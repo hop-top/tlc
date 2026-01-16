@@ -46,7 +46,6 @@ var syncPullCmd = &cobra.Command{
 		tasksForSystem, _ := s.ListTasks(ctx, core.Query{
 			Filters: []core.FieldFilter{
 				{Field: "origin_system", Value: system},
-				{Field: "archived", Value: 0},
 			},
 			SortBy:        "last_sync_at",
 			SortDirection: "desc",

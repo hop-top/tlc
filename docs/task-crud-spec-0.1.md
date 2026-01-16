@@ -43,6 +43,7 @@ A Task MUST be representable as:
 - updated_at: ISO8601 UTC (recommended)
 - logs: array of log entries (recommended, see task-log-spec-0.1.md)
 - meta: object/map (optional)
+- archived: boolean (defaults to false)
 
 ---
 
@@ -195,6 +196,26 @@ Recommendation:
 - Every task MUST have exactly one reference pointer.
 - A task in DONE or SKIPPED MUST NOT be mutated (except COMMENT logs).
 - All mutations MUST be logged (see task-log-spec-0.1.md).
+
+---
+
+## Archiving (Normative)
+
+Archiving is a secondary state that hides tasks from default listings without deleting them.
+
+### Archiving Rules
+
+- A task MAY be archived if its status is `DONE` or `SKIPPED`.
+- `TODO` and `IN_PROGRESS` tasks SHOULD NOT be archived.
+- Archiving MUST NOT change the task `status`.
+- Archived tasks MUST NOT appear in `ReadTask` results by default.
+- Archiving MUST be reversible (Unarchive).
+
+### Auto-Archiving
+
+TLC implementations MAY support auto-archiving:
+- Tasks are auto-archived if they remain in `DONE` or `SKIPPED` status for longer than a configured `archive_threshold`.
+- Auto-archiving typically happens during system startup or sync operations.
 
 ---
 

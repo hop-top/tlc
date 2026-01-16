@@ -29,4 +29,5 @@ type Query struct {
 	SortDirection string // "asc" or "desc"
 	Limit   int
 	Offset  int
+	IncludeArchived bool
 }

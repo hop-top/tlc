@@ -232,7 +232,7 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
 	}
 
-	if len(whereClauses) == 0 {
+	if !query.IncludeArchived {
 		whereClauses = append(whereClauses, "archived = 0")
 	}
 

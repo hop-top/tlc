@@ -171,6 +171,24 @@ tlc task create --interactive
 }
 ```
 
+### `tlc task archive` (System Managed)
+
+Archiving is primarily a system-managed operation controlled by configuration.
+
+#### Behavior
+
+1. On startup, TLC checks for tasks that have been in `DONE` or `SKIPPED` status longer than `task.archive_threshold`.
+2. Matches are marked as `archived: true`.
+3. Archived tasks are excluded from `tlc task list` by default.
+
+#### Showing Archived Tasks
+
+To view archived tasks, use the `--archived` flag:
+
+```bash
+tlc task list --archived
+```
+
 ---
 
 ### `tlc task list`
@@ -192,6 +210,7 @@ tlc task list [query] [flags]
 | `--tag` | | string[] | Filter by tag (repeatable) |
 | `--reference` | `-r` | string | Filter by reference pattern |
 | `--meta` | `-m` | key=value | Filter by metadata |
+| `--archived` | | bool | Show only archived tasks |
 | `--sort-by` | | string | Sort field (default: `created_at`) |
 | `--order` | | enum | Sort order: `asc`, `desc` (default: `desc`) |
 | `--limit` | `-n` | int | Limit results (default: 100) |

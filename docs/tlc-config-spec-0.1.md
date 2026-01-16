@@ -153,6 +153,7 @@ output:
 | `id_format` | string | `T-{seq:04d}` | Task ID format template |
 | `auto_assign` | bool | `false` | Auto-assign to current user on create |
 | `require_reference` | bool | `true` | Require reference on creation |
+| `archive_threshold` | duration | `168h` (7d) | Auto-archive DONE/SKIPPED tasks after this duration |
 
 **ID Format Template Syntax**:
 - `{seq}` — Sequential number
@@ -164,8 +165,7 @@ output:
 ```yaml
 task:
   id_format: "T-{seq:04d}"        # T-0001, T-0042
-  id_format: "TASK-{seq}"         # TASK-1, TASK-42
-  id_format: "{date:YYYYMMDD}-{seq:03d}"  # 20250116-001
+  archive_threshold: 48h          # Archive after 2 days
 ```
 
 ---

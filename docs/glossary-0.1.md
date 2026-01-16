@@ -72,6 +72,12 @@ This glossary defines canonical terms used across all TLC specs.
 - **Reference**
   - A justification pointer or provenance pointer for why a task exists.
 
+- **Archive**
+  - A secondary task state that hides tasks from default listings. Archiving is used to clean up the active workspace without deleting durable work records.
+
+- **Auto-archiving**
+  - A system process that automatically archives tasks that have been in a terminal status (DONE, SKIPPED) for longer than a configured threshold.
+
 - **Dependency**
   - A relationship where a task/step must not start until another completes successfully. In flows, expressed via `depends_on` field.
 

@@ -28,6 +28,7 @@ var (
 	taskListAssignedTo string
 	taskListTag        []string
 	taskListMine       bool
+	taskListArchived   bool
 	taskListSortBy     string
 	taskListSortDirection      string
 	taskListLimit      int
@@ -334,10 +335,11 @@ var taskListCmd = &cobra.Command{
 
 		ctx := context.Background()
 		query := core.Query{
-			Limit:  taskListLimit,
-			Offset: taskListOffset,
-			SortBy: taskListSortBy,
-			SortDirection:  taskListSortDirection,
+			Limit:           taskListLimit,
+			Offset:          taskListOffset,
+			SortBy:          taskListSortBy,
+			SortDirection:   taskListSortDirection,
+			IncludeArchived: taskListArchived,
 		}
 
 		if len(args) > 0 {
@@ -565,6 +567,7 @@ func init() {
 	taskListCmd.Flags().StringVarP(&taskListAssignedTo, "assigned-to", "a", "", "Filter by assignee")
 	taskListCmd.Flags().StringSliceVar(&taskListTag, "tag", []string{}, "Filter by tag")
 	taskListCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
+	taskListCmd.Flags().BoolVar(&taskListArchived, "archived", false, "Show archived tasks")
 	taskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
 	taskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
