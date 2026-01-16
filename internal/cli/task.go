@@ -29,6 +29,7 @@ var (
 	taskListSortBy     string
 	taskListOrder      string
 	taskListLimit      int
+	taskListOffset     int
 
 	taskShowLogs bool
 
@@ -241,6 +242,7 @@ var taskListCmd = &cobra.Command{
 		ctx := context.Background()
 		query := core.Query{
 			Limit:  taskListLimit,
+			Offset: taskListOffset,
 			SortBy: taskListSortBy,
 			Order:  taskListOrder,
 		}
@@ -461,6 +463,7 @@ func init() {
 	taskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
 	taskListCmd.Flags().StringVar(&taskListOrder, "order", "desc", "Sort order (asc, desc)")
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
+	taskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
 
 	taskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
 

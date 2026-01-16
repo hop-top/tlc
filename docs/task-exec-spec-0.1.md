@@ -27,6 +27,17 @@ This spec DOES NOT own:
 This spec references:
 - task-log-spec-0.1.md for audit logs
 
+---
+
+## Traceability Invariants (Normative)
+
+To ensure a complete audit trail, every action performed by an agent MUST be associated with a valid Task ID.
+
+### Unplanned Work Rule
+In cases where an agent begins work on a task, modification, or investigation that is not already captured in the task store, the agent **MUST** create a self-assigned task before proceeding. This ensures that even "out-of-band" or spontaneous work leaves a durable trace in the system.
+
+---
+
 ## Execution Request (Normative)
 
 A runner MUST accept an execution request object:

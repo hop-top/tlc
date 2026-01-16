@@ -55,3 +55,51 @@ func TestApplyEnvOverrides(t *testing.T) {
 		t.Errorf("expected output format yaml from env, got %s", cfg.Output.Format)
 	}
 }
+
+func TestConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*Config)
+		wantErr bool
+	}{
+		{
+			name:    "valid default config",
+			setup:   func(c *Config) {},
+			wantErr: false,
+		},
+		{
+			name: "invalid output format",
+			setup: func(c *Config) {
+				c.Output.Format = "invalid"
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing github repo when enabled",
+			setup: func(c *Config) {
+				c.Sync.GitHub.Enabled = true
+				c.Sync.GitHub.Repo = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid storage backend",
+			setup: func(c *Config) {
+				c.Storage.Backend = "invalid"
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tt.setup(cfg)
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+

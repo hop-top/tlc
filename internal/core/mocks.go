@@ -5,12 +5,14 @@ import (
 )
 
 type MockRepository struct {
-	Tasks map[string]*Task
+	Tasks    map[string]*Task
+	FlowRuns map[string]*FlowRun
 }
 
 func NewMockRepository() *MockRepository {
 	return &MockRepository{
-		Tasks: make(map[string]*Task),
+		Tasks:    make(map[string]*Task),
+		FlowRuns: make(map[string]*FlowRun),
 	}
 }
 
@@ -40,34 +42,50 @@ func (m *MockRepository) ListTasks(ctx context.Context, query Query) ([]*Task, e
 	return tasks, nil
 }
 
+func (m *MockRepository) DeleteTask(ctx context.Context, id string) error {
+	delete(m.Tasks, id)
+	return nil
+}
+
+func (m *MockRepository) CreateFlowRun(ctx context.Context, run *FlowRun) error {
+	m.FlowRuns[run.ID] = run
+	return nil
+}
+
+func (m *MockRepository) GetFlowRun(ctx context.Context, id string) (*FlowRun, error) {
+	return m.FlowRuns[id], nil
+}
+
+func (m *MockRepository) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
+	m.FlowRuns[run.ID] = run
+	return nil
+}
+
 type MockLogRepository struct {
-	Logs map[string][]*LogEntry
+	Logs []*LogEntry
 }
 
 func NewMockLogRepository() *MockLogRepository {
 	return &MockLogRepository{
-		Logs: make(map[string][]*LogEntry),
+		Logs: make([]*LogEntry, 0),
 	}
 }
 
 func (m *MockLogRepository) AddLog(ctx context.Context, entry *LogEntry) error {
-	m.Logs[entry.TaskID] = append(m.Logs[entry.TaskID], entry)
+	m.Logs = append(m.Logs, entry)
 	return nil
 }
 
 func (m *MockLogRepository) GetLogs(ctx context.Context, taskID string) ([]*LogEntry, error) {
-	logs, ok := m.Logs[taskID]
-	if !ok {
-		return nil, nil
+	var filtered []*LogEntry
+	for _, l := range m.Logs {
+		if l.TaskID == taskID {
+			filtered = append(filtered, l)
+		}
 	}
-	return logs, nil
+	return filtered, nil
 }
 
 func (m *MockLogRepository) ListLogs(ctx context.Context, query LogQuery) ([]*LogEntry, error) {
-	var allLogs []*LogEntry
-	for _, logs := range m.Logs {
-		allLogs = append(allLogs, logs...)
-	}
-	// Simple slice for now, could implement filtering if needed for tests
-	return allLogs, nil
+	return m.Logs, nil
 }

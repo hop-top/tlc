@@ -32,6 +32,19 @@ mkdir -p bin
 go build -o bin/tlc cmd/tlc/main.go
 ```
 
+## 🧪 Testing
+
+### Run all tests
+```bash
+go test ./...
+```
+
+### Generate Coverage Report
+```bash
+./scripts/coverage.sh
+```
+The HTML report will be available at `coverage/all.html`.
+
 ## 📖 Usage
 
 ### Quick Start

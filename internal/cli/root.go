@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/google/oss-tlc-cli/internal/config"
 	"github.com/google/oss-tlc-cli/internal/storage"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -49,24 +50,56 @@ func initConfig() {
 
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
+		if err := viper.ReadInConfig(); err != nil {
+			log.Warn("Failed to read config file", "path", cfgFile, "error", err)
+		}
 	} else {
+		// 1. Load global/system fallbacks first
 		viper.AddConfigPath("/etc/tlc")
 		home, err := os.UserHomeDir()
 		if err == nil {
-			viper.AddConfigPath(fmt.Sprintf("%s/.config/tlc", home))
+			viper.AddConfigPath(filepath.Join(home, ".config", "tlc"))
 		}
-		viper.AddConfigPath(".tlc")
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
+
+		// Read base config if exists (e.g. ~/.config/tlc/config.yaml)
+		if err := viper.ReadInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				log.Warn("Error reading base config", "error", err)
+			}
+		}
+
+		// 2. Cascade project-specific configs from current dir up to root
+		curr, err := os.Getwd()
+		if err == nil {
+			configs := findAllConfigs(curr)
+			// Merge them in order from root-most to closest
+			// so that closer files overwrite further ones.
+			for i := len(configs) - 1; i >= 0; i-- {
+				viper.SetConfigFile(configs[i])
+				if err := viper.MergeInConfig(); err != nil {
+					log.Warn("Failed to merge config", "path", configs[i], "error", err)
+				}
+			}
+		}
 	}
 
 	viper.SetEnvPrefix("TLC")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err == nil {
-		if viper.GetBool("output.verbose") {
-			fmt.Println("Using config file:", viper.ConfigFileUsed())
+	if viper.ConfigFileUsed() != "" && viper.GetBool("output.verbose") {
+		fmt.Println("Using config file:", viper.ConfigFileUsed())
+	}
+
+	// Validate merged configuration
+	var cfg config.Config
+	if err := viper.Unmarshal(&cfg); err != nil {
+		log.Warn("Failed to unmarshal config for validation", "error", err)
+	} else {
+		if err := cfg.Validate(); err != nil {
+			log.Fatal("Invalid configuration", "error", err)
 		}
 	}
 
@@ -76,6 +109,32 @@ func initConfig() {
 	}
 
 	setupLogging()
+}
+
+func findAllConfigs(startDir string) []string {
+	var configs []string
+	curr := startDir
+	for {
+		// Check for .tlc.yaml
+		tlcYaml := filepath.Join(curr, ".tlc.yaml")
+		if _, err := os.Stat(tlcYaml); err == nil {
+			configs = append(configs, tlcYaml)
+		}
+
+		// Check for .tlc/config.yaml
+		tlcDirConfig := filepath.Join(curr, ".tlc", "config.yaml")
+		if _, err := os.Stat(tlcDirConfig); err == nil {
+			configs = append(configs, tlcDirConfig)
+		}
+
+		// Move up
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			break
+		}
+		curr = parent
+	}
+	return configs
 }
 
 func setupLogging() {

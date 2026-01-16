@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -15,6 +16,22 @@ type Config struct {
 	UI      UIConfig      `yaml:"ui"`
 }
 
+func (c *Config) Validate() error {
+	if err := c.Output.Validate(); err != nil {
+		return err
+	}
+	if err := c.Task.Validate(); err != nil {
+		return err
+	}
+	if err := c.Sync.Validate(); err != nil {
+		return err
+	}
+	if err := c.Storage.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 type OutputConfig struct {
 	Format  string `yaml:"format"`
 	Color   bool   `yaml:"color"`
@@ -23,12 +40,26 @@ type OutputConfig struct {
 	LogFile string `yaml:"log_file"`
 }
 
+func (o *OutputConfig) Validate() error {
+	switch o.Format {
+	case "table", "json", "yaml", "tls", "":
+		return nil
+	default:
+		return fmt.Errorf("invalid output format: %s", o.Format)
+	}
+}
+
 type TaskConfig struct {
 	DefaultStatus    string `yaml:"default_status"`
 	IDFormat         string `yaml:"id_format"`
 	AutoAssign       bool   `yaml:"auto_assign"`
 	RequireReference bool   `yaml:"require_reference"`
 	TodoFile         string `yaml:"todo_file"`
+}
+
+func (t *TaskConfig) Validate() error {
+	// Status validation logic could be shared with core
+	return nil
 }
 
 type GitConfig struct {
@@ -65,6 +96,13 @@ type SyncConfig struct {
 	Linear           LinearSyncConfig     `yaml:"linear"`
 }
 
+func (s *SyncConfig) Validate() error {
+	if s.GitHub.Enabled && s.GitHub.Repo == "" {
+		return fmt.Errorf("sync.github.repo is required when GitHub sync is enabled")
+	}
+	return nil
+}
+
 type GitHubSyncConfig struct {
 	Enabled        bool   `yaml:"enabled"`
 	Repo           string `yaml:"repo"`
@@ -90,6 +128,15 @@ type StorageConfig struct {
 	Backend          string `yaml:"backend"`
 	DBPath           string `yaml:"db_path"`
 	ConnectionString string `yaml:"connection_string"`
+}
+
+func (s *StorageConfig) Validate() error {
+	switch s.Backend {
+	case "sqlite", "local", "postgres", "":
+		return nil
+	default:
+		return fmt.Errorf("invalid storage backend: %s", s.Backend)
+	}
 }
 
 type UIConfig struct {

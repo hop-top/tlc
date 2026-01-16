@@ -44,6 +44,21 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_task_logs_task_id ON task_logs(task_id);
 		`,
 	},
+	{
+		version: 2,
+		query: `
+		CREATE TABLE IF NOT EXISTS flow_runs (
+			id TEXT PRIMARY KEY,
+			flow_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			ended_at TEXT,
+			results TEXT
+		);
+		CREATE INDEX IF NOT EXISTS idx_flow_runs_flow_id ON flow_runs(flow_id);
+		CREATE INDEX IF NOT EXISTS idx_flow_runs_status ON flow_runs(status);
+		`,
+	},
 }
 
 func (s *SQLiteStorage) migrate() error {

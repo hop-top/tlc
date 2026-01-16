@@ -427,6 +427,54 @@ GitHub recognizes these keywords:
 
 ---
 
+## Internal Task References
+
+### TLC Task References
+
+For commits that implement TLC tasks but don't close GitHub issues, reference tasks in the footer:
+
+```bash
+feat: add authentication middleware
+
+Implements JWT validation and user context injection.
+
+Refs: tlc/T-0042
+```
+
+### Multiple Task References
+
+When a commit spans multiple tasks:
+
+```bash
+refactor: restructure auth module
+
+Extracted helper functions and improved error handling.
+
+Refs: tlc/T-0042, tlc/T-0043, tlc/T-0045
+```
+
+### Combined References
+
+Commits can reference both GitHub issues (in title for closure) and TLC tasks (in footer):
+
+```bash
+feat: add rate limiting (closes #156)
+
+Implements token bucket algorithm for API rate limiting.
+
+Refs: tlc/T-0089, tlc/T-0090
+```
+
+### Reference Format
+
+**Rules**:
+- Use `Refs:` footer for internal task tracking
+- Format: `<tool>/<id>` where tool is `tlc`, `jira`, `linear`, etc.
+- Multiple references separated by commas
+- GitHub issue closure uses `(closes #N)` in title only
+
+---
+
 ## References
 
 - git-branch-convention-0.1.md — Branch naming format
@@ -438,5 +486,5 @@ GitHub recognizes these keywords:
 ---
 
 **Version**: 0.1
-**Last Updated**: 2025-01-16
+**Last Updated**: 2026-01-16
 **Status**: Normative

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 type TaskService struct {
@@ -52,6 +53,69 @@ func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next 
 	}
 
 	return s.logRepo.AddLog(ctx, logEntry)
+}
+
+func (s *TaskService) PauseFlowRun(ctx context.Context, runID string, by string, note string) error {
+	run, err := s.repo.GetFlowRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return fmt.Errorf("flow run %s not found", runID)
+	}
+	run.Status = FlowStatusPaused
+	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
+		return err
+	}
+	return s.logRepo.AddLog(ctx, &LogEntry{
+		Timestamp: time.Now().UTC(),
+		By:        by,
+		Action:    "FLOW_PAUSED",
+		Note:      note,
+		Meta:      map[string]any{"run_id": runID},
+	})
+}
+
+func (s *TaskService) ResumeFlowRun(ctx context.Context, runID string, by string, note string) error {
+	run, err := s.repo.GetFlowRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return fmt.Errorf("flow run %s not found", runID)
+	}
+	run.Status = FlowStatusRunning
+	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
+		return err
+	}
+	return s.logRepo.AddLog(ctx, &LogEntry{
+		Timestamp: time.Now().UTC(),
+		By:        by,
+		Action:    "FLOW_RESUMED",
+		Note:      note,
+		Meta:      map[string]any{"run_id": runID},
+	})
+}
+
+func (s *TaskService) CancelFlowRun(ctx context.Context, runID string, by string, note string) error {
+	run, err := s.repo.GetFlowRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return fmt.Errorf("flow run %s not found", runID)
+	}
+	run.Status = FlowStatusCanceled
+	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
+		return err
+	}
+	return s.logRepo.AddLog(ctx, &LogEntry{
+		Timestamp: time.Now().UTC(),
+		By:        by,
+		Action:    "FLOW_CANCELED",
+		Note:      note,
+		Meta:      map[string]any{"run_id": runID},
+	})
 }
 
 const (

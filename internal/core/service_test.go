@@ -29,6 +29,23 @@ func (m *mockRepo) ListTasks(ctx context.Context, q Query) ([]*Task, error) {
 	return nil, nil
 }
 
+func (m *mockRepo) DeleteTask(ctx context.Context, id string) error {
+	delete(m.tasks, id)
+	return nil
+}
+
+func (m *mockRepo) CreateFlowRun(ctx context.Context, run *FlowRun) error {
+	return nil
+}
+
+func (m *mockRepo) GetFlowRun(ctx context.Context, id string) (*FlowRun, error) {
+	return nil, nil
+}
+
+func (m *mockRepo) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
+	return nil
+}
+
 func (m *mockRepo) AddLog(ctx context.Context, e *LogEntry) error {
 	m.logs = append(m.logs, e)
 	return nil

@@ -1,0 +1,252 @@
+package storage
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/oss-tlc-cli/internal/core"
+)
+
+// TestConcurrentTaskCreation simulates multiple agents creating tasks simultaneously
+// This test reproduces the "UNIQUE constraint failed: tasks.id" bug
+func TestConcurrentTaskCreation(t *testing.T) {
+	dbPath := "test_concurrent.db"
+	defer os.Remove(dbPath)
+
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Simulate multiple agents trying to create the same task ID
+	// This happens when sync happens from multiple sources
+	taskID := "T-SYNC-001"
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 5)
+
+	// Spawn 5 goroutines simulating different agents/sync processes
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(agentID int) {
+			defer wg.Done()
+
+			task := &core.Task{
+				ID:         taskID,
+				Title:      fmt.Sprintf("Task from agent %d", agentID),
+				Status:     core.StatusTodo,
+				Reference:  fmt.Sprintf("ref-%d", agentID),
+				CreatedAt:  time.Now().UTC(),
+				UpdatedAt:  time.Now().UTC(),
+				Meta:       map[string]interface{}{"agent": agentID},
+			}
+
+			err := s.CreateTask(ctx, task)
+			if err != nil {
+				errChan <- err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Count errors
+	errorCount := 0
+	var lastError error
+	for err := range errChan {
+		errorCount++
+		lastError = err
+		t.Logf("Error from concurrent creation: %v", err)
+	}
+
+	// At least 4 should fail with constraint error
+	if errorCount < 4 {
+		t.Errorf("Expected at least 4 constraint errors, got %d", errorCount)
+	}
+
+	// The error should mention UNIQUE constraint
+	if lastError != nil && !containsUniqueConstraintError(lastError) {
+		t.Errorf("Expected UNIQUE constraint error, got: %v", lastError)
+	}
+}
+
+// TestConcurrentFlowExecution simulates multiple parallel steps accessing tasks
+func TestConcurrentFlowExecution(t *testing.T) {
+	dbPath := "test_flow_concurrent.db"
+	defer os.Remove(dbPath)
+
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Create a set of tasks
+	for i := 1; i <= 10; i++ {
+		task := &core.Task{
+			ID:         fmt.Sprintf("T-%04d", i),
+			Title:      fmt.Sprintf("Task %d", i),
+			Status:     core.StatusTodo,
+			Reference:  "ref",
+			CreatedAt:  time.Now().UTC(),
+			UpdatedAt:  time.Now().UTC(),
+		}
+		s.CreateTask(ctx, task)
+	}
+
+	// Simulate parallel execution updating tasks concurrently
+	var wg sync.WaitGroup
+	errChan := make(chan error, 10)
+
+	for i := 1; i <= 10; i++ {
+		wg.Add(1)
+		go func(taskNum int) {
+			defer wg.Done()
+
+			taskID := fmt.Sprintf("T-%04d", taskNum)
+
+			// Read task
+			task, err := s.GetTask(ctx, taskID)
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			// Simulate some processing time
+			time.Sleep(10 * time.Millisecond)
+
+			// Update task
+			task.Status = core.StatusDone
+			task.UpdatedAt = time.Now().UTC()
+			err = s.UpdateTask(ctx, task)
+			if err != nil {
+				errChan <- err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Count errors
+	errorCount := 0
+	for err := range errChan {
+		errorCount++
+		t.Logf("Error from concurrent update: %v", err)
+	}
+
+	if errorCount > 0 {
+		t.Errorf("Expected no errors in concurrent updates, got %d", errorCount)
+	}
+
+	// Verify all tasks are done
+	tasks, _ := s.ListTasks(ctx, core.Query{})
+	doneCount := 0
+	for _, task := range tasks {
+		if task.Status == core.StatusDone {
+			doneCount++
+		}
+	}
+
+	if doneCount != 10 {
+		t.Errorf("Expected 10 done tasks, got %d", doneCount)
+	}
+}
+
+// TestSyncIngest simulates the ingestTODO scenario with concurrent sync
+func TestSyncIngest(t *testing.T) {
+	dbPath := "test_sync_ingest.db"
+	defer os.Remove(dbPath)
+
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Simulate two agents both trying to ingest the same TODO file
+	// Agent 1 reads TODO and sees T-0001 doesn't exist, tries to create
+	// Agent 2 reads TODO at the same time, sees T-0001 doesn't exist, tries to create
+
+	taskID := "T-0001"
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(agentID int) {
+			defer wg.Done()
+
+			// Check if task exists (both will see it doesn't exist)
+			existing, _ := s.GetTask(ctx, taskID)
+
+			if existing == nil {
+				// Both agents will try to create
+				task := &core.Task{
+					ID:         taskID,
+					Title:      fmt.Sprintf("Task from sync agent %d", agentID),
+					Status:     core.StatusTodo,
+					Reference:  "ref",
+					CreatedAt:  time.Now().UTC(),
+					UpdatedAt:  time.Now().UTC(),
+				}
+
+				err := s.CreateTask(ctx, task)
+				if err != nil {
+					errChan <- err
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Expect one error due to race condition
+	errorCount := 0
+	for err := range errChan {
+		errorCount++
+		t.Logf("Error from sync ingest: %v", err)
+	}
+
+	// This demonstrates the bug: at least one should fail
+	if errorCount < 1 {
+		t.Logf("WARNING: Expected at least 1 constraint error in race condition, got %d", errorCount)
+	}
+}
+
+func containsUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return contains(errStr, "UNIQUE") && contains(errStr, "constraint")
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+		findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

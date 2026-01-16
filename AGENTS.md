@@ -104,4 +104,5 @@ tlc task list --status TODO --assigned-to engineer-1
 1.  **Plan First**: Before starting a complex task, use the `create` action to break it down into smaller sub-tasks.
 2.  **Stay Updated**: Always move a task to `IN_PROGRESS` when you start working on it, and to `DONE` when finished.
 3.  **Use Tags**: Apply domain tags (e.g., `#storage`, `#cli`, `#sync`) to help teammates filter and understand your work.
-4.  **Reference IDs**: When committing code or sending messages, refer to the Task IDs (e.g., "Closes T-0042") to maintain a clear link between planning and execution.
+4.  **Reference IDs**: When committing code or sending messages, refer to the Task IDs (e.g., "Refs: tlc/T-0042") to maintain a clear link between planning and execution.
+5.  **Self-Update**: When TLC is updated, refresh your tool knowledge by running `tlc help llm` which auto-detects your environment and outputs format-specific instructions.

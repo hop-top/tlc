@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/google/oss-tlc-cli/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -11,6 +12,22 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configuration management",
+}
+
+var configValidateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Validate configuration",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var cfg config.Config
+		if err := viper.Unmarshal(&cfg); err != nil {
+			return fmt.Errorf("failed to unmarshal config: %w", err)
+		}
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("configuration invalid: %w", err)
+		}
+		fmt.Println("✓ Configuration is valid")
+		return nil
+	},
 }
 
 var configListCmd = &cobra.Command{
@@ -62,6 +79,7 @@ var configSetCmd = &cobra.Command{
 }
 
 func init() {
+	configCmd.AddCommand(configValidateCmd)
 	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)

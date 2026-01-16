@@ -13,6 +13,7 @@ type RPCClient struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout *bufio.Scanner
+	nextID int
 }
 
 type Request struct {
@@ -54,16 +55,20 @@ func NewRPCClient(binPath string) (*RPCClient, error) {
 		cmd:    cmd,
 		stdin:  stdin,
 		stdout: bufio.NewScanner(stdout),
+		nextID: 1,
 	}, nil
 }
 
 // Call makes a JSON-RPC call
 func (c *RPCClient) Call(method string, params interface{}, result interface{}) error {
+	id := c.nextID
+	c.nextID++
+
 	req := Request{
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  params,
-		ID:      1, // Simplified
+		ID:      id,
 	}
 
 	data, err := json.Marshal(req)

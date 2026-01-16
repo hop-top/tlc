@@ -3,3 +3,4 @@ bin/
 tlc
 *.db
 *.test
+coverage/

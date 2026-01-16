@@ -78,6 +78,11 @@ func LoadConfig(projectRoot string) (*Config, error) {
 	// 3. Environment variables (simplistic implementation for now)
 	applyEnvOverrides(cfg)
 
+	// 4. Validate
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
 	return cfg, nil
 }
 

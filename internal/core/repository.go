@@ -12,6 +12,15 @@ type Repository interface {
 	UpdateTask(ctx context.Context, task *Task) error
 	// ListTasks returns a list of tasks matching the query parameters.
 	ListTasks(ctx context.Context, query Query) ([]*Task, error)
+	// DeleteTask removes a task by its ID.
+	DeleteTask(ctx context.Context, id string) error
+
+	// CreateFlowRun persists a new flow execution instance.
+	CreateFlowRun(ctx context.Context, run *FlowRun) error
+	// GetFlowRun retrieves a flow run by its ID.
+	GetFlowRun(ctx context.Context, id string) (*FlowRun, error)
+	// UpdateFlowRun updates an existing flow run.
+	UpdateFlowRun(ctx context.Context, run *FlowRun) error
 }
 
 // LogRepository defines the interface for audit log persistence.

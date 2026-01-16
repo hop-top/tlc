@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/oss-tlc-cli/internal/core"
@@ -13,13 +14,27 @@ import (
 )
 
 type SQLiteStorage struct {
-	db *sql.DB
+	db        *sql.DB
+	writeLock sync.Mutex
 }
 
 func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
+	}
+
+	// Enable foreign keys
+	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	// Enable WAL mode and set busy timeout for better concurrency
+	if _, err := db.Exec("PRAGMA journal_mode = WAL;"); err != nil {
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
 	s := &SQLiteStorage{db: db}
@@ -30,18 +45,36 @@ func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
 	return s, nil
 }
 
-func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
-	metaJSON, _ := json.Marshal(task.Meta)
-	tagsJSON, _ := json.Marshal(task.Tags)
+func (s *SQLiteStorage) withWriteTransaction(ctx context.Context, fn func(*sql.Tx) error) error {
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-		task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
-		string(metaJSON), string(tagsJSON),
-	)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		metaJSON, _ := json.Marshal(task.Meta)
+		tagsJSON, _ := json.Marshal(task.Tags)
+
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
+			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
+			string(metaJSON), string(tagsJSON),
+		)
+		return err
+	})
 }
 
 func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, error) {
@@ -73,59 +106,72 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 }
 
 func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
-	metaJSON, _ := json.Marshal(task.Meta)
-	tagsJSON, _ := json.Marshal(task.Tags)
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		metaJSON, _ := json.Marshal(task.Meta)
+		tagsJSON, _ := json.Marshal(task.Tags)
 
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?
-		WHERE id = ?`,
-		task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-		task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON), task.ID,
-	)
-	return err
+		_, err := tx.ExecContext(ctx, `
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?
+			WHERE id = ?`,
+			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
+			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON), task.ID,
+		)
+		return err
+	})
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
 	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags FROM tasks"
 	var args []interface{}
-	whereClauses := []string{}
-
+	
+	// Group filters by field to implement OR logic for same field
+	fieldGroups := make(map[string][]core.FieldFilter)
 	for _, f := range query.Filters {
-		field := f.Field
-		op := "="
-		switch f.Operator {
-		case core.OpEq, core.OpEqual:
-			op = "="
-		case core.OpNotEq:
-			op = "!="
-		case core.OpGt:
-			op = ">"
-		case core.OpGte:
-			op = ">="
-		case core.OpLt:
-			op = "<"
-		case core.OpLte:
-			op = "<="
-		case core.OpContains:
-			op = "LIKE"
-			f.Value = "%" + fmt.Sprintf("%v", f.Value) + "%"
-		case core.OpStart:
-			op = "LIKE"
-			f.Value = fmt.Sprintf("%v", f.Value) + "%"
-		case core.OpEnd:
-			op = "LIKE"
-			f.Value = "%" + fmt.Sprintf("%v", f.Value)
-		}
+		fieldGroups[f.Field] = append(fieldGroups[f.Field], f)
+	}
 
-		if field == "assigned_to" && f.Value == nil {
-			if op == "=" {
-				whereClauses = append(whereClauses, "assigned_to IS NULL")
-			} else {
-				whereClauses = append(whereClauses, "assigned_to IS NOT NULL")
+	whereClauses := []string{}
+	for field, filters := range fieldGroups {
+		groupClauses := []string{}
+		for _, f := range filters {
+			op := "="
+			switch f.Operator {
+			case core.OpEq, core.OpEqual:
+				op = "="
+			case core.OpNotEq:
+				op = "!="
+			case core.OpGt:
+				op = ">"
+			case core.OpGte:
+				op = ">="
+			case core.OpLt:
+				op = "<"
+			case core.OpLte:
+				op = "<="
+			case core.OpContains:
+				op = "LIKE"
+				f.Value = "%" + fmt.Sprintf("%v", f.Value) + "%"
+			case core.OpStart:
+				op = "LIKE"
+				f.Value = fmt.Sprintf("%v", f.Value) + "%"
+			case core.OpEnd:
+				op = "LIKE"
+				f.Value = "%" + fmt.Sprintf("%v", f.Value)
 			}
-		} else {
-			whereClauses = append(whereClauses, fmt.Sprintf("%s %s ?", field, op))
-			args = append(args, f.Value)
+
+			if field == "assigned_to" && f.Value == nil {
+				if op == "=" {
+					groupClauses = append(groupClauses, "assigned_to IS NULL")
+				} else {
+					groupClauses = append(groupClauses, "assigned_to IS NOT NULL")
+				}
+			} else {
+				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))
+				args = append(args, f.Value)
+			}
+		}
+		if len(groupClauses) > 0 {
+			whereClauses = append(whereClauses, "(" + strings.Join(groupClauses, " OR ") + ")")
 		}
 	}
 
@@ -187,13 +233,15 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 }
 
 func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error {
-	metaJSON, _ := json.Marshal(entry.Meta)
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO task_logs (task_id, timestamp, by, action, note, meta)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(metaJSON),
-	)
-	return err
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		metaJSON, _ := json.Marshal(entry.Meta)
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO task_logs (task_id, timestamp, by, action, note, meta)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(metaJSON),
+		)
+		return err
+	})
 }
 
 func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string) ([]*core.LogEntry, error) {
@@ -221,8 +269,67 @@ func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string) ([]*core.Log
 }
 
 func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM tasks WHERE id = ?", id)
-	return err
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE id = ?", id)
+		return err
+	})
+}
+
+func (s *SQLiteStorage) CreateFlowRun(ctx context.Context, run *core.FlowRun) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		resultsJSON, _ := json.Marshal(run.Results)
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO flow_runs (id, flow_id, status, started_at, ended_at, results)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			run.ID, run.FlowID, run.Status, run.StartedAt.Format(time.RFC3339),
+			nil, string(resultsJSON),
+		)
+		return err
+	})
+}
+
+func (s *SQLiteStorage) GetFlowRun(ctx context.Context, id string) (*core.FlowRun, error) {
+	row := s.db.QueryRowContext(ctx, "SELECT id, flow_id, status, started_at, ended_at, results FROM flow_runs WHERE id = ?", id)
+
+	var run core.FlowRun
+	var startedAtStr string
+	var endedAtStr, resultsStr sql.NullString
+
+	err := row.Scan(&run.ID, &run.FlowID, &run.Status, &startedAtStr, &endedAtStr, &resultsStr)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	run.StartedAt, _ = time.Parse(time.RFC3339, startedAtStr)
+	if endedAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, endedAtStr.String)
+		run.EndedAt = &t
+	}
+	if resultsStr.Valid {
+		json.Unmarshal([]byte(resultsStr.String), &run.Results)
+	}
+
+	return &run, nil
+}
+
+func (s *SQLiteStorage) UpdateFlowRun(ctx context.Context, run *core.FlowRun) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		resultsJSON, _ := json.Marshal(run.Results)
+		var endedAt interface{}
+		if run.EndedAt != nil {
+			endedAt = run.EndedAt.Format(time.RFC3339)
+		}
+
+		_, err := tx.ExecContext(ctx, `
+			UPDATE flow_runs SET status = ?, ended_at = ?, results = ?
+			WHERE id = ?`,
+			run.Status, endedAt, string(resultsJSON), run.ID,
+		)
+		return err
+	})
 }
 
 func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*core.LogEntry, error) {
