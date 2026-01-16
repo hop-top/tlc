@@ -66,25 +66,31 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 		metaJSON, _ := json.Marshal(task.Meta)
 		tagsJSON, _ := json.Marshal(task.Tags)
 
+		var lastSyncAt *string
+		if task.LastSyncAt != nil {
+			s := task.LastSyncAt.Format(time.RFC3339)
+			lastSyncAt = &s
+		}
+
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
-			string(metaJSON), string(tagsJSON),
+			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived,
 		)
 		return err
 	})
 }
 
 func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, error) {
-	row := s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags FROM tasks WHERE id = ?", id)
+	row := s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived FROM tasks WHERE id = ?", id)
 
 	var task core.Task
 	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr sql.NullString
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -101,6 +107,13 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	if tagsStr.Valid {
 		json.Unmarshal([]byte(tagsStr.String), &task.Tags)
 	}
+	if originSystemStr.Valid {
+		task.OriginSystem = &originSystemStr.String
+	}
+	if lastSyncAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		task.LastSyncAt = &t
+	}
 
 	return &task, nil
 }
@@ -110,18 +123,57 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 		metaJSON, _ := json.Marshal(task.Meta)
 		tagsJSON, _ := json.Marshal(task.Tags)
 
+		var lastSyncAt *string
+		if task.LastSyncAt != nil {
+			s := task.LastSyncAt.Format(time.RFC3339)
+			lastSyncAt = &s
+		}
+
 		_, err := tx.ExecContext(ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
 			WHERE id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON), task.ID,
+			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
+			task.OriginSystem, lastSyncAt, task.Archived, task.ID,
+		)
+		return err
+	})
+}
+
+func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, entry *core.LogEntry) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		// Update Task
+		metaJSON, _ := json.Marshal(task.Meta)
+		tagsJSON, _ := json.Marshal(task.Tags)
+		var lastSyncAt *string
+		if task.LastSyncAt != nil {
+			s := task.LastSyncAt.Format(time.RFC3339)
+			lastSyncAt = &s
+		}
+		_, err := tx.ExecContext(ctx, `
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
+			WHERE id = ?`,
+			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
+			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
+			task.OriginSystem, lastSyncAt, task.Archived, task.ID,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Add Log
+		logMetaJSON, _ := json.Marshal(entry.Meta)
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO task_logs (task_id, timestamp, by, action, note, meta)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(logMetaJSON),
 		)
 		return err
 	})
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags FROM tasks"
+	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived FROM tasks"
 	var args []interface{}
 	
 	// Group filters by field to implement OR logic for same field
@@ -180,6 +232,10 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
 	}
 
+	if len(whereClauses) == 0 {
+		whereClauses = append(whereClauses, "archived = 0")
+	}
+
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
@@ -215,8 +271,8 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 	for rows.Next() {
 		var task core.Task
 		var createdAtStr, updatedAtStr string
-		var metaStr, tagsStr sql.NullString
-		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr); err != nil {
+		var metaStr, tagsStr, originSystemStr, lastSyncAtStr sql.NullString
+		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived); err != nil {
 			return nil, err
 		}
 		task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
@@ -226,6 +282,13 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		}
 		if tagsStr.Valid {
 			json.Unmarshal([]byte(tagsStr.String), &task.Tags)
+		}
+		if originSystemStr.Valid {
+			task.OriginSystem = &originSystemStr.String
+		}
+		if lastSyncAtStr.Valid {
+			t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+			task.LastSyncAt = &t
 		}
 		tasks = append(tasks, &task)
 	}
@@ -278,6 +341,114 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 		_, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE id = ?", id)
 		return err
 	})
+}
+
+func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID string) (*core.Task, error) {
+	sqlQuery := `
+		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived 
+		FROM tasks 
+		WHERE origin_system = ? AND json_extract(meta, '$.origin_id') = ?
+		LIMIT 1
+	`
+	row := s.db.QueryRowContext(ctx, sqlQuery, system, originID)
+
+	var task core.Task
+	var createdAtStr, updatedAtStr string
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr sql.NullString
+
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+
+	if metaStr.Valid {
+		json.Unmarshal([]byte(metaStr.String), &task.Meta)
+	}
+	if tagsStr.Valid {
+		json.Unmarshal([]byte(tagsStr.String), &task.Tags)
+	}
+	if originSystemStr.Valid {
+		task.OriginSystem = &originSystemStr.String
+	}
+	if lastSyncAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		task.LastSyncAt = &t
+	}
+
+	return &task, nil
+}
+
+func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-threshold).Format(time.RFC3339)
+	
+	var count int64
+	err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			UPDATE tasks 
+			SET archived = 1 
+			WHERE archived = 0 
+			AND (status = 'DONE' OR status = 'SKIPPED')
+			AND updated_at < ?`, 
+			cutoff,
+		)
+		if err != nil {
+			return err
+		}
+		count, _ = res.RowsAffected()
+		return nil
+	})
+	
+	return count, err
+}
+
+func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, error) {
+	// A task needs push if it has an origin system AND (it has never been synced OR updated_at > last_sync_at)
+	// AND it is NOT archived.
+	sqlQuery := `
+		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived 
+		FROM tasks 
+		WHERE origin_system IS NOT NULL AND origin_system != ''
+		AND (last_sync_at IS NULL OR updated_at > last_sync_at)
+		AND archived = 0
+	`
+	rows, err := s.db.QueryContext(ctx, sqlQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []*core.Task
+	for rows.Next() {
+		var task core.Task
+		var createdAtStr, updatedAtStr string
+		var metaStr, tagsStr, originSystemStr, lastSyncAtStr sql.NullString
+		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived); err != nil {
+			return nil, err
+		}
+		task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+		task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+		if metaStr.Valid {
+			json.Unmarshal([]byte(metaStr.String), &task.Meta)
+		}
+		if tagsStr.Valid {
+			json.Unmarshal([]byte(tagsStr.String), &task.Tags)
+		}
+		if originSystemStr.Valid {
+			task.OriginSystem = &originSystemStr.String
+		}
+		if lastSyncAtStr.Valid {
+			t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+			task.LastSyncAt = &t
+		}
+		tasks = append(tasks, &task)
+	}
+	return tasks, nil
 }
 
 func (s *SQLiteStorage) CreateFlowRun(ctx context.Context, run *core.FlowRun) error {

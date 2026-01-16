@@ -33,6 +33,7 @@ type Styles struct {
 	Title           lipgloss.Style
 	Label           lipgloss.Style
 	Muted           lipgloss.Style
+	Warning         lipgloss.Style
 	Error           lipgloss.Style
 	Todo            lipgloss.Style
 	InProgress      lipgloss.Style
@@ -66,6 +67,7 @@ func NewStyles(t Theme) *Styles {
 		Title:      lipgloss.NewStyle().Foreground(t.Primary).Bold(true),
 		Label:      lipgloss.NewStyle().Foreground(t.Muted).Width(12),
 		Muted:      lipgloss.NewStyle().Foreground(t.Muted),
+		Warning:    lipgloss.NewStyle().Foreground(t.Warning).Bold(true),
 		Error:      lipgloss.NewStyle().Foreground(t.Error).Bold(true),
 		Todo:       lipgloss.NewStyle(), // Inherits default fg/bg
 		InProgress: lipgloss.NewStyle().Foreground(t.Primary),
@@ -93,6 +95,7 @@ var (
 	TitleStyle      = Current.Title
 	LabelStyle      = Current.Label
 	MutedStyle      = Current.Muted
+	WarningStyle    = Current.Warning
 	ErrorStyle      = Current.Error
 	TodoStyle       = Current.Todo
 	InProgressStyle = Current.InProgress
@@ -114,6 +117,7 @@ func ApplyTheme(t Theme) {
 	TitleStyle = Current.Title
 	LabelStyle = Current.Label
 	MutedStyle = Current.Muted
+	WarningStyle = Current.Warning
 	ErrorStyle = Current.Error
 	TodoStyle = Current.Todo
 	InProgressStyle = Current.InProgress

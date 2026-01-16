@@ -42,6 +42,32 @@ func (s *TaskService) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun
 	return s.repo.ListFlowRuns(ctx, query)
 }
 
+func (s *TaskService) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
+	return s.repo.ArchiveTasks(ctx, threshold)
+}
+
+func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, note string) error {
+	if task.OriginSystem != nil && *task.OriginSystem != "" {
+		if task.Meta == nil {
+			task.Meta = make(map[string]interface{})
+		}
+		task.Meta["needs_push"] = true
+		
+		logEntry := &LogEntry{
+			TaskID:    task.ID,
+			Timestamp: time.Now().UTC(),
+			By:        by,
+			Action:    ActionComment,
+			Note:      fmt.Sprintf("Task marked for push to %s", *task.OriginSystem),
+		}
+		if err := s.logRepo.AddLog(ctx, logEntry); err != nil {
+			return err
+		}
+	}
+
+	return s.repo.UpdateTask(ctx, task)
+}
+
 func (s *TaskService) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error) {
 	return s.logRepo.GetLogs(ctx, taskID, sortDirection)
 }
@@ -60,11 +86,7 @@ func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next 
 		return err
 	}
 
-	if err := s.repo.UpdateTask(ctx, task); err != nil {
-		return err
-	}
-
-	return s.logRepo.AddLog(ctx, logEntry)
+	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
 }
 
 func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, note string) error {
@@ -83,11 +105,7 @@ func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, n
 	}
 	logEntry.Action = ActionClaimed
 
-	if err := s.repo.UpdateTask(ctx, task); err != nil {
-		return err
-	}
-
-	return s.logRepo.AddLog(ctx, logEntry)
+	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
 }
 
 func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string, note string) error {
@@ -106,11 +124,7 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 	}
 	logEntry.Action = ActionReleased
 
-	if err := s.repo.UpdateTask(ctx, task); err != nil {
-		return err
-	}
-
-	return s.logRepo.AddLog(ctx, logEntry)
+	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
 }
 
 func (s *TaskService) PauseFlowRun(ctx context.Context, runID string, by string, note string) error {

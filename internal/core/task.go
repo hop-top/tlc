@@ -61,3 +61,14 @@ func (t *Task) Transition(next TaskStatus, by string, note string) (*LogEntry, e
 		Note:      fmt.Sprintf("Status changed from %s to %s: %s", oldStatus, next, note),
 	}, nil
 }
+
+func (t *Task) NeedsPush() bool {
+	if t.OriginSystem == nil || *t.OriginSystem == "" {
+		return false
+	}
+	if t.LastSyncAt == nil {
+		return true
+	}
+	// Use a small buffer to avoid jitter issues with time precision
+	return t.UpdatedAt.After(t.LastSyncAt.Add(time.Millisecond))
+}

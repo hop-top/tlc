@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 	"github.com/andygrunwald/go-jira"
 )
 
@@ -13,6 +14,8 @@ type Task struct {
 	Status      string                 `json:"status"`
 	AssignedTo  string                 `json:"assigned_to,omitempty"`
 	Tags        []string               `json:"tags,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 	Meta        map[string]interface{} `json:"meta,omitempty"`
 }
 
@@ -33,6 +36,8 @@ func MapJiraIssueToTask(issue *jira.Issue) *Task {
 		Title:       issue.Fields.Summary,
 		Description: issue.Fields.Description,
 		Status:      status,
+		CreatedAt:   time.Time(issue.Fields.Created),
+		UpdatedAt:   time.Time(issue.Fields.Updated),
 		Meta: map[string]interface{}{
 			"origin_system": "jira",
 			"origin_id":     issue.ID,

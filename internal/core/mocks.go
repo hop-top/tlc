@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 )
 
 type MockRepository struct {
@@ -36,6 +37,12 @@ func (m *MockRepository) UpdateTask(ctx context.Context, task *Task) error {
 	return nil
 }
 
+func (m *MockRepository) UpdateTaskWithLog(ctx context.Context, task *Task, entry *LogEntry) error {
+	m.Tasks[task.ID] = task
+	// MockRepository doesn't store logs in a separate map yet, but we can assume it works
+	return nil
+}
+
 func (m *MockRepository) ListTasks(ctx context.Context, query Query) ([]*Task, error) {
 	var tasks []*Task
 	for _, t := range m.Tasks {
@@ -47,6 +54,39 @@ func (m *MockRepository) ListTasks(ctx context.Context, query Query) ([]*Task, e
 func (m *MockRepository) DeleteTask(ctx context.Context, id string) error {
 	delete(m.Tasks, id)
 	return nil
+}
+
+func (m *MockRepository) GetTasksNeedingPush(ctx context.Context) ([]*Task, error) {
+	var result []*Task
+	for _, t := range m.Tasks {
+		if t.NeedsPush() {
+			result = append(result, t)
+		}
+	}
+	return result, nil
+}
+
+func (m *MockRepository) FindTaskByOrigin(ctx context.Context, system, originID string) (*Task, error) {
+	for _, t := range m.Tasks {
+		if t.OriginSystem != nil && *t.OriginSystem == system {
+			if id, ok := t.Meta["origin_id"].(string); ok && id == originID {
+				return t, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func (m *MockRepository) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-threshold)
+	var count int64
+	for _, t := range m.Tasks {
+		if !t.Archived && (t.Status == StatusDone || t.Status == StatusSkipped) && t.UpdatedAt.Before(cutoff) {
+			t.Archived = true
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (m *MockRepository) CreateFlowRun(ctx context.Context, run *FlowRun) error {

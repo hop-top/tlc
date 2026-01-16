@@ -84,56 +84,56 @@ func handleRequest(req Request) Response {
 			}
 		}
 
-		return Response{
-			JSONRPC: "2.0",
-			Result: map[string]interface{}{
-				"tasks":     tasks,
-				"conflicts": []interface{}{}, // Conflict detection T-0084
-				"sync_at":   time.Now().Format(time.RFC3339),
-			},
-			ID: req.ID,
-		}
-
-	case "sync.push":
-		var params SyncPushParams
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return Response{
-				JSONRPC: "2.0",
-				Error: &Error{
-					Code:    -32602,
-					Message: "Invalid params",
-				},
-				ID: req.ID,
-			}
-		}
-
-		pushed := []string{}
-		failed := []string{}
-		for _, task := range params.Tasks {
-			var err error
-			if task.Meta["origin_id"] == nil {
-				err = createGitHubIssue(params.Repo, &task)
-			} else {
-				err = updateGitHubIssue(params.Repo, &task)
-			}
-
-			if err != nil {
-				failed = append(failed, task.ID)
-			} else {
-				pushed = append(pushed, task.ID)
-			}
-		}
-
-		return Response{
-			JSONRPC: "2.0",
-			Result: map[string]interface{}{
-				"pushed": pushed,
-				"failed": failed,
-			},
-			ID: req.ID,
-		}
-
-	case "auth.status":
+				return Response{
+					JSONRPC: "2.0",
+					Result: map[string]interface{}{
+						"tasks":     tasks,
+						"conflicts": []interface{}{}, // Conflict detection T-0084
+						"sync_at":   time.Now().Format(time.RFC3339),
+					},
+					ID: req.ID,
+				}
+		
+			case "sync.push":
+				var params SyncPushParams
+				if err := json.Unmarshal(req.Params, &params); err != nil {
+					return Response{
+						JSONRPC: "2.0",
+						Error: &Error{
+							Code:    -32602,
+							Message: "Invalid params",
+						},
+						ID: req.ID,
+					}
+				}
+		
+				updated := []string{}
+				failed := map[string]string{}
+				for _, task := range params.Tasks {
+					var err error
+					originID, ok := task.Meta["origin_id"].(string)
+					if !ok || originID == "" {
+						err = createGitHubIssue(params.Repo, &task)
+					} else {
+						err = updateGitHubIssue(params.Repo, &task)
+					}
+		
+					if err != nil {
+						failed[task.ID] = err.Error()
+					} else {
+						updated = append(updated, task.ID)
+					}
+				}
+		
+				return Response{
+					JSONRPC: "2.0",
+					Result: map[string]interface{}{
+						"updated": updated,
+						"failed":  failed,
+					},
+					ID: req.ID,
+				}
+			case "auth.status":
 		return Response{
 			JSONRPC: "2.0",
 			Result: map[string]interface{}{

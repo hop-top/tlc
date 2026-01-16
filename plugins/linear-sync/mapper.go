@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 // Task represents the TLC task structure as used by plugins
 type Task struct {
 	ID          string                 `json:"id"`
@@ -8,6 +10,8 @@ type Task struct {
 	Status      string                 `json:"status"`
 	AssignedTo  string                 `json:"assigned_to,omitempty"`
 	Tags        []string               `json:"tags,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 	Meta        map[string]interface{} `json:"meta,omitempty"`
 }
 
@@ -20,6 +24,9 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 	if d, ok := issue["description"].(string); ok {
 		description = d
 	}
+
+	createdAt, _ := time.Parse(time.RFC3339, issue["createdAt"].(string))
+	updatedAt, _ := time.Parse(time.RFC3339, issue["updatedAt"].(string))
 
 	state := issue["state"].(map[string]interface{})
 	stateName := state["name"].(string)
@@ -36,6 +43,8 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 		Title:       title,
 		Description: description,
 		Status:      status,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
 		Meta: map[string]interface{}{
 			"origin_system": "linear",
 			"origin_id":     id,

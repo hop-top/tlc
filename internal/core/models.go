@@ -14,16 +14,19 @@ const (
 )
 
 type Task struct {
-	ID          string                 `json:"id" yaml:"id"`
-	Title       string                 `json:"title" yaml:"title"`
-	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
-	Status      TaskStatus             `json:"status" yaml:"status"`
-	AssignedTo  *string                `json:"assigned_to" yaml:"assigned_to"`
-	Tags        []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Reference   string                 `json:"reference" yaml:"reference"`
-	CreatedAt   time.Time              `json:"created_at" yaml:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at" yaml:"updated_at"`
-	Meta        map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
+	ID           string                 `json:"id" yaml:"id"`
+	Title        string                 `json:"title" yaml:"title"`
+	Description  string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Status       TaskStatus             `json:"status" yaml:"status"`
+	AssignedTo   *string                `json:"assigned_to" yaml:"assigned_to"`
+	Tags         []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Reference    string                 `json:"reference" yaml:"reference"`
+	CreatedAt    time.Time              `json:"created_at" yaml:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at" yaml:"updated_at"`
+	OriginSystem *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`
+	LastSyncAt   *time.Time             `json:"last_sync_at,omitempty" yaml:"last_sync_at,omitempty"`
+	Archived     bool                   `json:"archived" yaml:"archived"`
+	Meta         map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
 }
 
 type LogEntry struct {

@@ -50,6 +50,44 @@ New log actions for tracking sync operations:
 - **SYNC_CONFLICT** - Sync conflict detected requiring resolution
 - **SYNC_ERROR** - Sync operation failed
 
+## Change Tracking
+
+TLC identifies tasks that need to be pushed back to their origin systems by comparing the `updated_at` timestamp with the `last_sync_at` timestamp.
+
+A task is considered "dirty" (needing push) if:
+1. It has an `origin_system` defined.
+2. EITHER `last_sync_at` is null (never synced).
+3. OR `updated_at` > `last_sync_at`.
+
+This logic is encapsulated in the `NeedsPush()` method on the Task model. The storage layer provides a optimized query `GetTasksNeedingPush()` to fetch all such tasks efficiently.
+
+## Bidirectional Sync & Conflict Resolution
+
+TLC supports bidirectional synchronization, allowing changes to flow both from external systems to TLC (pull) and from TLC back to external systems (push).
+
+### Conflict Detection
+
+A conflict occurs when both the local task and the remote task have been modified since the last synchronization point (`last_sync_at`).
+
+TLC detects conflicts during the `sync pull` operation:
+- Local modification: `local.updated_at > local.last_sync_at`
+- Remote modification: `remote.updated_at > local.last_sync_at`
+
+### Resolution Strategies
+
+When a conflict is detected, TLC applies one of the following strategies (configurable via `--strategy` flag):
+
+- **remote-wins** (default): Overwrites local changes with the remote version.
+- **local-wins**: Keeps local changes; the task will be pushed to the remote system in the next `sync push`.
+- **last-write-wins**: Chooses the version with the most recent `updated_at` timestamp.
+- **manual**: Prompts the user interactively to choose between local and remote versions.
+
+### Implementation Notes
+
+- **Plugins**: Must include `updated_at` and `created_at` in the `Task` objects returned by `sync.pull` to enable accurate conflict detection.
+- **Audit Logs**: All conflict resolutions are logged with the `SYNC_CONFLICT` action.
+- **Last Sync Timestamp**: The `last_sync_at` field is updated only after a successful pull or push operation, serving as the baseline for future change tracking.
+
 ## Sync Workflow
 
 1. **Poll**: TLC regularly probes integrated systems for new/updated tasks

@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository defines the interface for task persistence.
 type Repository interface {
@@ -10,10 +13,21 @@ type Repository interface {
 	GetTask(ctx context.Context, id string) (*Task, error)
 	// UpdateTask updates an existing task.
 	UpdateTask(ctx context.Context, task *Task) error
+	// UpdateTaskWithLog updates a task and adds a log entry atomically.
+	UpdateTaskWithLog(ctx context.Context, task *Task, entry *LogEntry) error
 	// ListTasks returns a list of tasks matching the query parameters.
 	ListTasks(ctx context.Context, query Query) ([]*Task, error)
 	// DeleteTask removes a task by its ID.
 	DeleteTask(ctx context.Context, id string) error
+
+	// GetTasksNeedingPush returns tasks that have been modified since their last sync.
+	GetTasksNeedingPush(ctx context.Context) ([]*Task, error)
+
+	// FindTaskByOrigin locates a task by its origin system and origin ID.
+	FindTaskByOrigin(ctx context.Context, system, originID string) (*Task, error)
+
+	// ArchiveTasks marks tasks as archived if they have been DONE or SKIPPED for longer than the threshold.
+	ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error)
 
 	// CreateFlowRun persists a new flow execution instance.
 	CreateFlowRun(ctx context.Context, run *FlowRun) error

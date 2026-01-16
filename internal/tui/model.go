@@ -796,13 +796,16 @@ func (m Model) dashboardContent() string {
 
 			
 
-							s.WriteString(fmt.Sprintf("%s %s %s %s%s%s\n", cursor, task.ID, statusIcon, title, styles.MutedStyle.Render(assignee), tags))
-
-							currentIndex++
-
-						}
-
-			
+										syncIcon := ""
+										if task.NeedsPush() {
+											syncIcon = styles.WarningStyle.Render(" ↑")
+										}
+							
+										s.WriteString(fmt.Sprintf("%s %s %s %s%s%s%s\n", cursor, task.ID, statusIcon, title, syncIcon, styles.MutedStyle.Render(assignee), tags))
+							
+										currentIndex++
+									}
+										
 		s.WriteString("\n")
 	}
 
@@ -852,6 +855,15 @@ func (m Model) detailView() string {
 	s.WriteString(fmt.Sprintf("Assigned:  %s\n", formatAssignee(task.AssignedTo)))
 	s.WriteString(fmt.Sprintf("Reference: %s\n", task.Reference))
 	s.WriteString(fmt.Sprintf("Tags:      %s\n", strings.Join(task.Tags, ", ")))
+	
+	if task.OriginSystem != nil && *task.OriginSystem != "" {
+		syncStatus := "In Sync"
+		if task.NeedsPush() {
+			syncStatus = styles.WarningStyle.Render("Pending Push")
+		}
+		s.WriteString(fmt.Sprintf("Sync:      %s (%s)\n", syncStatus, *task.OriginSystem))
+	}
+	
 	s.WriteString("\n")
 
 	if task.Description != "" {

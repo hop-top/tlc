@@ -55,6 +55,7 @@ type TaskConfig struct {
 	AutoAssign       bool   `yaml:"auto_assign"`
 	RequireReference bool   `yaml:"require_reference"`
 	TodoFile         string `yaml:"todo_file"`
+	ArchiveThreshold time.Duration `yaml:"archive_threshold"`
 }
 
 func (t *TaskConfig) Validate() error {
@@ -88,6 +89,7 @@ type GitCommitConfig struct {
 
 type SyncConfig struct {
 	Enabled          bool                 `yaml:"enabled"`
+	AutoPush         bool                 `yaml:"auto_push"`
 	Interval         time.Duration        `yaml:"interval"`
 	ConflictStrategy string               `yaml:"conflict_strategy"`
 	BatchSize        int                  `yaml:"batch_size"`

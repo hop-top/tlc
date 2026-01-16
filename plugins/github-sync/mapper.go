@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 	"github.com/google/go-github/v69/github"
 )
 
@@ -13,6 +14,8 @@ type Task struct {
 	Status      string                 `json:"status"`
 	AssignedTo  string                 `json:"assigned_to,omitempty"`
 	Tags        []string               `json:"tags,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 	Meta        map[string]interface{} `json:"meta,omitempty"`
 }
 
@@ -33,6 +36,8 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 		Title:       title,
 		Description: body,
 		Status:      status,
+		CreatedAt:   issue.GetCreatedAt().Time,
+		UpdatedAt:   issue.GetUpdatedAt().Time,
 		Meta: map[string]interface{}{
 			"origin_system": "github",
 			"origin_id":     fmt.Sprintf("%d", number),

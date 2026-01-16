@@ -25,6 +25,12 @@ func (m *mockRepo) UpdateTask(ctx context.Context, t *Task) error {
 	return nil
 }
 
+func (m *mockRepo) UpdateTaskWithLog(ctx context.Context, t *Task, e *LogEntry) error {
+	m.tasks[t.ID] = t
+	m.logs = append(m.logs, e)
+	return nil
+}
+
 func (m *mockRepo) ListTasks(ctx context.Context, q Query) ([]*Task, error) {
 	return nil, nil
 }
@@ -32,6 +38,39 @@ func (m *mockRepo) ListTasks(ctx context.Context, q Query) ([]*Task, error) {
 func (m *mockRepo) DeleteTask(ctx context.Context, id string) error {
 	delete(m.tasks, id)
 	return nil
+}
+
+func (m *mockRepo) GetTasksNeedingPush(ctx context.Context) ([]*Task, error) {
+	var result []*Task
+	for _, t := range m.tasks {
+		if t.NeedsPush() {
+			result = append(result, t)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockRepo) FindTaskByOrigin(ctx context.Context, system, originID string) (*Task, error) {
+	for _, t := range m.tasks {
+		if t.OriginSystem != nil && *t.OriginSystem == system {
+			if id, ok := t.Meta["origin_id"].(string); ok && id == originID {
+				return t, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockRepo) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-threshold)
+	var count int64
+	for _, t := range m.tasks {
+		if !t.Archived && (t.Status == StatusDone || t.Status == StatusSkipped) && t.UpdatedAt.Before(cutoff) {
+			t.Archived = true
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (m *mockRepo) CreateFlowRun(ctx context.Context, run *FlowRun) error {

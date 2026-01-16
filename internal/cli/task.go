@@ -91,6 +91,9 @@ var taskClaimCmd = &cobra.Command{
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
+		if task.OriginSystem != nil && *task.OriginSystem != "" {
+			fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
+		}
 		return syncToTODO()
 	},
 }
@@ -131,6 +134,9 @@ var taskUnclaimCmd = &cobra.Command{
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
+		if task.OriginSystem != nil && *task.OriginSystem != "" {
+			fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
+		}
 		return syncToTODO()
 	},
 }
@@ -485,6 +491,11 @@ var taskUpdateCmd = &cobra.Command{
 				return err
 			}
 			fmt.Printf("Updated task %s\n", task.ID)
+			
+			if task.OriginSystem != nil && *task.OriginSystem != "" {
+				fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
+			}
+			
 			return syncToTODO()
 		} else {
 			fmt.Println("No changes specified")

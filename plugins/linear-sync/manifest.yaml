@@ -20,7 +20,7 @@ requires:
 config_schema:
   type: object
   properties:
-    team:
+    repo:
       type: string
       required: true
     sync_direction:
@@ -30,5 +30,7 @@ config_schema:
 
 # Permissions required
 permissions:
-  - network.http
-  - credential.read
+  - network.http: linear.app
+  - credential.read: linear_api_key
+  - storage.read: tasks
+  - storage.write: tasks

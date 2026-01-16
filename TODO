@@ -1,116 +1,116 @@
-[x] T-0001 Initialize project structure and Go module @engineer-1 #setup #infra created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:infra prio:P0
+[x] T-0001 Initialize project structure and Go module @engineer-1 #setup #infra created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:infra
 [x] T-0002 Setup SQLite database with migration system @engineer-1 #storage #db created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
-[x] T-0003 Design and implement Task schema tables @engineer-1 #storage #schema ref:docs/task-crud-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
+[x] T-0003 Design and implement Task schema tables @engineer-1 #storage #schema ref:docs/task-crud-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:storage
 [x] T-0004 Implement Task repository interface @engineer-1 #storage #interface created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
 [x] T-0005 Implement Task CRUD operations @engineer-1 #storage #crud created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
-[x] T-0006 Add database migration system @engineer-1 #storage #migrations created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:storage
-[x] T-0007 Design query filter data structures @engineer-1 #query #design ref:docs/tlc-query-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
-[x] T-0008 Implement basic filters (status, assigned_to, tags) @engineer-1 #query #filter created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:storage
-[x] T-0009 Implement comparison operators @engineer-1 #query #operators created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
+[x] T-0006 Add database migration system @engineer-1 #storage #migrations created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
+[x] T-0007 Design query filter data structures @engineer-1 #query #design ref:docs/tlc-query-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:storage
+[x] T-0008 Implement basic filters (status, assigned_to, tags) @engineer-1 #query #filter created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
+[x] T-0009 Implement comparison operators @engineer-1 #query #operators created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:storage
 [x] T-0010 Implement text search and pattern matching @engineer-1 #query #search created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
 [x] T-0011 Implement sorting (single and multi-field) @engineer-1 #query #sort created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
-[x] T-0012 Implement pagination (limit, offset) @engineer-1 #query #pagination created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:storage
+[x] T-0012 Implement pagination (limit, offset) @engineer-1 #query #pagination created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
 [x] T-0013 Add metadata field queries @engineer-1 #query #metadata created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:48:32Z domain:storage prio:P1
 [x] T-0014 Define Task status enum @engineer-1 #state #model ref:docs/task-crud-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P0
 [x] T-0015 Implement state transition validator @engineer-1 #state #validation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P0
 [x] T-0016 Implement state change handlers @engineer-1 #state #handlers created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P0
 [x] T-0017 Add state transition error handling @engineer-1 #state #errors created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P1
-[x] T-0018 Design audit log schema @engineer-1 #log #schema ref:docs/task-log-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P0
+[x] T-0018 Design audit log schema @engineer-1 #log #schema ref:docs/task-log-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:storage
 [x] T-0019 Implement log entry creation for all 34 actions @engineer-1 #log #actions created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P0
 [x] T-0020 Add automatic log creation on state changes @engineer-1 #log #hooks created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P0
-[x] T-0021 Implement log query and filtering @engineer-1 #log #query created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:storage
+[x] T-0021 Implement log query and filtering @engineer-1 #log #query created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
 [x] T-0022 Add log pagination and sorting @engineer-1 #log #pagination created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:storage prio:P1
 [x] T-0023 Design config file schema @engineer-1 #config #schema ref:docs/tlc-config-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:config prio:P0
 [x] T-0024 Implement config file loading @engineer-1 #config #loader created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:config prio:P0
 [x] T-0025 Implement hierarchical config merging @engineer-1 #config #merge created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:config prio:P0
 [x] T-0026 Add environment variable overrides @engineer-1 #config #env created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:config prio:P1
 [x] T-0027 Implement config validation @engineer-1 #config #validation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:05:29Z domain:config prio:P1
-[x] T-0028 Add default config values @engineer-1 #config #defaults created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T06:35:00Z domain:config prio:P1
+[x] T-0028 Add default config values @engineer-1 #config #defaults created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T06:35:00Z prio:P1 domain:config
 [x] T-0029 Create mock implementations for CLI integration @engineer-1 #integration #mocks created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:core prio:P0
 [x] T-0030 Write API documentation for storage interfaces @engineer-1 #docs #api created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:docs prio:P1
 [x] T-0031 Setup Cobra CLI framework @engineer-2 #cli #setup ref:docs/tlc-cli-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
 [x] T-0032 Setup Viper configuration integration @engineer-2 #cli #config created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
 [x] T-0033 Implement tlc init command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
-[x] T-0034 Implement tlc task create command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:cli
+[x] T-0034 Implement tlc task create command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
 [x] T-0035 Implement tlc task list command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
-[x] T-0036 Implement tlc task show command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
+[x] T-0036 Implement tlc task show command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:cli
 [x] T-0037 Implement tlc task update command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
 [x] T-0038 Implement tlc task delete command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0039 Implement tlc config get command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0040 Implement tlc config set command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
-[x] T-0041 Implement tlc config list command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:cli
+[x] T-0041 Implement tlc config list command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0042 Add JSON output formatter @engineer-2 #cli #format created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
 [x] T-0043 Add YAML output formatter @engineer-2 #cli #format created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0044 Add table formatter using Bubbles @engineer-2 #cli #format created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P0
 [x] T-0045 Add Task Line Syntax formatter @engineer-2 #cli #format ref:docs/task-line-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
-[x] T-0046 Integrate Huh for interactive task creation @engineer-2 #cli #interactive created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
-[x] T-0047 Add confirmation prompts with Huh @engineer-2 #cli #interactive created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
+[x] T-0046 Integrate Huh for interactive task creation @engineer-2 #cli #interactive created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:cli
+[x] T-0047 Add confirmation prompts with Huh @engineer-2 #cli #interactive created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:cli
 [x] T-0048 Implement Lip Gloss styling for output @engineer-2 #cli #styling created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0049 Add status badge rendering with Lip Gloss @engineer-2 #cli #styling created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0050 Integrate Glamour for markdown rendering @engineer-2 #cli #markdown created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
-[x] T-0051 Setup Charm Log for structured logging @engineer-2 #cli #logging created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
-[x] T-0052 Setup Bubble Tea architecture @engineer-2 #tui #setup ref:docs/tlc-tui-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[x] T-0053 Implement TUI dashboard view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[x] T-0054 Implement TUI task list view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[x] T-0055 Implement TUI task detail view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[x] T-0056 Add TUI navigation and keybindings @engineer-2 #tui #navigation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[x] T-0057 Implement TUI flow execution view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P2
-[x] T-0058 Add TUI search/filter dialog @engineer-2 #tui #search created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P2
-[ ] T-0059 Implement tlc flow run command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
-[ ] T-0060 Implement tlc flow status command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
-[ ] T-0061 Implement tlc log command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
-[ ] T-0062 Add shell completion scripts @engineer-2 #cli #completion created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
+[x] T-0051 Setup Charm Log for structured logging @engineer-2 #cli #logging created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:cli
+[x] T-0052 Setup Bubble Tea architecture @engineer-2 #tui #setup ref:docs/tlc-tui-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P1
+[x] T-0053 Implement TUI dashboard view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P1
+[x] T-0054 Implement TUI task list view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P1
+[x] T-0055 Implement TUI task detail view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P1
+[x] T-0056 Add TUI navigation and keybindings @engineer-2 #tui #navigation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P1
+[x] T-0057 Implement TUI flow execution view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P2
+[x] T-0058 Add TUI search/filter dialog @engineer-2 #tui #search created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T04:04:00-05:00 domain:tui prio:P2
+[x] T-0059 Implement tlc flow run command Bitar @Jad #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T08:12:54-05:00 prio:P2 domain:cli
+[x] T-0060 Implement tlc flow status command Bitar @Jad #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T13:09:56Z domain:cli prio:P2
+[x] T-0061 Implement tlc log command Bitar @Jad #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T08:12:54-05:00 domain:cli prio:P2
+[x] T-0062 Add shell completion scripts Bitar @Jad #cli #completion created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T12:49:10Z domain:cli prio:P2
 [x] T-0063 Setup OS keychain integration @engineer-3 #auth #keychain ref:docs/tlc-auth-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P0
 [x] T-0064 Implement encrypted file fallback storage @engineer-3 #auth #storage created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P0
 [x] T-0065 Implement GitHub PAT authentication @engineer-3 #auth #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P0
 [x] T-0066 Implement GitHub OAuth flow @engineer-3 #auth #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P1
-[x] T-0067 Add GitHub token refresh logic @engineer-3 #auth #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:auth
+[x] T-0067 Add GitHub token refresh logic @engineer-3 #auth #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P1
 [x] T-0068 Implement Jira API token authentication @engineer-3 #auth #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P1
 [x] T-0069 Implement Jira OAuth 2.0 flow @engineer-3 #auth #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:auth prio:P2
-[x] T-0070 Implement Linear API key authentication @engineer-3 #auth #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:42:22-05:00 domain:auth prio:P1
+[x] T-0070 Implement Linear API key authentication @engineer-3 #auth #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:42:22-05:00 prio:P1 domain:auth
 [x] T-0071 Implement tlc auth login command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
 [x] T-0072 Implement tlc auth logout command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
 [x] T-0073 Implement tlc auth status command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
 [x] T-0074 Create GitHub sync plugin manifest @engineer-3 #plugin #github ref:docs/tlc-plugin-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P0
 [x] T-0075 Implement GitHub plugin JSON-RPC server @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P0
 [x] T-0076 Implement GitHub API issue fetching @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P0
-[x] T-0077 Implement GitHub API issue creation @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
+[x] T-0077 Implement GitHub API issue creation @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:sync
 [x] T-0078 Implement GitHub API issue updates @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
 [x] T-0079 Add GitHub label and milestone import @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
 [x] T-0080 Implement GitHub to TLC schema mapping @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P0
-[x] T-0081 Implement TLC to GitHub schema mapping @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P0
-[x] T-0082 Add sync pull logic with polling @engineer-3 #plugin #sync created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P0
+[x] T-0081 Implement TLC to GitHub schema mapping @engineer-3 #plugin #github created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:sync
+[x] T-0082 Add sync pull logic with polling @engineer-3 #plugin #sync created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P0 domain:sync
 [x] T-0083 Add sync push logic @engineer-3 #plugin #sync created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
 [x] T-0084 Implement conflict detection @engineer-3 #plugin #sync created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
-[x] T-0085 Add sync status tracking @engineer-3 #plugin #sync created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
-[x] T-0086 Create Jira sync plugin manifest @engineer-3 #plugin #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:sync
+[x] T-0085 Add sync status tracking @engineer-3 #plugin #sync created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:sync
+[x] T-0086 Create Jira sync plugin manifest @engineer-3 #plugin #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
 [x] T-0087 Implement Jira plugin JSON-RPC server @engineer-3 #plugin #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
 [x] T-0088 Implement Jira API integration @engineer-3 #plugin #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
 [x] T-0089 Implement Jira schema mapping @engineer-3 #plugin #jira created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P1
-[x] T-0090 Create Linear sync plugin manifest @engineer-3 #plugin #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P2 domain:sync
+[x] T-0090 Create Linear sync plugin manifest @engineer-3 #plugin #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P2
 [x] T-0091 Implement Linear plugin JSON-RPC server @engineer-3 #plugin #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P2
 [x] T-0092 Implement Linear API integration @engineer-3 #plugin #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P2
-[x] T-0093 Implement Linear schema mapping @engineer-3 #plugin #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:sync prio:P2
+[x] T-0093 Implement Linear schema mapping @engineer-3 #plugin #linear created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P2 domain:sync
 [x] T-0094 Implement tlc sync pull command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
-[x] T-0095 Implement tlc sync push command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
+[x] T-0095 Implement tlc sync push command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 prio:P1 domain:cli
 [x] T-0096 Implement tlc sync status command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
 [x] T-0097 Implement tlc sync config command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:45:28-05:00 domain:cli prio:P2
 [x] T-0098 Implement project type auto-detection @engineer-3 #labels #detection ref:docs/github-label-convention-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:labels prio:P1
-[x] T-0099 Create label templates for project types @engineer-3 #labels #templates created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:labels prio:P1
-[x] T-0100 Implement tlc label init command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 domain:cli prio:P1
+[x] T-0099 Create label templates for project types @engineer-3 #labels #templates created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:labels
+[x] T-0100 Implement tlc label init command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:44:05-05:00 prio:P1 domain:cli
 [x] T-0101 Implement tlc label list command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:45:28-05:00 domain:cli prio:P2
 [x] T-0102 Implement tlc label templates command @engineer-3 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:45:28-05:00 domain:cli prio:P2
 [x] T-0103 Parse YAML flow definitions @engineer-1 #flow #parser ref:docs/task-flow-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:06:42Z domain:flow prio:P1
-[x] T-0104 Implement flow definition validation @engineer-1 #flow #validation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:07:20Z prio:P1 domain:flow
+[x] T-0104 Implement flow definition validation @engineer-1 #flow #validation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:07:20Z domain:flow prio:P1
 [x] T-0105 Implement sequential step execution @engineer-1 #flow #executor created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:08:32Z domain:flow prio:P1
 [x] T-0106 Implement parallel step execution @engineer-1 #flow #executor created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:09:20Z domain:flow prio:P1
-[x] T-0107 Add flow error handling and retry @engineer-1 #flow #errors created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:11:38Z domain:flow prio:P1
+[x] T-0107 Add flow error handling and retry @engineer-1 #flow #errors created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:11:38Z prio:P1 domain:flow
 [x] T-0108 Implement flow state management @engineer-1 #flow #state created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:14:31Z domain:flow prio:P1
 [x] T-0109 Add flow pause/resume/cancel support @engineer-1 #flow #control created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:21:38Z domain:flow prio:P2
 [x] T-0110 Implement flow progress reporting @engineer-1 #flow #progress created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:22:08Z domain:flow prio:P2
 [x] T-0111 Design plugin manifest schema @engineer-1 #plugin #schema ref:docs/tlc-plugin-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:22:29Z domain:plugin prio:P1
 [x] T-0112 Implement plugin discovery and loading @engineer-1 #plugin #discovery created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:23:14Z domain:plugin prio:P1
-[x] T-0113 Implement JSON-RPC communication layer @engineer-1 #plugin #rpc created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:24:06Z domain:plugin prio:P1
+[x] T-0113 Implement JSON-RPC communication layer @engineer-1 #plugin #rpc created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:24:06Z prio:P1 domain:plugin
 [x] T-0114 Add plugin permission system @engineer-1 #plugin #permissions created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:46:33Z domain:plugin prio:P2
 [x] T-0115 Implement credential isolation @engineer-1 #plugin #security created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:47:14Z domain:plugin prio:P2
 [x] T-0116 Write unit tests for storage layer @engineer-1 #test #storage created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:25:10Z domain:tests prio:P1
@@ -118,11 +118,11 @@
 [x] T-0118 Write unit tests for state machine @engineer-1 #test #state created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:26:04Z domain:tests prio:P1
 [x] T-0119 Write unit tests for audit logging @engineer-1 #test #log created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:31:00Z domain:tests prio:P1
 [x] T-0120 Write unit tests for config system @engineer-1 #test #config created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:32:07Z domain:tests prio:P1
-[x] T-0121 Write integration tests for storage @engineer-1 #test #integration created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:34:53Z prio:P1 domain:tests
+[x] T-0121 Write integration tests for storage @engineer-1 #test #integration created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:34:53Z domain:tests prio:P1
 [ ] T-0122 Write CLI command tests @engineer-2 #test #cli created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tests prio:P1
 [ ] T-0123 Write TUI interaction tests @engineer-2 #test #tui created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tests prio:P2
-[x] T-0124 Write auth system tests @engineer-3 #test #auth created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:42:22-05:00 prio:P1 domain:tests
-[x] T-0125 Write plugin integration tests @engineer-3 #test #plugin created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tests prio:P1
+[x] T-0124 Write auth system tests @engineer-3 #test #auth created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T02:42:22-05:00 domain:tests prio:P1
+[x] T-0125 Write plugin integration tests @engineer-3 #test #plugin created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:tests
 [x] T-0126 Performance benchmarks for query engine @engineer-1 #test #performance created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:45:35Z domain:tests prio:P2
 [x] T-0127 Setup CI/CD pipeline @engineer-1 #infra #ci created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:44:55Z domain:infra prio:P1
 [x] T-0128 Add code coverage reporting @engineer-1 #infra #testing created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T07:44:20Z domain:infra prio:P2
@@ -130,3 +130,12 @@
 [ ] T-0130 Create user guide documentation @engineer-2 #docs #guide created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:docs prio:P2
 [x] T-0131 Update Task Execution Spec for Agent Traceability @engineer-1 #docs created_at=2026-01-16T07:17:55Z updated_at=2026-01-16T07:19:37Z
 [x] T-0132 Fix Query Engine to support multiple filters per field (OR logic) @engineer-1 #core created_at=2026-01-16T07:51:38Z updated_at=2026-01-16T07:52:37Z
+[x] T-0133 Implement change tracking for detecting modified tasks since last sync Bitar @Jad #sync #push #change-tracking ref:docs/sync-architecture-0.1.md created_at=2026-01-16T12:37:14Z updated_at=2026-01-16T08:08:56-05:00
+[x] T-0134 Complete sync push command implementation in CLI Bitar @Jad #sync #cli #push ref:internal/cli/sync.go:50-59 created_at=2026-01-16T12:37:24Z updated_at=2026-01-16T08:08:56-05:00
+[x] T-0135 Implement conflict detection and resolution for bidirectional sync Bitar @Jad #sync #conflict #resolution ref:plugins/github-sync/main.go:91 created_at=2026-01-16T12:37:37Z updated_at=2026-01-16T13:02:30Z
+[x] T-0136 Add automatic sync hooks for bidirectional sync triggers Bitar @Jad #sync #automation #hooks ref:internal/core/service.go created_at=2026-01-16T12:37:49Z updated_at=2026-01-16T13:17:14Z
+[x] T-0137 Implement sync push for Jira plugin with bidirectional support Bitar @Jad #sync #jira #plugin ref:plugins/jira-sync/main.go created_at=2026-01-16T12:38:01Z updated_at=2026-01-16T12:54:59Z
+[x] T-0138 Implement sync push for Linear plugin with bidirectional support Bitar @Jad #sync #linear #plugin ref:plugins/linear-sync/main.go created_at=2026-01-16T12:38:13Z updated_at=2026-01-16T13:02:02Z
+[x] T-0139 Add comprehensive logging for all sync operations Bitar @Jad #sync #logging #audit ref:docs/task-log-spec-0.1.md created_at=2026-01-16T12:38:31Z updated_at=2026-01-16T13:29:16Z
+[ ] T-0140 Write integration tests for end-to-end bidirectional sync @engineer-2 #sync #test #integration ref:internal/plugin/integration_test.go created_at=2026-01-16T12:38:47Z updated_at=2026-01-16T12:38:47Z
+[x] T-0141 Update sync documentation with bidirectional workflow examples Bitar @Jad #sync #docs #documentation ref:docs/sync-architecture-0.1.md created_at=2026-01-16T12:39:03Z updated_at=2026-01-16T13:02:22Z

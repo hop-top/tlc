@@ -24,6 +24,7 @@ task:
     id_format: T-{seq:04d}
     require_reference: true
     todo_file: TODO
+    archive_threshold: 4h
 ui:
     date_format: "2006-01-02 15:04:05"
     editor: vim

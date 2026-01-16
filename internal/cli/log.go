@@ -1,0 +1,209 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
+)
+
+var (
+	logTaskID        string
+	logAction        string
+	logBy            string
+	logSince         string
+	logUntil         string
+	logLimit         int
+	logOffset        int
+	logSortDirection string
+	logAll           bool
+)
+
+var logCmd = &cobra.Command{
+	Use:   "log [task-id]",
+	Short: "View task audit logs",
+	Long: `View audit logs for tasks with filtering and querying capabilities.
+
+Examples:
+  # View logs for a specific task
+  tlc log T-0001
+
+  # View all logs across all tasks
+  tlc log --all
+
+  # Filter by action type
+  tlc log --all --action CLAIMED
+
+  # Filter by user
+  tlc log --all --by engineer-1
+
+  # View logs in different formats
+  tlc log T-0001 --format json
+  tlc log --all --format yaml
+
+  # Limit and paginate results
+  tlc log --all --limit 20 --offset 40
+`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// If task ID provided as argument, use it
+		if len(args) > 0 {
+			logTaskID = args[0]
+		}
+
+		// Validate: either task-id or --all must be specified
+		if logTaskID == "" && !logAll {
+			return fmt.Errorf("either provide a task-id or use --all flag")
+		}
+
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+
+		// Build log query
+		query := core.LogQuery{
+			TaskID:        logTaskID,
+			Action:        logAction,
+			By:            logBy,
+			Limit:         logLimit,
+			Offset:        logOffset,
+			SortDirection: logSortDirection,
+		}
+
+		// Default sort direction
+		if query.SortDirection == "" {
+			query.SortDirection = "desc"
+		}
+
+		// Get logs
+		logs, err := s.ListLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to query logs: %w", err)
+		}
+
+		// Format and output
+		format := viper.GetString("output.format")
+		formatLogs(cmd, logs, format)
+		return nil
+	},
+}
+
+func formatLogs(cmd *cobra.Command, logs []*core.LogEntry, format string) {
+	out := cmd.OutOrStdout()
+	switch format {
+	case "json":
+		data, _ := json.MarshalIndent(logs, "", "  ")
+		fmt.Fprintln(out, string(data))
+	case "yaml":
+		data, _ := yaml.Marshal(logs)
+		fmt.Fprintln(out, string(data))
+	default: // table
+		renderLogTable(out, logs)
+	}
+}
+
+func renderLogTable(w io.Writer, logs []*core.LogEntry) {
+	if len(logs) == 0 {
+		fmt.Fprintln(w, "No logs found")
+		return
+	}
+
+	columns := []table.Column{
+		{Title: "Timestamp", Width: 20},
+		{Title: "Task ID", Width: 12},
+		{Title: "Action", Width: 18},
+		{Title: "By", Width: 15},
+		{Title: "Note", Width: 50},
+	}
+
+	rows := []table.Row{}
+	for _, l := range logs {
+		timestamp := l.Timestamp.Format("2006-01-02 15:04:05")
+		note := l.Note
+		if len(note) > 47 {
+			note = note[:47] + "..."
+		}
+
+		rows = append(rows, table.Row{
+			timestamp,
+			l.TaskID,
+			formatLogAction(l.Action),
+			l.By,
+			note,
+		})
+	}
+
+	tbl := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(false),
+		table.WithHeight(len(rows)+1),
+	)
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	tbl.SetStyles(s)
+
+	fmt.Fprintln(w, tbl.View())
+	fmt.Fprintf(w, "\nShowing %d log entries\n", len(logs))
+}
+
+func formatLogAction(action string) string {
+	actionColors := map[string]lipgloss.Color{
+		"CREATED":        lipgloss.Color("42"),  // green
+		"CLAIMED":        lipgloss.Color("39"),  // blue
+		"RELEASED":       lipgloss.Color("214"), // yellow
+		"REASSIGNED":     lipgloss.Color("208"), // orange
+		"UPDATED":        lipgloss.Color("45"),  // cyan
+		"DONE":           lipgloss.Color("46"),  // bright green
+		"SKIPPED":        lipgloss.Color("226"), // yellow
+		"FAILURE":        lipgloss.Color("196"), // red
+		"RETRY":          lipgloss.Color("214"), // orange
+		"COMMENT":        lipgloss.Color("245"), // gray
+		"SYNC_IMPORTED":  lipgloss.Color("51"),  // cyan
+		"SYNC_PULLED":    lipgloss.Color("51"),  // cyan
+		"SYNC_PUSHED":    lipgloss.Color("51"),  // cyan
+		"SYNC_CONFLICT":  lipgloss.Color("196"), // red
+		"SYNC_ERROR":     lipgloss.Color("196"), // red
+		"FLOW_START":     lipgloss.Color("39"),  // blue
+		"FLOW_END":       lipgloss.Color("42"),  // green
+		"STEP_START":     lipgloss.Color("39"),  // blue
+		"STEP_END":       lipgloss.Color("42"),  // green
+	}
+
+	color, exists := actionColors[action]
+	if !exists {
+		color = lipgloss.Color("255") // white/default
+	}
+
+	return lipgloss.NewStyle().Foreground(color).Render(action)
+}
+
+func init() {
+	logCmd.Flags().StringVar(&logTaskID, "task-id", "", "Filter by task ID")
+	logCmd.Flags().StringVar(&logAction, "action", "", "Filter by action type (e.g., CLAIMED, DONE, SYNC_PUSHED)")
+	logCmd.Flags().StringVar(&logBy, "by", "", "Filter by actor/user")
+	logCmd.Flags().StringVar(&logSince, "since", "", "Filter logs since timestamp (RFC3339)")
+	logCmd.Flags().StringVar(&logUntil, "until", "", "Filter logs until timestamp (RFC3339)")
+	logCmd.Flags().IntVarP(&logLimit, "limit", "n", 100, "Maximum number of logs to return")
+	logCmd.Flags().IntVar(&logOffset, "offset", 0, "Skip first N logs (for pagination)")
+	logCmd.Flags().StringVar(&logSortDirection, "sort", "desc", "Sort direction: asc or desc")
+	logCmd.Flags().BoolVar(&logAll, "all", false, "Show logs from all tasks")
+
+	rootCmd.AddCommand(logCmd)
+}

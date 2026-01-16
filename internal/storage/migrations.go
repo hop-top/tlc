@@ -59,6 +59,21 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_flow_runs_status ON flow_runs(status);
 		`,
 	},
+	{
+		version: 3,
+		query: `
+		ALTER TABLE tasks ADD COLUMN origin_system TEXT;
+		ALTER TABLE tasks ADD COLUMN last_sync_at TEXT;
+		CREATE INDEX IF NOT EXISTS idx_tasks_origin_system ON tasks(origin_system);
+		`,
+	},
+	{
+		version: 4,
+		query: `
+		ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0;
+		CREATE INDEX IF NOT EXISTS idx_tasks_archived ON tasks(archived);
+		`,
+	},
 }
 
 func (s *SQLiteStorage) migrate() error {

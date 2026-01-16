@@ -33,5 +33,7 @@ config_schema:
 
 # Permissions required
 permissions:
-  - network.http
-  - credential.read
+  - network.http: jira.com
+  - credential.read: jira_email, jira_token
+  - storage.read: tasks
+  - storage.write: tasks

@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/google/oss-tlc-cli/internal/config"
@@ -111,6 +113,18 @@ func initConfig() {
 		log.Warn("Failed to ingest TODO file", "error", err)
 	}
 
+	// Auto-archive tasks
+	if s, err := getStorage(); err == nil {
+		defer s.Close()
+		threshold := viper.GetDuration("task.archive_threshold")
+		if threshold > 0 {
+			count, err := s.ArchiveTasks(context.Background(), threshold)
+			if err == nil && count > 0 {
+				log.Info("Auto-archived tasks", "count", count)
+			}
+		}
+	}
+
 	setupLogging()
 }
 
@@ -198,6 +212,7 @@ func setDefaults() {
 	viper.SetDefault("task.id_format", "T-{seq:04d}")
 	viper.SetDefault("task.auto_assign", false)
 	viper.SetDefault("task.require_reference", true)
+	viper.SetDefault("task.archive_threshold", 7*24*time.Hour)
 
 	viper.SetDefault("git.worktree.directory", ".worktrees")
 	viper.SetDefault("git.worktree.auto_create", true)
