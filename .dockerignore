@@ -1,0 +1,46 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Development directories
+.worktrees/
+bin/
+tmp/
+build-errors.log
+lint-errors.log
+
+# Test files
+*.test
+coverage/
+*.coverprofile
+*.out
+
+# Database files
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# Documentation (already in image)
+docs/plans/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+tlc
+
+# Docker files (no need to copy into build)
+Dockerfile
+.dockerignore
+docker-compose.yml

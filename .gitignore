@@ -3,7 +3,6 @@ bin/
 tlc
 *.db
 *.test
-coverage/
 
 # Development artifacts
 tmp/
@@ -12,5 +11,6 @@ build-errors.log
 lint-errors.log
 
 # Coverage
+coverage/
 *.coverprofile
 *.out

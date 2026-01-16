@@ -33,6 +33,32 @@ mkdir -p bin
 go build -o bin/tlc cmd/tlc/main.go
 ```
 
+### Docker
+
+Run TLC in a containerized environment with persistent storage:
+
+```bash
+# Build the image
+docker build -t tlc-cli .
+
+# Run interactively with TUI
+docker run -it --rm \
+  -v tlc-data:/home/tlc/.local/share/tlc \
+  -v tlc-config:/home/tlc/.config/tlc \
+  tlc-cli tui
+
+# Run one-off commands
+docker run --rm \
+  -v tlc-data:/home/tlc/.local/share/tlc \
+  tlc-cli task list
+
+# Or use docker-compose
+docker-compose up -d
+docker-compose exec tlc tlc tui
+```
+
+For more Docker usage examples, see [docs/docker.md](docs/docker.md).
+
 ## 🧪 Testing
 
 ### Run all tests

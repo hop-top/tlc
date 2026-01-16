@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  tlc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tlc-cli:latest
+    container_name: tlc
+    stdin_open: true
+    tty: true
+    volumes:
+      # Persist TLC data
+      - tlc-data:/home/tlc/.local/share/tlc
+      # Persist TLC configuration
+      - tlc-config:/home/tlc/.config/tlc
+      # Optional: Mount a local config file
+      # - ./tlc-local.yaml:/home/tlc/.config/tlc/config.yaml:ro
+      # Optional: Mount a local todo.txt file for direct editing
+      # - ./todo.txt:/home/tlc/.local/share/tlc/todo.txt
+    environment:
+      # Optional: Override default settings with environment variables
+      # TLC_LOG_LEVEL: "debug"
+      # TLC_ARCHIVE_THRESHOLD: "168h"
+      - TERM=xterm-256color
+    # Default command runs the TUI
+    command: ["tui"]
+    # For one-off commands, use:
+    # docker-compose run --rm tlc task list
+    # docker-compose run --rm tlc task create "New task" --tag feature
+
+volumes:
+  tlc-data:
+    driver: local
+  tlc-config:
+    driver: local
