@@ -147,4 +147,5 @@ type UIConfig struct {
 	TableStyle string            `yaml:"table_style"`
 	TagColors  map[string]string `yaml:"tag_colors"`
 	LogSortDirection   string            `yaml:"log_sort_direction"`
+	Theme      string            `yaml:"theme"`
 }

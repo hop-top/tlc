@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/oss-tlc-cli/internal/core"
 	"github.com/google/oss-tlc-cli/internal/tui/styles"
+	"github.com/google/oss-tlc-cli/pkg/themepicker"
 	"github.com/spf13/viper"
 )
 
@@ -24,7 +25,7 @@ type logsMsg []*core.LogEntry
 
 type Model struct {
 	service         *core.TaskService
-	view            string // "dashboard", "list", "detail", "search", "form", "kanban", "flows"
+	view            string // "dashboard", "list", "detail", "search", "form", "kanban", "flows", "theme_picker"
 	tasks           []*core.Task
 	flowRuns        []*core.FlowRun
 	selected        int
@@ -36,6 +37,7 @@ type Model struct {
 	taskLogs        []*core.LogEntry
 	logSortDirection string
 	form            *huh.Form
+	themePicker     themepicker.Model
 	taskTitle       string
 	taskDescription string
 	err             error
@@ -53,12 +55,19 @@ func NewModel(service *core.TaskService) Model {
 		direction = "desc"
 	}
 
+	// Initialize theme picker with default theme
+	// In the future, we can load more themes here
+	defaultTheme := styles.DefaultTheme()
+	tp := themepicker.New([]themepicker.Theme{defaultTheme})
+	tp.SetFetcher(themepicker.FetchTheme)
+
 	return Model{
 		service:     service,
 		view:        "dashboard",
 		searchInput: ti,
 		viewport:    vp,
 		logSortDirection:    direction,
+		themePicker: tp,
 	}
 }
 
@@ -186,7 +195,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - 6 // Initial estimate, refined in View()
-		// Don't return, let other handlers see it if needed
+		
+		// Resize theme picker
+		var cmd tea.Cmd
+		var tm tea.Model
+		tm, cmd = m.themePicker.Update(msg)
+		m.themePicker = tm.(themepicker.Model)
+		return m, cmd
 	case tea.MouseMsg:
 		if msg.Type == tea.MouseLeft && m.view == "dashboard" {
 			// Basic selection on click
@@ -198,6 +213,77 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// 2. View-specific handlers
+	if m.view == "theme_picker" {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			if msg.String() == "esc" {
+				m.view = "dashboard"
+				return m, nil
+			}
+			if msg.String() == "R" {
+				// Trigger fetch remote themes
+				return m, func() tea.Msg {
+					names, err := themepicker.FetchThemeNames()
+					if err != nil {
+						return fmt.Errorf("failed to fetch themes: %w", err)
+					}
+					
+					var themes []themepicker.Theme
+					themes = append(themes, styles.DefaultTheme()) // Keep default
+					
+					for _, name := range names {
+						themes = append(themes, themepicker.LazyTheme{Name: name})
+					}
+					return themes // Returns []themepicker.Theme as Msg
+				}
+			}
+		case []themepicker.Theme:
+			// Re-init picker with new themes
+			m.themePicker = themepicker.New(msg)
+			m.themePicker.SetFetcher(themepicker.FetchTheme)
+			// Resize it immediately
+			tm, _ := m.themePicker.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+			m.themePicker = tm.(themepicker.Model)
+			return m, nil
+		case themepicker.ThemeSelectedMsg:
+			var themeToApply styles.Theme
+			
+			// Apply theme
+			if t, ok := msg.Theme.(styles.Theme); ok {
+				themeToApply = t
+			} else if bt, ok := msg.Theme.(themepicker.BasicTheme); ok {
+				// Convert BasicTheme to styles.Theme
+				themeToApply = styles.Theme{
+					Name:       bt.NameVal,
+					Primary:    bt.PrimaryVal,
+					Secondary:  bt.SecondaryVal,
+					Success:    bt.SuccessVal,
+					Warning:    bt.WarningVal,
+					Error:      bt.ErrorVal,
+					Muted:      bt.MutedVal,
+					Background: bt.BackgroundVal,
+					Foreground: bt.ForegroundVal,
+					TagColors:  styles.DefaultTheme().TagColors, // Keep default tag colors for now or map
+				}
+			}
+			
+			styles.ApplyTheme(themeToApply)
+			
+			// Save to config
+			viper.Set("ui.theme", themeToApply.Name)
+			viper.WriteConfig()
+
+			m.view = "dashboard"
+			return m, nil
+		}
+		
+		var cmd tea.Cmd
+		var tm tea.Model
+		tm, cmd = m.themePicker.Update(msg)
+		m.themePicker = tm.(themepicker.Model)
+		return m, cmd
+	}
+
 	if m.view == "form" && m.form != nil {
 		form, cmd := m.form.Update(msg)
 		if f, ok := form.(*huh.Form); ok {
@@ -317,6 +403,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.view != "flows" {
 				return m, m.createTask()
 			}
+		case "t":
+			m.view = "theme_picker"
+			// Ensure it has correct size
+			tm, _ := m.themePicker.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+			m.themePicker = tm.(themepicker.Model)
+			return m, nil
 		case "c":
 			if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
 				return m, m.claimTask(m.tasks[m.selected].ID)
@@ -453,6 +545,8 @@ func (m Model) View() string {
 
 	var content string
 	switch m.view {
+	case "theme_picker":
+		return m.themePicker.View()
 	case "detail":
 		content = m.detailView()
 	case "kanban":
@@ -729,7 +823,9 @@ func (m Model) helpView() string {
 		if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
 			items = append(items, "[esc] clear filter")
 		}
-		items = append(items, "[p] sync", "[v] cycle view", "[enter] details")
+		items = append(items, "[p] sync", "[t] theme", "[v] cycle view", "[enter] details")
+	case "theme_picker":
+		items = append(items, "[enter] select", "[R] fetch remote", "[esc] cancel")
 	case "kanban":
 		items = append(items, "[h/l] move", "[v] cycle view", "[enter] details")
 	case "flows":

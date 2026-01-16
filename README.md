@@ -126,9 +126,23 @@ Launch the interactive terminal interface:
 - `c`/`u`: Claim / Unclaim task
 - `s`: Cycle task status
 - `/`: Search/Filter tasks
+- `t`: Open theme picker
 - `v`: Cycle views (Dashboard -> Kanban -> Flows)
 - `r`: Refresh data
 - `q`: Quit
+
+### 🎨 Theme Customization
+TLC features a powerful theme switcher that allows you to customize your terminal experience.
+
+- **Built-in Themes**: Start with the high-contrast default theme.
+- **250+ Community Themes**: Pull themes directly from the popular `mbadolato/iTerm2-Color-Schemes` repository.
+- **Lazy Loading**: The picker fetches theme names instantly and downloads color data only when you highlight a theme, ensuring a smooth experience even with hundreds of options.
+
+**Inside the Theme Picker:**
+- `j`/`k`: Scroll through themes
+- `R` (Shift+R): Fetch/Refresh the full list of 250+ remote themes
+- `enter`: Apply and save the selected theme
+- `esc`: Cancel and return to dashboard
 
 ### Local Configuration
 You can use a local configuration file to override global settings:
