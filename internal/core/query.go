@@ -26,7 +26,7 @@ type Query struct {
 	Filters []FieldFilter
 	Search  string // Full-text search term
 	SortBy  string
-	Order   string // "asc" or "desc"
+	SortDirection string // "asc" or "desc"
 	Limit   int
 	Offset  int
 }

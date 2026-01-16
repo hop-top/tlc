@@ -23,8 +23,8 @@ func syncToTODO() error {
 
 	ctx := context.Background()
 	tasks, err := s.ListTasks(ctx, core.Query{
-		SortBy: "id",
-		Order:  "asc",
+		SortBy: "created_at",
+		SortDirection:  "asc",
 	})
 	if err != nil {
 		return err

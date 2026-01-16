@@ -29,8 +29,8 @@ type Repository interface {
 type LogRepository interface {
 	// AddLog appends a new log entry.
 	AddLog(ctx context.Context, entry *LogEntry) error
-	// GetLogs retrieves all logs for a specific task, sorted by timestamp DESC.
-	GetLogs(ctx context.Context, taskID string) ([]*LogEntry, error)
+	// GetLogs retrieves all logs for a specific task, with specified order (asc/desc).
+	GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error)
 	// ListLogs returns a filtered list of logs across all tasks.
 	ListLogs(ctx context.Context, query LogQuery) ([]*LogEntry, error)
 }
@@ -41,7 +41,7 @@ type LogQuery struct {
 	By        string
 	Limit     int
 	Offset    int
-	SortOrder string // "asc" or "desc"
+	SortDirection string // "asc" or "desc"
 }
 
 type TaskFilter struct {

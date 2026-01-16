@@ -8,16 +8,19 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/oss-tlc-cli/internal/core"
 	"github.com/google/oss-tlc-cli/internal/tui/styles"
+	"github.com/spf13/viper"
 )
 
 type tasksMsg []*core.Task
 type flowRunsMsg []*core.FlowRun
+type logsMsg []*core.LogEntry
 
 type Model struct {
 	service         *core.TaskService
@@ -28,6 +31,10 @@ type Model struct {
 	width           int
 	height          int
 	searchInput     textinput.Model
+	activeFilters   []core.FieldFilter
+	viewport        viewport.Model
+	taskLogs        []*core.LogEntry
+	logSortDirection string
 	form            *huh.Form
 	taskTitle       string
 	taskDescription string
@@ -36,13 +43,22 @@ type Model struct {
 
 func NewModel(service *core.TaskService) Model {
 
-ti := textinput.New()
-ti.Placeholder = "Search tasks..."
+	ti := textinput.New()
+	ti.Placeholder = "Search tasks..."
 
-return Model{
+	vp := viewport.New(0, 0)
+
+	direction := viper.GetString("ui.log_sort_direction")
+	if direction == "" {
+		direction = "desc"
+	}
+
+	return Model{
 		service:     service,
 		view:        "dashboard",
 		searchInput: ti,
+		viewport:    vp,
+		logSortDirection:    direction,
 	}
 }
 
@@ -52,7 +68,8 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) fetchTasks() tea.Msg {
 	query := core.Query{
-		Search: m.searchInput.Value(),
+		Search:  m.searchInput.Value(),
+		Filters: m.activeFilters,
 	}
 	tasks, err := m.service.ListTasks(context.Background(), query)
 	if err != nil {
@@ -75,6 +92,18 @@ func (m Model) fetchTasks() tea.Msg {
 	})
 
 	return tasksMsg(tasks)
+}
+
+func (m Model) fetchLogs() tea.Msg {
+	if len(m.tasks) == 0 || m.selected >= len(m.tasks) {
+		return nil
+	}
+	taskID := m.tasks[m.selected].ID
+	logs, err := m.service.GetLogs(context.Background(), taskID, m.logSortDirection)
+	if err != nil {
+		return err
+	}
+	return logsMsg(logs)
 }
 
 func (m Model) claimTask(id string) tea.Cmd {
@@ -150,6 +179,25 @@ func (m Model) createTask() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// 1. Handle common messages first
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - 6 // Initial estimate, refined in View()
+		// Don't return, let other handlers see it if needed
+	case tea.MouseMsg:
+		if msg.Type == tea.MouseLeft && m.view == "dashboard" {
+			// Basic selection on click
+			// In a real TUI we'd map coords, but for now we'll support navigation
+		}
+	case error:
+		m.err = msg
+		return m, nil
+	}
+
+	// 2. View-specific handlers
 	if m.view == "form" && m.form != nil {
 		form, cmd := m.form.Update(msg)
 		if f, ok := form.(*huh.Form); ok {
@@ -177,25 +225,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
-		return m, cmd
+		// Live search: trigger fetch on every update
+		return m, tea.Batch(cmd, m.fetchTasks)
 	}
 
+	// 3. Main navigation handlers
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		return m, nil
 	case tasksMsg:
 		m.tasks = msg
 		if m.selected >= len(m.tasks) && len(m.tasks) > 0 {
 			m.selected = len(m.tasks) - 1
 		}
+		m = m.syncViewport()
 		return m, nil
 	case flowRunsMsg:
 		m.flowRuns = msg
 		return m, nil
-	case error:
-		m.err = msg
+	case logsMsg:
+		m.taskLogs = msg
+		m = m.syncViewport()
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -204,6 +252,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			m.view = "search"
 			m.searchInput.Focus()
+			m.searchInput.SetValue("") // Clear on start
 			return m, nil
 		case "j", "down":
 			if m.view == "flows" {
@@ -215,10 +264,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selected++
 				}
 			}
+			m = m.syncViewport()
 		case "k", "up":
 			if m.selected > 0 {
 				m.selected--
 			}
+			m = m.syncViewport()
 		case "h", "left":
 			if m.view == "kanban" && len(m.tasks) > 0 {
 				return m, m.moveTask(m.tasks[m.selected], -1)
@@ -246,34 +297,70 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.view = "dashboard"
 				return m, m.fetchTasks
 			}
-		        case "n":
-		            if m.view != "flows" {
-		                return m, m.createTask()
-		            }
-		        case "c":
-		            if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
-		                return m, m.claimTask(m.tasks[m.selected].ID)
-		            }
-		        case "u":
-		            if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
-		                return m, m.unclaimTask(m.tasks[m.selected].ID)
-		            }
-		        case "s":
-		            if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
-		                return m, m.rotateStatus(m.tasks[m.selected])
-		            }
-		        case "enter":
-		            if m.view == "flows" {
-		                // Show flow details? Not implemented yet
-		            } else if len(m.tasks) > 0 {
-		                m.view = "detail"
-		            }
-		        case "esc", "backspace":
-		            m.view = "dashboard"
-		        }
-		    }
-		    return m, nil
+		case "f": // Filter by tags of selected task
+			if m.view == "dashboard" && len(m.tasks) > 0 {
+				task := m.tasks[m.selected]
+				for _, tag := range task.Tags {
+					m = m.addFilter("tags", tag)
+				}
+				return m, m.fetchTasks
+			}
+		case "a": // Filter by assignee of selected task
+			if m.view == "dashboard" && len(m.tasks) > 0 {
+				task := m.tasks[m.selected]
+				if task.AssignedTo != nil {
+					m = m.addFilter("assigned_to", *task.AssignedTo)
+					return m, m.fetchTasks
+				}
+			}
+		case "n":
+			if m.view != "flows" {
+				return m, m.createTask()
+			}
+		case "c":
+			if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
+				return m, m.claimTask(m.tasks[m.selected].ID)
+			}
+		case "u":
+			if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
+				return m, m.unclaimTask(m.tasks[m.selected].ID)
+			}
+		case "s":
+			if (m.view == "dashboard" || m.view == "detail" || m.view == "kanban") && len(m.tasks) > 0 {
+				return m, m.rotateStatus(m.tasks[m.selected])
+			}
+		case "enter":
+			if m.view == "flows" {
+				// Show flow details? Not implemented yet
+			} else if len(m.tasks) > 0 {
+				m.view = "detail"
+				return m, m.fetchLogs
+			}
+		case "o": // Toggle log order
+			if m.view == "detail" {
+				if m.logSortDirection == "desc" {
+					m.logSortDirection = "asc"
+				} else {
+					m.logSortDirection = "desc"
+				}
+				return m, m.fetchLogs
+			}
+		case "esc":
+			if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
+				m.searchInput.SetValue("")
+				m.activeFilters = nil
+				return m, m.fetchTasks
+			}
+			m.view = "dashboard"
+		case "backspace":
+			m.view = "dashboard"
 		}
+	}
+
+	var vpCmd tea.Cmd
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	return m, vpCmd
+}
 func (m Model) saveTask(title, description string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -350,48 +437,107 @@ func (m Model) View() string {
 		return styles.ErrorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
-	switch m.view {
-	case "form":
+	if m.view == "form" {
 		if m.form != nil {
 			return m.form.View()
 		}
 		return "Loading form..."
-	case "detail":
-		return m.detailView()
-	case "kanban":
-		return m.kanbanView()
-	case "flows":
-		return m.flowsView()
-	case "search":
-		return m.dashboardView()
-	default:
-		return m.dashboardView()
 	}
+
+	if m.width == 0 || m.height == 0 {
+		return "Initializing..."
+	}
+
+	header := m.headerView()
+	footer := m.helpView()
+
+	var content string
+	switch m.view {
+	case "detail":
+		content = m.detailView()
+	case "kanban":
+		content = m.kanbanView()
+	case "flows":
+		content = m.flowsContent()
+	default: // dashboard or search
+		content = m.dashboardContent()
+	}
+
+	m.viewport.SetContent(content)
+	
+	// Calculate available height for viewport
+	// We use 1 line for spacing after header and 1 line before footer
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+	occupiedHeight := headerHeight + footerHeight + 2
+	
+	vh := m.height - occupiedHeight
+	if vh < 1 {
+		vh = 1
+	}
+	m.viewport.Height = vh
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		"", // Spacer
+		m.viewport.View(),
+		"", // Spacer
+		footer,
+	)
 }
 
-func (m Model) flowsView() string {
-	var s strings.Builder
-	s.WriteString(styles.TitleStyle.Render("Flow Executions"))
-	s.WriteString("\n\n")
-
-	if len(m.flowRuns) == 0 {
-		s.WriteString("No flow runs found.")
-	} else {
-		for i, run := range m.flowRuns {
-			cursor := " "
-			if i == m.selected {
-				cursor = styles.InProgressStyle.Render("►")
-			}
-
-			status := string(run.Status)
-			startedAt := run.StartedAt.Format("2006-01-02 15:04:05")
-
-			s.WriteString(fmt.Sprintf("%s %s %s %s (%s)\n", cursor, run.ID, run.FlowID, status, startedAt))
+func (m Model) headerView() string {
+	title := "TLC Dashboard"
+	switch m.view {
+	case "kanban":
+		title = "Kanban Board"
+	case "flows":
+		title = "Flow Executions"
+	case "detail":
+		title = "Task Details"
+	}
+	
+	titleRendered := styles.TitleStyle.MaxWidth(m.width).Render(title)
+	
+	if m.view == "search" {
+		m.searchInput.Width = m.width - 10
+		searchRendered := styles.MutedStyle.Render("Search: ") + m.searchInput.View()
+		return lipgloss.JoinVertical(lipgloss.Left, titleRendered, searchRendered)
+	}
+	
+	if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
+		var filterParts []string
+		if m.searchInput.Value() != "" {
+			filterParts = append(filterParts, fmt.Sprintf("search:%s", m.searchInput.Value()))
 		}
+		for _, f := range m.activeFilters {
+			filterParts = append(filterParts, fmt.Sprintf("%s:%v", f.Field, f.Value))
+		}
+		filterRendered := styles.MutedStyle.Render(fmt.Sprintf("Filtered by: %s", strings.Join(filterParts, ", ")))
+		return titleRendered + " | " + filterRendered
+	}
+	
+	return titleRendered
+}
+
+func (m Model) flowsContent() string {
+	if len(m.flowRuns) == 0 {
+		return "No flow runs found."
 	}
 
-	s.WriteString("\n")
-	s.WriteString(m.helpView())
+	var s strings.Builder
+	for i, run := range m.flowRuns {
+		cursor := " "
+		if i == m.selected {
+			cursor = styles.InProgressStyle.Render("►")
+		}
+
+		status := string(run.Status)
+		startedAt := run.StartedAt.Format("2006-01-02 15:04:05")
+
+		s.WriteString(fmt.Sprintf("%s %s %s %s (%s)\n", cursor, run.ID, run.FlowID, status, startedAt))
+	}
 
 	return s.String()
 }
@@ -454,83 +600,117 @@ func (m Model) kanbanView() string {
 	}
 
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
-	s.WriteString("\n\n")
-	s.WriteString(m.helpView())
-
 	return s.String()
 }
 
-func (m Model) dashboardView() string {
-	var s strings.Builder
-	s.WriteString(styles.TitleStyle.Render("TLC Dashboard"))
-	s.WriteString("\n\n")
-
-	if m.view == "search" {
-		s.WriteString("Search: ")
-		s.WriteString(m.searchInput.View())
-		s.WriteString("\n\n")
-	} else if m.searchInput.Value() != "" {
-		s.WriteString(styles.MutedStyle.Render(fmt.Sprintf("Filtered by: %s", m.searchInput.Value())))
-		s.WriteString("\n\n")
+func (m Model) getTagStyle(tag string) lipgloss.Style {
+	colors := viper.GetStringMapString("ui.tag_colors")
+	if colors == nil {
+		colors = make(map[string]string)
 	}
 
+	color, ok := colors[tag]
+	if !ok {
+		// Use hash for stable but random-looking color assignment
+		h := 0
+		for _, c := range tag {
+			h += int(c)
+		}
+		color = styles.TagColors[h%len(styles.TagColors)]
+		
+		// Save to config for future consistency
+		colors[tag] = color
+		viper.Set("ui.tag_colors", colors)
+		viper.WriteConfig()
+	}
+
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+}
+
+func (m Model) addFilter(field, value string) Model {
+	// Avoid duplicate filters
+	for _, f := range m.activeFilters {
+		if f.Field == field && f.Value == value {
+			return m
+		}
+	}
+	m.activeFilters = append(m.activeFilters, core.FieldFilter{
+		Field:    field,
+		Operator: core.OpEq,
+		Value:    value,
+	})
+	return m
+}
+
+func (m Model) dashboardContent() string {
 	if len(m.tasks) == 0 {
-		s.WriteString("No tasks found.")
-	} else {
-		// ... existing grouping logic ...
-		groups := make(map[core.TaskStatus][]*core.Task)
-		for _, t := range m.tasks {
-			groups[t.Status] = append(groups[t.Status], t)
-		}
-
-		statusOrder := []core.TaskStatus{
-			core.StatusTodo,
-			core.StatusInProgress,
-			core.StatusDone,
-			core.StatusSkipped,
-		}
-
-		currentIndex := 0
-		for _, status := range statusOrder {
-			tasks := groups[status]
-			if len(tasks) == 0 {
-				continue
-			}
-
-			s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true).Render(strings.ToUpper(string(status))))
-			s.WriteString("\n")
-
-			for _, task := range tasks {
-				cursor := " "
-				if currentIndex == m.selected {
-					cursor = styles.InProgressStyle.Render("►")
-				}
-
-				statusIcon := formatStatus(task.Status)
-				title := task.Title
-				if currentIndex == m.selected {
-					title = lipgloss.NewStyle().Bold(true).Render(title)
-				}
-
-				assignee := ""
-				if task.AssignedTo != nil {
-					assignee = fmt.Sprintf(" @%s", *task.AssignedTo)
-				}
-
-				tags := ""
-				if len(task.Tags) > 0 {
-					tags = " #" + strings.Join(task.Tags, " #")
-				}
-
-				s.WriteString(fmt.Sprintf("%s %s %s %s%s%s\n", cursor, task.ID, statusIcon, title, styles.MutedStyle.Render(assignee), styles.MutedStyle.Render(tags)))
-				currentIndex++
-			}
-			s.WriteString("\n")
-		}
+		return "No tasks found."
 	}
 
-	s.WriteString("\n")
-	s.WriteString(m.helpView())
+	var s strings.Builder
+	groups := make(map[core.TaskStatus][]*core.Task)
+	for _, t := range m.tasks {
+		groups[t.Status] = append(groups[t.Status], t)
+	}
+
+	statusOrder := []core.TaskStatus{
+		core.StatusTodo,
+		core.StatusInProgress,
+		core.StatusDone,
+		core.StatusSkipped,
+	}
+
+	currentIndex := 0
+	for _, status := range statusOrder {
+		tasks := groups[status]
+		if len(tasks) == 0 {
+			continue
+		}
+
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true).Render(strings.ToUpper(string(status))))
+		s.WriteString("\n")
+
+		for _, task := range tasks {
+			cursor := " "
+			if currentIndex == m.selected {
+				cursor = styles.InProgressStyle.Render("►")
+			}
+
+			statusIcon := formatStatus(task.Status)
+			title := task.Title
+			if currentIndex == m.selected {
+				title = lipgloss.NewStyle().Bold(true).Render(title)
+			}
+
+							assignee := ""
+
+							if task.AssignedTo != nil {
+
+								assignee = fmt.Sprintf(" @%s", *task.AssignedTo)
+
+							}
+
+			
+
+							tags := ""
+
+							for _, tag := range task.Tags {
+
+								tags += " " + m.getTagStyle(tag).Render("#"+tag)
+
+							}
+
+			
+
+							s.WriteString(fmt.Sprintf("%s %s %s %s%s%s\n", cursor, task.ID, statusIcon, title, styles.MutedStyle.Render(assignee), tags))
+
+							currentIndex++
+
+						}
+
+			
+		s.WriteString("\n")
+	}
 
 	return s.String()
 }
@@ -545,13 +725,17 @@ func (m Model) helpView() string {
 	items = append(items, "[j/k] navigate")
 	switch m.view {
 	case "dashboard":
-		items = append(items, "[n]ew", "[c/u] claim/unclaim", "[s] status", "[/ ] search", "[p] sync", "[v] cycle view", "[enter] details")
+		items = append(items, "[n]ew", "[c/u] claim/unclaim", "[s] status", "[/ ] search", "[f/a] filter tag/assignee")
+		if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
+			items = append(items, "[esc] clear filter")
+		}
+		items = append(items, "[p] sync", "[v] cycle view", "[enter] details")
 	case "kanban":
 		items = append(items, "[h/l] move", "[v] cycle view", "[enter] details")
 	case "flows":
 		items = append(items, "[v] cycle view")
 	case "detail":
-		items = append(items, "[c/u] claim/unclaim", "[s] status", "[esc] back")
+		items = append(items, "[c/u] claim/unclaim", "[s] status", "[o] sort dir", "[esc] back")
 	}
 	items = append(items, "[r]efresh", "[q]uit")
 	return styles.MutedStyle.Render(strings.Join(items, "  "))
@@ -594,7 +778,17 @@ func (m Model) detailView() string {
 		s.WriteString("\n")
 	}
 
-	s.WriteString(m.helpView())
+	if len(m.taskLogs) > 0 {
+		s.WriteString(fmt.Sprintf("\nLogs (%s):\n", strings.ToUpper(m.logSortDirection)))
+		for _, l := range m.taskLogs {
+			s.WriteString(fmt.Sprintf("  %s  %-15s (%s) %s\n",
+				l.Timestamp.Format("2006-01-02 15:04:05"),
+				l.Action,
+				l.By,
+				l.Note,
+			))
+		}
+	}
 
 	return s.String()
 }
@@ -612,6 +806,66 @@ func formatStatus(status core.TaskStatus) string {
 	default:
 		return string(status)
 	}
+}
+
+func (m Model) syncViewport() Model {
+	line := m.getLineOfSelected()
+	if line < m.viewport.YOffset {
+		m.viewport.YOffset = line
+	} else if line >= m.viewport.YOffset+m.viewport.Height {
+		m.viewport.YOffset = line - m.viewport.Height + 1
+	}
+	return m
+}
+
+func (m Model) formatAssignee(assignee *string) string {
+	if assignee == nil {
+		return "-"
+	}
+	return "@" + *assignee
+}
+
+func (m Model) getLineOfSelected() int {
+	if m.view == "flows" {
+		return m.selected
+	}
+
+	// For dashboard, we need to account for headers and spacing
+	groups := make(map[core.TaskStatus][]*core.Task)
+	for _, t := range m.tasks {
+		groups[t.Status] = append(groups[t.Status], t)
+	}
+
+	statusOrder := []core.TaskStatus{
+		core.StatusTodo,
+		core.StatusInProgress,
+		core.StatusDone,
+		core.StatusSkipped,
+	}
+
+	line := 0
+	taskIdx := 0
+	for _, status := range statusOrder {
+		tasks := groups[status]
+		if len(tasks) == 0 {
+			continue
+		}
+
+		// Header line
+		line++
+
+		for range tasks {
+			if taskIdx == m.selected {
+				return line
+			}
+			line++
+			taskIdx++
+		}
+		// Empty line after group
+		line++
+	}
+
+	return 0
 }
 
 func formatAssignee(assignee *string) string {

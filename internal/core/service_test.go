@@ -55,7 +55,7 @@ func (m *mockRepo) AddLog(ctx context.Context, e *LogEntry) error {
 	return nil
 }
 
-func (m *mockRepo) GetLogs(ctx context.Context, taskID string) ([]*LogEntry, error) {
+func (m *mockRepo) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error) {
 	return m.logs, nil
 }
 

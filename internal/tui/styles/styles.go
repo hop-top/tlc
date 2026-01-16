@@ -23,4 +23,19 @@ var (
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("240")).
 			Padding(0, 1)
+
+	TagColors = []string{
+		"42",  // Green
+		"214", // Orange
+		"39",  // Blue
+		"196", // Red
+		"170", // Pink/Purple
+		"208", // Dark Orange
+		"141", // Purple
+		"81",  // Light Blue
+		"111", // Sky Blue
+		"118", // Lime
+		"226", // Yellow
+		"201", // Magenta
+	}
 )

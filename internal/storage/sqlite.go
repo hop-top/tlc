@@ -187,7 +187,7 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 	// Sorting
 	if query.SortBy != "" {
 		order := "ASC"
-		if strings.ToLower(query.Order) == "desc" {
+		if strings.ToLower(query.SortDirection) == "desc" {
 			order = "DESC"
 		}
 		sqlQuery += fmt.Sprintf(" ORDER BY %s %s", query.SortBy, order)
@@ -244,8 +244,13 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 	})
 }
 
-func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string) ([]*core.LogEntry, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs WHERE task_id = ? ORDER BY timestamp DESC", taskID)
+func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*core.LogEntry, error) {
+	order := "DESC"
+	if strings.ToUpper(sortDirection) == "ASC" {
+		order = "ASC"
+	}
+	query := fmt.Sprintf("SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs WHERE task_id = ? ORDER BY timestamp %s", order)
+	rows, err := s.db.QueryContext(ctx, query, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +399,7 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 	}
 
 	order := "DESC"
-	if strings.ToLower(query.SortOrder) == "asc" {
+	if strings.ToLower(query.SortDirection) == "asc" {
 		order = "ASC"
 	}
 	sqlQuery += " ORDER BY timestamp " + order

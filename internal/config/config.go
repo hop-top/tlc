@@ -140,9 +140,11 @@ func (s *StorageConfig) Validate() error {
 }
 
 type UIConfig struct {
-	Pager      string `yaml:"pager"`
-	Editor     string `yaml:"editor"`
-	DateFormat string `yaml:"date_format"`
-	Timezone   string `yaml:"timezone"`
-	TableStyle string `yaml:"table_style"`
+	Pager      string            `yaml:"pager"`
+	Editor     string            `yaml:"editor"`
+	DateFormat string            `yaml:"date_format"`
+	Timezone   string            `yaml:"timezone"`
+	TableStyle string            `yaml:"table_style"`
+	TagColors  map[string]string `yaml:"tag_colors"`
+	LogSortDirection   string            `yaml:"log_sort_direction"`
 }

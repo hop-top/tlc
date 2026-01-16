@@ -12,7 +12,7 @@ func TestQuery_Structure(t *testing.T) {
 		Limit:  10,
 		Offset: 20,
 		SortBy: "created_at",
-		Order:  "desc",
+		SortDirection:  "desc",
 	}
 
 	if len(q.Filters) != 2 {

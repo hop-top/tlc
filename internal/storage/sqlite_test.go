@@ -73,7 +73,7 @@ func TestSQLiteStorage_CRUD(t *testing.T) {
 		t.Fatalf("failed to add log: %v", err)
 	}
 
-	logs, err := s.GetLogs(ctx, taskID)
+	logs, err := s.GetLogs(ctx, taskID, "desc")
 	if err != nil {
 		t.Fatalf("failed to get logs: %v", err)
 	}

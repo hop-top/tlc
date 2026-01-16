@@ -42,6 +42,10 @@ func (s *TaskService) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun
 	return s.repo.ListFlowRuns(ctx, query)
 }
 
+func (s *TaskService) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error) {
+	return s.logRepo.GetLogs(ctx, taskID, sortDirection)
+}
+
 func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next TaskStatus, by string, note string) error {
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {

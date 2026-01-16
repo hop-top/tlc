@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"sort"
+	"strings"
 )
 
 type MockRepository struct {
@@ -84,12 +86,22 @@ func (m *MockLogRepository) AddLog(ctx context.Context, entry *LogEntry) error {
 	return nil
 }
 
-func (m *MockLogRepository) GetLogs(ctx context.Context, taskID string) ([]*LogEntry, error) {
+func (m *MockLogRepository) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error) {
 	var filtered []*LogEntry
 	for _, l := range m.Logs {
 		if l.TaskID == taskID {
 			filtered = append(filtered, l)
 		}
+	}
+	// Simplified sorting for mock
+	if strings.ToUpper(sortDirection) == "ASC" {
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].Timestamp.Before(filtered[j].Timestamp)
+		})
+	} else {
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].Timestamp.After(filtered[j].Timestamp)
+		})
 	}
 	return filtered, nil
 }

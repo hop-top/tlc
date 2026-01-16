@@ -20,6 +20,10 @@ var rootCmd = &cobra.Command{
 	Use:   "tlc",
 	Short: "Task Line CLI - Multi-agent task orchestration",
 	Long:  "TLC provides commands for task management, flow execution, and collaboration.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// If no command is specified, run the TUI
+		return tuiCmd.RunE(cmd, args)
+	},
 }
 
 func Execute() {

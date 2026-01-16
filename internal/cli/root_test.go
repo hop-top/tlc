@@ -38,6 +38,14 @@ func TestInitConfig(t *testing.T) {
 	}
 }
 
+func TestRootCmdDefault(t *testing.T) {
+	// We can't easily test the TUI launch in a unit test without it hanging or failing on no TTY.
+	// But we can verify RunE is set.
+	if rootCmd.RunE == nil {
+		t.Error("expected rootCmd.RunE to be set")
+	}
+}
+
 func TestFindAllConfigs(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "tlc-findconfigs-*")
 	defer os.RemoveAll(tmpDir)

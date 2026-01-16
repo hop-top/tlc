@@ -29,11 +29,12 @@ var (
 	taskListTag        []string
 	taskListMine       bool
 	taskListSortBy     string
-	taskListOrder      string
+	taskListSortDirection      string
 	taskListLimit      int
 	taskListOffset     int
 
-	taskShowLogs bool
+	taskShowLogs     bool
+	taskShowLogSortDirection string
 
 	taskUpdateTitle       string
 	taskUpdateDescription string
@@ -330,7 +331,7 @@ var taskListCmd = &cobra.Command{
 			Limit:  taskListLimit,
 			Offset: taskListOffset,
 			SortBy: taskListSortBy,
-			Order:  taskListOrder,
+			SortDirection:  taskListSortDirection,
 		}
 
 		if len(args) > 0 {
@@ -387,7 +388,14 @@ var taskShowCmd = &cobra.Command{
 
 		var logs []*core.LogEntry
 		if taskShowLogs || viper.GetString("output.format") != "table" {
-			logs, err = s.GetLogs(ctx, id)
+			direction := taskShowLogSortDirection
+			if direction == "" {
+				direction = viper.GetString("ui.log_sort_direction")
+			}
+			if direction == "" {
+				direction = "desc"
+			}
+			logs, err = s.GetLogs(ctx, id, direction)
 			if err != nil {
 				return err
 			}
@@ -547,11 +555,12 @@ func init() {
 	taskListCmd.Flags().StringSliceVar(&taskListTag, "tag", []string{}, "Filter by tag")
 	taskListCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
 	taskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
-	taskListCmd.Flags().StringVar(&taskListOrder, "order", "desc", "Sort order (asc, desc)")
+	taskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
 	taskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
 
 	taskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
+	taskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
 
 	taskUpdateCmd.Flags().StringVarP(&taskUpdateTitle, "title", "t", "", "New title")
 	taskUpdateCmd.Flags().StringVarP(&taskUpdateDescription, "description", "d", "", "New description")
