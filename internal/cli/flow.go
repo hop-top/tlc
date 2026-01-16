@@ -59,7 +59,7 @@ Example flow file (flow.yaml):
 
 Usage:
   tlc flow run flow.yaml
-  tlc flow run examples/parallel-flow.yaml
+  tlc flow run tests/fixtures/parallel-flow.yaml
   tlc flow run deployment-flow.json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

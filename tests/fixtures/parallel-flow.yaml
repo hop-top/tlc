@@ -1,0 +1,27 @@
+flow_id: "flow:parallel-test:1.0"
+name: "Parallel Flow Test"
+version: "1.0"
+description: "Test parallel execution of tasks"
+entry_step: "parallel-step"
+steps:
+  parallel-step:
+    step_id: "parallel-step"
+    type: "parallel"
+    title: "Execute tasks in parallel"
+    children: ["task1", "task2", "task3"]
+    max_concurrency: 3
+  task1:
+    step_id: "task1"
+    type: "task"
+    title: "Task 1"
+    task_ref: "T-0133"
+  task2:
+    step_id: "task2"
+    type: "task"
+    title: "Task 2"
+    task_ref: "T-0134"
+  task3:
+    step_id: "task3"
+    type: "task"
+    title: "Task 3"
+    task_ref: "T-0061"

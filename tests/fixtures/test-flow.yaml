@@ -1,0 +1,17 @@
+flow_id: "flow:test:1.0"
+name: "Test Flow"
+version: "1.0"
+description: "A simple test flow to verify flow execution"
+entry_step: "step1"
+steps:
+  step1:
+    step_id: "step1"
+    type: "task"
+    title: "First step - verify T-0059"
+    task_ref: "T-0059"
+  step2:
+    step_id: "step2"
+    type: "task"
+    title: "Second step - verify T-0061"
+    task_ref: "T-0061"
+    depends_on: ["step1"]
