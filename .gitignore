@@ -1,0 +1,5 @@
+.worktrees/
+bin/
+tlc
+*.db
+*.test

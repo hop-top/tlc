@@ -1,0 +1,10 @@
+git:
+    worktree:
+        auto_create: true
+        directory: .worktrees
+output:
+    color: true
+    format: table
+storage:
+    backend: sqlite
+version: 0.1

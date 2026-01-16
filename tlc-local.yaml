@@ -1,0 +1,11 @@
+version: "0.1"
+
+task:
+  todo_file: "TODO"
+
+storage:
+  backend: "sqlite"
+  db_path: ".tlc/db.sqlite"
+
+output:
+  log_file: ".tlc/tlc.log"

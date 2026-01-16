@@ -1,0 +1,34 @@
+name: linear-sync
+version: 0.1.0
+type: external-sync
+description: Linear issue synchronization
+
+# Capabilities
+capabilities:
+  - sync.pull
+  - sync.push
+  - sync.bidirectional
+
+# Entry point
+entry_point: ./bin/linear-sync
+
+# Dependencies
+requires:
+  tlc_version: ">=0.1.0"
+
+# Configuration schema
+config_schema:
+  type: object
+  properties:
+    team:
+      type: string
+      required: true
+    sync_direction:
+      type: string
+      enum: [pull, push, bidirectional]
+      default: bidirectional
+
+# Permissions required
+permissions:
+  - network.http
+  - credential.read
