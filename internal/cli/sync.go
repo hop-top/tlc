@@ -43,7 +43,7 @@ var syncPullCmd = &cobra.Command{
 			log.Fatal("Sync pull failed", "error", err)
 		}
 
-		fmt.Printf("✓ Pulled %d tasks from %s\n", len(result.Tasks), system)
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Pulled %d tasks from %s\n", len(result.Tasks), system)
 	},
 }
 
@@ -53,7 +53,7 @@ var syncPushCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		system := args[0]
-		fmt.Printf("Pushing updates to %s...\n", system)
+		fmt.Fprintf(cmd.OutOrStdout(), "Pushing updates to %s...\n", system)
 		// Logic to fetch local changes and call sync.push
 	},
 }
@@ -64,9 +64,10 @@ var syncConfigCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		system := args[0]
-		fmt.Printf("Sync configuration for %s:\n", system)
-		fmt.Printf("  Repo: %s\n", viper.GetString(fmt.Sprintf("sync.%s.repo", system)))
-		fmt.Printf("  Direction: %s\n", viper.GetString(fmt.Sprintf("sync.%s.direction", system)))
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "Sync configuration for %s:\n", system)
+		fmt.Fprintf(out, "  Repo: %s\n", viper.GetString(fmt.Sprintf("sync.%s.repo", system)))
+		fmt.Fprintf(out, "  Direction: %s\n", viper.GetString(fmt.Sprintf("sync.%s.direction", system)))
 	},
 }
 

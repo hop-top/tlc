@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -41,11 +43,95 @@ var (
 	taskUpdateRemoveTags  []string
 
 	taskDeleteYes bool
+
+	taskClaimNote   string
+	taskUnclaimNote string
 )
 
 var taskCmd = &cobra.Command{
 	Use:   "task",
 	Short: "Task operations",
+}
+
+var taskClaimCmd = &cobra.Command{
+	Use:   "claim <task-id>",
+	Short: "Claim a task for work",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return err
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", id)
+		}
+
+		user := core.GetCurrentUser()
+		task.AssignedTo = &user
+
+		log, err := task.Transition(core.StatusInProgress, user, taskClaimNote)
+		if err != nil {
+			return err
+		}
+
+		if err := s.UpdateTask(ctx, task); err != nil {
+			return err
+		}
+		if err := s.AddLog(ctx, log); err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
+		return syncToTODO()
+	},
+}
+
+var taskUnclaimCmd = &cobra.Command{
+	Use:   "unclaim <task-id>",
+	Short: "Release a claimed task",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return err
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", id)
+		}
+
+		task.AssignedTo = nil
+
+		log, err := task.Transition(core.StatusTodo, core.GetCurrentUser(), taskUnclaimNote)
+		if err != nil {
+			return err
+		}
+
+		if err := s.UpdateTask(ctx, task); err != nil {
+			return err
+		}
+		if err := s.AddLog(ctx, log); err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
+		return syncToTODO()
+	},
 }
 
 var taskCreateCmd = &cobra.Command{
@@ -66,7 +152,7 @@ var taskCreateCmd = &cobra.Command{
 			return fmt.Errorf("title is required")
 		}
 
-		_, err := saveTask(taskID, title, taskDescription, taskStatus, taskAssignedTo, taskTags, taskReference, make(map[string]interface{}))
+		_, err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskTags, taskReference, make(map[string]interface{}))
 		if err != nil {
 			return err
 		}
@@ -160,14 +246,14 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	_, err := saveTask("", title, description, status, assignee, tags, "", meta)
+	_, err := saveTask(os.Stdout, "", title, description, status, assignee, tags, "", meta)
 	if err != nil {
 		return err
 	}
 	return syncToTODO()
 }
 
-func saveTask(id, title, description, status, assignedTo string, tags []string, reference string, meta map[string]interface{}) (*core.Task, error) {
+func saveTask(w io.Writer, id, title, description, status, assignedTo string, tags []string, reference string, meta map[string]interface{}) (*core.Task, error) {
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 	s, err := getStorage()
 	if err != nil {
@@ -217,15 +303,15 @@ func saveTask(id, title, description, status, assignedTo string, tags []string, 
 	logEntry := &core.LogEntry{
 		TaskID:    task.ID,
 		Timestamp: now,
-		By:        getCurrentUser(),
+		By:        core.GetCurrentUser(),
 		Action:    "CREATED",
 		Note:      "Task created via CLI",
 	}
 	if err := s.AddLog(ctx, logEntry); err != nil {
-		fmt.Printf("Warning: failed to write log: %v\n", err)
+		fmt.Fprintf(w, "Warning: failed to write log: %v\n", err)
 	}
 
-	fmt.Printf("Created task %s: %s\n", task.ID, task.Title)
+	fmt.Fprintf(w, "Created task %s: %s\n", task.ID, task.Title)
 	return task, nil
 }
 
@@ -252,7 +338,7 @@ var taskListCmd = &cobra.Command{
 		}
 
 		if taskListMine {
-			taskListAssignedTo = getCurrentUser()
+			taskListAssignedTo = core.GetCurrentUser()
 		}
 
 		if taskListStatus != nil {
@@ -273,7 +359,7 @@ var taskListCmd = &cobra.Command{
 		}
 
 		format := viper.GetString("output.format")
-		formatTasks(tasks, format)
+		formatTasks(cmd, tasks, format)
 		return nil
 	},
 }
@@ -308,7 +394,7 @@ var taskShowCmd = &cobra.Command{
 		}
 
 		format := viper.GetString("output.format")
-		printTask(task, logs, format)
+		printTask(cmd, task, logs, format)
 		return nil
 	},
 }
@@ -356,7 +442,7 @@ var taskUpdateCmd = &cobra.Command{
 
 		if cmd.Flags().Changed("status") {
 			nextStatus := core.TaskStatus(taskUpdateStatus)
-			log, err := task.Transition(nextStatus, getCurrentUser(), "Manual update")
+			log, err := task.Transition(nextStatus, core.GetCurrentUser(), "Manual update")
 			if err != nil {
 				return err
 			}
@@ -474,12 +560,32 @@ func init() {
 	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 
-	taskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
+		taskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 
-	taskCmd.AddCommand(taskCreateCmd)
-	taskCmd.AddCommand(taskListCmd)
-	taskCmd.AddCommand(taskShowCmd)
-	taskCmd.AddCommand(taskUpdateCmd)
-	taskCmd.AddCommand(taskDeleteCmd)
-	rootCmd.AddCommand(taskCmd)
-}
+	
+
+		taskClaimCmd.Flags().StringVarP(&taskClaimNote, "note", "n", "", "Claim note")
+
+		taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
+
+	
+
+		taskCmd.AddCommand(taskCreateCmd)
+
+		taskCmd.AddCommand(taskListCmd)
+
+		taskCmd.AddCommand(taskShowCmd)
+
+		taskCmd.AddCommand(taskUpdateCmd)
+
+		taskCmd.AddCommand(taskDeleteCmd)
+
+		taskCmd.AddCommand(taskClaimCmd)
+
+		taskCmd.AddCommand(taskUnclaimCmd)
+
+		rootCmd.AddCommand(taskCmd)
+
+	}
+
+	

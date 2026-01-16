@@ -36,7 +36,7 @@ var migrations = []migration{
 			action TEXT NOT NULL,
 			note TEXT NOT NULL,
 			meta TEXT,
-			FOREIGN KEY (task_id) REFERENCES tasks(id)
+			FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 		);
 		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 		CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);

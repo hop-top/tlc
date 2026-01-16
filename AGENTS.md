@@ -17,7 +17,7 @@ Use this tool to create, list, or update tasks in the TLC system. This allows yo
     "properties": {
       "action": {
         "type": "string",
-        "enum": ["create", "list", "update", "show"],
+        "enum": ["create", "list", "update", "show", "claim", "unclaim"],
         "description": "The action to perform on tasks."
       },
       "task_id": {
@@ -97,6 +97,32 @@ tlc task update T-0042 --status IN_PROGRESS
 **Command Executed:**
 ```bash
 tlc task list --status TODO --assigned-to engineer-1
+```
+
+#### Example: Claiming a task
+**Tool Call:**
+```json
+{
+  "action": "claim",
+  "task_id": "T-0042"
+}
+```
+**Command Executed:**
+```bash
+tlc task claim T-0042
+```
+
+#### Example: Releasing a task
+**Tool Call:**
+```json
+{
+  "action": "unclaim",
+  "task_id": "T-0042"
+}
+```
+**Command Executed:**
+```bash
+tlc task unclaim T-0042
 ```
 
 ## Best Practices for Agents

@@ -46,6 +46,10 @@ func (m *mockRepo) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
 	return nil
 }
 
+func (m *mockRepo) ListFlowRuns(ctx context.Context, q Query) ([]*FlowRun, error) {
+	return nil, nil
+}
+
 func (m *mockRepo) AddLog(ctx context.Context, e *LogEntry) error {
 	m.logs = append(m.logs, e)
 	return nil

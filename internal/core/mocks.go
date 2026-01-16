@@ -61,6 +61,14 @@ func (m *MockRepository) UpdateFlowRun(ctx context.Context, run *FlowRun) error 
 	return nil
 }
 
+func (m *MockRepository) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error) {
+	var runs []*FlowRun
+	for _, r := range m.FlowRuns {
+		runs = append(runs, r)
+	}
+	return runs, nil
+}
+
 type MockLogRepository struct {
 	Logs []*LogEntry
 }

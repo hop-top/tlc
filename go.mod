@@ -5,11 +5,13 @@ go 1.25.5
 require (
 	github.com/andygrunwald/go-jira v1.17.0
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
+	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
 	github.com/google/go-github/v69 v69.2.0
+	github.com/google/uuid v1.6.0
 	github.com/machinebox/graphql v0.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -27,7 +29,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
-	github.com/charmbracelet/bubbletea v1.3.6 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
 	github.com/charmbracelet/x/ansi v0.9.3 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
@@ -45,7 +46,6 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect

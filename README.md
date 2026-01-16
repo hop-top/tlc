@@ -59,9 +59,14 @@ List all tasks:
 ./bin/tlc task list
 ```
 
-Filter by status or assignee:
+Claim a task for work:
 ```bash
-./bin/tlc task list --status TODO --assigned-to engineer-1
+./bin/tlc task claim T-0042
+```
+
+Release a claimed task:
+```bash
+./bin/tlc task unclaim T-0042
 ```
 
 Create a new task:
@@ -71,8 +76,25 @@ Create a new task:
 
 Update a task status:
 ```bash
-./bin/tlc task update T-0042 --status IN_PROGRESS
+./bin/tlc task update T-0042 --status DONE
 ```
+
+### Interactive TUI
+Launch the interactive terminal interface:
+```bash
+./bin/tlc tui
+```
+
+**Keybindings:**
+- `j`/`k`: Navigate tasks
+- `enter`: View task details (including markdown description)
+- `n`: Create new task (interactive form)
+- `c`/`u`: Claim / Unclaim task
+- `s`: Cycle task status
+- `/`: Search/Filter tasks
+- `v`: Cycle views (Dashboard -> Kanban -> Flows)
+- `r`: Refresh data
+- `q`: Quit
 
 ### Local Configuration
 You can use a local configuration file to override global settings:

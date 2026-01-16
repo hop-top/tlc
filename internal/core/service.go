@@ -34,6 +34,14 @@ func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, not
 	return s.logRepo.AddLog(ctx, logEntry)
 }
 
+func (s *TaskService) ListTasks(ctx context.Context, query Query) ([]*Task, error) {
+	return s.repo.ListTasks(ctx, query)
+}
+
+func (s *TaskService) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error) {
+	return s.repo.ListFlowRuns(ctx, query)
+}
+
 func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next TaskStatus, by string, note string) error {
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
@@ -47,6 +55,52 @@ func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next 
 	if err != nil {
 		return err
 	}
+
+	if err := s.repo.UpdateTask(ctx, task); err != nil {
+		return err
+	}
+
+	return s.logRepo.AddLog(ctx, logEntry)
+}
+
+func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, note string) error {
+	task, err := s.repo.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return fmt.Errorf("task %s not found", taskID)
+	}
+
+	task.AssignedTo = &by
+	logEntry, err := task.Transition(StatusInProgress, by, note)
+	if err != nil {
+		return err
+	}
+	logEntry.Action = ActionClaimed
+
+	if err := s.repo.UpdateTask(ctx, task); err != nil {
+		return err
+	}
+
+	return s.logRepo.AddLog(ctx, logEntry)
+}
+
+func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string, note string) error {
+	task, err := s.repo.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return fmt.Errorf("task %s not found", taskID)
+	}
+
+	task.AssignedTo = nil
+	logEntry, err := task.Transition(StatusTodo, by, note)
+	if err != nil {
+		return err
+	}
+	logEntry.Action = ActionReleased
 
 	if err := s.repo.UpdateTask(ctx, task); err != nil {
 		return err

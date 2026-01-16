@@ -21,6 +21,8 @@ type Repository interface {
 	GetFlowRun(ctx context.Context, id string) (*FlowRun, error)
 	// UpdateFlowRun updates an existing flow run.
 	UpdateFlowRun(ctx context.Context, run *FlowRun) error
+	// ListFlowRuns returns a list of flow runs matching the query.
+	ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error)
 }
 
 // LogRepository defines the interface for audit log persistence.

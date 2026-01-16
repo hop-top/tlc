@@ -49,13 +49,13 @@
 [x] T-0049 Add status badge rendering with Lip Gloss @engineer-2 #cli #styling created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
 [x] T-0050 Integrate Glamour for markdown rendering @engineer-2 #cli #markdown created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
 [x] T-0051 Setup Charm Log for structured logging @engineer-2 #cli #logging created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P1
-[ ] T-0052 Setup Bubble Tea architecture @engineer-2 #tui #setup ref:docs/tlc-tui-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:tui
-[ ] T-0053 Implement TUI dashboard view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[ ] T-0054 Implement TUI task list view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 prio:P1 domain:tui
-[ ] T-0055 Implement TUI task detail view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[ ] T-0056 Add TUI navigation and keybindings @engineer-2 #tui #navigation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
-[ ] T-0057 Implement TUI flow execution view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P2
-[ ] T-0058 Add TUI search/filter dialog @engineer-2 #tui #search created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P2
+[x] T-0052 Setup Bubble Tea architecture @engineer-2 #tui #setup ref:docs/tlc-tui-spec-0.1.md created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
+[x] T-0053 Implement TUI dashboard view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
+[x] T-0054 Implement TUI task list view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
+[x] T-0055 Implement TUI task detail view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
+[x] T-0056 Add TUI navigation and keybindings @engineer-2 #tui #navigation created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P1
+[x] T-0057 Implement TUI flow execution view @engineer-2 #tui #view created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P2
+[x] T-0058 Add TUI search/filter dialog @engineer-2 #tui #search created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:tui prio:P2
 [ ] T-0059 Implement tlc flow run command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
 [ ] T-0060 Implement tlc flow status command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2
 [ ] T-0061 Implement tlc log command @engineer-2 #cli #cmd created_at=2026-01-16T01:34:11-05:00 updated_at=2026-01-16T01:34:11-05:00 domain:cli prio:P2

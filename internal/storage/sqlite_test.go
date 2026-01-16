@@ -138,6 +138,46 @@ func TestSQLiteStorage_Query(t *testing.T) {
 		}
 }
 
+func TestStorage_QueryORLogic(t *testing.T) {
+	dbPath := "test_or_logic.db"
+	defer os.Remove(dbPath)
+
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	s.CreateTask(ctx, &core.Task{ID: "T-1", Title: "Task 1", Status: core.StatusTodo, Reference: "ref"})
+	s.CreateTask(ctx, &core.Task{ID: "T-2", Title: "Task 2", Status: core.StatusInProgress, Reference: "ref"})
+	s.CreateTask(ctx, &core.Task{ID: "T-3", Title: "Task 3", Status: core.StatusDone, Reference: "ref"})
+
+	// Query for status=TODO OR status=IN_PROGRESS
+	q := core.Query{
+		Filters: []core.FieldFilter{
+			{Field: "status", Operator: core.OpEq, Value: core.StatusTodo},
+			{Field: "status", Operator: core.OpEq, Value: core.StatusInProgress},
+		},
+	}
+	
+	got, err := s.ListTasks(ctx, q)
+	if err != nil {
+		t.Fatalf("ListTasks failed: %v", err)
+	}
+	
+	if len(got) != 2 {
+		t.Errorf("expected 2 tasks (TODO or IN_PROGRESS), got %d", len(got))
+	}
+	
+	// Verify we didn't get T-3 (DONE)
+	for _, tsk := range got {
+		if tsk.ID == "T-3" {
+			t.Errorf("unexpected task T-3 in results")
+		}
+	}
+}
+
 func TestSQLiteStorage_FlowRuns(t *testing.T) {
 	dbPath := "test_flow_runs.db"
 	defer os.Remove(dbPath)

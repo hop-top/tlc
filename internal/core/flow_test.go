@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseFlow_YAML(t *testing.T) {
@@ -260,6 +261,36 @@ func TestFlowExecutor_Cancel(t *testing.T) {
 	err = executor.checkStatus(ctx, run, "test")
 	if err == nil || !strings.Contains(err.Error(), "canceled") {
 		t.Errorf("checkStatus: expected canceled error, got %v", err)
+	}
+}
+
+func TestFlowExecutor_PauseResume(t *testing.T) {
+	repo := NewMockRepository()
+	logRepo := NewMockLogRepository()
+	executor := NewFlowExecutor(repo, logRepo)
+
+	ctx := context.Background()
+	run := &FlowRun{ID: "test-run", Status: FlowStatusRunning}
+	repo.CreateFlowRun(ctx, run)
+
+	// In a separate goroutine, change status to paused then running
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		run.Status = FlowStatusPaused
+		repo.UpdateFlowRun(ctx, run)
+		
+		time.Sleep(100 * time.Millisecond)
+		run.Status = FlowStatusRunning
+		repo.UpdateFlowRun(ctx, run)
+	}()
+
+	err := executor.checkStatus(ctx, run, "test")
+	if err != nil {
+		t.Errorf("expected eventually running, got error: %v", err)
+	}
+	
+	if run.Status != FlowStatusRunning {
+		t.Errorf("expected status Running after resume, got %s", run.Status)
 	}
 }
 

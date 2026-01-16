@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,24 +31,26 @@ var (
 	skippedStyle    = lipgloss.NewStyle().Foreground(warningColor)
 )
 
-func formatTasks(tasks []*core.Task, format string) {
+func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
+	out := cmd.OutOrStdout()
 	switch format {
 	case "json":
 		data, _ := json.MarshalIndent(tasks, "", "  ")
-		fmt.Println(string(data))
+		fmt.Fprintln(out, string(data))
 	case "yaml":
 		data, _ := yaml.Marshal(tasks)
-		fmt.Println(string(data))
+		fmt.Fprintln(out, string(data))
 	case "tls":
 		for _, t := range tasks {
-			fmt.Println(formatTLS(t))
+			fmt.Fprintln(out, formatTLS(t))
 		}
 	default: // table
-		renderTable(tasks)
+		renderTable(out, tasks)
 	}
 }
 
-func printTask(task *core.Task, logs []*core.LogEntry, format string) {
+func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, format string) {
+	out := cmd.OutOrStdout()
 	switch format {
 	case "json":
 		result := map[string]interface{}{
@@ -54,16 +58,16 @@ func printTask(task *core.Task, logs []*core.LogEntry, format string) {
 			"logs": logs,
 		}
 		data, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(data))
+		fmt.Fprintln(out, string(data))
 	case "yaml":
 		result := map[string]interface{}{
 			"task": task,
 			"logs": logs,
 		}
 		data, _ := yaml.Marshal(result)
-		fmt.Println(string(data))
+		fmt.Fprintln(out, string(data))
 	default:
-		renderTaskDetail(task, logs)
+		renderTaskDetail(out, task, logs)
 	}
 }
 
@@ -115,7 +119,7 @@ func formatTLS(t *core.Task) string {
 	return strings.Join(parts, " ")
 }
 
-func renderTable(tasks []*core.Task) {
+func renderTable(w io.Writer, tasks []*core.Task) {
 	columns := []table.Column{
 		{Title: "ID", Width: 10},
 		{Title: "Title", Width: 40},
@@ -153,7 +157,7 @@ func renderTable(tasks []*core.Task) {
 		Bold(true)
 	tbl.SetStyles(s)
 
-	fmt.Println(tbl.View())
+	fmt.Fprintln(w, tbl.View())
 }
 
 func formatStatus(status core.TaskStatus) string {
@@ -171,39 +175,39 @@ func formatStatus(status core.TaskStatus) string {
 	}
 }
 
-func renderTaskDetail(t *core.Task, logs []*core.LogEntry) {
-	fmt.Println(titleStyle.Render(fmt.Sprintf("Task: %s", t.ID)))
-	fmt.Printf("%s %s\n", labelStyle.Render("Title:"), t.Title)
-	fmt.Printf("%s %s\n", labelStyle.Render("Status:"), formatStatus(t.Status))
+func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
+	fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Task: %s", t.ID)))
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Status:"), formatStatus(t.Status))
 	
 	assignee := "-"
 	if t.AssignedTo != nil {
 		assignee = *t.AssignedTo
 	}
-	fmt.Printf("%s %s\n", labelStyle.Render("Assigned:"), assignee)
-	fmt.Printf("%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
-	fmt.Printf("%s %s\n", labelStyle.Render("Reference:"), t.Reference)
-	fmt.Printf("%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))
-	fmt.Printf("%s %s\n", labelStyle.Render("Updated:"), t.UpdatedAt.Format(time.RFC3339))
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Assigned:"), assignee)
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), t.Reference)
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))
+	fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), t.UpdatedAt.Format(time.RFC3339))
 
 	if t.Description != "" {
-		fmt.Println("\nDescription:")
+		fmt.Fprintln(w, "\nDescription:")
 		r, _ := glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
 			glamour.WithWordWrap(80),
 		)
 		out, err := r.Render(t.Description)
 		if err != nil {
-			fmt.Println(t.Description)
+			fmt.Fprintln(w, t.Description)
 		} else {
-			fmt.Print(out)
+			fmt.Fprint(w, out)
 		}
 	}
 
 	if len(logs) > 0 {
-		fmt.Println("\nLogs:")
+		fmt.Fprintln(w, "\nLogs:")
 		for _, l := range logs {
-			fmt.Printf("  %s  %-15s (%s) %s\n", 
+			fmt.Fprintf(w, "  %s  %-15s (%s) %s\n", 
 				l.Timestamp.Format("2006-01-02 15:04:05"),
 				l.Action,
 				l.By,

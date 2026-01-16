@@ -332,6 +332,45 @@ func (s *SQLiteStorage) UpdateFlowRun(ctx context.Context, run *core.FlowRun) er
 	})
 }
 
+func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*core.FlowRun, error) {
+	sqlQuery := "SELECT id, flow_id, status, started_at, ended_at, results FROM flow_runs"
+	var args []interface{}
+
+	// Basic implementation, can be extended like ListTasks
+	sqlQuery += " ORDER BY started_at DESC"
+
+	if query.Limit > 0 {
+		sqlQuery += " LIMIT ?"
+		args = append(args, query.Limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runs []*core.FlowRun
+	for rows.Next() {
+		var run core.FlowRun
+		var startedAtStr string
+		var endedAtStr, resultsStr sql.NullString
+		if err := rows.Scan(&run.ID, &run.FlowID, &run.Status, &startedAtStr, &endedAtStr, &resultsStr); err != nil {
+			return nil, err
+		}
+		run.StartedAt, _ = time.Parse(time.RFC3339, startedAtStr)
+		if endedAtStr.Valid {
+			t, _ := time.Parse(time.RFC3339, endedAtStr.String)
+			run.EndedAt = &t
+		}
+		if resultsStr.Valid {
+			json.Unmarshal([]byte(resultsStr.String), &run.Results)
+		}
+		runs = append(runs, &run)
+	}
+	return runs, nil
+}
+
 func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*core.LogEntry, error) {
 	sqlQuery := "SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs"
 	var args []interface{}
