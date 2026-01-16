@@ -1,0 +1,25 @@
+# Air configuration for linting oss-tlc-cli
+# Watches for Go file changes and runs golangci-lint
+
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  bin = "echo"
+  cmd = "golangci-lint run --config .golangci.yml"
+  delay = 500
+  exclude_dir = ["vendor", "testdata", "coverage", "tmp", ".worktrees", "bin", ".git"]
+  exclude_regex = ["_test.go"]
+  exclude_unchanged = true
+  include_ext = ["go"]
+  log = "lint-errors.log"
+  stop_on_error = false  # Continue watching even if lint fails
+
+[color]
+  build = "yellow"
+  main = "magenta"
+  watcher = "cyan"
+
+[screen]
+  clear_on_rebuild = true

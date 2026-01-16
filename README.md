@@ -45,6 +45,40 @@ go test ./...
 ```
 The HTML report will be available at `coverage/all.html`.
 
+## 👨‍💻 Development
+
+### Quick Start
+
+```bash
+make tools    # Install dev tools (golangci-lint, air)
+make dev      # Run all checks (format, lint, test)
+make watch    # Auto-rebuild on changes
+```
+
+See [docs/development-setup.md](docs/development-setup.md) for comprehensive development workflow, watch modes, and editor integration.
+
+### Available Make Targets
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build binary to `bin/tlc` |
+| `make test` | Run tests with race detector |
+| `make lint` | Run golangci-lint |
+| `make fmt` | Format code with gofmt + goimports |
+| `make watch` | Watch and rebuild on changes |
+| `make watch-lint` | Watch and lint on changes |
+| `make dev` | Run format + lint + test |
+| `make tools` | Install development tools |
+
+### Watch Mode (Auto-detection)
+
+Get instant feedback while coding:
+```bash
+make watch-lint  # Lint on file save
+make watch       # Build on file save
+make watch-test  # Test on file save
+```
+
 ## 📖 Usage
 
 ### Quick Start

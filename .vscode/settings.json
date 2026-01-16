@@ -1,0 +1,46 @@
+{
+  "go.useLanguageServer": true,
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": [
+    "--config=${workspaceFolder}/.golangci.yml",
+    "--fast"
+  ],
+  "go.lintOnSave": "workspace",
+  "go.formatTool": "goimports",
+  "go.formatFlags": [
+    "-local",
+    "github.com/google/oss-tlc-cli"
+  ],
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "go.testFlags": ["-v", "-race", "-short"],
+  "go.coverOnSave": false,
+  "go.coverageDecorator": {
+    "type": "gutter"
+  },
+  "go.testTimeout": "30s",
+  "gopls": {
+    "analyses": {
+      "unusedparams": true,
+      "shadow": true,
+      "nilness": true
+    },
+    "staticcheck": true,
+    "gofumpt": true
+  },
+  "files.watcherExclude": {
+    "**/.worktrees/**": true,
+    "**/bin/**": true,
+    "**/coverage/**": true,
+    "**/tmp/**": true
+  },
+  "search.exclude": {
+    "**/.worktrees/**": true,
+    "**/bin/**": true,
+    "**/coverage/**": true
+  }
+}

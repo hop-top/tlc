@@ -1,0 +1,48 @@
+# Pre-commit hooks for oss-tlc-cli
+# https://pre-commit.com/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+        args: ['-s']
+      - id: go-imports
+        args: ['-local', 'github.com/google/oss-tlc-cli']
+      - id: go-vet
+      - id: go-unit-tests
+        args: ['-short', '-race']
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.8.0
+    hooks:
+      - id: golangci-lint
+        args: ['--config', '.golangci.yml', '--fast']
+
+  - repo: local
+    hooks:
+      - id: no-direct-commits-to-main
+        name: Prevent commits to main
+        entry: sh -c 'if [ "$PRE_COMMIT_FROM_REF" = "" ]; then branch=$(git symbolic-ref HEAD 2>/dev/null | sed "s/refs\/heads\///"); if [ "$branch" = "main" ]; then echo "Direct commits to main are not allowed. Use a feature branch."; exit 1; fi; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+# Global settings
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+fail_fast: false

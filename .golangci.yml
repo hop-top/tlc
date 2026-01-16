@@ -1,0 +1,167 @@
+# golangci-lint configuration for oss-tlc-cli
+# https://golangci-lint.run/usage/configuration/
+
+version: 2
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - (io.Closer).Close
+      - (*database/sql.Rows).Close
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow # Too noisy for Cobra CLI patterns
+
+  gocyclo:
+    min-complexity: 15
+
+  gocognit:
+    min-complexity: 20
+
+  dupl:
+    threshold: 100
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+    ignore-tests: true
+
+  misspell:
+    locale: US
+
+  lll:
+    line-length: 120
+    tab-width: 1
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: package-comments
+        disabled: true # Disabled for internal packages
+      - name: var-naming
+        arguments:
+          - ["ID"] # Allow ID instead of Id
+
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104 # Duplicates errcheck
+      - G304 # Allow file path variables in CLI
+
+  stylecheck:
+    checks: ["all", "-ST1003"] # Allow ID naming
+
+  wrapcheck:
+    ignoreSigs:
+      - .Errorf(
+      - errors.New(
+      - errors.Wrap(
+      - errors.Wrapf(
+
+linters:
+  enable:
+    # Critical
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Security
+    - gosec
+    # Quality
+    - gocyclo
+    - gocognit
+    - dupl
+    - goconst
+    - misspell
+    - unconvert
+    - unparam
+    # Style
+    - revive
+    - whitespace
+    # Errors
+    - wrapcheck
+    # Testing
+    - testpackage
+    - tparallel
+    # Performance
+    - prealloc
+
+  disable:
+    - gochecknoglobals # Will enable with exclude paths
+    - funlen # Too restrictive for CLI/TUI code
+    - exhaustive # Exhaustive switch checks - overkill
+    - nlreturn # Newline style - too opinionated
+    - wsl # Whitespace linter - conflicts with formatters
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  exclude-rules:
+    # Exclude test files from certain checks
+    - path: _test\.go
+      linters:
+        - errcheck
+        - dupl
+        - gosec
+        - goconst
+
+    # Exclude mock files
+    - path: mocks?\.go
+      linters:
+        - unused
+        - deadcode
+
+    # Allow globals in plugin system
+    - path: internal/plugin/
+      linters:
+        - gochecknoglobals
+
+    # Skip godoc for internal packages
+    - path: internal/
+      linters:
+        - godoc
+
+    # Allow longer functions in TUI/CLI handlers
+    - path: internal/(tui|cli)/
+      linters:
+        - gocyclo
+        - gocognit
+
+    # Skip wrapcheck for main.go
+    - path: cmd/tlc/main\.go
+      linters:
+        - wrapcheck
+
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 5m
+  go: '1.25'
+  tests: true
+  skip-dirs:
+    - vendor
+    - .worktrees
+    - bin
+    - coverage
+  skip-files:
+    - ".*\\.pb\\.go$"
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true

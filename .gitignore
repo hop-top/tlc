@@ -4,3 +4,13 @@ tlc
 *.db
 *.test
 coverage/
+
+# Development artifacts
+tmp/
+*.log
+build-errors.log
+lint-errors.log
+
+# Coverage
+*.coverprofile
+*.out
