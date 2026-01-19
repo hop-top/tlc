@@ -115,6 +115,46 @@ Initialize a new project:
 ./bin/tlc init
 ```
 
+### AI Agent Integration
+
+Configure AI agents to use TLC for task management:
+
+**For Claude Code users:**
+
+Add this to your global Claude configuration (`~/.claude/CLAUDE.md`):
+
+```markdown
+## Task Management with TLC
+
+Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
+
+**Setup (run once per project):**
+- Check if initialized: `ls .tlc/` or run `tlc init` if not found
+- Optional GitHub sync: `tlc sync setup github` (syncs with GitHub Issues)
+
+**Common commands:**
+- Create: `tlc task create "Task title" --assigned-to @me --tag feature`
+- List: `tlc task list --status TODO --mine`
+- Update: `tlc task update T-0042 --status IN_PROGRESS`
+- Claim: `tlc task claim T-0042`
+- View logs: `tlc log T-0042`
+
+**Tool definition:** Run `tlc help llm --format mcp` for MCP tool schema.
+```
+
+**For other AI platforms:**
+
+Add to your project's `AGENTS.md` file:
+
+```markdown
+## Task Management
+
+This project uses TLC for task tracking.
+
+Setup: `tlc init`
+Tool definition: `tlc help llm` (or `--format openai` for OpenAI platforms)
+```
+
 ### Managing Tasks
 List all tasks:
 ```bash
@@ -231,6 +271,9 @@ Defaults:
 - **Archive threshold**: 168h (7 days)
 
 ## 📚 Documentation
+
+**New to TLC?** Start with [Getting Started Guide](docs/GETTING-STARTED.md) for a progressive learning path from basic tasks to advanced workflows.
+
 Detailed specifications can be found in the `docs/` directory:
 
 **Features & Guides:**

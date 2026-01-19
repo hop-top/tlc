@@ -2,6 +2,18 @@
 
 This document provides the standard tool definition for AI agents to interact with the TLC (Task Line CLI). Agents should use this tool to manage their internal planning and work breakdown.
 
+## Getting the Tool Definition
+
+The tool definition can be retrieved programmatically using:
+
+```bash
+tlc help llm                    # JSON format (default, includes examples)
+tlc help llm --format mcp       # MCP format (Claude Code, Claude Desktop)
+tlc help llm --format openai    # OpenAI function calling format
+```
+
+The command outputs an up-to-date tool definition that matches the current TLC version.
+
 ## Tool: `manage_tlc_task`
 
 Use this tool to create, list, or update tasks in the TLC system. This allows you to track your own work and maintain an audit trail of your progress without polluting external systems like GitHub or Jira.
