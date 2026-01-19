@@ -6,6 +6,7 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 
 - **Hybrid Storage Model**: Edit tasks directly in a human-friendly `todo.txt` (Task Line Syntax) or use the synchronized SQLite database for high-performance querying.
 - **Complex Orchestration (Task Flows)**: Define declarative workflows with support for sequential and parallel execution, conditional branching, synchronization joins, and automated retries.
+- **Flows & Assignees**: Procedural workflow templates that generate task sequences with capability-based auto-assignment to specialized executors (inspired by superpowers plugin).
 - **Multi-Agent Collaboration**: Safe coordination between humans and AI agents using task claiming, responsibility transfer, delegation protocols, and time-bounded ownership leases (TTL).
 - **Deterministic Task Execution**: Robust execution contract with stdout/stderr capture, error normalization, and configurable timeouts.
 - **Audit-Ready Logging**: A canonical, reverse-chronological `CHANGELOG` capturing every state transition, collaboration action, and execution attempt.
@@ -145,6 +146,33 @@ Update a task status:
 ./bin/tlc task update T-0042 --status DONE
 ```
 
+### Flows & Assignees
+
+TLC includes a comprehensive workflow suite with capability-based task assignment:
+
+**List available assignees:**
+```bash
+./bin/tlc assignee list
+```
+
+**View assignee details:**
+```bash
+./bin/tlc assignee show assignee:code-analyst:1.0
+```
+
+**Invoke a flow to generate tasks:**
+```bash
+./bin/tlc flow invoke examples/flows/brainstorming.yaml
+```
+
+**Available workflow flows:**
+- **Creative & Planning**: brainstorming, writing-plans
+- **Development**: test-driven-development, executing-plans
+- **Quality Assurance**: systematic-debugging, code-review, verification-before-completion
+- **Workflow**: finishing-development-branch
+
+See [docs/flows-and-assignees.md](docs/flows-and-assignees.md) for complete documentation.
+
 ### Interactive TUI
 Launch the interactive terminal interface:
 ```bash
@@ -204,7 +232,18 @@ Defaults:
 
 ## 📚 Documentation
 Detailed specifications can be found in the `docs/` directory:
+
+**Features & Guides:**
+- [Flows & Assignees](docs/flows-and-assignees.md) - Workflow automation and capability-based assignment
+- [Development Setup](docs/development-setup.md) - Development workflow and watch modes
+- [Editor Setup](docs/editor-setup.md) - IDE/editor integration
+- [Docker Usage](docs/docker.md) - Container deployment
+
+**Specifications:**
 - [Task CRUD Spec](docs/task-crud-spec-0.1.md)
 - [Task Line Syntax Spec](docs/task-line-spec-0.1.md)
+- [Task Flow Spec](docs/task-flow-spec-0.1.md)
 - [Task Log Spec](docs/task-log-spec-0.1.md)
 - [Sync Architecture](docs/sync-architecture-0.1.md)
+- [CLI Spec](docs/tlc-cli-spec-0.1.md)
+- [TUI Spec](docs/tlc-tui-spec-0.1.md)

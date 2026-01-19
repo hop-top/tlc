@@ -1,0 +1,207 @@
+flow_id: "flow:test-driven-development:1.0"
+name: "Test-Driven Development"
+version: "1.0"
+description: "Write tests before implementation - the TDD workflow"
+entry_step: "understand-requirements"
+
+config:
+  category: "development"
+  triggers:
+    - "implementing feature"
+    - "adding functionality"
+    - "bug fix"
+    - "before writing implementation code"
+
+  procedure: |
+    ## Test-Driven Development (TDD)
+
+    The Iron Law: **Tests before implementation, always.**
+
+    ## The Three Laws of TDD
+
+    1. You may not write production code until you have written a failing test
+    2. You may not write more of a test than is sufficient to fail
+    3. You may not write more production code than is sufficient to pass the test
+
+    ## The TDD Cycle (Red-Green-Refactor)
+
+    ### Phase 1: Red (Write Failing Test)
+
+    1. **Understand the requirement**
+       - What behavior are we adding?
+       - What are the inputs and expected outputs?
+       - What are the edge cases?
+
+    2. **Write the simplest failing test**
+       - Test ONE behavior
+       - Use descriptive test names
+       - Assert on observable behavior, not implementation
+       - Run test → confirm it fails for the right reason
+
+    ### Phase 2: Green (Make It Pass)
+
+    3. **Write minimal implementation**
+       - Goal: Make the test pass, nothing more
+       - Hardcode values if needed
+       - No premature optimization
+       - No "while I'm here" additions
+
+    4. **Run tests**
+       - Does the new test pass?
+       - Do all existing tests still pass?
+       - If no → fix before proceeding
+
+    ### Phase 3: Refactor (Clean Up)
+
+    5. **Refactor with confidence**
+       - Remove duplication
+       - Improve names
+       - Extract methods/functions
+       - Run tests after each refactor
+       - Tests are your safety net
+
+    6. **Commit**
+       - Commit when tests are green
+       - Commit message: behavior added, not implementation details
+
+    ## Repeat
+
+    Return to Phase 1 for next behavior.
+
+    ## Key Principles
+
+    - **Behavioral focus**: Test what, not how
+    - **Incremental**: One test at a time
+    - **Fast feedback**: Run tests constantly
+    - **No skipping**: Never write implementation without a failing test first
+
+steps:
+  understand-requirements:
+    step_id: "understand-requirements"
+    type: "task"
+    title: "Understand the requirement"
+    task_template:
+      title: "Clarify what behavior to implement"
+      description: |
+        Before writing any code or test:
+        - What specific behavior are we adding?
+        - What are the inputs?
+        - What are the expected outputs?
+        - What are the edge cases?
+        - What should happen when things go wrong?
+
+        Write this down clearly.
+      requirements:
+        capabilities: ["requirements-gathering", "behavior-analysis"]
+
+  write-failing-test:
+    step_id: "write-failing-test"
+    type: "task"
+    title: "Write the simplest failing test"
+    depends_on: ["understand-requirements"]
+    task_template:
+      title: "Write failing test for ONE behavior"
+      description: |
+        Write a test that:
+        - Tests exactly ONE behavior
+        - Has a descriptive name describing the behavior
+        - Asserts on observable behavior (not implementation)
+        - Is as simple as possible
+
+        Then:
+        - Run the test
+        - Confirm it fails
+        - Confirm it fails for the RIGHT reason
+
+        DO NOT proceed until you have a properly failing test.
+      requirements:
+        capabilities: ["testing", "test-writing"]
+        tools: ["test-framework"]
+
+  write-minimal-implementation:
+    step_id: "write-minimal-implementation"
+    type: "task"
+    title: "Write minimal implementation"
+    depends_on: ["write-failing-test"]
+    task_template:
+      title: "Implement just enough to pass the test"
+      description: |
+        Write the SIMPLEST code that makes the test pass:
+        - Hardcode values if needed at first
+        - No premature abstractions
+        - No "while I'm here" improvements
+        - No extra features
+
+        Goal: Green test, nothing more.
+      requirements:
+        capabilities: ["implementation", "coding"]
+        tools: ["compiler", "interpreter"]
+
+  run-tests:
+    step_id: "run-tests"
+    type: "task"
+    title: "Run all tests"
+    depends_on: ["write-minimal-implementation"]
+    task_template:
+      title: "Verify tests pass"
+      description: |
+        Run the full test suite:
+        - Does the new test pass?
+        - Do all existing tests still pass?
+        - Any unexpected failures?
+
+        If ANY test fails:
+        - Fix immediately
+        - Do not proceed to refactor
+        - Do not commit
+
+        Only proceed when ALL tests are green.
+      requirements:
+        capabilities: ["testing", "verification"]
+        tools: ["test-framework"]
+
+  refactor:
+    step_id: "refactor"
+    type: "task"
+    title: "Refactor with confidence"
+    depends_on: ["run-tests"]
+    task_template:
+      title: "Clean up code while keeping tests green"
+      description: |
+        Now that tests are green, refactor:
+        - Remove duplication
+        - Improve variable/function names
+        - Extract methods for clarity
+        - Simplify complex logic
+
+        After EACH change:
+        - Run tests
+        - Confirm still green
+        - If red → undo and try smaller step
+
+        Tests are your safety net.
+      requirements:
+        capabilities: ["refactoring", "code-quality"]
+        tools: ["test-framework", "linter"]
+
+  commit:
+    step_id: "commit"
+    type: "task"
+    title: "Commit green tests"
+    depends_on: ["refactor"]
+    task_template:
+      title: "Commit with behavioral commit message"
+      description: |
+        Commit the working code:
+        - Confirm all tests green
+        - Write commit message describing BEHAVIOR added
+        - Not implementation details
+
+        Example:
+        - Good: "Add validation for empty usernames"
+        - Bad: "Add if statement to checkUsername function"
+
+        Then return to step 1 for next behavior.
+      requirements:
+        capabilities: ["version-control"]
+        tools: ["git"]

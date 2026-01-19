@@ -1,0 +1,375 @@
+flow_id: "flow:finishing-development-branch:1.0"
+name: "Finishing a Development Branch"
+version: "1.0"
+description: "Complete development work and decide integration path"
+entry_step: "verify-completion"
+
+config:
+  category: "workflow"
+  triggers:
+    - "implementation complete"
+    - "all tests passing"
+    - "ready to integrate"
+
+  procedure: |
+    ## Finishing a Development Branch
+
+    When implementation is complete and tests pass, decide how to integrate.
+
+    ## The Process
+
+    ### Phase 1: Verify Completion
+
+    1. **Confirm work is done**
+       - All planned work implemented?
+       - All tests passing? (run them)
+       - No outstanding TODOs?
+       - Documentation updated?
+
+    2. **Clean up branch**
+       - Remove debug code
+       - Remove commented-out code
+       - Remove temporary files
+       - Squash/clean commit history if needed
+
+    ### Phase 2: Choose Integration Path
+
+    3. **Decide integration approach**
+
+       **Option A: Direct Merge**
+       - When: Small, low-risk changes
+       - When: Solo project or pair programming
+       - Action: Merge to main directly
+
+       **Option B: Pull Request**
+       - When: Team project
+       - When: Changes need human review
+       - When: CI/CD must run first
+       - Action: Create PR with description
+
+       **Option C: Continue Iterating**
+       - When: Additional work identified
+       - When: Review feedback needs addressing
+       - Action: Keep branch, continue work
+
+       **Option D: Abandon**
+       - When: Approach didn't work
+       - When: Requirements changed
+       - When: Better solution found
+       - Action: Close branch, document learnings
+
+    ### Phase 3: Execute Integration
+
+    4. **For Direct Merge:**
+       - Switch to main
+       - Pull latest changes
+       - Merge branch
+       - Push to remote
+       - Delete branch
+
+    5. **For Pull Request:**
+       - Push branch to remote
+       - Create PR with context
+       - Request reviewers
+       - Address feedback
+       - Merge when approved
+
+    6. **For Continue/Abandon:**
+       - Document decision
+       - Update plan if needed
+       - Either continue work or archive learnings
+
+    ### Phase 4: Cleanup
+
+    7. **After integration:**
+       - Delete merged branch
+       - Delete worktree if used
+       - Close related issues
+       - Update project status
+
+steps:
+  verify-completion:
+    step_id: "verify-completion"
+    type: "task"
+    title: "Verify work is complete"
+    task_template:
+      title: "Confirm implementation complete"
+      description: |
+        Before integrating, verify completion:
+
+        Implementation:
+        - [ ] All planned features implemented?
+        - [ ] All plan steps completed?
+        - [ ] No skipped requirements?
+
+        Testing:
+        - [ ] All tests pass? (run and show output)
+        - [ ] New tests added for new functionality?
+        - [ ] No test failures or errors?
+
+        Code Quality:
+        - [ ] No debug code left behind?
+        - [ ] No commented-out code?
+        - [ ] No temporary files?
+        - [ ] Code follows project conventions?
+
+        Documentation:
+        - [ ] README updated if needed?
+        - [ ] API docs updated if needed?
+        - [ ] Comments added where needed?
+
+        Use verification-before-completion flow.
+
+        Only proceed if ALL items verified.
+      requirements:
+        capabilities: ["verification", "testing", "quality-assurance"]
+        tools: ["test-framework", "linter"]
+
+  cleanup-branch:
+    step_id: "cleanup-branch"
+    type: "task"
+    title: "Clean up branch"
+    depends_on: ["verify-completion"]
+    task_template:
+      title: "Remove temporary code and clean history"
+      description: |
+        Clean up before integration:
+
+        1. Remove debug artifacts
+           - console.log, print statements used for debugging
+           - Temporary test files
+           - Debug configuration
+
+        2. Remove dead code
+           - Commented-out code blocks
+           - Unused imports
+           - Unused variables/functions
+
+        3. Clean commit history (optional)
+           - Squash fixup commits
+           - Rewrite unclear commit messages
+           - Remove commits that back out previous commits
+           - Use: git rebase -i main
+
+        4. Final verification
+           - Tests still pass after cleanup?
+           - Build still works?
+
+        Branch should be clean and presentable.
+      requirements:
+        capabilities: ["code-cleanup", "version-control"]
+        tools: ["git", "test-framework"]
+
+  choose-integration-path:
+    step_id: "choose-integration-path"
+    type: "task"
+    title: "Choose integration approach"
+    depends_on: ["cleanup-branch"]
+    task_template:
+      title: "Decide how to integrate this work"
+      description: |
+        Choose integration path based on context:
+
+        **Option A: Direct Merge to Main**
+        Choose when:
+        - Solo project or pair programming
+        - Small, low-risk changes
+        - No formal review process needed
+
+        Pros: Fast, simple
+        Cons: No review, no CI gate
+
+        **Option B: Create Pull Request**
+        Choose when:
+        - Team project with review process
+        - Changes need human eyes
+        - CI/CD must run before merge
+        - Want discussion on approach
+
+        Pros: Review, discussion, CI validation
+        Cons: Slower, requires reviewer time
+
+        **Option C: Continue Iterating**
+        Choose when:
+        - Additional work identified during testing
+        - Review feedback needs addressing
+        - Not quite ready yet
+
+        Pros: Can refine further
+        Cons: Delays integration
+
+        **Option D: Abandon Branch**
+        Choose when:
+        - Approach didn't work out
+        - Requirements changed
+        - Better solution identified
+        - Experiment failed (that's ok!)
+
+        Pros: Don't commit to bad approach
+        Cons: Work "wasted" (but learnings gained)
+
+        Make decision and proceed to appropriate step.
+      requirements:
+        capabilities: ["decision-making", "workflow-management"]
+
+  direct-merge:
+    step_id: "direct-merge"
+    type: "task"
+    title: "Direct merge to main"
+    depends_on: ["choose-integration-path"]
+    task_template:
+      title: "Merge branch directly to main"
+      description: |
+        Execute direct merge:
+
+        1. Switch to main branch
+           ```bash
+           git checkout main
+           ```
+
+        2. Pull latest changes
+           ```bash
+           git pull origin main
+           ```
+
+        3. Merge your branch
+           ```bash
+           git merge your-branch-name
+           ```
+
+        4. Run tests one more time
+           - Verify no conflicts broke anything
+           - All tests still pass
+
+        5. Push to remote
+           ```bash
+           git push origin main
+           ```
+
+        6. Delete branch
+           ```bash
+           git branch -d your-branch-name
+           ```
+
+        7. Delete worktree if used
+           ```bash
+           git worktree remove ../path
+           ```
+
+        Work is now integrated!
+      requirements:
+        capabilities: ["version-control", "git-workflow"]
+        tools: ["git", "test-framework"]
+
+  create-pull-request:
+    step_id: "create-pull-request"
+    type: "task"
+    title: "Create pull request"
+    depends_on: ["choose-integration-path"]
+    task_template:
+      title: "Submit work via pull request"
+      description: |
+        Create PR for review:
+
+        1. Push branch to remote
+           ```bash
+           git push origin your-branch-name
+           ```
+
+        2. Create PR (via GitHub CLI or web UI)
+           ```bash
+           gh pr create --title "..." --body "..."
+           ```
+
+        3. Write PR description
+           Include:
+           - What: Summary of changes
+           - Why: Problem being solved
+           - How: Approach taken
+           - Testing: How to verify
+           - Link to plan/issue if applicable
+
+        4. Request reviewers
+           - Tag appropriate reviewers
+           - Assign to yourself
+
+        5. Wait for review
+           - Address feedback
+           - Update branch as needed
+           - Re-request review after changes
+
+        6. Merge when approved
+           - Squash or merge per team convention
+           - Delete branch after merge
+
+        Use code-review flow for self-review before creating PR.
+      requirements:
+        capabilities: ["version-control", "technical-writing"]
+        tools: ["git", "github"]
+
+  continue-iteration:
+    step_id: "continue-iteration"
+    type: "task"
+    title: "Continue iterating"
+    depends_on: ["choose-integration-path"]
+    task_template:
+      title: "Document decision to continue work"
+      description: |
+        Decided to continue iterating:
+
+        1. Document what's left
+           - What additional work identified?
+           - What feedback needs addressing?
+           - What's not quite right?
+
+        2. Update plan
+           - Add new steps for remaining work
+           - Update task list
+           - Revise timeline if needed
+
+        3. Continue implementing
+           - Return to implementation
+           - Use executing-plans flow
+           - Come back here when done
+
+        This is a valid choice - better to get it right than rush.
+      requirements:
+        capabilities: ["planning", "documentation"]
+
+  abandon-branch:
+    step_id: "abandon-branch"
+    type: "task"
+    title: "Abandon branch and document learnings"
+    depends_on: ["choose-integration-path"]
+    task_template:
+      title: "Close branch and capture learnings"
+      description: |
+        Decided to abandon this approach:
+
+        1. Document WHY
+           - What didn't work?
+           - What did we learn?
+           - What would we do differently?
+           - Write this down in docs/learnings/ or similar
+
+        2. Close related issues/tasks
+           - Update issue with learnings
+           - Close as "won't do" with explanation
+           - Link to documentation
+
+        3. Delete branch
+           ```bash
+           git checkout main
+           git branch -D your-branch-name
+           git worktree remove ../path  # if using worktree
+           ```
+
+        4. Plan next steps
+           - What's the new approach?
+           - Use brainstorming flow for new design
+           - Start fresh with learnings applied
+
+        Experiments that fail still provide value through learning.
+      requirements:
+        capabilities: ["documentation", "decision-making"]
+        tools: ["git", "markdown"]

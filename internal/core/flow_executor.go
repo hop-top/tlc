@@ -346,3 +346,52 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 		},
 	})
 }
+
+// ExtractTasksFromFlow generates tasks from flow steps with task templates.
+// This enables flows to coordinate task creation for assignee execution.
+func (e *FlowExecutor) ExtractTasksFromFlow(ctx context.Context, flow *Flow, runID string) ([]*Task, error) {
+	tasks := []*Task{}
+
+	for stepID, step := range flow.Steps {
+		if step.Type == StepTypeTask && step.TaskTemplate != nil {
+			task, err := e.generateTaskFromTemplate(flow, runID, stepID, step)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate task for step %s: %w", stepID, err)
+			}
+			tasks = append(tasks, task)
+		}
+	}
+
+	return tasks, nil
+}
+
+// generateTaskFromTemplate creates a task from a step's task template.
+func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string, step Step) (*Task, error) {
+	taskID := generateTaskID()
+
+	task := &Task{
+		ID:          taskID,
+		Title:       step.TaskTemplate.Title,
+		Description: step.TaskTemplate.Description,
+		Status:      StatusTodo,
+		Reference:   flow.ID,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+		Meta: map[string]interface{}{
+			"flow_id":      flow.ID,
+			"flow_run_id":  runID,
+			"step_id":      stepID,
+			"requirements": step.TaskTemplate.Requirements,
+			"context":      step.TaskTemplate.Context,
+		},
+	}
+
+	return task, nil
+}
+
+// generateTaskID creates a unique task ID (e.g., T-0042).
+func generateTaskID() string {
+	// Simple UUID-based ID for now
+	// In production, this should use a counter from the database
+	return fmt.Sprintf("T-%s", uuid.New().String()[:8])
+}

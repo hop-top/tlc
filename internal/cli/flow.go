@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
@@ -306,12 +307,120 @@ func formatFlowStatus(status core.FlowStatus) string {
 	}
 }
 
+var flowInvokeCmd = &cobra.Command{
+	Use:   "invoke <flow-file>",
+	Short: "Invoke a flow to generate and assign tasks",
+	Long: `Invoke a flow definition that uses task templates to generate tasks.
+
+The flow extracts tasks from step templates and auto-assigns them to
+assignees based on capability matching.
+
+Example:
+  tlc flow invoke examples/flows/brainstorming.yaml`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		flowFile := args[0]
+
+		// Read and parse flow file
+		f, err := os.Open(flowFile)
+		if err != nil {
+			return fmt.Errorf("failed to open flow file: %w", err)
+		}
+		defer f.Close()
+
+		flow, err := core.ParseFlow(f, flowFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse flow: %w", err)
+		}
+
+		// Get storage
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+
+		// Create flow executor
+		executor := core.NewFlowExecutor(s, s)
+
+		// Generate run ID
+		runID := fmt.Sprintf("run:%s", generateID())
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Invoking flow: %s (ID: %s)\n", flow.Name, flow.ID)
+		fmt.Fprintf(cmd.OutOrStdout(), "Run ID: %s\n\n", runID)
+
+		// Extract tasks from flow
+		tasks, err := executor.ExtractTasksFromFlow(ctx, flow, runID)
+		if err != nil {
+			return fmt.Errorf("failed to extract tasks from flow: %w", err)
+		}
+
+		if len(tasks) == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "No tasks to generate. Flow has no task templates.\n")
+			return nil
+		}
+
+		// Load assignees
+		assigneesDir := "examples/assignees"
+		assigneeLoader := core.NewAssigneeLoader(assigneesDir)
+		assignees, err := assigneeLoader.LoadAll()
+		if err != nil {
+			return fmt.Errorf("failed to load assignees: %w", err)
+		}
+
+		if len(assignees) == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Warning: No assignees available. Tasks will not be auto-assigned.\n")
+		}
+
+		// Create assignment engine
+		engine := core.NewAssignmentEngine(assignees)
+
+		// Create task service
+		taskService := core.NewTaskService(s, s)
+
+		// Determine actor
+		by := flowRunBy
+		if by == "" {
+			by = core.GetCurrentUser()
+		}
+
+		// Create and assign tasks
+		for _, task := range tasks {
+			if err := taskService.CreateTaskWithAssignment(ctx, task, engine, by, fmt.Sprintf("Created by flow %s", flow.ID)); err != nil {
+				return fmt.Errorf("failed to create task %s: %w", task.ID, err)
+			}
+
+			assigneeName := "unassigned"
+			if task.AssignedTo != nil {
+				assigneeName = *task.AssignedTo
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created task %s: %s (assigned to %s)\n",
+				task.ID, task.Title, assigneeName)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "\nFlow %s invoked successfully. Created %d tasks.\n",
+			flow.ID, len(tasks))
+
+		return nil
+	},
+}
+
+func generateID() string {
+	// Simple timestamp-based ID
+	return fmt.Sprintf("%d", time.Now().Unix())
+}
+
 func init() {
 	flowRunCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor executing the flow (default: current user)")
+	flowInvokeCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor invoking the flow (default: current user)")
 
 	flowStatusCmd.Flags().BoolVar(&flowStatusAll, "all", false, "List all flow runs")
 
 	flowCmd.AddCommand(flowRunCmd)
+	flowCmd.AddCommand(flowInvokeCmd)
 	flowCmd.AddCommand(flowStatusCmd)
 	flowCmd.AddCommand(flowListCmd)
 	rootCmd.AddCommand(flowCmd)

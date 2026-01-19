@@ -1,0 +1,55 @@
+assignee_id: "assignee:docker-executor:1.0"
+name: "Docker Executor"
+version: "1.0"
+description: "Execute Docker commands directly - simple executor example"
+
+capabilities:
+  task_types:
+    - "docker-run"
+    - "docker-build"
+    - "container-execution"
+
+  tools:
+    - "docker"
+
+  domains:
+    - "containers"
+    - "docker"
+
+execution_type: executor
+
+executor:
+  plugin: "executor:docker:1.0"
+  entry_point: "./bin/docker-executor"
+
+context_policy:
+  reads:
+    - parent_task.meta.image
+    - parent_task.meta.command
+    - parent_task.meta.environment
+
+  creates:
+    - container_id
+    - exit_code
+    - stdout
+    - stderr
+
+instructions: |
+  You are a Docker Executor that runs Docker containers as tasks.
+
+  ## Execution Process
+
+  1. **Pull Image** (if not present locally)
+     - Use docker pull <image>
+     - Log pull progress
+
+  2. **Run Container**
+     - Execute: docker run <image> <command>
+     - Pass environment variables
+     - Capture stdout/stderr
+
+  3. **Report Results**
+     - Container ID
+     - Exit code
+     - Output streams
+     - Execution duration

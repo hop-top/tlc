@@ -1,18 +1,32 @@
-# TLC Specifications (Generated)
+# TLC Documentation
 
-## Generated
+## Updated
 
+- Last updated: 2026-01-17
 - Generated at: 2026-01-15T15:38:01Z
 
 ## Purpose
 
-This directory contains a complementary spec suite for a task system that supports:
+This directory contains comprehensive documentation for TLC (Task Line CLI), a task orchestration system that supports:
 - tasks as durable work units
 - deterministic execution
 - multi-agent or AI-assisted collaboration
 - flow orchestration (sequence, branching, parallelism, joins, retries)
+- workflow automation with capability-based assignment (flows & assignees)
 - E2E testability from user stories
 - a shared glossary to eliminate coordination ambiguity
+
+## Features & Guides
+
+- [Flows & Assignees](flows-and-assignees.md) - Workflow automation and capability-based task assignment
+- [Development Setup](development-setup.md) - Development workflow, watch modes, and tooling
+- [Editor Setup](editor-setup.md) - IDE/editor integration guides
+- [Docker Usage](docker.md) - Container deployment and usage
+
+## Design Documents
+
+- [Flows & Assignees Design](plans/2026-01-17-flows-and-assignees-design.md) - Complete design for workflow automation system
+- [TUI Refactoring Design](plans/2026-01-16-tui-refactoring-design.md) - Terminal UI architecture
 
 ## Spec Map (Non-Overlapping Ownership)
 

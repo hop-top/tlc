@@ -1,0 +1,34 @@
+name: docker-runner
+version: 1.0.0
+description: Run Docker containers as tasks - simple executor plugin example
+
+provides:
+  flows:
+    - id: "flow:docker:run-container:1.0"
+      file: "flows/run-container.yaml"
+      description: "Run a Docker container and capture output"
+
+  assignees:
+    - id: "assignee:docker-executor:1.0"
+      file: "assignees/docker-executor.yaml"
+      execution_type: executor
+      description: "Execute Docker commands directly"
+
+  executors:
+    - id: "executor:docker:1.0"
+      entry_point: "./bin/docker-executor"
+      protocol: jsonrpc
+      capabilities:
+        task_types: ["docker-run", "docker-build"]
+
+requires:
+  tlc_version: ">=0.2.0"
+  system:
+    - docker >= 20.10
+
+permissions:
+  - process.spawn
+
+author: "TLC Examples"
+license: "MIT"
+repository: "github.com/tlc-plugins/docker-runner"

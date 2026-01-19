@@ -1,0 +1,84 @@
+assignee_id: "assignee:test-collector:1.0"
+name: "Test Collector"
+version: "1.0"
+description: "Collect and aggregate test results - demonstrates collection pattern"
+
+capabilities:
+  task_types:
+    - "test-coordination"
+    - "result-aggregation"
+    - "test-reporting"
+
+  tools: []
+
+  domains:
+    - "testing"
+    - "quality-assurance"
+    - "metrics"
+
+execution_type: orchestrator
+patterns: [delegation, aggregation, reporting]
+
+executor:
+  plugin: "executor:test-collector:1.0"
+  entry_point: "./bin/test-collector"
+
+context_policy:
+  reads:
+    - parent_task.meta.project
+    - parent_task.meta.test_paths
+
+  delegates:
+    - test_type
+    - test_path
+
+  collects:
+    - test_results.*
+    - coverage_data.*
+    - execution_time
+
+  creates:
+    - aggregated_report
+    - overall_status
+    - total_tests
+    - pass_rate
+    - coverage_percentage
+
+instructions: |
+  You are a Test Collector responsible for aggregating test results.
+
+  ## Collection Process
+
+  1. **Delegate Test Execution**
+     - Create subtasks for each test type
+     - Assign to appropriate test executors
+     - Track subtask execution
+
+  2. **Collect Results**
+     - Wait for all subtasks to complete
+     - Gather test_results from each subtask
+     - Collect coverage_data from each subtask
+
+  3. **Aggregate Metrics**
+     - Sum total tests across all suites
+     - Calculate overall pass rate
+     - Combine coverage percentages
+     - Identify slowest tests
+
+  4. **Generate Report**
+     - Create summary report with:
+       - Total tests: X
+       - Passed: Y (Z%)
+       - Failed: N
+       - Coverage: M%
+       - Duration: Xs
+     - Update parent task with aggregated_report
+
+delegation:
+  handoff_conditions:
+    - when: "coverage_below_threshold"
+      delegate_to: "assignee:coverage-analyzer:1.0"
+
+  unblocks:
+    - "deployment"
+    - "release"

@@ -50,6 +50,19 @@ type Flow struct {
 	EntryStep   string          `json:"entry_step" yaml:"entry_step"`
 	Steps       map[string]Step `json:"steps" yaml:"steps"`
 	Meta        map[string]any  `json:"meta,omitempty" yaml:"meta,omitempty"`
+	Config      *FlowConfig     `json:"config,omitempty" yaml:"config,omitempty"`
+}
+
+// FlowConfig holds flow configuration including procedural instructions.
+type FlowConfig struct {
+	// Procedural instructions (markdown format, like superpowers skills)
+	Procedure string `json:"procedure,omitempty" yaml:"procedure,omitempty"`
+	// Category for organization (e.g., "creative", "debugging", "deployment")
+	Category string `json:"category,omitempty" yaml:"category,omitempty"`
+	// Triggers that suggest using this flow
+	Triggers []string `json:"triggers,omitempty" yaml:"triggers,omitempty"`
+	// Additional config parameters
+	Params map[string]any `json:"params,omitempty" yaml:"params,omitempty"`
 }
 
 // Step represents a node inside a flow.
@@ -81,6 +94,24 @@ type Step struct {
 	// Subflow specific
 	FlowRef string         `json:"flow_ref,omitempty" yaml:"flow_ref,omitempty"`
 	Inputs  map[string]any `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+
+	// Task template for task generation (flows & assignees feature)
+	TaskTemplate *TaskTemplate `json:"task_template,omitempty" yaml:"task_template,omitempty"`
+}
+
+// TaskTemplate defines how to generate tasks from flow steps.
+type TaskTemplate struct {
+	Title        string             `json:"title" yaml:"title"`
+	Description  string             `json:"description,omitempty" yaml:"description,omitempty"`
+	Requirements *TaskRequirements  `json:"requirements,omitempty" yaml:"requirements,omitempty"`
+	Context      map[string]any     `json:"context,omitempty" yaml:"context,omitempty"`
+}
+
+// TaskRequirements specifies capabilities needed to execute a task.
+type TaskRequirements struct {
+	Capabilities []string `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+	Domains      []string `json:"domains,omitempty" yaml:"domains,omitempty"`
+	Tools        []string `json:"tools,omitempty" yaml:"tools,omitempty"`
 }
 
 // BranchCase defines a conditional path for a branch step.

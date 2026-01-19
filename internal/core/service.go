@@ -190,6 +190,163 @@ func (s *TaskService) CancelFlowRun(ctx context.Context, runID string, by string
 	})
 }
 
+// CreateTaskWithAssignment creates a task and auto-assigns it to the best-matching assignee.
+func (s *TaskService) CreateTaskWithAssignment(ctx context.Context, task *Task, engine *AssignmentEngine, by string, note string) error {
+	// Create task first
+	if err := s.CreateTask(ctx, task, by, note); err != nil {
+		return err
+	}
+
+	// Find best assignee
+	assignee, score, err := engine.FindBestAssignee(task)
+	if err != nil {
+		// Log warning but don't fail task creation
+		logEntry := &LogEntry{
+			TaskID:    task.ID,
+			Timestamp: time.Now().UTC(),
+			By:        "assignment-engine",
+			Action:    ActionComment,
+			Note:      fmt.Sprintf("Warning: could not auto-assign task: %v", err),
+		}
+		s.logRepo.AddLog(ctx, logEntry)
+		return nil
+	}
+
+	// Assign task
+	assigneeID := assignee.ID
+	task.AssignedTo = &assigneeID
+
+	// Log assignment
+	logEntry := &LogEntry{
+		TaskID:    task.ID,
+		Timestamp: time.Now().UTC(),
+		By:        "assignment-engine",
+		Action:    ActionAutoAssigned,
+		Note:      fmt.Sprintf("Auto-assigned to %s (match score: %.1f)", assignee.Name, score),
+		Meta: map[string]any{
+			"assignee_id": assignee.ID,
+			"score":       score,
+		},
+	}
+
+	if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DelegateTask delegates a task from one assignee to another based on delegation rules.
+func (s *TaskService) DelegateTask(ctx context.Context, taskID string, fromAssignee *Assignee, reason, by, note string) error {
+	task, err := s.repo.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return fmt.Errorf("task %s not found", taskID)
+	}
+
+	// Check if delegation is allowed
+	newAssigneeID, canDelegate := fromAssignee.CanDelegate(reason)
+	if !canDelegate {
+		return fmt.Errorf("no delegation rule for reason: %s", reason)
+	}
+
+	// Update task assignment
+	oldAssignee := "unassigned"
+	if task.AssignedTo != nil {
+		oldAssignee = *task.AssignedTo
+	}
+	task.AssignedTo = &newAssigneeID
+	task.Status = StatusTodo // Reset for new assignee
+	task.UpdatedAt = time.Now().UTC()
+
+	// Create log entry
+	logEntry := &LogEntry{
+		TaskID:    task.ID,
+		Timestamp: task.UpdatedAt,
+		By:        by,
+		Action:    ActionDelegated,
+		Note:      fmt.Sprintf("Delegated from %s to %s: %s", oldAssignee, newAssigneeID, reason),
+		Meta: map[string]any{
+			"from_assignee": oldAssignee,
+			"to_assignee":   newAssigneeID,
+			"reason":        reason,
+		},
+	}
+
+	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
+}
+
+// UnblockTasks finds and unblocks tasks that were blocked by the completed task.
+func (s *TaskService) UnblockTasks(ctx context.Context, completedTaskID string, assignee *Assignee, by string) error {
+	unblockedTypes := assignee.CheckUnblocks(nil)
+	if len(unblockedTypes) == 0 {
+		return nil
+	}
+
+	// Find tasks that were blocked by this task
+	// For now, we'll use metadata to track blockers
+	allTasks, err := s.repo.ListTasks(ctx, Query{})
+	if err != nil {
+		return err
+	}
+
+	for _, task := range allTasks {
+		if task.Meta == nil {
+			continue
+		}
+
+		// Check if this task is blocked by the completed task
+		blockedBy, ok := task.Meta["blocked_by"].(string)
+		if !ok || blockedBy != completedTaskID {
+			continue
+		}
+
+		// Check if the task type is in the unblocks list
+		taskType := extractTaskType(task)
+		if !contains(unblockedTypes, taskType) {
+			continue
+		}
+
+		// Unblock the task
+		delete(task.Meta, "blocked_by")
+		task.UpdatedAt = time.Now().UTC()
+
+		logEntry := &LogEntry{
+			TaskID:    task.ID,
+			Timestamp: task.UpdatedAt,
+			By:        by,
+			Action:    ActionUnblocked,
+			Note:      fmt.Sprintf("Unblocked by completion of %s", completedTaskID),
+			Meta: map[string]any{
+				"unblocked_by": completedTaskID,
+			},
+		}
+
+		if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// extractTaskType extracts the task type from task metadata or requirements.
+func extractTaskType(task *Task) string {
+	if task.Meta == nil {
+		return ""
+	}
+
+	requirements := extractTaskRequirements(task)
+	if requirements == nil || len(requirements.Capabilities) == 0 {
+		return ""
+	}
+
+	// Return the first capability as the task type
+	return requirements.Capabilities[0]
+}
+
 const (
 	// Task CRUD Actions
 	ActionCreated = "CREATED"
@@ -232,4 +389,9 @@ const (
 	ActionSyncPushed   = "SYNC_PUSHED"
 	ActionSyncConflict = "SYNC_CONFLICT"
 	ActionSyncError    = "SYNC_ERROR"
+
+	// Assignee Actions (new)
+	ActionAutoAssigned = "AUTO_ASSIGNED"
+	ActionDelegated    = "DELEGATED"
+	ActionUnblocked    = "UNBLOCKED"
 )

@@ -1,0 +1,39 @@
+flow_id: "flow:docker:run-container:1.0"
+name: "Run Docker Container"
+version: "1.0"
+description: "Run a Docker container and capture output"
+entry_step: "run-container"
+
+config:
+  category: "execution"
+  triggers:
+    - "run docker container"
+    - "docker run"
+
+  procedure: |
+    ## Run Docker Container
+
+    Simple workflow to run a Docker container with specified configuration.
+
+    1. Pull image if not present
+    2. Run container with specified command
+    3. Capture output and exit code
+
+steps:
+  run-container:
+    step_id: "run-container"
+    type: "task"
+    task_template:
+      title: "Run Docker container: {{image}}"
+      description: |
+        Execute Docker container:
+        - Image: {{image}}
+        - Command: {{command}}
+        - Environment: {{environment}}
+
+      requirements:
+        capabilities: ["docker-run"]
+        tools: ["docker"]
+
+      context:
+        inherit: [image, command, environment]

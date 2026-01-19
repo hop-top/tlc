@@ -1,0 +1,54 @@
+flow_id: "flow:test:full-suite:1.0"
+name: "Full Test Suite"
+version: "1.0"
+description: "Run complete test suite and aggregate results"
+entry_step: "run-test-suite"
+
+config:
+  category: "testing"
+  triggers:
+    - "run tests"
+    - "test suite"
+
+  procedure: |
+    ## Test Suite Execution
+
+    Collector pattern demonstration:
+
+    1. **Delegate test execution**
+       - Unit tests
+       - Integration tests
+       - E2E tests
+
+    2. **Collect results**
+       - Test counts (pass/fail)
+       - Coverage data
+       - Execution time
+
+    3. **Aggregate and report**
+       - Overall pass rate
+       - Combined coverage
+       - Performance metrics
+
+steps:
+  run-test-suite:
+    step_id: "run-test-suite"
+    type: "task"
+    task_template:
+      title: "Run full test suite for {{project}}"
+      description: |
+        Execute and aggregate all tests:
+        - Project: {{project}}
+        - Test types: unit, integration, e2e
+
+        This collector will:
+        1. Create subtasks for each test type
+        2. Collect results from all test runners
+        3. Aggregate into summary report
+
+      requirements:
+        capabilities: ["test-coordination", "result-aggregation"]
+        tools: []
+
+      context:
+        inherit: [project, test_paths]

@@ -1,0 +1,108 @@
+flow_id: "flow:brainstorming:1.0"
+name: "Brainstorming"
+version: "1.0"
+description: "Transform ideas into designs through collaborative dialogue"
+entry_step: "explore-context"
+
+config:
+  category: "creative"
+  triggers:
+    - "new feature"
+    - "adding functionality"
+    - "building component"
+
+  procedure: |
+    ## Brainstorming Process
+
+    1. **Understanding the idea**
+       - Check current project state (files, docs, commits)
+       - Ask questions one at a time
+       - Focus on purpose, constraints, success criteria
+
+    2. **Exploring approaches**
+       - Propose 2-3 different approaches with trade-offs
+       - Present conversationally with recommendation
+
+    3. **Presenting the design**
+       - Break into 200-300 word sections
+       - Ask after each section if it looks right
+       - Cover: architecture, components, data flow, error handling, testing
+
+    4. **Documentation**
+       - Write validated design to docs/plans/
+
+    5. **Implementation setup**
+       - Create git worktree
+       - Create implementation plan
+
+steps:
+  explore-context:
+    step_id: "explore-context"
+    type: "task"
+    title: "Explore current project context"
+    task_template:
+      title: "Explore codebase for context"
+      description: |
+        Review current project state:
+        - Recent commits
+        - Existing files and structure
+        - Related documentation
+      requirements:
+        capabilities: ["codebase-exploration", "git-analysis"]
+        tools: ["grep", "git"]
+
+  gather-requirements:
+    step_id: "gather-requirements"
+    type: "task"
+    title: "Ask clarifying questions"
+    depends_on: ["explore-context"]
+    task_template:
+      title: "Gather requirements through questions"
+      description: |
+        Ask questions one at a time to understand:
+        - Purpose of the feature
+        - Constraints (technical, business, timeline)
+        - Success criteria
+      requirements:
+        capabilities: ["requirements-gathering", "user-interaction"]
+
+  analyze-approaches:
+    step_id: "analyze-approaches"
+    type: "task"
+    title: "Propose approaches with trade-offs"
+    depends_on: ["gather-requirements"]
+    task_template:
+      title: "Analyze 2-3 implementation approaches"
+      description: |
+        Propose multiple approaches:
+        - Approach A (recommended)
+        - Approach B (alternative)
+        - Approach C (alternative)
+
+        For each, describe:
+        - Implementation strategy
+        - Trade-offs
+        - Why recommended or not
+      requirements:
+        capabilities: ["architecture-analysis", "trade-off-analysis"]
+        domains: ["system-design"]
+
+  write-design:
+    step_id: "write-design"
+    type: "task"
+    title: "Write design document"
+    depends_on: ["analyze-approaches"]
+    task_template:
+      title: "Document validated design"
+      description: |
+        Write design document to docs/plans/YYYY-MM-DD-<topic>-design.md
+
+        Include:
+        - Architecture overview
+        - Component breakdown
+        - Data flow
+        - Error handling strategy
+        - Testing approach
+      requirements:
+        capabilities: ["technical-writing", "documentation"]
+        tools: ["markdown"]

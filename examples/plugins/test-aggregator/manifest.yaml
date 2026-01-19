@@ -1,0 +1,31 @@
+name: test-aggregator
+version: 1.0.0
+description: Test suite collector - demonstrates aggregation pattern
+
+provides:
+  flows:
+    - id: "flow:test:full-suite:1.0"
+      file: "flows/full-suite.yaml"
+      description: "Run complete test suite and aggregate results"
+
+  assignees:
+    - id: "assignee:test-collector:1.0"
+      file: "assignees/test-collector.yaml"
+      execution_type: orchestrator
+      description: "Collect and aggregate test results from multiple test runners"
+      patterns: [delegation, aggregation, reporting]
+
+  executors:
+    - id: "executor:test-collector:1.0"
+      entry_point: "./bin/test-collector"
+      protocol: jsonrpc
+
+requires:
+  tlc_version: ">=0.2.0"
+
+permissions:
+  - process.spawn
+
+author: "TLC Examples"
+license: "MIT"
+repository: "github.com/tlc-plugins/test-aggregator"

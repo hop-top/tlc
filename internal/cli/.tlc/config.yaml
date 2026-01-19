@@ -1,0 +1,8 @@
+storage:
+    backend: sqlite
+    db_path: /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-sync-test-3415384849/test.sqlite
+sync:
+    github:
+        direction: bidirectional
+        repo: IdeaCraftersLabs/oss-tlc-cli
+        use_gh_auth: true

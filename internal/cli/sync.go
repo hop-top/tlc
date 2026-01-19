@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -26,12 +28,123 @@ var syncCmd = &cobra.Command{
 	Short: "Synchronize tasks with external systems",
 }
 
+// autoConfigureGitHub detects GitHub repo and auto-configures sync if not already set
+func autoConfigureGitHub() error {
+	// Check if already configured (must have both repo and direction set)
+	repo := viper.GetString("sync.github.repo")
+	direction := viper.GetString("sync.github.direction")
+	if repo != "" && direction != "" {
+		return nil // Already configured
+	}
+
+	// Check if we're in a git repo
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	if err := cmd.Run(); err != nil {
+		return nil // Not in a git repo, skip auto-config
+	}
+
+	// Get remote URL
+	cmd = exec.Command("git", "remote", "get-url", "origin")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil // No origin remote, skip auto-config
+	}
+
+	remoteURL := strings.TrimSpace(string(output))
+
+	// Parse GitHub repo from URL
+	// Supports: https://github.com/owner/repo.git or git@github.com:owner/repo.git
+	repo = "" // Reset repo for parsing
+	if strings.Contains(remoteURL, "github.com") {
+		// HTTPS format
+		if strings.HasPrefix(remoteURL, "https://github.com/") {
+			repo = strings.TrimPrefix(remoteURL, "https://github.com/")
+			repo = strings.TrimSuffix(repo, ".git")
+		} else if strings.HasPrefix(remoteURL, "git@github.com:") {
+			// SSH format
+			repo = strings.TrimPrefix(remoteURL, "git@github.com:")
+			repo = strings.TrimSuffix(repo, ".git")
+		}
+	}
+
+	if repo == "" {
+		return nil // Not a GitHub repo
+	}
+
+	// Auto-configure with bidirectional sync
+	viper.Set("sync.github.repo", repo)
+	viper.Set("sync.github.direction", "bidirectional")
+
+	// Try to get token from gh CLI if available
+	if _, err := exec.LookPath("gh"); err == nil {
+		cmd = exec.Command("gh", "auth", "token")
+		if tokenOutput, err := cmd.Output(); err == nil {
+			token := strings.TrimSpace(string(tokenOutput))
+			if token != "" {
+				// Store token in environment for this session
+				os.Setenv("GITHUB_TOKEN", token)
+				viper.Set("sync.github.use_gh_auth", true)
+			}
+		}
+	}
+
+	// Save to config file
+	// Prefer .tlc/config.yaml in current directory
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		// Check if .tlc directory exists
+		if _, err := os.Stat(".tlc"); os.IsNotExist(err) {
+			// No .tlc directory, use .tlc.yaml in current directory
+			configFile = ".tlc.yaml"
+		} else {
+			// .tlc directory exists, use config.yaml inside it
+			configFile = filepath.Join(".tlc", "config.yaml")
+		}
+		viper.SetConfigFile(configFile)
+	}
+
+	// Write message BEFORE attempting to save (in case write fails silently)
+	fmt.Printf("✓ Auto-configured GitHub sync for repo: %s (bidirectional)\n", repo)
+
+	if err := viper.WriteConfig(); err != nil {
+		// If config doesn't exist, create it
+		if os.IsNotExist(err) || strings.Contains(err.Error(), "Not Found") {
+			if err := viper.SafeWriteConfig(); err != nil {
+				// Don't fail on config write errors - just warn
+				fmt.Fprintf(os.Stderr, "Warning: Could not save config: %v\n", err)
+			}
+		} else {
+			// Don't fail on config write errors - just warn
+			fmt.Fprintf(os.Stderr, "Warning: Could not update config: %v\n", err)
+		}
+	}
+
+	return nil
+}
+
 var syncPullCmd = &cobra.Command{
 	Use:   "pull <system>",
 	Short: "Pull updates from an external system",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		system := args[0]
+
+		// Auto-configure GitHub if needed
+		if system == "github" {
+			if err := autoConfigureGitHub(); err != nil {
+				return err
+			}
+			// Always try to get token from gh if available and not already set
+			if os.Getenv("GITHUB_TOKEN") == "" {
+				if _, err := exec.LookPath("gh"); err == nil {
+					ghCmd := exec.Command("gh", "auth", "token")
+					if tokenOutput, err := ghCmd.Output(); err == nil {
+						token := strings.TrimSpace(string(tokenOutput))
+						os.Setenv("GITHUB_TOKEN", token)
+					}
+				}
+			}
+		}
 
 		s, err := getStorage()
 		if err != nil {
@@ -199,6 +312,23 @@ var syncPushCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		system := args[0]
+
+		// Auto-configure GitHub if needed
+		if system == "github" {
+			if err := autoConfigureGitHub(); err != nil {
+				return err
+			}
+			// Always try to get token from gh if available and not already set
+			if os.Getenv("GITHUB_TOKEN") == "" {
+				if _, err := exec.LookPath("gh"); err == nil {
+					ghCmd := exec.Command("gh", "auth", "token")
+					if tokenOutput, err := ghCmd.Output(); err == nil {
+						token := strings.TrimSpace(string(tokenOutput))
+						os.Setenv("GITHUB_TOKEN", token)
+					}
+				}
+			}
+		}
 
 		s, err := getStorage()
 		if err != nil {
