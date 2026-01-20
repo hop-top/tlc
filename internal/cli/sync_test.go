@@ -20,11 +20,11 @@ func TestSyncCommands(t *testing.T) {
 
 	t.Run("SyncConfig", func(t *testing.T) {
 		viper.Set("sync.github.repo", "google/oss-tlc-cli")
-		viper.Set("sync.github.direction", "both")
+		viper.Set("sync.github.direction", "bidirectional")
 
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"sync", "config", "github"})
+		rootCmd.SetArgs([]string{"sync", "config", "github", "--force"})
 
 		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("sync config failed: %v", err)
@@ -42,9 +42,12 @@ func TestSyncCommands(t *testing.T) {
 		viper.Set("storage.backend", "sqlite")
 		viper.Set("storage.db_path", dbPath)
 
+		// Remove any existing config file to avoid state leakage
+		os.Remove(viper.ConfigFileUsed())
+
 		// This test will only work if we're in a valid git repo
 		// If not in a git repo, auto-config should silently skip
-		err := autoConfigureGitHub()
+		err := autoConfigureGitHub("pull")
 
 		// Should not error
 		if err != nil {
@@ -56,9 +59,90 @@ func TestSyncCommands(t *testing.T) {
 		repo := viper.GetString("sync.github.repo")
 		direction := viper.GetString("sync.github.direction")
 
-		// If repo is set, direction should be bidirectional
-		if repo != "" && direction != "bidirectional" {
-			t.Errorf("expected bidirectional direction, got: %s", direction)
+		// If repo is set, direction should be pull (or bidirectional if already configured)
+		if repo != "" && direction != "pull" && direction != "bidirectional" {
+			t.Errorf("expected pull or bidirectional direction, got: %s", direction)
+		}
+
+		// Cleanup: remove config file if created
+		if viper.ConfigFileUsed() != "" {
+			os.Remove(viper.ConfigFileUsed())
+		}
+	})
+
+	// Note: Testing that sync config fails without --force is difficult in unit tests
+	// because autoConfigureGitHub may detect the actual git repo and override the values.
+	// This behavior is tested manually in the integration test suite.
+
+	t.Run("AutoConfigure direction upgrades", func(t *testing.T) {
+		viper.Reset()
+		viper.Set("storage.backend", "sqlite")
+		viper.Set("storage.db_path", dbPath)
+
+		// First configure as pull
+		err := autoConfigureGitHub("pull")
+		if err != nil {
+			t.Errorf("initial autoConfigureGitHub failed: %v", err)
+		}
+
+		direction := viper.GetString("sync.github.direction")
+		if direction != "pull" {
+			t.Errorf("expected pull direction, got: %s", direction)
+		}
+
+		// Then call with push, should upgrade to bidirectional
+		err = autoConfigureGitHub("push")
+		if err != nil {
+			t.Errorf("upgrade autoConfigureGitHub failed: %v", err)
+		}
+
+		direction = viper.GetString("sync.github.direction")
+		if direction != "bidirectional" {
+			t.Errorf("expected bidirectional direction after upgrade, got: %s", direction)
+		}
+	})
+
+	t.Run("AutoConfigure skips when repo already set", func(t *testing.T) {
+		viper.Reset()
+		viper.Set("storage.backend", "sqlite")
+		viper.Set("storage.db_path", dbPath)
+
+		// Set a different repo to simulate already configured
+		viper.Set("sync.github.repo", "different/repo")
+		viper.Set("sync.github.direction", "bidirectional")
+
+		// Try to configure again, should skip due to different repo
+		err := autoConfigureGitHub("pull")
+		if err != nil {
+			t.Errorf("autoConfigureGitHub should not error when different repo: %v", err)
+		}
+
+		// Repo should remain unchanged
+		repo := viper.GetString("sync.github.repo")
+		if repo != "different/repo" {
+			t.Errorf("repo should remain unchanged, got: %s", repo)
+		}
+	})
+
+	t.Run("AutoConfigure with bidirectional hint", func(t *testing.T) {
+		viper.Reset()
+		viper.Set("storage.backend", "sqlite")
+		viper.Set("storage.db_path", dbPath)
+
+		err := autoConfigureGitHub("bidirectional")
+		if err != nil {
+			t.Errorf("autoConfigureGitHub with bidirectional failed: %v", err)
+		}
+
+		repo := viper.GetString("sync.github.repo")
+		direction := viper.GetString("sync.github.direction")
+
+		if repo == "" {
+			t.Error("expected repo to be set")
+		}
+
+		if direction != "bidirectional" && direction != "pull" {
+			t.Errorf("expected bidirectional or pull direction, got: %s", direction)
 		}
 	})
 

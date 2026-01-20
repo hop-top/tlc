@@ -1,4 +1,23 @@
-# TLC — Task Line CLI
+<div align="center">
+    <img src="./media/logo_large.webp" alt="Spec Kit Logo" width="200" height="200"/>
+    <h1>☑︎ TLC</h1>
+    <h3><em>Task </em></h3>
+</div>
+
+<p align="center">
+    <strong>An open source toolkit that allows you to focus on product scenarios and predictable outcomes instead of vibe coding every piece from scratch.</strong>
+</p>
+
+<p align="center">
+    <a href="https://github.com/github/spec-kit/actions/workflows/release.yml"><img src="https://github.com/github/spec-kit/actions/workflows/release.yml/badge.svg" alt="Release"/></a>
+    <a href="https://github.com/github/spec-kit/stargazers"><img src="https://img.shields.io/github/stars/github/spec-kit?style=social" alt="GitHub stars"/></a>
+    <a href="https://github.com/github/spec-kit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/github/spec-kit" alt="License"/></a>
+    <a href="https://github.github.io/spec-kit/"><img src="https://img.shields.io/badge/docs-GitHub_Pages-blue" alt="Documentation"/></a>
+</p>
+
+
+
+☑︎ TLC
 
 TLC is a high-performance, multi-agent task orchestration tool designed for developers and AI agents. It uses a human-friendly "Task Line Syntax" (TLS) to manage tasks in a flat text file while maintaining a synchronized SQLite database for advanced querying and state management.
 
@@ -130,7 +149,7 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 
 **Setup (run once per project):**
 - Check if initialized: `ls .tlc/` or run `tlc init` if not found
-- Optional GitHub sync: `tlc sync setup github` (syncs with GitHub Issues)
+- Optional GitHub sync: Run `tlc sync pull github` or `tlc sync push github` to auto-configure (syncs with GitHub Issues)
 
 **Common commands:**
 - Create: `tlc task create "Task title" --assigned-to @me --tag feature`

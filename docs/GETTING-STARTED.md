@@ -106,10 +106,7 @@ tlc log T-0005
 **Docs**: [Sync Architecture](sync-architecture-0.1.md#use-cases)
 **Try**:
 ```bash
-# Setup GitHub sync
-tlc sync setup github
-
-# Import issues
+# Setup GitHub sync (auto-configures on first run)
 tlc sync pull github
 
 # List synced tasks (have origin_system)

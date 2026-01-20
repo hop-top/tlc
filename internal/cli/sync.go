@@ -21,6 +21,7 @@ var (
 	syncPushDryRun   bool
 	syncPushForce    bool
 	syncPullStrategy string
+	syncConfigForce  bool
 )
 
 var syncCmd = &cobra.Command{
@@ -28,15 +29,11 @@ var syncCmd = &cobra.Command{
 	Short: "Synchronize tasks with external systems",
 }
 
-// autoConfigureGitHub detects GitHub repo and auto-configures sync if not already set
-func autoConfigureGitHub() error {
-	// Check if already configured (must have both repo and direction set)
-	repo := viper.GetString("sync.github.repo")
-	direction := viper.GetString("sync.github.direction")
-	if repo != "" && direction != "" {
-		return nil // Already configured
-	}
-
+// autoConfigureGitHub detects GitHub repo and auto-configures sync
+// directionHint: suggested direction ("pull", "push", or "bidirectional")
+//
+//	if current config has different direction, it will be upgraded to bidirectional
+func autoConfigureGitHub(directionHint string) error {
 	// Check if we're in a git repo
 	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
 	if err := cmd.Run(); err != nil {
@@ -54,7 +51,7 @@ func autoConfigureGitHub() error {
 
 	// Parse GitHub repo from URL
 	// Supports: https://github.com/owner/repo.git or git@github.com:owner/repo.git
-	repo = "" // Reset repo for parsing
+	repo := ""
 	if strings.Contains(remoteURL, "github.com") {
 		// HTTPS format
 		if strings.HasPrefix(remoteURL, "https://github.com/") {
@@ -71,9 +68,47 @@ func autoConfigureGitHub() error {
 		return nil // Not a GitHub repo
 	}
 
-	// Auto-configure with bidirectional sync
-	viper.Set("sync.github.repo", repo)
-	viper.Set("sync.github.direction", "bidirectional")
+	// Check existing configuration
+	existingRepo := viper.GetString("sync.github.repo")
+	existingDirection := viper.GetString("sync.github.direction")
+
+	// Determine if we need to update configuration
+	needsUpdate := false
+	newDirection := existingDirection
+
+	if existingRepo == "" {
+		// No repo configured, set it
+		viper.Set("sync.github.repo", repo)
+		needsUpdate = true
+		newDirection = directionHint
+	} else if existingRepo != repo {
+		// Different repo configured, skip
+		return nil
+	}
+
+	if existingDirection == "" {
+		// No direction configured, set from hint
+		newDirection = directionHint
+		needsUpdate = true
+	} else if existingDirection != "bidirectional" {
+		// Check if we need to upgrade to bidirectional
+		if existingDirection == "pull" && directionHint == "push" {
+			newDirection = "bidirectional"
+			needsUpdate = true
+		} else if existingDirection == "push" && directionHint == "pull" {
+			newDirection = "bidirectional"
+			needsUpdate = true
+		}
+	}
+
+	if newDirection != existingDirection {
+		viper.Set("sync.github.direction", newDirection)
+		needsUpdate = true
+	}
+
+	if !needsUpdate {
+		return nil // Already configured with correct settings
+	}
 
 	// Try to get token from gh CLI if available
 	if _, err := exec.LookPath("gh"); err == nil {
@@ -104,7 +139,11 @@ func autoConfigureGitHub() error {
 	}
 
 	// Write message BEFORE attempting to save (in case write fails silently)
-	fmt.Printf("✓ Auto-configured GitHub sync for repo: %s (bidirectional)\n", repo)
+	if existingRepo == "" && existingDirection == "" {
+		fmt.Printf("✓ Auto-configured GitHub sync for repo: %s (%s)\n", repo, newDirection)
+	} else if newDirection != existingDirection {
+		fmt.Printf("✓ Updated GitHub sync direction from %s to %s\n", existingDirection, newDirection)
+	}
 
 	if err := viper.WriteConfig(); err != nil {
 		// If config doesn't exist, create it
@@ -131,7 +170,7 @@ var syncPullCmd = &cobra.Command{
 
 		// Auto-configure GitHub if needed
 		if system == "github" {
-			if err := autoConfigureGitHub(); err != nil {
+			if err := autoConfigureGitHub("pull"); err != nil {
 				return err
 			}
 			// Always try to get token from gh if available and not already set
@@ -299,9 +338,9 @@ var syncPullCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n", 
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n",
 			system, createdCount, updatedCount, conflictCount)
-		
+
 		return syncToTODO()
 	},
 }
@@ -315,7 +354,7 @@ var syncPushCmd = &cobra.Command{
 
 		// Auto-configure GitHub if needed
 		if system == "github" {
-			if err := autoConfigureGitHub(); err != nil {
+			if err := autoConfigureGitHub("push"); err != nil {
 				return err
 			}
 			// Always try to get token from gh if available and not already set
@@ -375,7 +414,7 @@ var syncPushCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Pushing %d tasks to %s...\n", len(tasks), system)
-		
+
 		// Operation-level logging
 		for _, t := range tasks {
 			s.AddLog(ctx, &core.LogEntry{
@@ -456,12 +495,31 @@ var syncConfigCmd = &cobra.Command{
 	Use:   "config <system>",
 	Short: "Configure sync settings for a system",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		system := args[0]
 		out := cmd.OutOrStdout()
+
+		// Check if already configured
+		repo := viper.GetString(fmt.Sprintf("sync.%s.repo", system))
+		direction := viper.GetString(fmt.Sprintf("sync.%s.direction", system))
+
+		if repo != "" && direction != "" && !syncConfigForce {
+			return fmt.Errorf("sync for %s is already configured. Use --force to overwrite.\nCurrent config: repo=%s, direction=%s",
+				system, repo, direction)
+		}
+
+		// Auto-configure for GitHub
+		if system == "github" {
+			if err := autoConfigureGitHub("bidirectional"); err != nil {
+				return err
+			}
+		}
+
+		// Display configuration
 		fmt.Fprintf(out, "Sync configuration for %s:\n", system)
 		fmt.Fprintf(out, "  Repo: %s\n", viper.GetString(fmt.Sprintf("sync.%s.repo", system)))
 		fmt.Fprintf(out, "  Direction: %s\n", viper.GetString(fmt.Sprintf("sync.%s.direction", system)))
+		return nil
 	},
 }
 
@@ -487,7 +545,7 @@ var syncStatusCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Push Queue (%d tasks):\n", len(tasks))
-		
+
 		// Group by system
 		bySystem := make(map[string][]*core.Task)
 		for _, t := range tasks {
@@ -515,7 +573,7 @@ func getPluginPath(system string) string {
 	if _, err := os.Stat(localPath); err == nil {
 		return localPath
 	}
-	
+
 	// Fallback to config or standard location
 	return filepath.Join(os.Getenv("HOME"), ".config", "tlc", "plugins", system+"-sync", "bin", system+"-sync")
 }
@@ -526,7 +584,7 @@ func resolveConflictInteractive(conflict *sync.Conflict) (*core.Task, bool) {
 		huh.NewGroup(
 			huh.NewNote().
 				Title(fmt.Sprintf("Conflict detected for %s", conflict.TaskID)).
-				Description(fmt.Sprintf("Local: %s (updated: %s)\nRemote: %s (updated: %s)", 
+				Description(fmt.Sprintf("Local: %s (updated: %s)\nRemote: %s (updated: %s)",
 					conflict.LocalTask.Title, conflict.LocalTask.UpdatedAt.Format(time.RFC3339),
 					conflict.RemoteTask.Title, conflict.RemoteTask.UpdatedAt.Format(time.RFC3339))),
 			huh.NewSelect[string]().
@@ -555,6 +613,8 @@ func init() {
 
 	syncPushCmd.Flags().BoolVar(&syncPushDryRun, "dry-run", false, "Preview changes without pushing")
 	syncPushCmd.Flags().BoolVar(&syncPushForce, "force", false, "Push all tasks even if not modified locally")
+
+	syncConfigCmd.Flags().BoolVar(&syncConfigForce, "force", false, "Overwrite existing configuration")
 
 	syncCmd.AddCommand(syncPullCmd)
 	syncCmd.AddCommand(syncPushCmd)
