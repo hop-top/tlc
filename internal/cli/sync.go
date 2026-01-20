@@ -568,10 +568,25 @@ var syncStatusCmd = &cobra.Command{
 }
 
 func getPluginPath(system string) string {
-	// For dev, check local plugins directory
-	localPath := filepath.Join("plugins", system+"-sync", "bin", system+"-sync")
-	if _, err := os.Stat(localPath); err == nil {
-		return localPath
+	// For dev, check local plugins directory relative to binary
+	// Get the path to the currently running executable
+	execPath, err := os.Executable()
+	if err == nil {
+		// Resolve symlinks to get the actual binary path
+		realPath, err := filepath.EvalSymlinks(execPath)
+		if err == nil {
+			execPath = realPath
+		}
+		// Get the directory containing the binary
+		binDir := filepath.Dir(execPath)
+		// Check if binary is in a "bin" directory (repo structure: repo/bin/tlc)
+		if filepath.Base(binDir) == "bin" {
+			// Navigate up to repo root, then to plugins
+			localPath := filepath.Join(filepath.Dir(binDir), "plugins", system+"-sync", "bin", system+"-sync")
+			if _, err := os.Stat(localPath); err == nil {
+				return localPath
+			}
+		}
 	}
 
 	// Fallback to config or standard location
