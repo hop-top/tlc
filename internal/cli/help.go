@@ -43,7 +43,7 @@ This command outputs a JSON schema that describes how to call TLC commands progr
 }
 
 func init() {
-	rootCmd.AddCommand(helpCmd)
+	rootCmd.SetHelpCommand(helpCmd)
 	helpCmd.AddCommand(helpLLMCmd)
 
 	helpLLMCmd.Flags().StringVar(&helpLLMFormat, "format", "json", "Output format (json, mcp, openai)")
@@ -163,8 +163,8 @@ func getToolDefinition() map[string]interface{} {
 			"type": "object",
 			"properties": map[string]interface{}{
 				"action": map[string]interface{}{
-					"type": "string",
-					"enum": []string{"create", "list", "update", "show", "claim", "unclaim"},
+					"type":        "string",
+					"enum":        []string{"create", "list", "update", "show", "claim", "unclaim"},
 					"description": "The action to perform on tasks.",
 				},
 				"task_id": map[string]interface{}{
