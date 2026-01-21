@@ -238,6 +238,11 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	conflictCount := 0
 
 	for _, remoteTask := range result.Tasks {
+		// Extract origin_system from meta and set it on the task
+		if originSystem, ok := remoteTask.Meta["origin_system"].(string); ok {
+			remoteTask.OriginSystem = &originSystem
+		}
+
 		originID, ok := remoteTask.Meta["origin_id"].(string)
 		if !ok {
 			continue

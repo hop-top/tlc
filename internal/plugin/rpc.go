@@ -51,10 +51,15 @@ func NewRPCClient(binPath string) (*RPCClient, error) {
 		return nil, err
 	}
 
+	// Increase buffer size to handle large responses (e.g., many GitHub issues)
+	scanner := bufio.NewScanner(stdout)
+	buf := make([]byte, 0, 1024*1024) // 1MB buffer
+	scanner.Buffer(buf, 10*1024*1024) // 10MB max token size
+
 	return &RPCClient{
 		cmd:    cmd,
 		stdin:  stdin,
-		stdout: bufio.NewScanner(stdout),
+		stdout: scanner,
 		nextID: 1,
 	}, nil
 }

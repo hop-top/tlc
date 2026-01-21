@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/google/oss-tlc-cli/internal/plugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -51,6 +52,55 @@ var (
 	taskUnclaimNote string
 )
 
+func updateSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, s core.Repository) error {
+	if task.OriginSystem == nil || *task.OriginSystem == "" {
+		return fmt.Errorf("task does not have an origin system")
+	}
+
+	system := *task.OriginSystem
+	fmt.Printf("Syncing task %s to %s...\n", task.ID, system)
+
+	if err := s.UpdateTask(ctx, task); err != nil {
+		return err
+	}
+
+	binPath := getPluginPath(system)
+	client, err := plugin.NewRPCClient(binPath)
+	if err != nil {
+		return fmt.Errorf("failed to start plugin %s: %w", system, err)
+	}
+	defer client.Close()
+
+	params := map[string]interface{}{
+		"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
+		"tasks": []core.Task{*task},
+	}
+
+	var result struct {
+		Updated []string          `json:"updated"`
+		Failed  map[string]string `json:"failed"`
+	}
+
+	if err := client.Call("sync.push", params, &result); err != nil {
+		return fmt.Errorf("sync push RPC failed: %w", err)
+	}
+
+	if len(result.Failed) > 0 {
+		if errMsg, ok := result.Failed[task.ID]; ok {
+			return fmt.Errorf("failed to push to %s: %s", system, errMsg)
+		}
+	}
+
+	now := time.Now().UTC()
+	task.LastSyncAt = &now
+	if err := s.UpdateTask(ctx, task); err != nil {
+		return fmt.Errorf("failed to update task after sync: %w", err)
+	}
+
+	fmt.Printf("✓ Task %s synced to %s\n", task.ID, system)
+	return nil
+}
+
 var taskCmd = &cobra.Command{
 	Use:   "task",
 	Short: "Task operations",
@@ -85,17 +135,23 @@ var taskClaimCmd = &cobra.Command{
 			return err
 		}
 
-		if err := s.UpdateTask(ctx, task); err != nil {
-			return err
-		}
-		if err := s.AddLog(ctx, log); err != nil {
-			fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		if task.OriginSystem != nil && *task.OriginSystem != "" {
+			if err := updateSyncedTask(cmd, ctx, task, s); err != nil {
+				return err
+			}
+			if err := s.AddLog(ctx, log); err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+			}
+		} else {
+			if err := s.UpdateTask(ctx, task); err != nil {
+				return err
+			}
+			if err := s.AddLog(ctx, log); err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+			}
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
-		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
-		}
 		return syncTODOAll()
 	},
 }
@@ -128,17 +184,23 @@ var taskUnclaimCmd = &cobra.Command{
 			return err
 		}
 
-		if err := s.UpdateTask(ctx, task); err != nil {
-			return err
-		}
-		if err := s.AddLog(ctx, log); err != nil {
-			fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		if task.OriginSystem != nil && *task.OriginSystem != "" {
+			if err := updateSyncedTask(cmd, ctx, task, s); err != nil {
+				return err
+			}
+			if err := s.AddLog(ctx, log); err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+			}
+		} else {
+			if err := s.UpdateTask(ctx, task); err != nil {
+				return err
+			}
+			if err := s.AddLog(ctx, log); err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+			}
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
-		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
-		}
 		return syncTODOAll()
 	},
 }
@@ -500,13 +562,16 @@ var taskUpdateCmd = &cobra.Command{
 
 		if changed {
 			task.UpdatedAt = now
-			if err := s.UpdateTask(ctx, task); err != nil {
-				return err
-			}
-			fmt.Printf("Updated task %s\n", task.ID)
 
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
-				fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
+				if err := updateSyncedTask(cmd, ctx, task, s); err != nil {
+					return err
+				}
+			} else {
+				if err := s.UpdateTask(ctx, task); err != nil {
+					return err
+				}
+				fmt.Printf("Updated task %s\n", task.ID)
 			}
 
 			return syncTODOAll()
