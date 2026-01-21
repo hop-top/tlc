@@ -4,12 +4,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
+
+func getDataHome() string {
+	dataHome := os.Getenv("XDG_DATA_HOME")
+	if dataHome == "" {
+		home, _ := os.UserHomeDir()
+		switch runtime.GOOS {
+		case "darwin":
+			dataHome = filepath.Join(home, "Library", "Application Support")
+		case "windows":
+			dataHome = filepath.Join(home, "AppData", "Local")
+		default:
+			dataHome = filepath.Join(home, ".local", "share")
+		}
+	}
+	return dataHome
+}
 
 var (
 	storageBackend string
@@ -35,7 +52,7 @@ var initCmd = &cobra.Command{
 		// 2. Generate config.yaml with defaults or flags
 		config := make(map[string]interface{})
 		config["version"] = 0.1
-		
+
 		output := make(map[string]interface{})
 		output["format"] = "table"
 		output["color"] = true
@@ -43,7 +60,9 @@ var initCmd = &cobra.Command{
 
 		storageCfg := make(map[string]interface{})
 		storageCfg["backend"] = storageBackend
-		storageCfg["db_path"] = dbPath
+		if dbPath != "" {
+			storageCfg["db_path"] = dbPath
+		}
 		config["storage"] = storageCfg
 
 		gitCfg := make(map[string]interface{})
@@ -83,7 +102,7 @@ var initCmd = &cobra.Command{
 
 func init() {
 	initCmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
-	initCmd.Flags().StringVar(&dbPath, "db-path", ".tlc/db.sqlite", "Database file path")
+	initCmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
 	initCmd.Flags().StringVar(&worktreeDir, "worktree-dir", ".worktrees", "Git worktree directory")
 	initCmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
 

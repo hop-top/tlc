@@ -26,15 +26,16 @@ type Task struct {
 	OriginSystem *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`
 	LastSyncAt   *time.Time             `json:"last_sync_at,omitempty" yaml:"last_sync_at,omitempty"`
 	Archived     bool                   `json:"archived" yaml:"archived"`
+	ProjectID    *string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
 	Meta         map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
 }
 
 type LogEntry struct {
-	ID         int64                  `json:"id,omitempty" yaml:"id,omitempty"`
-	TaskID     string                 `json:"task_id" yaml:"task_id"`
-	Timestamp  time.Time              `json:"timestamp" yaml:"timestamp"`
-	By         string                 `json:"by" yaml:"by"`
-	Action     string                 `json:"action" yaml:"action"`
-	Note       string                 `json:"note" yaml:"note"`
-	Meta       map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
+	ID        int64                  `json:"id,omitempty" yaml:"id,omitempty"`
+	TaskID    string                 `json:"task_id" yaml:"task_id"`
+	Timestamp time.Time              `json:"timestamp" yaml:"timestamp"`
+	By        string                 `json:"by" yaml:"by"`
+	Action    string                 `json:"action" yaml:"action"`
+	Note      string                 `json:"note" yaml:"note"`
+	Meta      map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
 }

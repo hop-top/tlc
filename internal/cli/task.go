@@ -24,17 +24,18 @@ var (
 	taskReference   string
 	taskInteractive bool
 
-	taskListStatus     []string
-	taskListAssignedTo string
-	taskListTag        []string
-	taskListMine       bool
-	taskListArchived   bool
-	taskListSortBy     string
-	taskListSortDirection      string
-	taskListLimit      int
-	taskListOffset     int
+	taskListStatus        []string
+	taskListAssignedTo    string
+	taskListTag           []string
+	taskListMine          bool
+	taskListArchived      bool
+	taskListAllProjects   bool
+	taskListSortBy        string
+	taskListSortDirection string
+	taskListLimit         int
+	taskListOffset        int
 
-	taskShowLogs     bool
+	taskShowLogs             bool
 	taskShowLogSortDirection string
 
 	taskUpdateTitle       string
@@ -95,7 +96,7 @@ var taskClaimCmd = &cobra.Command{
 		if task.OriginSystem != nil && *task.OriginSystem != "" {
 			fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
 		}
-		return syncToTODO()
+		return syncTODOAll()
 	},
 }
 
@@ -138,7 +139,7 @@ var taskUnclaimCmd = &cobra.Command{
 		if task.OriginSystem != nil && *task.OriginSystem != "" {
 			fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
 		}
-		return syncToTODO()
+		return syncTODOAll()
 	},
 }
 
@@ -164,7 +165,7 @@ var taskCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return syncToTODO()
+		return syncTODOAll()
 	},
 }
 
@@ -273,11 +274,15 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo string, ta
 
 	finalID := id
 	if finalID == "" {
-		tasks, err := s.ListTasks(ctx, core.Query{})
+		var projectID string
+		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+			projectID = proj.ProjectID
+		}
+		seq, err := s.GetNextSequenceID(ctx, projectID)
 		if err != nil {
 			return nil, err
 		}
-		finalID = fmt.Sprintf("T-%04d", len(tasks)+1)
+		finalID = fmt.Sprintf("T-%04d", seq)
 	}
 
 	now := time.Now().UTC()
@@ -298,6 +303,11 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo string, ta
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		Meta:        meta,
+	}
+
+	// Auto-assign project_id if in a project context
+	if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+		task.ProjectID = &proj.ProjectID
 	}
 
 	if task.Reference == "" {
@@ -340,6 +350,7 @@ var taskListCmd = &cobra.Command{
 			SortBy:          taskListSortBy,
 			SortDirection:   taskListSortDirection,
 			IncludeArchived: taskListArchived,
+			AllProjects:     taskListAllProjects,
 		}
 
 		if len(args) > 0 {
@@ -493,12 +504,12 @@ var taskUpdateCmd = &cobra.Command{
 				return err
 			}
 			fmt.Printf("Updated task %s\n", task.ID)
-			
+
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
 				fmt.Printf("Note: Task %s has local changes. Run 'tlc sync push %s' to sync.\n", task.ID, *task.OriginSystem)
 			}
-			
-			return syncToTODO()
+
+			return syncTODOAll()
 		} else {
 			fmt.Println("No changes specified")
 		}
@@ -549,7 +560,7 @@ var taskDeleteCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Deleted task %s\n", id)
-		return syncToTODO()
+		return syncTODOAll()
 	},
 }
 
@@ -568,6 +579,7 @@ func init() {
 	taskListCmd.Flags().StringSliceVar(&taskListTag, "tag", []string{}, "Filter by tag")
 	taskListCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
 	taskListCmd.Flags().BoolVar(&taskListArchived, "archived", false, "Show archived tasks")
+	taskListCmd.Flags().BoolVar(&taskListAllProjects, "all-projects", false, "Show tasks from all projects")
 	taskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
 	taskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
@@ -583,32 +595,26 @@ func init() {
 	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 
-		taskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
+	taskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 
-	
+	taskClaimCmd.Flags().StringVarP(&taskClaimNote, "note", "n", "", "Claim note")
 
-		taskClaimCmd.Flags().StringVarP(&taskClaimNote, "note", "n", "", "Claim note")
+	taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
 
-		taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
+	taskCmd.AddCommand(taskCreateCmd)
 
-	
+	taskCmd.AddCommand(taskListCmd)
 
-		taskCmd.AddCommand(taskCreateCmd)
+	taskCmd.AddCommand(taskShowCmd)
 
-		taskCmd.AddCommand(taskListCmd)
+	taskCmd.AddCommand(taskUpdateCmd)
 
-		taskCmd.AddCommand(taskShowCmd)
+	taskCmd.AddCommand(taskDeleteCmd)
 
-		taskCmd.AddCommand(taskUpdateCmd)
+	taskCmd.AddCommand(taskClaimCmd)
 
-		taskCmd.AddCommand(taskDeleteCmd)
+	taskCmd.AddCommand(taskUnclaimCmd)
 
-		taskCmd.AddCommand(taskClaimCmd)
+	rootCmd.AddCommand(taskCmd)
 
-		taskCmd.AddCommand(taskUnclaimCmd)
-
-		rootCmd.AddCommand(taskCmd)
-
-	}
-
-	
+}

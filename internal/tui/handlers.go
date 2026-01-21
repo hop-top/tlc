@@ -79,6 +79,7 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		case "enter":
 			if len(m.tasks) > 0 {
 				m.view = "detail"
+				m.viewport.GotoTop()
 				return m, m.fetchLogs
 			}
 		case "esc":
@@ -129,9 +130,11 @@ func handleDetailUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.fetchLogs
 		case "esc":
 			m.view = "dashboard"
+			m.viewport.GotoTop()
 			return m, nil
 		case "backspace":
 			m.view = "dashboard"
+			m.viewport.GotoTop()
 			return m, nil
 		}
 	}
@@ -188,13 +191,16 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		case "enter":
 			if len(m.tasks) > 0 {
 				m.view = "detail"
+				m.viewport.GotoTop()
 				return m, m.fetchLogs
 			}
 		case "esc":
 			m.view = "dashboard"
+			m.viewport.GotoTop()
 			return m, nil
 		case "backspace":
 			m.view = "dashboard"
+			m.viewport.GotoTop()
 			return m, nil
 		}
 	}

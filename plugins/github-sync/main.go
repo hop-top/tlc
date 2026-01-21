@@ -38,8 +38,8 @@ type Response struct {
 }
 
 type Error struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
 }
 
@@ -84,56 +84,56 @@ func handleRequest(req Request) Response {
 			}
 		}
 
-				return Response{
-					JSONRPC: "2.0",
-					Result: map[string]interface{}{
-						"tasks":     tasks,
-						"conflicts": []interface{}{}, // Conflict detection T-0084
-						"sync_at":   time.Now().Format(time.RFC3339),
-					},
-					ID: req.ID,
-				}
-		
-			case "sync.push":
-				var params SyncPushParams
-				if err := json.Unmarshal(req.Params, &params); err != nil {
-					return Response{
-						JSONRPC: "2.0",
-						Error: &Error{
-							Code:    -32602,
-							Message: "Invalid params",
-						},
-						ID: req.ID,
-					}
-				}
-		
-				updated := []string{}
-				failed := map[string]string{}
-				for _, task := range params.Tasks {
-					var err error
-					originID, ok := task.Meta["origin_id"].(string)
-					if !ok || originID == "" {
-						err = createGitHubIssue(params.Repo, &task)
-					} else {
-						err = updateGitHubIssue(params.Repo, &task)
-					}
-		
-					if err != nil {
-						failed[task.ID] = err.Error()
-					} else {
-						updated = append(updated, task.ID)
-					}
-				}
-		
-				return Response{
-					JSONRPC: "2.0",
-					Result: map[string]interface{}{
-						"updated": updated,
-						"failed":  failed,
-					},
-					ID: req.ID,
-				}
-			case "auth.status":
+		return Response{
+			JSONRPC: "2.0",
+			Result: map[string]interface{}{
+				"tasks":     tasks,
+				"conflicts": []interface{}{}, // Conflict detection T-0084
+				"sync_at":   time.Now().Format(time.RFC3339),
+			},
+			ID: req.ID,
+		}
+
+	case "sync.push":
+		var params SyncPushParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return Response{
+				JSONRPC: "2.0",
+				Error: &Error{
+					Code:    -32602,
+					Message: "Invalid params",
+				},
+				ID: req.ID,
+			}
+		}
+
+		updated := []string{}
+		failed := map[string]string{}
+		for _, task := range params.Tasks {
+			var err error
+			originID, ok := task.Meta["origin_id"].(string)
+			if !ok || originID == "" {
+				err = createGitHubIssue(params.Repo, &task)
+			} else {
+				err = updateGitHubIssue(params.Repo, &task)
+			}
+
+			if err != nil {
+				failed[task.ID] = err.Error()
+			} else {
+				updated = append(updated, task.ID)
+			}
+		}
+
+		return Response{
+			JSONRPC: "2.0",
+			Result: map[string]interface{}{
+				"updated": updated,
+				"failed":  failed,
+			},
+			ID: req.ID,
+		}
+	case "auth.status":
 		return Response{
 			JSONRPC: "2.0",
 			Result: map[string]interface{}{
@@ -175,6 +175,9 @@ func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error
 
 	opts := &github.IssueListByRepoOptions{
 		State: "all",
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
 	}
 
 	if lastSyncAt != "" {
@@ -183,17 +186,24 @@ func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error
 		}
 	}
 
-	issues, _, err := client.Issues.ListByRepo(ctx, owner, repo, opts)
-	if err != nil {
-		return nil, err
-	}
-
 	tasks := []interface{}{}
-	for _, issue := range issues {
-		if issue.IsPullRequest() {
-			continue
+	for {
+		issues, resp, err := client.Issues.ListByRepo(ctx, owner, repo, opts)
+		if err != nil {
+			return nil, err
 		}
-		tasks = append(tasks, MapGitHubIssueToTask(issue))
+
+		for _, issue := range issues {
+			if issue.IsPullRequest() {
+				continue
+			}
+			tasks = append(tasks, MapGitHubIssueToTask(issue))
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 
 	return tasks, nil

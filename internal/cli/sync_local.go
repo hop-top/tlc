@@ -13,6 +13,14 @@ import (
 	"github.com/spf13/viper"
 )
 
+// syncTODOAll syncs tasks to both global and project-specific todo.txt files.
+func syncTODOAll() error {
+	if err := syncToTODO(); err != nil {
+		return err
+	}
+	return syncToProjectTODO()
+}
+
 // syncToTODO exports all tasks from SQLite to the TODO file in TLS format.
 func syncToTODO() error {
 	s, err := getStorage()
@@ -23,19 +31,59 @@ func syncToTODO() error {
 
 	ctx := context.Background()
 	tasks, err := s.ListTasks(ctx, core.Query{
-		SortBy: "created_at",
-		SortDirection:  "asc",
+		SortBy:        "created_at",
+		SortDirection: "asc",
+		AllProjects:   true,
 	})
 	if err != nil {
 		return err
 	}
 
 	todoFile := viper.GetString("task.todo_file")
-	// Ensure directory exists
 	os.MkdirAll(filepath.Dir(todoFile), 0755)
 	f, err := os.Create(todoFile)
 	if err != nil {
 		return fmt.Errorf("failed to create TODO file: %w", err)
+	}
+	defer f.Close()
+
+	for _, t := range tasks {
+		_, err := f.WriteString(formatTLS(t) + "\n")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// syncToProjectTODO exports project-scoped tasks to the local .tlc/todo.txt file.
+func syncToProjectTODO() error {
+	proj := core.DetectProject()
+	if proj == nil || !proj.InProject {
+		return nil
+	}
+
+	s, err := getStorage()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	tasks, err := s.ListTasks(ctx, core.Query{
+		SortBy:        "created_at",
+		SortDirection: "asc",
+	})
+	if err != nil {
+		return err
+	}
+
+	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), "todo.txt")
+	os.MkdirAll(filepath.Dir(todoFile), 0755)
+	f, err := os.Create(todoFile)
+	if err != nil {
+		return fmt.Errorf("failed to create project TODO file: %w", err)
 	}
 	defer f.Close()
 
@@ -68,7 +116,7 @@ func ingestTODO() error {
 
 	ctx := context.Background()
 	scanner := bufio.NewScanner(f)
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.TrimSpace(line) == "" {

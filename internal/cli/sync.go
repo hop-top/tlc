@@ -161,187 +161,197 @@ func autoConfigureGitHub(directionHint string) error {
 	return nil
 }
 
+func runSyncPull(cmd *cobra.Command, system string) error {
+	// Auto-configure GitHub if needed
+	if system == "github" {
+		if err := autoConfigureGitHub("pull"); err != nil {
+			return err
+		}
+		// Always try to get token from gh if available and not already set
+		if os.Getenv("GITHUB_TOKEN") == "" {
+			if _, err := exec.LookPath("gh"); err == nil {
+				ghCmd := exec.Command("gh", "auth", "token")
+				if tokenOutput, err := ghCmd.Output(); err == nil {
+					token := strings.TrimSpace(string(tokenOutput))
+					os.Setenv("GITHUB_TOKEN", token)
+				}
+			}
+		}
+	}
+
+	s, err := getStorage()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Get max last_sync_at for this system to pass to plugin
+	var lastSyncAt string
+	tasksForSystem, _ := s.ListTasks(ctx, core.Query{
+		Filters: []core.FieldFilter{
+			{Field: "origin_system", Value: system},
+		},
+		SortBy:        "last_sync_at",
+		SortDirection: "desc",
+		Limit:         1,
+	})
+	if len(tasksForSystem) > 0 && tasksForSystem[0].LastSyncAt != nil {
+		lastSyncAt = tasksForSystem[0].LastSyncAt.Format(time.RFC3339)
+	}
+
+	binPath := getPluginPath(system)
+	client, err := plugin.NewRPCClient(binPath)
+	if err != nil {
+		return fmt.Errorf("failed to start plugin %s: %w", system, err)
+	}
+	defer client.Close()
+
+	params := map[string]interface{}{
+		"repo":         viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
+		"last_sync_at": lastSyncAt,
+	}
+
+	var result struct {
+		Tasks []core.Task `json:"tasks"`
+	}
+
+	err = client.Call("sync.pull", params, &result)
+	if err != nil {
+		// Log error for tasks of this system
+		for _, t := range tasksForSystem {
+			s.AddLog(ctx, &core.LogEntry{
+				TaskID:    t.ID,
+				Timestamp: time.Now().UTC(),
+				By:        "system",
+				Action:    "SYNC_ERROR",
+				Note:      fmt.Sprintf("Sync pull failed: %v", err),
+			})
+		}
+		return fmt.Errorf("sync pull RPC failed: %w", err)
+	}
+
+	now := time.Now().UTC()
+	createdCount := 0
+	updatedCount := 0
+	conflictCount := 0
+
+	for _, remoteTask := range result.Tasks {
+		originID, ok := remoteTask.Meta["origin_id"].(string)
+		if !ok {
+			continue
+		}
+
+		existing, err := s.FindTaskByOrigin(ctx, system, originID)
+		if err != nil {
+			fmt.Printf("Error searching for existing task: %v\n", err)
+			continue
+		}
+
+		// Auto-assign project_id if in a project context
+		// This ensures tasks from sync pull are properly scoped
+		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+			remoteTask.ProjectID = &proj.ProjectID
+		}
+
+		if existing == nil {
+			// Create new task
+			// Assign a new ID if not present
+			if remoteTask.ID == "" {
+				allTasks, _ := s.ListTasks(ctx, core.Query{})
+				remoteTask.ID = fmt.Sprintf("T-%04d", len(allTasks)+1)
+			}
+			remoteTask.LastSyncAt = &now
+			if err := s.CreateTask(ctx, &remoteTask); err != nil {
+				fmt.Printf("Error creating task %s: %v\n", remoteTask.ID, err)
+			} else {
+				createdCount++
+				logEntry := &core.LogEntry{
+					TaskID:    remoteTask.ID,
+					Timestamp: now,
+					By:        "system",
+					Action:    "SYNC_IMPORTED",
+					Note:      fmt.Sprintf("Imported from %s", system),
+				}
+				s.AddLog(ctx, logEntry)
+			}
+			continue
+		}
+
+		// Detect conflict
+		conflict := sync.DetectConflict(existing, &remoteTask)
+		if conflict != nil {
+			conflictCount++
+			fmt.Printf("! Conflict for %s (%s): %s\n", existing.ID, existing.Title, conflict.Description)
+
+			strategy := sync.ConflictStrategy(syncPullStrategy)
+			if strategy == "" {
+				strategy = sync.StrategyRemoteWins // Default
+			}
+
+			var resolved *core.Task
+			var updatedLocally bool
+
+			if strategy == sync.StrategyManual {
+				resolved, updatedLocally = resolveConflictInteractive(conflict)
+			} else {
+				resolved, updatedLocally = sync.ResolveConflict(conflict, strategy)
+			}
+
+			if updatedLocally {
+				resolved.ID = existing.ID               // Preserve local ID
+				resolved.ProjectID = existing.ProjectID // Preserve existing project_id
+				resolved.LastSyncAt = &now
+				if err := s.UpdateTask(ctx, resolved); err != nil {
+					fmt.Printf("Error updating task %s: %v\n", resolved.ID, err)
+				} else {
+					updatedCount++
+					logEntry := &core.LogEntry{
+						TaskID:    existing.ID,
+						Timestamp: now,
+						By:        "system",
+						Action:    "SYNC_CONFLICT",
+						Note:      fmt.Sprintf("Resolved conflict using %s", strategy),
+					}
+					s.AddLog(ctx, logEntry)
+				}
+			}
+		} else {
+			// No conflict, check if remote is newer
+			if remoteTask.UpdatedAt.After(existing.UpdatedAt.Add(time.Second)) {
+				remoteTask.ID = existing.ID               // Preserve local ID
+				remoteTask.ProjectID = existing.ProjectID // Preserve existing project_id
+				remoteTask.LastSyncAt = &now
+				if err := s.UpdateTask(ctx, &remoteTask); err != nil {
+					fmt.Printf("Error updating task %s: %v\n", existing.ID, err)
+				} else {
+					updatedCount++
+					logEntry := &core.LogEntry{
+						TaskID:    existing.ID,
+						Timestamp: now,
+						By:        "system",
+						Action:    "SYNC_PULLED",
+						Note:      fmt.Sprintf("Updated from %s", system),
+					}
+					s.AddLog(ctx, logEntry)
+				}
+			}
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n",
+		system, createdCount, updatedCount, conflictCount)
+
+	return syncTODOAll()
+}
+
 var syncPullCmd = &cobra.Command{
 	Use:   "pull <system>",
 	Short: "Pull updates from an external system",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		system := args[0]
-
-		// Auto-configure GitHub if needed
-		if system == "github" {
-			if err := autoConfigureGitHub("pull"); err != nil {
-				return err
-			}
-			// Always try to get token from gh if available and not already set
-			if os.Getenv("GITHUB_TOKEN") == "" {
-				if _, err := exec.LookPath("gh"); err == nil {
-					ghCmd := exec.Command("gh", "auth", "token")
-					if tokenOutput, err := ghCmd.Output(); err == nil {
-						token := strings.TrimSpace(string(tokenOutput))
-						os.Setenv("GITHUB_TOKEN", token)
-					}
-				}
-			}
-		}
-
-		s, err := getStorage()
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-
-		ctx := context.Background()
-
-		// Get max last_sync_at for this system to pass to plugin
-		var lastSyncAt string
-		tasksForSystem, _ := s.ListTasks(ctx, core.Query{
-			Filters: []core.FieldFilter{
-				{Field: "origin_system", Value: system},
-			},
-			SortBy:        "last_sync_at",
-			SortDirection: "desc",
-			Limit:         1,
-		})
-		if len(tasksForSystem) > 0 && tasksForSystem[0].LastSyncAt != nil {
-			lastSyncAt = tasksForSystem[0].LastSyncAt.Format(time.RFC3339)
-		}
-
-		binPath := getPluginPath(system)
-		client, err := plugin.NewRPCClient(binPath)
-		if err != nil {
-			return fmt.Errorf("failed to start plugin %s: %w", system, err)
-		}
-		defer client.Close()
-
-		params := map[string]interface{}{
-			"repo":         viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
-			"last_sync_at": lastSyncAt,
-		}
-
-		var result struct {
-			Tasks []core.Task `json:"tasks"`
-		}
-
-		err = client.Call("sync.pull", params, &result)
-		if err != nil {
-			// Log error for tasks of this system
-			for _, t := range tasksForSystem {
-				s.AddLog(ctx, &core.LogEntry{
-					TaskID:    t.ID,
-					Timestamp: time.Now().UTC(),
-					By:        "system",
-					Action:    "SYNC_ERROR",
-					Note:      fmt.Sprintf("Sync pull failed: %v", err),
-				})
-			}
-			return fmt.Errorf("sync pull RPC failed: %w", err)
-		}
-
-		now := time.Now().UTC()
-		createdCount := 0
-		updatedCount := 0
-		conflictCount := 0
-
-		for _, remoteTask := range result.Tasks {
-			originID, ok := remoteTask.Meta["origin_id"].(string)
-			if !ok {
-				continue
-			}
-
-			existing, err := s.FindTaskByOrigin(ctx, system, originID)
-			if err != nil {
-				fmt.Printf("Error searching for existing task: %v\n", err)
-				continue
-			}
-
-			if existing == nil {
-				// Create new task
-				// Assign a new ID if not present
-				if remoteTask.ID == "" {
-					allTasks, _ := s.ListTasks(ctx, core.Query{})
-					remoteTask.ID = fmt.Sprintf("T-%04d", len(allTasks)+1)
-				}
-				remoteTask.LastSyncAt = &now
-				if err := s.CreateTask(ctx, &remoteTask); err != nil {
-					fmt.Printf("Error creating task %s: %v\n", remoteTask.ID, err)
-				} else {
-					createdCount++
-					logEntry := &core.LogEntry{
-						TaskID:    remoteTask.ID,
-						Timestamp: now,
-						By:        "system",
-						Action:    "SYNC_IMPORTED",
-						Note:      fmt.Sprintf("Imported from %s", system),
-					}
-					s.AddLog(ctx, logEntry)
-				}
-				continue
-			}
-
-			// Detect conflict
-			conflict := sync.DetectConflict(existing, &remoteTask)
-			if conflict != nil {
-				conflictCount++
-				fmt.Printf("! Conflict for %s (%s): %s\n", existing.ID, existing.Title, conflict.Description)
-
-				strategy := sync.ConflictStrategy(syncPullStrategy)
-				if strategy == "" {
-					strategy = sync.StrategyRemoteWins // Default
-				}
-
-				var resolved *core.Task
-				var updatedLocally bool
-
-				if strategy == sync.StrategyManual {
-					resolved, updatedLocally = resolveConflictInteractive(conflict)
-				} else {
-					resolved, updatedLocally = sync.ResolveConflict(conflict, strategy)
-				}
-
-				if updatedLocally {
-					resolved.ID = existing.ID // Preserve local ID
-					resolved.LastSyncAt = &now
-					if err := s.UpdateTask(ctx, resolved); err != nil {
-						fmt.Printf("Error updating task %s: %v\n", resolved.ID, err)
-					} else {
-						updatedCount++
-						logEntry := &core.LogEntry{
-							TaskID:    existing.ID,
-							Timestamp: now,
-							By:        "system",
-							Action:    "SYNC_CONFLICT",
-							Note:      fmt.Sprintf("Resolved conflict using %s", strategy),
-						}
-						s.AddLog(ctx, logEntry)
-					}
-				}
-			} else {
-				// No conflict, check if remote is newer
-				if remoteTask.UpdatedAt.After(existing.UpdatedAt.Add(time.Second)) {
-					remoteTask.ID = existing.ID // Preserve local ID
-					remoteTask.LastSyncAt = &now
-					if err := s.UpdateTask(ctx, &remoteTask); err != nil {
-						fmt.Printf("Error updating task %s: %v\n", existing.ID, err)
-					} else {
-						updatedCount++
-						logEntry := &core.LogEntry{
-							TaskID:    existing.ID,
-							Timestamp: now,
-							By:        "system",
-							Action:    "SYNC_PULLED",
-							Note:      fmt.Sprintf("Updated from %s", system),
-						}
-						s.AddLog(ctx, logEntry)
-					}
-				}
-			}
-		}
-
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n",
-			system, createdCount, updatedCount, conflictCount)
-
-		return syncToTODO()
+		return runSyncPull(cmd, args[0])
 	},
 }
 
@@ -487,7 +497,7 @@ var syncPushCmd = &cobra.Command{
 			}
 		}
 
-		return syncToTODO()
+		return syncTODOAll()
 	},
 }
 
@@ -519,6 +529,15 @@ var syncConfigCmd = &cobra.Command{
 		fmt.Fprintf(out, "Sync configuration for %s:\n", system)
 		fmt.Fprintf(out, "  Repo: %s\n", viper.GetString(fmt.Sprintf("sync.%s.repo", system)))
 		fmt.Fprintf(out, "  Direction: %s\n", viper.GetString(fmt.Sprintf("sync.%s.direction", system)))
+
+		// Automatically trigger sync pull for GitHub after successful configuration
+		if system == "github" {
+			fmt.Fprintf(out, "\nPulling issues from GitHub...\n")
+			if err := runSyncPull(cmd, system); err != nil {
+				fmt.Fprintf(out, "Warning: Initial pull failed: %v\n", err)
+			}
+		}
+
 		return nil
 	},
 }

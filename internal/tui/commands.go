@@ -178,6 +178,7 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		now := time.Now().UTC()
+
 		// Get next ID - simple hack for now
 		tasks, _ := m.service.ListTasks(ctx, core.Query{})
 		id := fmt.Sprintf("T-%04d", len(tasks)+1)
@@ -191,6 +192,12 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
+
+		// Auto-assign project_id if in a project context
+		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+			task.ProjectID = &proj.ProjectID
+		}
+
 		err := m.service.CreateTask(ctx, task, core.GetCurrentUser(), "Created via TUI")
 		if err != nil {
 			return err

@@ -1,8 +1,40 @@
+git:
+    branch:
+        prefix_from_type: true
+        separator: /
+        zero_pad_issue: 4
+    commit:
+        auto_generate: true
+        template: '{type}: {description} (closes #{issue})'
+    worktree:
+        auto_create: true
+        directory: .worktrees
+output:
+    color: true
+    format: json
+    log_file: /Users/jadb/.local/share/tlc/tlc.log
+    quiet: false
+    verbose: false
+project:
+    id: IdeaCraftersLabs/oss-tlc-cli
 storage:
     backend: sqlite
-    db_path: /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-sync-test-3415384849/test.sqlite
+    db_path: /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-test-4096488981/test.sqlite
 sync:
     github:
         direction: bidirectional
         repo: IdeaCraftersLabs/oss-tlc-cli
         use_gh_auth: true
+task:
+    archive_threshold: 168h0m0s
+    auto_assign: false
+    default_status: TODO
+    id_format: T-{seq:04d}
+    require_reference: true
+    todo_file: /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-test-4096488981/TODO
+ui:
+    date_format: "2006-01-02 15:04:05"
+    editor: vim
+    pager: auto
+    table_style: unicode
+    timezone: local

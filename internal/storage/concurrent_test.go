@@ -33,19 +33,23 @@ func TestConcurrentTaskCreation(t *testing.T) {
 	errChan := make(chan error, 5)
 
 	// Spawn 5 goroutines simulating different agents/sync processes
+	// Note: With composite primary key (project_id, id), tasks with same ID
+	// can coexist in different projects. For this test, we use the same project.
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
+		projectID := "org/test"
 		go func(agentID int) {
 			defer wg.Done()
 
 			task := &core.Task{
-				ID:         taskID,
-				Title:      fmt.Sprintf("Task from agent %d", agentID),
-				Status:     core.StatusTodo,
-				Reference:  fmt.Sprintf("ref-%d", agentID),
-				CreatedAt:  time.Now().UTC(),
-				UpdatedAt:  time.Now().UTC(),
-				Meta:       map[string]interface{}{"agent": agentID},
+				ID:        taskID,
+				ProjectID: &projectID,
+				Title:     fmt.Sprintf("Task from agent %d", agentID),
+				Status:    core.StatusTodo,
+				Reference: fmt.Sprintf("ref-%d", agentID),
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+				Meta:      map[string]interface{}{"agent": agentID},
 			}
 
 			err := s.CreateTask(ctx, task)
@@ -94,12 +98,12 @@ func TestConcurrentFlowExecution(t *testing.T) {
 	// Create a set of tasks
 	for i := 1; i <= 10; i++ {
 		task := &core.Task{
-			ID:         fmt.Sprintf("T-%04d", i),
-			Title:      fmt.Sprintf("Task %d", i),
-			Status:     core.StatusTodo,
-			Reference:  "ref",
-			CreatedAt:  time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:        fmt.Sprintf("T-%04d", i),
+			Title:     fmt.Sprintf("Task %d", i),
+			Status:    core.StatusTodo,
+			Reference: "ref",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		s.CreateTask(ctx, task)
 	}
@@ -196,12 +200,12 @@ func TestSyncIngest(t *testing.T) {
 			if existing == nil {
 				// Both agents will try to create
 				task := &core.Task{
-					ID:         taskID,
-					Title:      fmt.Sprintf("Task from sync agent %d", agentID),
-					Status:     core.StatusTodo,
-					Reference:  "ref",
-					CreatedAt:  time.Now().UTC(),
-					UpdatedAt:  time.Now().UTC(),
+					ID:        taskID,
+					Title:     fmt.Sprintf("Task from sync agent %d", agentID),
+					Status:    core.StatusTodo,
+					Reference: "ref",
+					CreatedAt: time.Now().UTC(),
+					UpdatedAt: time.Now().UTC(),
 				}
 
 				err := s.CreateTask(ctx, task)
@@ -239,7 +243,7 @@ func containsUniqueConstraintError(err error) bool {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		findSubstring(s, substr)))
+			findSubstring(s, substr)))
 }
 
 func findSubstring(s, substr string) bool {
