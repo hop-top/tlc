@@ -6,9 +6,7 @@ git:
     commit:
         auto_generate: true
         template: '{type}: {description} (closes #{issue})'
-    worktree:
-        auto_create: true
-        directory: .worktrees
+    track: false
 output:
     color: true
     format: json
