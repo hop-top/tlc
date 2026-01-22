@@ -64,15 +64,9 @@ func (t *TaskConfig) Validate() error {
 }
 
 type GitConfig struct {
-	Worktree GitWorktreeConfig `yaml:"worktree"`
-	Branch   GitBranchConfig   `yaml:"branch"`
-	Commit   GitCommitConfig   `yaml:"commit"`
-}
-
-type GitWorktreeConfig struct {
-	Directory  string `yaml:"directory"`
-	AutoCreate bool   `yaml:"auto_create"`
-	AutoRemove bool   `yaml:"auto_remove"`
+	Track  bool            `yaml:"track"`
+	Branch GitBranchConfig `yaml:"branch"`
+	Commit GitCommitConfig `yaml:"commit"`
 }
 
 type GitBranchConfig struct {

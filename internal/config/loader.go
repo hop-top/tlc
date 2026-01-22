@@ -24,10 +24,6 @@ func DefaultConfig() *Config {
 			RequireReference: true,
 		},
 		Git: GitConfig{
-			Worktree: GitWorktreeConfig{
-				Directory:  ".worktrees",
-				AutoCreate: true,
-			},
 			Branch: GitBranchConfig{
 				PrefixFromType: true,
 				ZeroPadIssue:   4,

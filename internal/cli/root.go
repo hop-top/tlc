@@ -214,8 +214,7 @@ func setDefaults() {
 	viper.SetDefault("task.require_reference", true)
 	viper.SetDefault("task.archive_threshold", 7*24*time.Hour)
 
-	viper.SetDefault("git.worktree.directory", ".worktrees")
-	viper.SetDefault("git.worktree.auto_create", true)
+	viper.SetDefault("git.track", false)
 	viper.SetDefault("git.branch.prefix_from_type", true)
 	viper.SetDefault("git.branch.zero_pad_issue", 4)
 	viper.SetDefault("git.branch.separator", "/")

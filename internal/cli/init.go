@@ -31,7 +31,6 @@ func getDataHome() string {
 var (
 	storageBackend string
 	dbPath         string
-	worktreeDir    string
 	force          bool
 )
 
@@ -66,10 +65,6 @@ var initCmd = &cobra.Command{
 		config["storage"] = storageCfg
 
 		gitCfg := make(map[string]interface{})
-		worktreeCfg := make(map[string]interface{})
-		worktreeCfg["directory"] = worktreeDir
-		worktreeCfg["auto_create"] = true
-		gitCfg["worktree"] = worktreeCfg
 		config["git"] = gitCfg
 
 		data, err := yaml.Marshal(config)
@@ -81,14 +76,15 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("failed to write config.yaml: %w", err)
 		}
 
-		// 3. Add .worktrees/ to .gitignore if it's a git repo
 		if _, err := os.Stat(".git"); err == nil {
 			f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err == nil {
 				defer f.Close()
 				content, _ := os.ReadFile(".gitignore")
-				if !strings.Contains(string(content), worktreeDir) {
-					if _, err := f.WriteString(fmt.Sprintf("\n%s/\n", worktreeDir)); err != nil {
+				contentStr := string(content)
+
+				if track && !strings.Contains(contentStr, ".tlc/") {
+					if _, err := f.WriteString(".tlc/\n"); err != nil {
 						log.Warn("Failed to update .gitignore", "error", err)
 					}
 				}
@@ -103,7 +99,6 @@ var initCmd = &cobra.Command{
 func init() {
 	initCmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
 	initCmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
-	initCmd.Flags().StringVar(&worktreeDir, "worktree-dir", ".worktrees", "Git worktree directory")
 	initCmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
 
 	rootCmd.AddCommand(initCmd)

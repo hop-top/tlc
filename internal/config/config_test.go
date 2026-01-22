@@ -38,10 +38,6 @@ task:
 	if cfg.Task.DefaultStatus != "IN_PROGRESS" {
 		t.Errorf("expected default status IN_PROGRESS, got %s", cfg.Task.DefaultStatus)
 	}
-	// Verify default still exists
-	if cfg.Git.Worktree.Directory != ".worktrees" {
-		t.Errorf("expected default git directory .worktrees, got %s", cfg.Git.Worktree.Directory)
-	}
 }
 
 func TestApplyEnvOverrides(t *testing.T) {
@@ -102,4 +98,3 @@ func TestConfig_Validate(t *testing.T) {
 		})
 	}
 }
-
