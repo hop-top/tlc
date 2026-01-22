@@ -229,8 +229,37 @@ grep "domain:auth" TODO
 3. **Update status promptly**: Keep TODO file current so other agents know what's being worked on
 4. **One task at a time**: Move task to `[~]` when starting, `[x]` when complete
 5. **Check for conflicts**: Before starting a task, grep for `[~]` to see what others are working on
-6. **Use consistent formatting**: Don't add extra spaces or change the structure
+6. **Use consistent formatting**: Don't add extra spaces or change structure
 7. **Respect priorities**: P0 tasks should be completed before P1, P1 before P2
+
+## Testing Guidelines
+
+When testing CLI commands (using Cobra and Viper):
+
+1. **Always create fresh command instances** using helper functions like `newTestCmd()` or `newTestInitCmd()` from `internal/cli/test_helpers.go`.
+2. **Never share command instances across test runs** to avoid Cobra flag state leakage.
+3. **Use `viper.Reset()` at the start of each test** to clear configuration state.
+4. **Reset environment variables** to avoid cross-test pollution when testing configuration-related functionality.
+5. **Create temporary directories** for test isolation and clean them up with `defer os.RemoveAll()`.
+
+Example test structure:
+```go
+t.Run("test_name", func(t *testing.T) {
+    viper.Reset()
+
+    cmd := newTestCmd()
+    initCmd := newTestInitCmd()
+    cmd.AddCommand(initCmd)
+
+    buf := new(strings.Builder)
+    cmd.SetOut(buf)
+    cmd.SetErr(buf)
+    cmd.SetArgs([]string{"init", "--track"})
+
+    err = cmd.Execute()
+    // ... assertions ...
+})
+```
 
 ## Documentation References
 

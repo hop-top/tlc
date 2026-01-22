@@ -168,16 +168,29 @@ func TestInitCmd(t *testing.T) {
 			defer os.Chdir(oldWd)
 
 			viper.Reset()
-			force = false
-			storageBackend = "sqlite"
-			dbPath = ""
+
+			if tt.setupGit {
+				if err := os.Mkdir(".git", 0755); err != nil {
+					t.Fatalf("failed to create .git: %v", err)
+				}
+			}
+
+			if tt.existingGitignore != "" {
+				if err := os.WriteFile(".gitignore", []byte(tt.existingGitignore), 0644); err != nil {
+					t.Fatalf("failed to create .gitignore: %v", err)
+				}
+			}
+
+			cmd := newTestCmd()
+			initCmd := newTestInitCmd()
+			cmd.AddCommand(initCmd)
 
 			buf := new(strings.Builder)
-			rootCmd.SetOut(buf)
-			rootCmd.SetErr(buf)
-			rootCmd.SetArgs(tt.args)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs(tt.args)
 
-			err = rootCmd.Execute()
+			err = cmd.Execute()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -256,20 +269,21 @@ func TestInitCmd_ExistingTLC(t *testing.T) {
 			defer os.Chdir(oldWd)
 
 			viper.Reset()
-			force = false
-			storageBackend = "sqlite"
-			dbPath = ""
 
 			if err := tt.setup(tmpDir); err != nil {
 				t.Fatalf("setup failed: %v", err)
 			}
 
-			buf := new(strings.Builder)
-			rootCmd.SetOut(buf)
-			rootCmd.SetErr(buf)
-			rootCmd.SetArgs(tt.args)
+			cmd := newTestCmd()
+			initCmd := newTestInitCmd()
+			cmd.AddCommand(initCmd)
 
-			err = rootCmd.Execute()
+			buf := new(strings.Builder)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs(tt.args)
+
+			err = cmd.Execute()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -340,9 +354,6 @@ git:
 			defer os.Chdir(oldWd)
 
 			viper.Reset()
-			force = false
-			storageBackend = "sqlite"
-			dbPath = ""
 
 			if tt.setupGit {
 				if err := os.Mkdir(".git", 0755); err != nil {
@@ -367,12 +378,16 @@ git:
 			viper.Reset()
 			initConfig()
 
-			buf := new(strings.Builder)
-			rootCmd.SetOut(buf)
-			rootCmd.SetErr(buf)
-			rootCmd.SetArgs([]string{"init"})
+			cmd := newTestCmd()
+			initCmd := newTestInitCmd()
+			cmd.AddCommand(initCmd)
 
-			err = rootCmd.Execute()
+			buf := new(strings.Builder)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs([]string{"init"})
+
+			err = cmd.Execute()
 			if err != nil {
 				t.Fatalf("Execute() failed: %v", err)
 			}
@@ -417,16 +432,17 @@ func TestInitCmd_ConfigStructure(t *testing.T) {
 	defer os.Chdir(oldWd)
 
 	viper.Reset()
-	force = false
-	storageBackend = "sqlite"
-	dbPath = ""
+
+	cmd := newTestCmd()
+	initCmd := newTestInitCmd()
+	cmd.AddCommand(initCmd)
 
 	buf := new(strings.Builder)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"init"})
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"init"})
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() failed: %v", err)
 	}
 

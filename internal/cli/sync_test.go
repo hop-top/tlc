@@ -22,11 +22,13 @@ func TestSyncCommands(t *testing.T) {
 		viper.Set("sync.github.repo", "google/oss-tlc-cli")
 		viper.Set("sync.github.direction", "bidirectional")
 
+		cmd := newTestCmd()
+		cmd.AddCommand(syncCmd)
 		buf := new(bytes.Buffer)
-		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"sync", "config", "github", "--force"})
+		cmd.SetOut(buf)
+		cmd.SetArgs([]string{"sync", "config", "github", "--force"})
 
-		if err := rootCmd.Execute(); err != nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf("sync config failed: %v", err)
 		}
 

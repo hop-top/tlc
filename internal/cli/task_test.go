@@ -32,15 +32,17 @@ func TestTaskCommands(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("CreateTask", func(t *testing.T) {
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
-		rootCmd.SetOut(buf)
-		rootCmd.SetErr(buf)
-		rootCmd.SetArgs([]string{"task", "create", "Test Task", "--description", "Test Description", "--tag", "test", "--tag", "cli"})
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "create", "Test Task", "--description", "Test Description", "--tag", "test", "--tag", "cli"})
 
-		if err := rootCmd.Execute(); err != nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task create failed: %v", err)
 		}
-		
+
 		output := buf.String()
 		t.Logf("Create output: %s", output)
 
@@ -54,12 +56,14 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasks", func(t *testing.T) {
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
-		rootCmd.SetOut(buf)
-		rootCmd.SetErr(buf)
-		rootCmd.SetArgs([]string{"task", "list"})
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list"})
 
-		if err := rootCmd.Execute(); err != nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task list failed: %v", err)
 		}
 
@@ -71,23 +75,27 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("UpdateTask", func(t *testing.T) {
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
-		rootCmd.SetOut(buf)
-		rootCmd.SetErr(buf)
-		rootCmd.SetArgs([]string{"task", "update", "T-0001", "--status", "IN_PROGRESS", "--title", "Updated Title"})
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "update", "T-0001", "--status", "IN_PROGRESS", "--title", "Updated Title"})
 
-		if err := rootCmd.Execute(); err != nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task update failed: %v", err)
 		}
 	})
 
 	t.Run("ShowTask", func(t *testing.T) {
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
-		rootCmd.SetOut(buf)
-		rootCmd.SetErr(buf)
-		rootCmd.SetArgs([]string{"task", "show", "T-0001", "--logs"})
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001", "--logs"})
 
-		if err := rootCmd.Execute(); err != nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task show failed: %v", err)
 		}
 
@@ -102,11 +110,14 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("DeleteTask", func(t *testing.T) {
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
-		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"task", "delete", "T-0001", "--yes"})
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "delete", "T-0001", "--yes"})
 
-		if err := rootCmd.Execute(); err != nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task delete failed: %v", err)
 		}
 
