@@ -1,4 +1,4 @@
-.worktrees/
+.tlc/
 bin/
 tlc
 *.db
@@ -14,3 +14,11 @@ lint-errors.log
 coverage/
 *.coverprofile
 *.out
+
+# SQLite files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
