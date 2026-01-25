@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/config"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/storage"
 	"github.com/charmbracelet/log"
-	"github.com/google/oss-tlc-cli/internal/config"
-	"github.com/google/oss-tlc-cli/internal/storage"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

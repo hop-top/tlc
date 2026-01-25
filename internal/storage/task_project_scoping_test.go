@@ -9,11 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// TestTODOFileSync_ProjectScoping tests TODO file filtering by project
+// Verifies local .tlc/todo.txt contains only current project tasks
+// Verifies global todo.txt contains tasks from all projects
 func TestTODOFileSync_ProjectScoping(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -67,6 +70,8 @@ storage:
 	require.NoError(t, s.CreateTask(ctx, task2))
 
 	t.Run("syncToProjectTODO filters by project", func(t *testing.T) {
+		t.Logf("Verifies project-specific todo.txt filtering")
+		t.Logf("Only writes tasks matching the project_id")
 		// Get tasks filtered by project
 		query := core.Query{AllProjects: true}
 		tasks, err := s.ListTasks(ctx, query)
@@ -95,6 +100,7 @@ storage:
 	})
 
 	t.Run("syncToTODO includes all tasks", func(t *testing.T) {
+		t.Logf("Global todo.txt contains tasks from all projects")
 		globalTodoFile := filepath.Join(tempDir, "global-todo.txt")
 
 		query := core.Query{AllProjects: true}
@@ -120,6 +126,8 @@ storage:
 	})
 }
 
+// TestProjectScoping_EdgeCases tests edge cases for project scoping
+// Handles nil project_id (defaults to 'default') and empty project_id
 func TestProjectScoping_EdgeCases(t *testing.T) {
 	ctx := context.Background()
 
@@ -131,6 +139,8 @@ func TestProjectScoping_EdgeCases(t *testing.T) {
 	defer s.Close()
 
 	t.Run("Task with nil project_id uses 'default'", func(t *testing.T) {
+		t.Logf("Tests tasks created without a project context")
+		t.Logf("Verifies 'default' handling")
 		now := time.Now()
 
 		task := &core.Task{
@@ -152,6 +162,7 @@ func TestProjectScoping_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Empty project_id treated as nil", func(t *testing.T) {
+		t.Logf("Edge case handling for empty string project_id")
 		emptyProj := ""
 
 		now := time.Now()

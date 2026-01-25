@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 )
 
+// TestSQLiteStorage_CRUD tests basic Create, Read, Update operations for tasks
+// Verifies task lifecycle: create, retrieve, update, and log entries
 func TestSQLiteStorage_CRUD(t *testing.T) {
 	dbPath := "test_crud.db"
 	defer os.Remove(dbPath)
@@ -22,14 +24,14 @@ func TestSQLiteStorage_CRUD(t *testing.T) {
 	ctx := context.Background()
 	taskID := "T-0001"
 	task := &core.Task{
-		ID:         taskID,
-		Title:      "Test Task",
-		Status:     core.StatusTodo,
-		Reference:  "docs/test.md",
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
-		Tags:       []string{"test", "dev"},
-		Meta:       map[string]interface{}{"priority": "high"},
+		ID:        taskID,
+		Title:     "Test Task",
+		Status:    core.StatusTodo,
+		Reference: "docs/test.md",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Tags:      []string{"test", "dev"},
+		Meta:      map[string]interface{}{"priority": "high"},
 	}
 
 	// Test Create
@@ -82,6 +84,8 @@ func TestSQLiteStorage_CRUD(t *testing.T) {
 	}
 }
 
+// TestSQLiteStorage_Query tests filtering, searching, and pagination
+// Verifies status filters, text search, pagination, and log queries
 func TestSQLiteStorage_Query(t *testing.T) {
 	dbPath := "test_query.db"
 	defer os.Remove(dbPath)
@@ -116,28 +120,30 @@ func TestSQLiteStorage_Query(t *testing.T) {
 
 	// Test search
 	q = core.Query{Search: "Special"}
-		got, _ = s.ListTasks(ctx, q)
-		if len(got) != 1 {
-			t.Errorf("expected 1 task, got %d", len(got))
-		}
-	
-		// Test pagination
-		q = core.Query{Limit: 1, Offset: 1}
-		got, _ = s.ListTasks(ctx, q)
-		if len(got) != 1 {
-			t.Errorf("expected 1 task for pagination, got %d", len(got))
-		}
-	
-		// Test Log Querying
-		s.AddLog(ctx, &core.LogEntry{TaskID: "T-1", Action: "CREATED", By: "user", Timestamp: time.Now()})
-		s.AddLog(ctx, &core.LogEntry{TaskID: "T-2", Action: "UPDATED", By: "user", Timestamp: time.Now()})
-	
-		logs, _ := s.ListLogs(ctx, core.LogQuery{Action: "CREATED"})
-		if len(logs) != 1 {
-			t.Errorf("expected 1 CREATED log, got %d", len(logs))
-		}
+	got, _ = s.ListTasks(ctx, q)
+	if len(got) != 1 {
+		t.Errorf("expected 1 task, got %d", len(got))
+	}
+
+	// Test pagination
+	q = core.Query{Limit: 1, Offset: 1}
+	got, _ = s.ListTasks(ctx, q)
+	if len(got) != 1 {
+		t.Errorf("expected 1 task for pagination, got %d", len(got))
+	}
+
+	// Test Log Querying
+	s.AddLog(ctx, &core.LogEntry{TaskID: "T-1", Action: "CREATED", By: "user", Timestamp: time.Now()})
+	s.AddLog(ctx, &core.LogEntry{TaskID: "T-2", Action: "UPDATED", By: "user", Timestamp: time.Now()})
+
+	logs, _ := s.ListLogs(ctx, core.LogQuery{Action: "CREATED"})
+	if len(logs) != 1 {
+		t.Errorf("expected 1 CREATED log, got %d", len(logs))
+	}
 }
 
+// TestStorage_QueryORLogic tests OR logic in query filters
+// Verifies multiple status filters work with OR logic
 func TestStorage_QueryORLogic(t *testing.T) {
 	dbPath := "test_or_logic.db"
 	defer os.Remove(dbPath)
@@ -160,16 +166,16 @@ func TestStorage_QueryORLogic(t *testing.T) {
 			{Field: "status", Operator: core.OpEq, Value: core.StatusInProgress},
 		},
 	}
-	
+
 	got, err := s.ListTasks(ctx, q)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
-	
+
 	if len(got) != 2 {
 		t.Errorf("expected 2 tasks (TODO or IN_PROGRESS), got %d", len(got))
 	}
-	
+
 	// Verify we didn't get T-3 (DONE)
 	for _, tsk := range got {
 		if tsk.ID == "T-3" {
@@ -178,6 +184,8 @@ func TestStorage_QueryORLogic(t *testing.T) {
 	}
 }
 
+// TestSQLiteStorage_FlowRuns tests flow run CRUD operations
+// Verifies flow run lifecycle: create, retrieve, update with status changes
 func TestSQLiteStorage_FlowRuns(t *testing.T) {
 	dbPath := "test_flow_runs.db"
 	defer os.Remove(dbPath)
@@ -228,6 +236,8 @@ func TestSQLiteStorage_FlowRuns(t *testing.T) {
 	}
 }
 
+// TestSQLiteStorage_ChangeTracking tests sync status tracking
+// Identifies tasks needing push: dirty (updated after sync) and never synced
 func TestSQLiteStorage_ChangeTracking(t *testing.T) {
 	dbPath := "test_change_tracking.db"
 	defer os.Remove(dbPath)
@@ -285,5 +295,3 @@ func TestSQLiteStorage_ChangeTracking(t *testing.T) {
 		t.Errorf("expected T-3 and T-4 to need push, got %v", found)
 	}
 }
-
-	

@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

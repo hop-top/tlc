@@ -85,6 +85,62 @@ func TestConfig_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid fallback_mode",
+			setup: func(c *Config) {
+				c.Project.FallbackMode = "invalid"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid duplicate_id_strategy",
+			setup: func(c *Config) {
+				c.Project.DuplicateIDStrategy = "invalid"
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid fallback_mode auto",
+			setup: func(c *Config) {
+				c.Project.FallbackMode = "auto"
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid fallback_mode detected",
+			setup: func(c *Config) {
+				c.Project.FallbackMode = "detected"
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid fallback_mode prompt",
+			setup: func(c *Config) {
+				c.Project.FallbackMode = "prompt"
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid duplicate_id_strategy share",
+			setup: func(c *Config) {
+				c.Project.DuplicateIDStrategy = "share"
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid duplicate_id_strategy unique",
+			setup: func(c *Config) {
+				c.Project.DuplicateIDStrategy = "unique"
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid duplicate_id_strategy prompt",
+			setup: func(c *Config) {
+				c.Project.DuplicateIDStrategy = "prompt"
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/stretchr/testify/assert"
 )
 

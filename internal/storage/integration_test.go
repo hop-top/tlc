@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 )
 
+// TestStorage_MigrationIntegration verifies migration system works correctly
+// Tests fresh initialization and re-opening with migration check
 func TestStorage_MigrationIntegration(t *testing.T) {
 	dbPath := "test_integration.db"
 	defer os.Remove(dbPath)
@@ -38,6 +40,8 @@ func TestStorage_MigrationIntegration(t *testing.T) {
 	}
 }
 
+// TestStorage_TransactionalIntegrity validates foreign key constraints
+// Ensures adding logs for non-existent tasks fails appropriately
 func TestStorage_TransactionalIntegrity(t *testing.T) {
 	// This tests if foreign keys and other constraints are respected
 	dbPath := "test_constraints.db"
@@ -59,9 +63,8 @@ func TestStorage_TransactionalIntegrity(t *testing.T) {
 		Action:    "COMMENT",
 		Note:      "should fail if FKs enabled",
 	})
-	
+
 	if err == nil {
 		t.Error("expected error when adding log for non-existent task, but got nil")
 	}
 }
-

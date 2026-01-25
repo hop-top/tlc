@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
-	"github.com/google/oss-tlc-cli/internal/core"
-	"github.com/google/oss-tlc-cli/internal/plugin"
-	"github.com/google/oss-tlc-cli/internal/sync"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/plugin"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/sync"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

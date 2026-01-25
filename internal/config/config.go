@@ -5,11 +5,32 @@ import (
 	"time"
 )
 
+type ProjectConfig struct {
+	ID                  string `yaml:"id"`
+	FallbackMode        string `yaml:"fallback_mode"`
+	DuplicateIDStrategy string `yaml:"duplicate_id_strategy"`
+}
+
+func (p *ProjectConfig) Validate() error {
+	switch p.FallbackMode {
+	case "", "auto", "detected", "prompt":
+	default:
+		return fmt.Errorf("invalid fallback_mode: %s (must be auto, detected, or prompt)", p.FallbackMode)
+	}
+	switch p.DuplicateIDStrategy {
+	case "", "share", "unique", "prompt":
+	default:
+		return fmt.Errorf("invalid duplicate_id_strategy: %s (must be share, unique, or prompt)", p.DuplicateIDStrategy)
+	}
+	return nil
+}
+
 // Config represents the TLC configuration
 type Config struct {
 	Version string        `yaml:"version"`
 	Output  OutputConfig  `yaml:"output"`
 	Task    TaskConfig    `yaml:"task"`
+	Project ProjectConfig `yaml:"project"`
 	Git     GitConfig     `yaml:"git"`
 	Sync    SyncConfig    `yaml:"sync"`
 	Storage StorageConfig `yaml:"storage"`
@@ -21,6 +42,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := c.Task.Validate(); err != nil {
+		return err
+	}
+	if err := c.Project.Validate(); err != nil {
 		return err
 	}
 	if err := c.Sync.Validate(); err != nil {
@@ -50,11 +74,11 @@ func (o *OutputConfig) Validate() error {
 }
 
 type TaskConfig struct {
-	DefaultStatus    string `yaml:"default_status"`
-	IDFormat         string `yaml:"id_format"`
-	AutoAssign       bool   `yaml:"auto_assign"`
-	RequireReference bool   `yaml:"require_reference"`
-	TodoFile         string `yaml:"todo_file"`
+	DefaultStatus    string        `yaml:"default_status"`
+	IDFormat         string        `yaml:"id_format"`
+	AutoAssign       bool          `yaml:"auto_assign"`
+	RequireReference bool          `yaml:"require_reference"`
+	TodoFile         string        `yaml:"todo_file"`
 	ArchiveThreshold time.Duration `yaml:"archive_threshold"`
 }
 
@@ -82,14 +106,14 @@ type GitCommitConfig struct {
 }
 
 type SyncConfig struct {
-	Enabled          bool                 `yaml:"enabled"`
-	AutoPush         bool                 `yaml:"auto_push"`
-	Interval         time.Duration        `yaml:"interval"`
-	ConflictStrategy string               `yaml:"conflict_strategy"`
-	BatchSize        int                  `yaml:"batch_size"`
-	GitHub           GitHubSyncConfig     `yaml:"github"`
-	Jira             JiraSyncConfig       `yaml:"jira"`
-	Linear           LinearSyncConfig     `yaml:"linear"`
+	Enabled          bool             `yaml:"enabled"`
+	AutoPush         bool             `yaml:"auto_push"`
+	Interval         time.Duration    `yaml:"interval"`
+	ConflictStrategy string           `yaml:"conflict_strategy"`
+	BatchSize        int              `yaml:"batch_size"`
+	GitHub           GitHubSyncConfig `yaml:"github"`
+	Jira             JiraSyncConfig   `yaml:"jira"`
+	Linear           LinearSyncConfig `yaml:"linear"`
 }
 
 func (s *SyncConfig) Validate() error {
@@ -100,11 +124,11 @@ func (s *SyncConfig) Validate() error {
 }
 
 type GitHubSyncConfig struct {
-	Enabled        bool   `yaml:"enabled"`
-	Repo           string `yaml:"repo"`
-	SyncDirection  string `yaml:"sync_direction"`
-	ImportLabels   bool   `yaml:"import_labels"`
-	ImportMilestones bool `yaml:"import_milestones"`
+	Enabled          bool   `yaml:"enabled"`
+	Repo             string `yaml:"repo"`
+	SyncDirection    string `yaml:"sync_direction"`
+	ImportLabels     bool   `yaml:"import_labels"`
+	ImportMilestones bool   `yaml:"import_milestones"`
 }
 
 type JiraSyncConfig struct {
@@ -136,12 +160,12 @@ func (s *StorageConfig) Validate() error {
 }
 
 type UIConfig struct {
-	Pager      string            `yaml:"pager"`
-	Editor     string            `yaml:"editor"`
-	DateFormat string            `yaml:"date_format"`
-	Timezone   string            `yaml:"timezone"`
-	TableStyle string            `yaml:"table_style"`
-	TagColors  map[string]string `yaml:"tag_colors"`
-	LogSortDirection   string            `yaml:"log_sort_direction"`
-	Theme      string            `yaml:"theme"`
+	Pager            string            `yaml:"pager"`
+	Editor           string            `yaml:"editor"`
+	DateFormat       string            `yaml:"date_format"`
+	Timezone         string            `yaml:"timezone"`
+	TableStyle       string            `yaml:"table_style"`
+	TagColors        map[string]string `yaml:"tag_colors"`
+	LogSortDirection string            `yaml:"log_sort_direction"`
+	Theme            string            `yaml:"theme"`
 }

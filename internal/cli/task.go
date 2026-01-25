@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
-	"github.com/google/oss-tlc-cli/internal/core"
-	"github.com/google/oss-tlc-cli/internal/plugin"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/plugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

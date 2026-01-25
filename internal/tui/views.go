@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/google/oss-tlc-cli/internal/core"
-	"github.com/google/oss-tlc-cli/internal/tui/styles"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/tui/styles"
 	"github.com/spf13/viper"
 )
 

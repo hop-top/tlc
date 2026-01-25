@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+// TestSyncCommands tests sync command configuration
+// Tests sync config, GitHub auto-configuration, and direction upgrades
 func TestSyncCommands(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "tlc-sync-test-*")
 	defer os.RemoveAll(tmpDir)

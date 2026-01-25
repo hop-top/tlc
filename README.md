@@ -269,6 +269,73 @@ You can use a local configuration file to override global settings:
 ./bin/tlc --config tlc-local.yaml task list
 ```
 
+### Multi-Clone Workflows
+TLC supports working with the same repository in multiple clones (different machines, worktrees, or branches). It automatically detects your project from git remote and provides flexible options for managing tasks across clones.
+
+**Automatic Project Detection:**
+
+When you run any TLC command in a clone without explicit configuration:
+```bash
+cd ~/repo-clone
+tlc task list
+# TLC detects project from git remote and tasks work correctly
+```
+
+**Choosing Between Shared or Isolated Tasks:**
+
+When running `tlc init` in a clone, you can choose how tasks are managed:
+
+```bash
+# Share tasks across all clones (default)
+tlc init --duplicate-id-strategy share
+
+# Isolate tasks for this clone
+tlc init --duplicate-id-strategy unique
+
+# Ask interactively
+tlc init --duplicate-id-strategy prompt
+```
+
+**Common Multi-Clone Scenarios:**
+
+- **Feature Branch Worktrees**: Isolated tasks per branch
+  ```bash
+  cd ~/main-repo
+  tlc init --duplicate-id-strategy unique
+  git worktree add ../feature-X feature-X
+  cd ../feature-X
+  tlc init --duplicate-id-strategy unique  # Isolated tasks
+  ```
+
+- **Multiple Machines**: Shared tasks across devices
+  ```bash
+  # Machine A (work laptop)
+  tlc init --duplicate-id-strategy share
+
+  # Machine B (home computer)
+  tlc init --duplicate-id-strategy share  # Same tasks
+  ```
+
+- **CI/CD Environments**: Auto-detect without config files
+  ```bash
+  export TLC_PROJECT_FALLBACK_MODE=detected
+  tlc task list  # Works in CI without .tlc directory
+  ```
+
+For detailed multi-clone setup guides, see:
+- [Project Detection](docs/project-detection.md) - How TLC detects projects automatically
+- [Multi-Clone Setup](docs/multi-clone-setup.md) - Strategies for shared vs isolated tasks
+
+**Configuration Reference:**
+
+Add to your `.tlc/config.yaml`:
+```yaml
+project:
+  id: "user/my-repo"              # Auto-detected from git remote
+  fallback_mode: "auto"            # auto, detected, or prompt
+  duplicate_id_strategy: "share"     # share, unique, or prompt
+```
+
 ## 📝 Task Line Syntax (TLS)
 Tasks are stored in a canonical single-line format:
 `[status] <ID> <Title> @assignee #tag prio:<P> domain:<D> ref:<R>`

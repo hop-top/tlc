@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 )
 
 func BenchmarkSQLiteStorage_ListTasks(b *testing.B) {

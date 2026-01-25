@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/spf13/viper"
 )
 

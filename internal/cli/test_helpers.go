@@ -29,12 +29,14 @@ func newTestInitCmd() *cobra.Command {
 	storageBackend := "sqlite"
 	dbPath := ""
 	force := false
+	fallbackMode := ""
+	duplicateIDStrategy := ""
 
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize TLC in current directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInit(cmd, &storageBackend, &dbPath, &force)
+			return runInit(cmd, &storageBackend, &dbPath, &force, &fallbackMode, &duplicateIDStrategy)
 		},
 	}
 
@@ -43,6 +45,8 @@ func newTestInitCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
 	cmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")
 	cmd.Flags().Bool("no-track", false, "Do not add .tlc/ to .gitignore")
+	cmd.Flags().StringVar(&fallbackMode, "fallback-mode", "", "Project fallback mode: auto, detected, prompt (default: auto)")
+	cmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: share)")
 
 	return cmd
 }

@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// TestProjectScoping_E2E runs comprehensive end-to-end tests for project scoping
+// Tests task ID uniqueness across projects, filtering, sequences, updates, deletes, and logs
 func TestProjectScoping_E2E(t *testing.T) {
 	ctx := context.Background()
 
@@ -29,6 +31,8 @@ func TestProjectScoping_E2E(t *testing.T) {
 	proj2ID := "org/project2"
 
 	t.Run("Tasks with same ID can exist in different projects", func(t *testing.T) {
+		t.Logf("Creates tasks with identical IDs (T-0001) in different projects")
+		t.Logf("Verifies both can coexist in the database")
 		task1 := &core.Task{
 			ID:        "T-0001",
 			ProjectID: &proj1ID,
@@ -62,6 +66,8 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("ListTasks filters by project_id", func(t *testing.T) {
+		t.Logf("Verifies that when AllProjects=false, tasks are filtered by project context")
+		t.Logf("Verifies that when no project context, all tasks are returned")
 		query := core.Query{}
 		tasks, err := s.ListTasks(ctx, query)
 		require.NoError(t, err)
@@ -71,6 +77,8 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("GetNextSequenceID increments per project", func(t *testing.T) {
+		t.Logf("Tests that task ID sequences are independent per project")
+		t.Logf("Project A gets T-0001, T-0002; Project B gets T-0001, T-0002")
 		// Simulate being in project1
 		id1, err := s.GetNextSequenceID(ctx, proj1ID)
 		require.NoError(t, err)
@@ -91,6 +99,8 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("Default project gets separate sequence", func(t *testing.T) {
+		t.Logf("Tasks without a project_id (nil) use 'default' project")
+		t.Logf("Sequence increments independently")
 		id1, err := s.GetNextSequenceID(ctx, "")
 		require.NoError(t, err)
 		assert.Equal(t, 1, id1)
@@ -101,6 +111,7 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("Update preserves project_id", func(t *testing.T) {
+		t.Logf("Updates to existing tasks maintain their project_id")
 		task := &core.Task{
 			ID:        "T-0002",
 			ProjectID: &proj1ID,
@@ -129,6 +140,7 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("Delete works with project_id constraint", func(t *testing.T) {
+		t.Logf("Composite primary key (project_id, id) is respected")
 		task := &core.Task{
 			ID:        "T-0003",
 			ProjectID: &proj1ID,
@@ -150,6 +162,7 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("Logs inherit project_id from task", func(t *testing.T) {
+		t.Logf("Log entries automatically get the same project_id as their task")
 		task := &core.Task{
 			ID:        "T-0004",
 			ProjectID: &proj1ID,
@@ -181,6 +194,8 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 }
 
+// TestProjectScoping_TODOFileSync tests TODO file synchronization with project scoping
+// Verifies project-specific todo.txt filtering
 func TestProjectScoping_TODOFileSync(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -201,6 +216,8 @@ func TestProjectScoping_TODOFileSync(t *testing.T) {
 	proj1ID := "org/project1"
 
 	t.Run("syncToProjectTODO only exports project tasks", func(t *testing.T) {
+		t.Logf("Local .tlc/todo.txt contains only tasks for the current project")
+		t.Logf("Tasks from other projects are excluded")
 		task1 := &core.Task{
 			ID:        "T-0001",
 			ProjectID: &proj1ID,
@@ -253,6 +270,11 @@ func TestProjectScoping_TODOFileSync(t *testing.T) {
 }
 
 func TestProjectScoping_Migration(t *testing.T) {
+	t.Logf("Verifies that migration 7 successfully:")
+	t.Logf("1. Creates tasks_new table with composite primary key (project_id, id)")
+	t.Logf("2. Migrates existing data with COALESCE(project_id, 'default')")
+	t.Logf("3. Drops old table and renames new table")
+	t.Logf("4. Rebuilds indexes")
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test_migrate.db")
 

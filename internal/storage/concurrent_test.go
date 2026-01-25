@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 )
 
-// TestConcurrentTaskCreation simulates multiple agents creating tasks simultaneously
-// This test reproduces the "UNIQUE constraint failed: tasks.id" bug
+// TestConcurrentTaskCreation verifies UNIQUE constraint on composite key (project_id, id)
+// Multiple agents trying to create same task in same project = constraint error
+// Same task ID in different projects = success
 func TestConcurrentTaskCreation(t *testing.T) {
 	dbPath := "test_concurrent.db"
 	defer os.Remove(dbPath)
@@ -83,6 +84,7 @@ func TestConcurrentTaskCreation(t *testing.T) {
 }
 
 // TestConcurrentFlowExecution simulates multiple parallel steps accessing tasks
+// Verifies concurrent updates don't cause data corruption or lost updates
 func TestConcurrentFlowExecution(t *testing.T) {
 	dbPath := "test_flow_concurrent.db"
 	defer os.Remove(dbPath)
@@ -168,6 +170,7 @@ func TestConcurrentFlowExecution(t *testing.T) {
 }
 
 // TestSyncIngest simulates the ingestTODO scenario with concurrent sync
+// Tests race condition where two agents read TODO and try to create same task
 func TestSyncIngest(t *testing.T) {
 	dbPath := "test_sync_ingest.db"
 	defer os.Remove(dbPath)

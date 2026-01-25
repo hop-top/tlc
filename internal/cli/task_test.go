@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/spf13/viper"
 )
 
+// TestTaskCommands tests task CRUD operations through CLI
+// Tests create, list, update, show, and delete task commands
 func TestTaskCommands(t *testing.T) {
 	// Setup temporary directory for test
 	tmpDir, err := os.MkdirTemp("", "tlc-test-*")

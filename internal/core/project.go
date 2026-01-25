@@ -1,13 +1,17 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type ProjectDetection struct {
@@ -25,19 +29,16 @@ func DetectProject() *ProjectDetection {
 	}
 
 	configPath := viper.ConfigFileUsed()
+
 	if configPath == "" {
-		return &ProjectDetection{
-			InProject: false,
-		}
+		return handleFallbackMode()
 	}
 
 	dotTlcDir := filepath.Dir(configPath)
 	tlcConfigPath := filepath.Join(dotTlcDir, "config.yaml")
 
 	if _, err := os.Stat(tlcConfigPath); os.IsNotExist(err) {
-		return &ProjectDetection{
-			InProject: false,
-		}
+		return handleFallbackMode()
 	}
 
 	viper.SetConfigFile(tlcConfigPath)
@@ -63,7 +64,7 @@ func DetectProject() *ProjectDetection {
 }
 
 func detectProjectID() string {
-	if detected := detectFromGitRemote(); detected != "" {
+	if detected := DetectFromGitRemote(); detected != "" {
 		return detected
 	}
 	if detected := detectFromGitConfig(); detected != "" {
@@ -75,7 +76,7 @@ func detectProjectID() string {
 	return "unknown"
 }
 
-func detectFromGitRemote() string {
+func DetectFromGitRemote() string {
 	cmd := exec.Command("git", "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err != nil {
@@ -148,4 +149,104 @@ func detectFromDirectory() string {
 	}
 
 	return "unknown"
+}
+
+func handleFallbackMode() *ProjectDetection {
+	mode := viper.GetString("project.fallback_mode")
+	if mode == "" {
+		mode = "auto"
+	}
+
+	inferredID := DetectFromGitRemote()
+	if inferredID == "" {
+		return &ProjectDetection{InProject: false}
+	}
+
+	switch mode {
+	case "auto":
+		if err := createConfigWithInferredID(inferredID); err == nil {
+			return &ProjectDetection{
+				ProjectID:  inferredID,
+				ConfigPath: ".tlc/config.yaml",
+				InProject:  true,
+			}
+		}
+		return &ProjectDetection{
+			ProjectID:  inferredID,
+			ConfigPath: "",
+			InProject:  true,
+		}
+
+	case "detected":
+		return &ProjectDetection{
+			ProjectID:  inferredID,
+			ConfigPath: "",
+			InProject:  true,
+		}
+
+	case "prompt":
+		choice, err := promptFallbackMode(inferredID)
+		if err != nil || choice == "auto" {
+			if createErr := createConfigWithInferredID(inferredID); createErr == nil {
+				return &ProjectDetection{
+					ProjectID:  inferredID,
+					ConfigPath: ".tlc/config.yaml",
+					InProject:  true,
+				}
+			}
+		}
+		return &ProjectDetection{
+			ProjectID:  inferredID,
+			ConfigPath: "",
+			InProject:  true,
+		}
+
+	default:
+		return &ProjectDetection{InProject: false}
+	}
+}
+
+func createConfigWithInferredID(projectID string) error {
+	if err := os.MkdirAll(".tlc", 0755); err != nil {
+		return err
+	}
+
+	config := map[string]interface{}{
+		"version": 0.1,
+		"project": map[string]interface{}{
+			"id": projectID,
+		},
+	}
+
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(".tlc/config.yaml", data, 0644); err != nil {
+		return err
+	}
+
+	log.Info("Detected project from git remote, created .tlc/config.yaml", "project_id", projectID)
+	return nil
+}
+
+func promptFallbackMode(projectID string) (string, error) {
+	var choice string
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(fmt.Sprintf("Detected project '%s' from git remote", projectID)).
+				Description("How should TLC handle project detection?").
+				Options(
+					huh.NewOption("Create config file (recommended)", "auto"),
+					huh.NewOption("Use detected mode without config", "detected"),
+				).
+				Value(&choice),
+		),
+	)
+
+	err := form.Run()
+	return choice, err
 }

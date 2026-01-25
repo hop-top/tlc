@@ -8,11 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// TestGitHubSync_ProjectScoping tests GitHub sync with project scoping
+// Simulates sync pull assigning project_id to tasks from GitHub
+// Verifies tasks appear in correct project context when listed
 func TestGitHubSync_ProjectScoping(t *testing.T) {
 	ctx := context.Background()
 	tempDir := t.TempDir()
@@ -44,6 +47,10 @@ storage:
 	now := time.Now()
 
 	t.Run("Simulated sync pull assigns project_id to tasks", func(t *testing.T) {
+		t.Logf("Creates tasks with GitHub-style IDs (GH-100, GH-101, etc.)")
+		t.Logf("Assigns project_id before creating (simulating sync pull behavior)")
+		t.Logf("Verifies all tasks have correct project_id set")
+		t.Logf("Verifies OriginSystem is set to 'github'")
 		// Simulate tasks returned from GitHub sync pull
 		// These are what to sync plugin would return
 		githubTasks := []core.Task{
@@ -129,6 +136,9 @@ storage:
 	})
 
 	t.Run("Task list in project context shows synced tasks", func(t *testing.T) {
+		t.Logf("Lists tasks with AllProjects=false (simulating CLI in project)")
+		t.Logf("Verifies only tasks with matching project_id are returned")
+		t.Logf("Confirms all GitHub-synced tasks appear")
 		// Change to project directory
 		oldCwd, _ := os.Getwd()
 		defer os.Chdir(oldCwd)
@@ -154,6 +164,10 @@ storage:
 	})
 
 	t.Run("Task list with all-projects shows all tasks", func(t *testing.T) {
+		t.Logf("Creates tasks in a different project")
+		t.Logf("Lists with AllProjects=true")
+		t.Logf("Verifies tasks from both projects appear")
+		t.Logf("Confirms project counts are correct")
 		// Create a task in a different project
 		otherProjID := "other-org/different-project"
 		otherTask := &core.Task{
@@ -187,6 +201,9 @@ storage:
 	})
 
 	t.Run("Task list outside project context shows all tasks", func(t *testing.T) {
+		t.Logf("Changes to directory without .tlc")
+		t.Logf("Lists tasks (no project filter applied)")
+		t.Logf("Verifies all tasks from all projects are returned")
 		// Change to a directory without .tlc (simulating being outside project)
 		oldCwd, _ := os.Getwd()
 		defer os.Chdir(oldCwd)
@@ -201,6 +218,9 @@ storage:
 	})
 }
 
+// TestGitHubSync_MultipleProjects tests GitHub sync across multiple projects
+// Verifies same GitHub issue ID can exist in different projects
+// Verifies each project only sees its own tasks
 func TestGitHubSync_MultipleProjects(t *testing.T) {
 	ctx := context.Background()
 	tempDir := t.TempDir()
@@ -244,6 +264,10 @@ storage:
 	now := time.Now()
 
 	t.Run("Same GitHub issue ID can exist in different projects", func(t *testing.T) {
+		t.Logf("Simulates GitHub sync pull for two different projects")
+		t.Logf("Both have issue #50 (same GitHub ID)")
+		t.Logf("Verifies both tasks can coexist in database")
+		t.Logf("Verifies they have different project_id values")
 		// Simulate GitHub sync pull for project1
 		oldCwd, _ := os.Getwd()
 		defer os.Chdir(oldCwd)
@@ -302,6 +326,9 @@ storage:
 	})
 
 	t.Run("Each project lists only its own tasks", func(t *testing.T) {
+		t.Logf("Lists tasks for project1, filters by project1's project_id")
+		t.Logf("Lists tasks for project2, filters by project2's project_id")
+		t.Logf("Verifies each project sees only its tasks")
 		// Test manual filtering by project_id
 		// This simulates what ListTasks does when in a project context
 
@@ -334,6 +361,8 @@ storage:
 	})
 }
 
+// TestGitHubSync_TaskUpdatePreservesProjectID tests sync updates preserve project scoping
+// Verifies project_id is preserved when GitHub sync updates task properties
 func TestGitHubSync_TaskUpdatePreservesProjectID(t *testing.T) {
 	ctx := context.Background()
 	tempDir := t.TempDir()
@@ -362,6 +391,11 @@ storage:
 	githubSystem := "github"
 
 	t.Run("Task update from sync preserves project_id", func(t *testing.T) {
+		t.Logf("Creates task from GitHub sync")
+		t.Logf("Simulates sync pull updating the task (title, description, status)")
+		t.Logf("Updates task in database")
+		t.Logf("Verifies project_id is preserved after update")
+		t.Logf("Verifies all other fields were updated correctly")
 		// Create task from GitHub
 		task := &core.Task{
 			ID:           "GH-200",

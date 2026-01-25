@@ -4,9 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 )
 
+// TestFormatFlowStatus tests flow status formatting
+// Verifies all flow statuses are formatted correctly and contain status text
 func TestFormatFlowStatus(t *testing.T) {
 	tests := []struct {
 		status core.FlowStatus

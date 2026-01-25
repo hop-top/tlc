@@ -5,9 +5,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/google/oss-tlc-cli/internal/core"
-	"github.com/google/oss-tlc-cli/internal/tui/styles"
-	"github.com/google/oss-tlc-cli/pkg/themepicker"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/tui/styles"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/pkg/themepicker"
 	"github.com/spf13/viper"
 )
 
