@@ -19,15 +19,26 @@ type Request struct {
 }
 
 type SyncPullParams struct {
-	URL         string `json:"url"`
-	Project     string `json:"project"`
-	LastSyncAt  string `json:"last_sync_at,omitempty"`
+	URL        string `json:"url"`
+	Project    string `json:"project"`
+	LastSyncAt string `json:"last_sync_at,omitempty"`
 }
 
 type SyncPushParams struct {
 	URL   string `json:"url"`
-	Repo  string `json:"repo"` // This is usually the project key in Jira
+	Repo  string `json:"repo"` // This is usually be project key in Jira
 	Tasks []Task `json:"tasks"`
+}
+
+type SyncDeleteParams struct {
+	URL   string `json:"url"`
+	Repo  string `json:"repo"` // This is usually be project key in Jira
+	Tasks []Task `json:"tasks"`
+}
+
+type SyncDeleteResult struct {
+	Deleted []string          `json:"deleted"`
+	Failed  map[string]string `json:"failed"`
 }
 
 type SyncPushResult struct {
@@ -90,6 +101,22 @@ func handleRequest(req Request) Response {
 		}
 
 		result, err := pushToJira(params.URL, params.Repo, params.Tasks)
+		if err != nil {
+			return Response{JSONRPC: "2.0", Error: &Error{Code: -32603, Message: err.Error()}, ID: req.ID}
+		}
+
+		return Response{
+			JSONRPC: "2.0",
+			Result:  result,
+			ID:      req.ID,
+		}
+	case "sync.delete":
+		var params SyncDeleteParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return Response{JSONRPC: "2.0", Error: &Error{Code: -32602, Message: "Invalid params"}, ID: req.ID}
+		}
+
+		result, err := deleteFromJira(params.URL, params.Repo, params.Tasks)
 		if err != nil {
 			return Response{JSONRPC: "2.0", Error: &Error{Code: -32603, Message: err.Error()}, ID: req.ID}
 		}
@@ -217,9 +244,9 @@ func createJiraIssue(client *jira.Client, projectKey string, task *Task) error {
 	task.Meta["origin_system"] = "jira"
 	task.Meta["origin_id"] = newIssue.ID
 	task.Meta["origin_key"] = newIssue.Key
-	// origin_url update is handled by the caller/CLI if needed, 
+	// origin_url update is handled by the caller/CLI if needed,
 	// or we can set it here if we have the base URL.
-	
+
 	return nil
 }
 
@@ -268,6 +295,51 @@ func transitionJiraIssue(client *jira.Client, issueID string, status string) err
 	}
 
 	return nil // Transition not found or not allowed
+}
+
+func deleteFromJira(url, projectKey string, tasks []Task) (*SyncDeleteResult, error) {
+	email := os.Getenv("JIRA_EMAIL")
+	token := os.Getenv("JIRA_TOKEN")
+	if email == "" || token == "" {
+		return nil, fmt.Errorf("JIRA_EMAIL or JIRA_TOKEN not set")
+	}
+
+	tp := jira.BasicAuthTransport{
+		Username: email,
+		Password: token,
+	}
+
+	client, err := jira.NewClient(tp.Client(), url)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &SyncDeleteResult{
+		Deleted: []string{},
+		Failed:  make(map[string]string),
+	}
+
+	for _, task := range tasks {
+		originID, ok := task.Meta["origin_id"].(string)
+		if !ok || originID == "" {
+			result.Failed[task.ID] = "origin_id missing"
+			continue
+		}
+
+		err := deleteJiraIssue(client, originID)
+		if err != nil {
+			result.Failed[task.ID] = err.Error()
+		} else {
+			result.Deleted = append(result.Deleted, task.ID)
+		}
+	}
+
+	return result, nil
+}
+
+func deleteJiraIssue(client *jira.Client, issueID string) error {
+	_, err := client.Issue.Delete(issueID)
+	return err
 }
 
 func sendResponse(resp Response) {

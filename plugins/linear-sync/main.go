@@ -19,13 +19,23 @@ type Request struct {
 }
 
 type SyncPullParams struct {
-	Repo        string `json:"repo"`
-	LastSyncAt  string `json:"last_sync_at,omitempty"`
+	Repo       string `json:"repo"`
+	LastSyncAt string `json:"last_sync_at,omitempty"`
 }
 
 type SyncPushParams struct {
 	Repo  string `json:"repo"` // Team name
 	Tasks []Task `json:"tasks"`
+}
+
+type SyncDeleteParams struct {
+	Repo  string `json:"repo"` // Team name
+	Tasks []Task `json:"tasks"`
+}
+
+type SyncDeleteResult struct {
+	Deleted []string          `json:"deleted"`
+	Failed  map[string]string `json:"failed"`
 }
 
 type SyncPushResult struct {
@@ -89,6 +99,23 @@ func handleRequest(req Request) Response {
 
 		teamName := params.Repo
 		result, err := pushToLinear(teamName, params.Tasks)
+		if err != nil {
+			return Response{JSONRPC: "2.0", Error: &Error{Code: -32603, Message: err.Error()}, ID: req.ID}
+		}
+
+		return Response{
+			JSONRPC: "2.0",
+			Result:  result,
+			ID:      req.ID,
+		}
+	case "sync.delete":
+		var params SyncDeleteParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return Response{JSONRPC: "2.0", Error: &Error{Code: -32602, Message: "Invalid params"}, ID: req.ID}
+		}
+
+		teamName := params.Repo
+		result, err := deleteFromLinear(teamName, params.Tasks)
 		if err != nil {
 			return Response{JSONRPC: "2.0", Error: &Error{Code: -32603, Message: err.Error()}, ID: req.ID}
 		}
@@ -222,7 +249,7 @@ func pushToLinear(teamName string, tasks []Task) (*SyncPushResult, error) {
 	teamReq.Header.Set("Authorization", apiKey)
 	var teamResp struct {
 		Teams struct {
-			Nodes []struct { ID string } `json:"nodes"`
+			Nodes []struct{ ID string } `json:"nodes"`
 		} `json:"teams"`
 	}
 	if err := client.Run(ctx, teamReq, &teamResp); err != nil {
@@ -328,6 +355,64 @@ func updateLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issu
 	}
 	if !resp.IssueUpdate.Success {
 		return fmt.Errorf("issue update failed")
+	}
+	return nil
+}
+
+func deleteFromLinear(teamName string, tasks []Task) (*SyncDeleteResult, error) {
+	apiKey := os.Getenv("LINEAR_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("LINEAR_API_KEY not set")
+	}
+
+	client := graphql.NewClient("https://api.linear.app/graphql")
+	ctx := context.Background()
+
+	result := &SyncDeleteResult{
+		Deleted: []string{},
+		Failed:  make(map[string]string),
+	}
+
+	for _, task := range tasks {
+		originID, ok := task.Meta["origin_id"].(string)
+		if !ok || originID == "" {
+			result.Failed[task.ID] = "origin_id missing"
+			continue
+		}
+
+		err := deleteLinearIssue(client, ctx, apiKey, originID)
+		if err != nil {
+			result.Failed[task.ID] = err.Error()
+		} else {
+			result.Deleted = append(result.Deleted, task.ID)
+		}
+	}
+
+	return result, nil
+}
+
+func deleteLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issueID string) error {
+	req := graphql.NewRequest(`
+		mutation($id: String!) {
+			issueDelete(id: $id) {
+				success
+			}
+		}
+	`)
+	req.Var("id", issueID)
+	req.Header.Set("Authorization", apiKey)
+
+	var resp struct {
+		IssueDelete struct {
+			Success bool
+		}
+	}
+
+	if err := client.Run(ctx, req, &resp); err != nil {
+		return err
+	}
+	if !resp.IssueDelete.Success {
+		return fmt.Errorf("issue deletion failed")
 	}
 	return nil
 }

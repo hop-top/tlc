@@ -30,6 +30,11 @@ type SyncPushParams struct {
 	Tasks []Task `json:"tasks"`
 }
 
+type SyncDeleteParams struct {
+	Repo  string `json:"repo"`
+	Tasks []Task `json:"tasks"`
+}
+
 type Response struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Result  interface{} `json:"result,omitempty"`
@@ -129,6 +134,38 @@ func handleRequest(req Request) Response {
 			JSONRPC: "2.0",
 			Result: map[string]interface{}{
 				"updated": updated,
+				"failed":  failed,
+			},
+			ID: req.ID,
+		}
+	case "sync.delete":
+		var params SyncDeleteParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return Response{
+				JSONRPC: "2.0",
+				Error: &Error{
+					Code:    -32602,
+					Message: "Invalid params",
+				},
+				ID: req.ID,
+			}
+		}
+
+		deleted := []string{}
+		failed := map[string]string{}
+		for _, task := range params.Tasks {
+			err := deleteGitHubIssue(params.Repo, &task)
+			if err != nil {
+				failed[task.ID] = err.Error()
+			} else {
+				deleted = append(deleted, task.ID)
+			}
+		}
+
+		return Response{
+			JSONRPC: "2.0",
+			Result: map[string]interface{}{
+				"deleted": deleted,
 				"failed":  failed,
 			},
 			ID: req.ID,
@@ -271,6 +308,42 @@ func updateGitHubIssue(repoFull string, task *Task) error {
 	client := github.NewClient(tc)
 
 	req := MapTaskToGitHubIssueRequest(task)
+	_, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req)
+	return err
+}
+
+func deleteGitHubIssue(repoFull string, task *Task) error {
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
+	}
+
+	parts := strings.Split(repoFull, "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid repo format")
+	}
+	owner, repo := parts[0], parts[1]
+
+	originIDStr, ok := task.Meta["origin_id"].(string)
+	if !ok {
+		return fmt.Errorf("origin_id missing or not a string")
+	}
+
+	var issueNumber int
+	if _, err := fmt.Sscanf(originIDStr, "%d", &issueNumber); err != nil {
+		return fmt.Errorf("invalid origin_id: %w", err)
+	}
+
+	ctx := context.Background()
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	tc := oauth2.NewClient(ctx, ts)
+	client := github.NewClient(tc)
+
+	closed := "closed"
+	req := &github.IssueRequest{
+		State: &closed,
+	}
+
 	_, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req)
 	return err
 }

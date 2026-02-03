@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/log"
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/plugin"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -98,6 +98,45 @@ func updateSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, 
 	}
 
 	fmt.Printf("✓ Task %s synced to %s\n", task.ID, system)
+	return nil
+}
+
+func deleteSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, s core.Repository) error {
+	if task.OriginSystem == nil || *task.OriginSystem == "" {
+		return fmt.Errorf("task does not have an origin system")
+	}
+
+	system := *task.OriginSystem
+	fmt.Printf("Deleting task %s from %s...\n", task.ID, system)
+
+	binPath := getPluginPath(system)
+	client, err := plugin.NewRPCClient(binPath)
+	if err != nil {
+		return fmt.Errorf("failed to start plugin %s: %w", system, err)
+	}
+	defer client.Close()
+
+	params := map[string]interface{}{
+		"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
+		"tasks": []core.Task{*task},
+	}
+
+	var result struct {
+		Deleted []string          `json:"deleted"`
+		Failed  map[string]string `json:"failed"`
+	}
+
+	if err := client.Call("sync.delete", params, &result); err != nil {
+		return fmt.Errorf("sync delete RPC failed: %w", err)
+	}
+
+	if len(result.Failed) > 0 {
+		if errMsg, ok := result.Failed[task.ID]; ok {
+			return fmt.Errorf("failed to delete from %s: %s", system, errMsg)
+		}
+	}
+
+	fmt.Printf("✓ Task %s deleted from %s\n", task.ID, system)
 	return nil
 }
 
@@ -617,6 +656,12 @@ var taskDeleteCmd = &cobra.Command{
 			if !confirm {
 				fmt.Println("Aborted")
 				return nil
+			}
+		}
+
+		if task.OriginSystem != nil && *task.OriginSystem != "" {
+			if err := deleteSyncedTask(cmd, ctx, task, s); err != nil {
+				return err
 			}
 		}
 
