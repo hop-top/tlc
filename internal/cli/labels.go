@@ -12,17 +12,17 @@ var (
 	projectType string
 )
 
-var labelsCmd = &cobra.Command{
-	Use:   "labels",
+var labelCmd = &cobra.Command{
+	Use:   "label",
 	Short: "Manage project labels",
 }
 
-var labelsInitCmd = &cobra.Command{
+var labelInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Auto-detect and initialize project labels",
 	Run: func(cmd *cobra.Command, args []string) {
 		wd, _ := os.Getwd()
-		
+
 		var pType labels.ProjectType
 		if projectType != "" {
 			pType = labels.ProjectType(projectType)
@@ -31,7 +31,7 @@ var labelsInitCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Detected project type: %s\n", pType)
-		
+
 		templates := labels.GetTemplates(pType)
 		fmt.Printf("Suggested labels for %s:\n", pType)
 		for _, l := range templates {
@@ -42,7 +42,7 @@ var labelsInitCmd = &cobra.Command{
 	},
 }
 
-var labelsListCmd = &cobra.Command{
+var labelListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List labels in the current project",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -51,7 +51,7 @@ var labelsListCmd = &cobra.Command{
 	},
 }
 
-var labelsTemplatesCmd = &cobra.Command{
+var labelTemplatesCmd = &cobra.Command{
 	Use:   "templates",
 	Short: "List available label templates",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -73,10 +73,10 @@ var labelsTemplatesCmd = &cobra.Command{
 }
 
 func init() {
-	labelsInitCmd.Flags().StringVar(&projectType, "type", "", "Force project type")
-	
-	labelsCmd.AddCommand(labelsInitCmd)
-	labelsCmd.AddCommand(labelsListCmd)
-	labelsCmd.AddCommand(labelsTemplatesCmd)
-	rootCmd.AddCommand(labelsCmd)
+	labelInitCmd.Flags().StringVar(&projectType, "type", "", "Force project type")
+
+	labelCmd.AddCommand(labelInitCmd)
+	labelCmd.AddCommand(labelListCmd)
+	labelCmd.AddCommand(labelTemplatesCmd)
+	rootCmd.AddCommand(labelCmd)
 }
