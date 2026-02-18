@@ -128,6 +128,33 @@ pre-commit-install: ## Install pre-commit hooks
 verify: lint test ## Run linting and tests (CI-like checks)
 	@echo "$(COLOR_GREEN)✓ All verification checks passed$(COLOR_RESET)"
 
+docs-links: ## Check documentation internal links using lychee
+	@echo "$(COLOR_BLUE)Checking documentation links...$(COLOR_RESET)"
+	@if ! command -v lychee >/dev/null 2>&1; then \
+		echo "$(COLOR_YELLOW)⚠ 'lychee' not found. Install with: cargo install lychee$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@lychee --config .lychee.toml docs/ 2>&1 | { \
+		if grep -q "🚫"; then \
+			echo "$(COLOR_YELLOW)⚠ Documentation link issues found (see above)$(COLOR_RESET)"; \
+			exit 1; \
+		else \
+			echo "$(COLOR_GREEN)✓ All documentation links valid$(COLOR_RESET)"; \
+		fi; \
+	}
+
+docs-links-offline: ## Check documentation internal links (offline mode - excludes external URLs)
+	@echo "$(COLOR_BLUE)Checking documentation links (offline mode)...$(COLOR_RESET)"
+	@if ! command -v lychee >/dev/null 2>&1; then \
+		echo "$(COLOR_YELLOW)⚠ 'lychee' not found. Install with: cargo install lychee$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@lychee --offline --config .lychee.toml docs/ || { \
+		echo "$(COLOR_YELLOW)⚠ Some internal documentation links are broken$(COLOR_RESET)"; \
+		exit 1; \
+	}
+	@echo "$(COLOR_GREEN)✓ All internal documentation links valid$(COLOR_RESET)"
+
 # Development shorthand aliases
 .PHONY: w wl wt
 w: watch       ## Alias for watch

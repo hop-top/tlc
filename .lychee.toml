@@ -1,0 +1,50 @@
+# Lychee configuration for documentation link checking
+# https://github.com/lycheeverse/lychee
+
+# Timeout for network requests in seconds
+timeout = 10
+
+# Maximum number of concurrent requests
+max_concurrency = 5
+
+# Retry failed requests
+max_retries = 2
+
+# Cache configuration
+cache = true
+max_cache_age = "1h"
+
+# Exclude patterns - paths to exclude from checking
+exclude_path = [
+    ".git",
+    "node_modules",
+    "vendor",
+    ".worktrees",
+    "bin",
+    "tmp",
+    "coverage"
+]
+
+# Exclude link patterns - URLs/patterns to skip
+exclude = [
+    # Skip localhost URLs
+    "http://localhost.*",
+    "127.0.0.1.*",
+    # Skip placeholder/template URLs
+    "https://example.com.*",
+    "http://example.com.*",
+    # Skip development URLs
+    "file://.*"
+]
+
+# Include file extensions to check
+extensions = [
+    "md",
+    "markdown"
+]
+
+# User agent for HTTP requests
+user_agent = "Mozilla/5.0 (compatible; Lychee-DocumentationChecker)"
+
+# Skip missing resources (for internal-only docs)
+skip_missing = false
