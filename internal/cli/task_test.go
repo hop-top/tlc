@@ -3,9 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/spf13/viper"
@@ -525,6 +527,572 @@ func TestTaskCommands(t *testing.T) {
 		}
 		if contains(output, "Other's task") {
 			t.Error("did not expect 'Other's task' in output (filtered by current user)")
+		}
+	})
+
+	t.Run("ListTasksJSONFormat", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "JSON test task",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--format", "json"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with --format json failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "\"id\"") {
+			t.Error("expected JSON output with 'id' field")
+		}
+		if !contains(output, "\"title\"") {
+			t.Error("expected JSON output with 'title' field")
+		}
+	})
+
+	t.Run("ListTasksYAMLFormat", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "YAML test task",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--format", "yaml"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with --format yaml failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "id:") {
+			t.Error("expected YAML output with 'id:' field")
+		}
+		if !contains(output, "title:") {
+			t.Error("expected YAML output with 'title:' field")
+		}
+	})
+
+	t.Run("ListTasksTLSFormat", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		assignee := "testuser"
+		task := &core.Task{
+			ID:         "T-0001",
+			Title:      "TLS test task",
+			Status:     core.StatusTodo,
+			AssignedTo: &assignee,
+			Tags:       []string{"bug", "urgent"},
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--format", "tls"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with --format tls failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "[TODO]") {
+			t.Error("expected TLS format with [status] bracket")
+		}
+		if !contains(output, "@testuser") {
+			t.Error("expected TLS format with @assignee")
+		}
+		if !contains(output, "#bug") {
+			t.Error("expected TLS format with #tag")
+		}
+	})
+
+	t.Run("ShowTaskWithLogs", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "Show logs test",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001", "--logs"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task show with --logs failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "Show logs test") {
+			t.Error("expected task title in output")
+		}
+		if !contains(output, "Logs") || !contains(output, "CREATED") {
+			t.Error("expected logs section with CREATED entry")
+		}
+	})
+
+	t.Run("DeleteTaskInteractiveConfirmation", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "Delete confirm test",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "delete", "T-0001"})
+
+		if err := cmd.Execute(); err == nil {
+			t.Error("expected error or prompt for interactive delete, got nil")
+		}
+	})
+
+	t.Run("ListTasksPagination", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		for i := 1; i <= 15; i++ {
+			task := &core.Task{
+				ID:     fmt.Sprintf("T-%04d", i),
+				Title:  fmt.Sprintf("Task %d", i),
+				Status: core.StatusTodo,
+			}
+			s.CreateTask(ctx, task)
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--limit", "10", "--offset", "5"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with pagination failed: %v", err)
+		}
+
+		output := buf.String()
+		taskCount := 0
+		for i := 6; i <= 15; i++ {
+			if contains(output, fmt.Sprintf("Task %d", i)) {
+				taskCount++
+			}
+		}
+		if taskCount != 10 {
+			t.Errorf("expected 10 tasks (6-15), got %d", taskCount)
+		}
+	})
+
+	t.Run("ListTasksSort", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task1 := &core.Task{
+			ID:        "T-0001",
+			Title:     "Task A",
+			Status:    core.StatusTodo,
+			CreatedAt: time.Now().Add(-2 * time.Hour),
+		}
+		task2 := &core.Task{
+			ID:        "T-0002",
+			Title:     "Task B",
+			Status:    core.StatusTodo,
+			CreatedAt: time.Now().Add(-1 * time.Hour),
+		}
+		s.CreateTask(ctx, task1)
+		s.CreateTask(ctx, task2)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--sort-by", "created_at", "--sort-direction", "asc"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with sort failed: %v", err)
+		}
+
+		output := buf.String()
+		taskAPos := bytes.Index([]byte(output), []byte("Task A"))
+		taskBpos := bytes.Index([]byte(output), []byte("Task B"))
+		if taskAPos == -1 || taskBpos == -1 {
+			t.Fatal("tasks not found in output")
+		}
+		if taskAPos > taskBpos {
+			t.Error("expected Task A before Task B (ascending by created_at)")
+		}
+	})
+
+	t.Run("ListTasksFullTextSearch", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task1 := &core.Task{
+			ID:     "T-0001",
+			Title:  "Search match task",
+			Status: core.StatusTodo,
+		}
+		task2 := &core.Task{
+			ID:     "T-0002",
+			Title:  "No match task",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task1)
+		s.CreateTask(ctx, task2)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "Search match"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with search term failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "Search match task") {
+			t.Error("expected matching task in output")
+		}
+		if contains(output, "No match task") {
+			t.Error("did not expect non-matching task in output")
+		}
+	})
+
+	t.Run("ListTasksAllProjects", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		project1 := "project-alpha"
+		project2 := "project-beta"
+		task1 := &core.Task{
+			ID:        "T-0001",
+			Title:     "Alpha task",
+			Status:    core.StatusTodo,
+			ProjectID: &project1,
+		}
+		task2 := &core.Task{
+			ID:        "T-0002",
+			Title:     "Beta task",
+			Status:    core.StatusTodo,
+			ProjectID: &project2,
+		}
+		s.CreateTask(ctx, task1)
+		s.CreateTask(ctx, task2)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--all-projects"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with --all-projects failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "Alpha task") {
+			t.Error("expected Alpha task in output")
+		}
+		if !contains(output, "Beta task") {
+			t.Error("expected Beta task in output")
+		}
+	})
+
+	t.Run("ListTasksArchived", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task1 := &core.Task{
+			ID:       "T-0001",
+			Title:    "Archived task",
+			Status:   core.StatusDone,
+			Archived: true,
+		}
+		task2 := &core.Task{
+			ID:       "T-0002",
+			Title:    "Active task",
+			Status:   core.StatusTodo,
+			Archived: false,
+		}
+		s.CreateTask(ctx, task1)
+		s.CreateTask(ctx, task2)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--archived"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list with --archived failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "Archived task") {
+			t.Error("expected archived task in output")
+		}
+		if !contains(output, "Active task") {
+			t.Error("expected active task in output")
+		}
+	})
+
+	t.Run("CreateTaskWithCustomID", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "create", "Custom ID task", "--id", "T-9999"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task create with --id failed: %v", err)
+		}
+
+		task, _ := s.GetTask(ctx, "T-9999")
+		if task == nil {
+			t.Fatal("task not found after creation")
+		}
+		if task.ID != "T-9999" {
+			t.Errorf("expected task ID T-9999, got %s", task.ID)
+		}
+	})
+
+	t.Run("CreateTaskWithReference", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		refURL := "https://github.com/repo/issues/42"
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "create", "Task with reference", "--reference", refURL})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task create with --reference failed: %v", err)
+		}
+
+		task, _ := s.GetTask(ctx, "T-0001")
+		if task == nil {
+			t.Fatal("task not found after creation")
+		}
+		if task.Reference != refURL {
+			t.Errorf("expected reference %s, got %s", refURL, task.Reference)
+		}
+	})
+
+	t.Run("ClaimTaskWithNote", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "Claim test task",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "claim", "T-0001", "--note", "Starting implementation"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task claim with --note failed: %v", err)
+		}
+
+		task, _ = s.GetTask(ctx, "T-0001")
+		if task == nil {
+			t.Fatal("task not found after claim")
+		}
+		if task.Status != core.StatusInProgress {
+			t.Errorf("expected status IN_PROGRESS, got %s", task.Status)
+		}
+	})
+
+	t.Run("UnclaimTaskWithNote", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		assignee := "testuser"
+		task := &core.Task{
+			ID:         "T-0001",
+			Title:      "Unclaim test task",
+			Status:     core.StatusInProgress,
+			AssignedTo: &assignee,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "unclaim", "T-0001", "--note", "Blocked, releasing"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task unclaim with --note failed: %v", err)
+		}
+
+		task, _ = s.GetTask(ctx, "T-0001")
+		if task == nil {
+			t.Fatal("task not found after unclaim")
+		}
+		if task.Status != core.StatusTodo {
+			t.Errorf("expected status TODO, got %s", task.Status)
+		}
+		if task.AssignedTo != nil {
+			t.Error("expected assignee to be nil after unclaim")
+		}
+	})
+
+	t.Run("ShowTaskJSONFormat", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "Show JSON test",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001", "--format", "json"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task show with --format json failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "\"id\"") {
+			t.Error("expected JSON output with 'id' field")
+		}
+		if !contains(output, "\"title\"") {
+			t.Error("expected JSON output with 'title' field")
+		}
+	})
+
+	t.Run("ShowTaskYAMLFormat", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		task := &core.Task{
+			ID:     "T-0001",
+			Title:  "Show YAML test",
+			Status: core.StatusTodo,
+		}
+		s.CreateTask(ctx, task)
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001", "--format", "yaml"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task show with --format yaml failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "id:") {
+			t.Error("expected YAML output with 'id:' field")
+		}
+		if !contains(output, "title:") {
+			t.Error("expected YAML output with 'title:' field")
+		}
+	})
+
+	t.Run("VerifyIDSequencing", func(t *testing.T) {
+		s, _ := getStorage()
+		defer s.Close()
+
+		cmd1 := newTestCmd()
+		cmd1.AddCommand(taskCmd)
+		buf1 := new(bytes.Buffer)
+		cmd1.SetOut(buf1)
+		cmd1.SetErr(buf1)
+		cmd1.SetArgs([]string{"task", "create", "First task"})
+
+		if err := cmd1.Execute(); err != nil {
+			t.Fatalf("first task create failed: %v", err)
+		}
+
+		cmd2 := newTestCmd()
+		cmd2.AddCommand(taskCmd)
+		buf2 := new(bytes.Buffer)
+		cmd2.SetOut(buf2)
+		cmd2.SetErr(buf2)
+		cmd2.SetArgs([]string{"task", "create", "Second task"})
+
+		if err := cmd2.Execute(); err != nil {
+			t.Fatalf("second task create failed: %v", err)
+		}
+
+		tasks, _ := s.ListTasks(ctx, core.Query{})
+		if len(tasks) < 2 {
+			t.Fatal("expected at least 2 tasks")
+		}
+
+		taskIDs := make([]string, len(tasks))
+		for i, task := range tasks {
+			taskIDs[i] = task.ID
+		}
+
+		if taskIDs[0] == taskIDs[1] {
+			t.Error("expected different task IDs (no sequencing conflict)")
 		}
 	})
 }
