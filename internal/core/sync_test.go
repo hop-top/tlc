@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -144,4 +145,172 @@ func TestTask_NeedsPush_EdgeCases(t *testing.T) {
 		}
 		assert.False(t, task.NeedsPush(), "should not need push when updated before last sync")
 	})
+}
+
+func TestGitHubLabelToTlcTagMapping(t *testing.T) {
+	ctx := context.Background()
+	repo := &mockRepo{tasks: make(map[string]*Task)}
+
+	githubLabels := []string{"bug", "enhancement", "documentation"}
+
+	task := &Task{
+		ID:     "GH-123",
+		Title:  "Test issue from GitHub",
+		Status: StatusTodo,
+		Tags:   githubLabels,
+		Meta: map[string]interface{}{
+			"origin_system": "github",
+			"origin_id":     "123",
+		},
+	}
+
+	repo.CreateTask(ctx, task)
+
+	retrievedTask, _ := repo.GetTask(ctx, "GH-123")
+	if retrievedTask == nil {
+		t.Fatal("task not found")
+	}
+
+	if len(retrievedTask.Tags) != 3 {
+		t.Errorf("expected 3 tags from GitHub labels, got %d", len(retrievedTask.Tags))
+	}
+
+	expectedTags := map[string]bool{
+		"bug":           true,
+		"enhancement":   true,
+		"documentation": true,
+	}
+
+	for _, tag := range retrievedTask.Tags {
+		if !expectedTags[tag] {
+			t.Errorf("unexpected tag: %s", tag)
+		}
+		delete(expectedTags, tag)
+	}
+
+	if len(expectedTags) > 0 {
+		t.Errorf("missing tags: %v", expectedTags)
+	}
+}
+
+func TestGitHubAssigneeToTlcAssigneeMapping(t *testing.T) {
+	ctx := context.Background()
+	repo := &mockRepo{tasks: make(map[string]*Task)}
+
+	githubAssignee := "octocat"
+
+	task := &Task{
+		ID:     "GH-456",
+		Title:  "Test issue with assignee",
+		Status: StatusTodo,
+		Meta: map[string]interface{}{
+			"origin_system": "github",
+			"origin_id":     "456",
+		},
+	}
+
+	if task.AssignedTo == nil {
+		assignee := githubAssignee
+		task.AssignedTo = &assignee
+	}
+
+	repo.CreateTask(ctx, task)
+
+	retrievedTask, _ := repo.GetTask(ctx, "GH-456")
+	if retrievedTask == nil {
+		t.Fatal("task not found")
+	}
+
+	if retrievedTask.AssignedTo == nil {
+		t.Error("assignee field is nil after mapping")
+	} else if *retrievedTask.AssignedTo != githubAssignee {
+		t.Errorf("assignee is %s, expected %s", *retrievedTask.AssignedTo, githubAssignee)
+	}
+}
+
+func TestGitHubSyncLabelUpdate(t *testing.T) {
+	ctx := context.Background()
+	repo := &mockRepo{tasks: make(map[string]*Task)}
+	service := NewTaskService(repo, repo)
+
+	task := &Task{
+		ID:     "GH-789",
+		Title:  "Issue for label sync",
+		Status: StatusTodo,
+		Tags:   []string{"bug", "urgent"},
+		Meta: map[string]interface{}{
+			"origin_system": "github",
+			"origin_id":     "789",
+		},
+	}
+
+	repo.CreateTask(ctx, task)
+
+	updatedTask, _ := repo.GetTask(ctx, "GH-789")
+	if updatedTask == nil {
+		t.Fatal("task not found")
+	}
+
+	updatedTask.Tags = []string{"bug", "fixed", "verified"}
+	err := service.UpdateTask(ctx, updatedTask, "github-sync", "labels updated from GitHub")
+	if err != nil {
+		t.Fatalf("UpdateTask failed: %v", err)
+	}
+
+	finalTask, _ := repo.GetTask(ctx, "GH-789")
+	if len(finalTask.Tags) != 3 {
+		t.Errorf("expected 3 tags after GitHub sync, got %d", len(finalTask.Tags))
+	}
+
+	expectedTags := map[string]bool{
+		"bug":      true,
+		"fixed":    true,
+		"verified": true,
+	}
+
+	for _, tag := range finalTask.Tags {
+		if !expectedTags[tag] {
+			t.Errorf("unexpected tag: %s", tag)
+		}
+		delete(expectedTags, tag)
+	}
+}
+
+func TestGitHubSyncAssigneeUpdate(t *testing.T) {
+	ctx := context.Background()
+	repo := &mockRepo{tasks: make(map[string]*Task)}
+	service := NewTaskService(repo, repo)
+
+	assignee1 := "octocat"
+	task := &Task{
+		ID:         "GH-999",
+		Title:      "Issue for assignee sync",
+		Status:     StatusTodo,
+		AssignedTo: &assignee1,
+		Meta: map[string]interface{}{
+			"origin_system": "github",
+			"origin_id":     "999",
+		},
+	}
+
+	repo.CreateTask(ctx, task)
+
+	updatedTask, _ := repo.GetTask(ctx, "GH-999")
+	if updatedTask == nil {
+		t.Fatal("task not found")
+	}
+
+	assignee2 := "newcontributor"
+	updatedTask.AssignedTo = &assignee2
+	err := service.UpdateTask(ctx, updatedTask, "github-sync", "assignee updated from GitHub")
+	if err != nil {
+		t.Fatalf("UpdateTask failed: %v", err)
+	}
+
+	finalTask, _ := repo.GetTask(ctx, "GH-999")
+	if finalTask.AssignedTo == nil {
+		t.Error("assignee field is nil after GitHub sync")
+	} else if *finalTask.AssignedTo != assignee2 {
+		t.Errorf("assignee is %s, expected %s", *finalTask.AssignedTo, assignee2)
+	}
 }
