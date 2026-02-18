@@ -1422,6 +1422,6 @@ An implementation conforms to TFS v0.1 if:
 - task-log-spec-0.1.md — Log schema and write policy
 - dev-workflow-conventions-0.1.md — Git worktree and branch naming conventions
 - sync-architecture-0.1.md — External system sync architecture
-- user-stories-taskflow-0.1.md — User story requirements
+- stories/user-stories-taskflow-0.1.md — User story requirements
 - e2e-taskflow-0.1.md — End-to-end test scenarios
 - glossary-0.1.md — Canonical term definitions

@@ -1010,6 +1010,6 @@ An implementation conforms to TFS v0.1 if:
 - task-crud-spec-0.1.md — Task data model and persistence
 - task-collab-spec-1.0.md — Multi-agent collaboration
 - task-log-spec-0.1.md — Log schema and write policy
-- user-stories-taskflow-0.1.md — User story requirements
+- stories/user-stories-taskflow-0.1.md — User story requirements
 - e2e-taskflow-0.1.md — End-to-end test scenarios
 - glossary-0.1.md — Canonical term definitions
