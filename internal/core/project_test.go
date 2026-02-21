@@ -44,8 +44,8 @@ func TestCreateConfigWithInferredID_SkipsExisting(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	// First call creates the config
-	if err := createConfigWithInferredID("org/repo"); err != nil {
-		t.Fatalf("first createConfigWithInferredID failed: %v", err)
+	if err := CreateConfigWithInferredID("org/repo"); err != nil {
+		t.Fatalf("first CreateConfigWithInferredID failed: %v", err)
 	}
 
 	info1, err := os.Stat(".tlc/config.yaml")
@@ -55,8 +55,8 @@ func TestCreateConfigWithInferredID_SkipsExisting(t *testing.T) {
 	mtime1 := info1.ModTime()
 
 	// Second call with same ID should skip
-	if err := createConfigWithInferredID("org/repo"); err != nil {
-		t.Fatalf("second createConfigWithInferredID failed: %v", err)
+	if err := CreateConfigWithInferredID("org/repo"); err != nil {
+		t.Fatalf("second CreateConfigWithInferredID failed: %v", err)
 	}
 
 	info2, _ := os.Stat(".tlc/config.yaml")
@@ -76,12 +76,12 @@ func TestCreateConfigWithInferredID_UpdatesDifferentID(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	if err := createConfigWithInferredID("org/repo-a"); err != nil {
+	if err := CreateConfigWithInferredID("org/repo-a"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Different ID should overwrite
-	if err := createConfigWithInferredID("org/repo-b"); err != nil {
+	if err := CreateConfigWithInferredID("org/repo-b"); err != nil {
 		t.Fatal(err)
 	}
 

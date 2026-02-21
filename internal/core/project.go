@@ -183,7 +183,7 @@ func handleFallbackMode() *ProjectDetection {
 
 	switch mode {
 	case "auto":
-		if err := createConfigWithInferredID(inferredID); err == nil {
+		if err := CreateConfigWithInferredID(inferredID); err == nil {
 			return &ProjectDetection{
 				ProjectID:  inferredID,
 				ConfigPath: ".tlc/config.yaml",
@@ -206,7 +206,7 @@ func handleFallbackMode() *ProjectDetection {
 	case "prompt":
 		choice, err := promptFallbackMode(inferredID)
 		if err != nil || choice == "auto" {
-			if createErr := createConfigWithInferredID(inferredID); createErr == nil {
+			if createErr := CreateConfigWithInferredID(inferredID); createErr == nil {
 				return &ProjectDetection{
 					ProjectID:  inferredID,
 					ConfigPath: ".tlc/config.yaml",
@@ -225,7 +225,7 @@ func handleFallbackMode() *ProjectDetection {
 	}
 }
 
-func createConfigWithInferredID(projectID string) error {
+func CreateConfigWithInferredID(projectID string) error {
 	configPath := ".tlc/config.yaml"
 
 	// Skip rewrite if config already exists with the same project ID

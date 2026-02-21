@@ -10,16 +10,8 @@ import (
 	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-func newTestCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "tlc",
-		Short: "Task Line CLI - Test",
-	}
-}
 
 // TestTaskCommands tests task CRUD operations through CLI
 // Tests create, list, update, show, and delete task commands

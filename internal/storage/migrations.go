@@ -152,6 +152,19 @@ var migrations = []migration{
 	},
 }
 
+// LatestMigrationVersion is the highest migration version in the schema.
+const LatestMigrationVersion = 7
+
+// SchemaVersion returns the current schema version from the database.
+func (s *SQLiteStorage) SchemaVersion() (int, error) {
+	var version int
+	err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query schema version: %w", err)
+	}
+	return version, nil
+}
+
 func (s *SQLiteStorage) migrate() error {
 	var currentVersion int
 	err := s.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&currentVersion)
