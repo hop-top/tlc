@@ -72,15 +72,13 @@ func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, forma
 }
 
 func formatTLS(t *core.Task) string {
-	status := "[ ]"
-	switch t.Status {
-	case core.StatusInProgress:
-		status = "[~]"
-	case core.StatusDone:
-		status = "[x]"
-	case core.StatusSkipped:
-		status = "[-]"
+	wm := core.DefaultWorkflow()
+	marker := " "
+	def, err := wm.GetStatusDef(t.Status)
+	if err == nil && def.TLSMarker != "" {
+		marker = def.TLSMarker
 	}
+	status := fmt.Sprintf("[%s]", marker)
 
 	parts := []string{status, t.ID, t.Title}
 
@@ -160,17 +158,31 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 }
 
 func formatStatus(status core.TaskStatus) string {
+	wm := core.DefaultWorkflow()
+	def, err := wm.GetStatusDef(status)
+	if err != nil {
+		return string(status)
+	}
+	label := def.Name
+	if def.Label != "" {
+		label = def.Label
+	}
+	if def.Color != "" {
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color(def.Color)).Render(label)
+	}
+	// Fallback to legacy styles for default statuses without explicit color
 	switch status {
 	case core.StatusTodo:
-		return todoStyle.Render("TODO")
+		return todoStyle.Render(label)
 	case core.StatusInProgress:
-		return inProgressStyle.Render("IN_PROGRESS")
+		return inProgressStyle.Render(label)
 	case core.StatusDone:
-		return doneStyle.Render("DONE")
+		return doneStyle.Render(label)
 	case core.StatusSkipped:
-		return skippedStyle.Render("SKIPPED")
+		return skippedStyle.Render(label)
 	default:
-		return string(status)
+		return label
 	}
 }
 

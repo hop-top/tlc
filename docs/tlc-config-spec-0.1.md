@@ -168,6 +168,114 @@ task:
   archive_threshold: 48h          # Archive after 2 days
 ```
 
+#### `task.statuses` — Custom Status Definitions
+
+Define custom statuses replacing the 4 defaults. Each entry is a
+`StatusDefinition` with the following fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Unique status identifier (e.g. `TODO`) |
+| `label` | string | no | Human-readable display label |
+| `description` | string | no | Short explanation of purpose |
+| `is_terminal` | bool | no | Terminal state; no outbound transitions |
+| `color` | string | no | ANSI/hex color for TUI/CLI output |
+| `role` | enum | no | Semantic role: `initial`, `active`, `completed` |
+| `tls_marker` | string | no | TLS bracket marker (e.g. `x`, `~`, `-`) |
+
+Semantic roles drive shortcut commands:
+
+- `initial` — target of `tlc task unclaim`
+- `active` — target of `tlc task claim`
+- `completed` — target of `tlc task complete`
+
+#### `task.state_machine` — Transition Rules
+
+The `task.state_machine.rules` list defines allowed transitions.
+Each rule has `from` and `to` (status names). Unlisted transitions
+are rejected unless `--force` is passed.
+
+#### `task.workflows` — Per-Tag Workflow Overrides
+
+Override statuses and rules for tasks matching specific tags.
+Each entry under `task.workflows` is keyed by tag name and
+contains its own `statuses` and `state_machine` blocks.
+
+**Full Custom Statuses Example**:
+
+```yaml
+task:
+  default_status: OPEN
+  statuses:
+    - name: OPEN
+      label: Open
+      role: initial
+      tls_marker: " "
+      color: "#888888"
+    - name: ACTIVE
+      label: Active
+      role: active
+      tls_marker: "~"
+      color: "#00AAFF"
+    - name: REVIEW
+      label: In Review
+      tls_marker: "r"
+      color: "#FFAA00"
+    - name: MERGED
+      label: Merged
+      role: completed
+      is_terminal: true
+      tls_marker: "x"
+      color: "#00FF00"
+    - name: WONTFIX
+      label: Won't Fix
+      is_terminal: true
+      tls_marker: "-"
+      color: "#FF0000"
+
+  state_machine:
+    rules:
+      - from: OPEN
+        to: ACTIVE
+      - from: ACTIVE
+        to: REVIEW
+      - from: REVIEW
+        to: MERGED
+      - from: REVIEW
+        to: ACTIVE
+      - from: OPEN
+        to: WONTFIX
+
+  workflows:
+    hotfix:
+      statuses:
+        - name: OPEN
+          role: initial
+          tls_marker: " "
+        - name: ACTIVE
+          role: active
+          tls_marker: "~"
+        - name: MERGED
+          role: completed
+          is_terminal: true
+          tls_marker: "x"
+      state_machine:
+        rules:
+          - from: OPEN
+            to: ACTIVE
+          - from: ACTIVE
+            to: MERGED
+```
+
+When no custom statuses are configured, TLC uses 4 defaults:
+
+| Name | Role | Terminal | TLS Marker |
+|------|------|----------|------------|
+| `TODO` | initial | no | ` ` (space) |
+| `IN_PROGRESS` | active | no | `~` |
+| `DONE` | completed | yes | `x` |
+| `SKIPPED` | — | yes | `-` |
+
 ---
 
 ### `git` — Git Integration

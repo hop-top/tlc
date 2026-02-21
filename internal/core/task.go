@@ -15,44 +15,22 @@ func (e ErrInvalidTransition) Error() string {
 	return fmt.Sprintf("invalid transition from %s to %s: %s", e.From, e.To, e.Msg)
 }
 
+// ValidateTransition checks if a status transition is allowed using the
+// default workflow. Kept for backward compatibility; new code should use
+// WorkflowManager.ValidateTransition directly.
 func ValidateTransition(current, next TaskStatus) error {
-	if current == next {
-		return nil
-	}
-
-	// Forbidden: DONE -> anything, SKIPPED -> anything
-	if current == StatusDone || current == StatusSkipped {
-		return ErrInvalidTransition{From: current, To: next, Msg: "terminal states are immutable"}
-	}
-
-	// Forbidden: TODO -> DONE (must pass through IN_PROGRESS)
-	if current == StatusTodo && next == StatusDone {
-		return ErrInvalidTransition{From: current, To: next, Msg: "must pass through IN_PROGRESS for audit clarity"}
-	}
-
-	switch current {
-	case StatusTodo:
-		if next == StatusInProgress || next == StatusSkipped {
-			return nil
-		}
-	case StatusInProgress:
-		if next == StatusDone || next == StatusTodo || next == StatusSkipped {
-			return nil
-		}
-	}
-
-	return ErrInvalidTransition{From: current, To: next, Msg: "transition not allowed by state machine"}
+	return DefaultWorkflow().ValidateTransition(current, next, false)
 }
 
-func (t *Task) Transition(next TaskStatus, by string, note string) (*LogEntry, error) {
-	if err := ValidateTransition(t.Status, next); err != nil {
+// TransitionWithWorkflow transitions the task using the given WorkflowManager
+// and records a log entry. Set force=true to bypass transition rules.
+func (t *Task) TransitionWithWorkflow(next TaskStatus, by string, note string, wm *WorkflowManager, force bool) (*LogEntry, error) {
+	if err := wm.ValidateTransition(t.Status, next, force); err != nil {
 		return nil, err
 	}
-
 	oldStatus := t.Status
 	t.Status = next
 	t.UpdatedAt = time.Now().UTC()
-
 	return &LogEntry{
 		TaskID:    t.ID,
 		Timestamp: t.UpdatedAt,
@@ -60,6 +38,12 @@ func (t *Task) Transition(next TaskStatus, by string, note string) (*LogEntry, e
 		Action:    string(next),
 		Note:      fmt.Sprintf("Status changed from %s to %s: %s", oldStatus, next, note),
 	}, nil
+}
+
+// Transition transitions the task using the default workflow.
+// Deprecated: use TransitionWithWorkflow for explicit workflow control.
+func (t *Task) Transition(next TaskStatus, by string, note string) (*LogEntry, error) {
+	return t.TransitionWithWorkflow(next, by, note, DefaultWorkflow(), false)
 }
 
 func (t *Task) NeedsPush() bool {

@@ -24,3 +24,5 @@ coverage/
 *.sqlite-wal
 .lycheecache
 .xray*
+.env
+vendor/

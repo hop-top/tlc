@@ -298,10 +298,15 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 		return fmt.Errorf("task %s not found", taskID)
 	}
 
+	wm := DefaultWorkflow()
+	activeStatus, _ := wm.StatusForRole("active")
+	completedStatus, _ := wm.StatusForRole("completed")
+	initialStatus, _ := wm.StatusForRole("initial")
+
 	// Simulation of task execution for now
 	// In real implementation, this would call a Runner
-	if task.Status == StatusTodo {
-		task.Status = StatusInProgress
+	if task.Status == initialStatus {
+		task.Status = activeStatus
 		task.UpdatedAt = time.Now()
 		if err := e.repo.UpdateTask(ctx, task); err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
@@ -318,7 +323,7 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 	}
 
 	// Complete task
-	task.Status = StatusDone
+	task.Status = completedStatus
 	task.UpdatedAt = time.Now()
 	if err := e.repo.UpdateTask(ctx, task); err != nil {
 		return fmt.Errorf("failed to update task: %w", err)
@@ -390,11 +395,14 @@ func (e *FlowExecutor) ExtractTasksFromFlow(_ context.Context, flow *Flow, runID
 func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string, step Step) *Task {
 	taskID := generateTaskID()
 
+	wm := DefaultWorkflow()
+	initialStatus, _ := wm.StatusForRole("initial")
+
 	task := &Task{
 		ID:          taskID,
 		Title:       step.TaskTemplate.Title,
 		Description: step.TaskTemplate.Description,
-		Status:      StatusTodo,
+		Status:      initialStatus,
 		Reference:   flow.ID,
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),

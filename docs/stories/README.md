@@ -10,6 +10,7 @@ User stories organized by feature area, persona, and priority. Each story define
 - [001 - Task Creation](001-task-creation.md) — Create tasks with metadata
 - [002 - Task Listing](002-task-listing.md) — Query and filter tasks
 - [003 - Task Claiming](003-task-claiming.md) — AI agent task assignment
+- [004 - Configurable Statuses](004-configurable-statuses.md) — Custom workflow states
 
 #### External Sync (010-019)
 - [010 - GitHub Sync](010-github-sync.md) — Bidirectional GitHub issue sync
@@ -38,6 +39,7 @@ User stories organized by feature area, persona, and priority. Each story define
 #### [Solo Developer](../personas/solo-developer.md)
 - [001 - Task Creation](001-task-creation.md)
 - [002 - Task Listing](002-task-listing.md)
+- [004 - Configurable Statuses](004-configurable-statuses.md)
 - [020 - Flow Execution](020-flow-execution.md)
 - [030 - TUI Navigation](030-tui-navigation.md)
 
@@ -52,6 +54,7 @@ User stories organized by feature area, persona, and priority. Each story define
 
 #### [Team Lead](../personas/team-lead.md)
 - [002 - Task Listing](002-task-listing.md) (filtering and reporting)
+- [004 - Configurable Statuses](004-configurable-statuses.md)
 - [010 - GitHub Sync](010-github-sync.md)
 - [012 - Flow Templates](012-flow-templates.md) (planned)
 - [013 - Team Task Assignment](013-team-task-assignment.md) (planned)

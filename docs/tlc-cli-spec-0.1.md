@@ -44,6 +44,7 @@ tlc <command> <subcommand> [arguments] [flags]
 **Top-level commands**:
 - `init` — Initialize TLC in current directory
 - `task` — Task operations (CRUD)
+- `workflow` — Workflow status and rule inspection
 - `flow` — Flow execution and management
 - `log` — Query audit logs
 - `sync` — External system synchronization
@@ -343,6 +344,7 @@ tlc task update <task-id> [flags]
 | `--remove-tag` | | string[] | Remove tags (repeatable) |
 | `--set-meta` | `-m` | key=value | Set metadata (repeatable) |
 | `--unset-meta` | | key | Remove metadata (repeatable) |
+| `--force` | | bool | Bypass workflow state machine rules |
 
 #### Behavior
 
@@ -514,6 +516,104 @@ tlc task unclaim T-0042
 
 # Release with note
 tlc task unclaim T-0042 --note "Need more context, releasing for others"
+```
+
+---
+
+## `tlc workflow` — Workflow Inspection
+
+Inspect configured statuses, state machine rules, and validate
+transitions.
+
+### Subcommands
+
+- `statuses` — List configured statuses
+- `rules` — List state machine transition rules
+- `validate` — Dry-run a transition check
+
+---
+
+### `tlc workflow statuses`
+
+List all configured statuses with roles, markers, and terminal
+flags.
+
+#### Synopsis
+
+```bash
+tlc workflow statuses [flags]
+```
+
+#### Examples
+
+```bash
+tlc workflow statuses
+
+# Output (table)
+NAME          LABEL        ROLE       TERMINAL  MARKER
+TODO          Todo         initial    no        [ ]
+IN_PROGRESS   In Progress  active     no        [~]
+DONE          Done         completed  yes       [x]
+SKIPPED       Skipped      —          yes       [-]
+```
+
+---
+
+### `tlc workflow rules`
+
+List all allowed state machine transitions.
+
+#### Synopsis
+
+```bash
+tlc workflow rules [flags]
+```
+
+#### Examples
+
+```bash
+tlc workflow rules
+
+# Output (table)
+FROM           TO
+TODO           IN_PROGRESS
+IN_PROGRESS    DONE
+IN_PROGRESS    SKIPPED
+TODO           SKIPPED
+```
+
+---
+
+### `tlc workflow validate`
+
+Dry-run a transition check without modifying any task.
+
+#### Synopsis
+
+```bash
+tlc workflow validate <from> <to> [flags]
+```
+
+#### Flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--tag` | string[] | Tags to select per-tag workflow |
+
+#### Examples
+
+```bash
+# Valid transition
+tlc workflow validate TODO IN_PROGRESS
+# Output: OK — transition TODO -> IN_PROGRESS is allowed
+
+# Invalid transition
+tlc workflow validate DONE TODO
+# Output: ERROR — transition DONE -> TODO is not allowed
+
+# Per-tag override
+tlc workflow validate OPEN MERGED --tag hotfix
+# Output: ERROR — transition OPEN -> MERGED not in hotfix
 ```
 
 ---

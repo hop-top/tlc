@@ -48,9 +48,10 @@ var (
 
 	taskDeleteYes bool
 
-	taskClaimNote   string
-	taskUnclaimNote string
+	taskClaimNote    string
+	taskUnclaimNote  string
 	taskCompleteNote string
+	taskUpdateForce  bool
 )
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
@@ -192,7 +193,14 @@ var taskClaimCmd = &cobra.Command{
 		user := core.GetCurrentUser()
 		task.AssignedTo = &user
 
-		log, err := task.Transition(core.StatusInProgress, user, taskClaimNote)
+		wm := core.DefaultWorkflow()
+		activeStatus, wmErr := wm.StatusForRole("active")
+		if wmErr != nil {
+			return fmt.Errorf("workflow has no active status: %w", wmErr)
+		}
+		log, err := task.TransitionWithWorkflow(
+			activeStatus, user, taskClaimNote, wm, false,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
@@ -229,7 +237,14 @@ var taskUnclaimCmd = &cobra.Command{
 
 		task.AssignedTo = nil
 
-		log, err := task.Transition(core.StatusTodo, core.GetCurrentUser(), taskUnclaimNote)
+		wm := core.DefaultWorkflow()
+		initialStatus, wmErr := wm.StatusForRole("initial")
+		if wmErr != nil {
+			return fmt.Errorf("workflow has no initial status: %w", wmErr)
+		}
+		log, err := task.TransitionWithWorkflow(
+			initialStatus, core.GetCurrentUser(), taskUnclaimNote, wm, false,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
@@ -264,7 +279,14 @@ var taskCompleteCmd = &cobra.Command{
 			return fmt.Errorf("task not found: %s", id)
 		}
 
-		logEntry, err := task.Transition(core.StatusDone, core.GetCurrentUser(), taskCompleteNote)
+		wm := core.DefaultWorkflow()
+		completedStatus, wmErr := wm.StatusForRole("completed")
+		if wmErr != nil {
+			return fmt.Errorf("workflow has no completed status: %w", wmErr)
+		}
+		logEntry, err := task.TransitionWithWorkflow(
+			completedStatus, core.GetCurrentUser(), taskCompleteNote, wm, false,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
@@ -315,6 +337,18 @@ func createTaskInteractive(initialTitle string) error {
 		domain      string
 	)
 
+	wm := core.DefaultWorkflow()
+	allStatuses := wm.GetAllStatuses()
+	statusOptions := make([]huh.Option[string], 0, len(allStatuses))
+	for _, s := range allStatuses {
+		def, _ := wm.GetStatusDef(core.TaskStatus(s))
+		label := s
+		if def != nil && def.Label != "" {
+			label = def.Label
+		}
+		statusOptions = append(statusOptions, huh.NewOption(label, s))
+	}
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -336,11 +370,7 @@ func createTaskInteractive(initialTitle string) error {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Status").
-				Options(
-					huh.NewOption("TODO", "TODO"),
-					huh.NewOption("IN_PROGRESS", "IN_PROGRESS"),
-					huh.NewOption("DONE", "DONE"),
-				).
+				Options(statusOptions...).
 				Value(&status),
 
 			huh.NewInput().
@@ -602,7 +632,10 @@ var taskUpdateCmd = &cobra.Command{
 
 		if cmd.Flags().Changed("status") {
 			nextStatus := core.TaskStatus(taskUpdateStatus)
-			log, err := task.Transition(nextStatus, core.GetCurrentUser(), "Manual update")
+			wm := core.DefaultWorkflow()
+			log, err := task.TransitionWithWorkflow(
+				nextStatus, core.GetCurrentUser(), "Manual update", wm, taskUpdateForce,
+			)
 			if err != nil {
 				return fmt.Errorf("failed to transition task: %w", err)
 			}
@@ -735,6 +768,7 @@ func init() {
 	taskUpdateCmd.Flags().StringVarP(&taskUpdateAssignedTo, "assigned-to", "a", "", "New assignee")
 	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
+	taskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
 
 	taskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 

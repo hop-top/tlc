@@ -43,12 +43,16 @@ Where:
 
 ### Status Token
 
-Allowed status tokens:
+Default status tokens:
 
 - `[ ]`  -> TODO
 - `[~]`  -> IN_PROGRESS
 - `[x]`  -> DONE
 - `[-]`  -> SKIPPED
+
+Custom markers may be defined via `task.statuses[].tls_marker`
+in config. Unknown markers fall back to legacy parsing
+heuristics. See `tlc-config-spec-0.1.md` for details.
 
 ### ID
 

@@ -22,6 +22,8 @@ func DefaultConfig() *Config {
 			IDFormat:         "T-{seq:04d}",
 			AutoAssign:       false,
 			RequireReference: true,
+			Statuses:         GetDefaultStatuses(),
+			StateMachine:     GetDefaultStateMachine(),
 		},
 		Git: GitConfig{
 			Branch: GitBranchConfig{

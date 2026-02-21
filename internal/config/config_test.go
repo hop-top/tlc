@@ -159,3 +159,100 @@ func TestConfig_Validate(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskConfig_TerminalDefaultStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.DefaultStatus = "DONE"
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for terminal default_status, got nil")
+	}
+}
+
+func TestTaskConfig_MissingInitialRoleRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	// Remove the "initial" role from all statuses
+	for i := range cfg.Task.Statuses {
+		if cfg.Task.Statuses[i].Role == "initial" {
+			cfg.Task.Statuses[i].Role = "completed"
+		}
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for missing initial role, got nil")
+	}
+}
+
+func TestTaskConfig_MissingActiveRoleRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	// Remove the "active" role from all statuses
+	for i := range cfg.Task.Statuses {
+		if cfg.Task.Statuses[i].Role == "active" {
+			cfg.Task.Statuses[i].Role = "completed"
+		}
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for missing active role, got nil")
+	}
+}
+
+func TestTaskConfig_DuplicateTLSMarkerRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	// Set two statuses to the same TLS marker
+	cfg.Task.Statuses[0].TLSMarker = "x"
+	cfg.Task.Statuses[2].TLSMarker = "x"
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for duplicate TLS marker, got nil")
+	}
+}
+
+func TestTaskConfig_DuplicateStatusNameRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Statuses = append(cfg.Task.Statuses, StatusDefinition{
+		Name:       "TODO",
+		Label:      "Duplicate Todo",
+		IsTerminal: false,
+		Role:       "initial",
+		TLSMarker:  "?",
+	})
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for duplicate status name, got nil")
+	}
+}
+
+func TestTaskConfig_StateMachineUnknownStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.StateMachine.Rules["NONEXISTENT"] = []string{"TODO"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for state machine rule referencing unknown status, got nil")
+	}
+}
+
+func TestTaskConfig_StateMachineUnknownTargetStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.StateMachine.Rules["TODO"] = []string{"NONEXISTENT"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for state machine rule referencing unknown target status, got nil")
+	}
+}
+
+func TestTaskConfig_EmptyStatusesPopulatedWithDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Statuses = nil
+	cfg.Task.StateMachine = nil
+	err := cfg.Validate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Task.Statuses) != 4 {
+		t.Errorf("expected 4 default statuses, got %d", len(cfg.Task.Statuses))
+	}
+	if cfg.Task.StateMachine == nil {
+		t.Error("expected state machine to be populated with defaults")
+	}
+}

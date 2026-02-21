@@ -114,7 +114,8 @@ func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next 
 		return fmt.Errorf("task %s not found", taskID)
 	}
 
-	logEntry, err := task.Transition(next, by, note)
+	wm := DefaultWorkflow()
+	logEntry, err := task.TransitionWithWorkflow(next, by, note, wm, false)
 	if err != nil {
 		return fmt.Errorf("failed to transition task: %w", err)
 	}
@@ -154,7 +155,12 @@ func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, n
 		task.Meta["needs_push"] = true
 	}
 
-	logEntry, err := task.Transition(StatusInProgress, by, note)
+	wm := DefaultWorkflow()
+	activeStatus, err := wm.StatusForRole("active")
+	if err != nil {
+		return fmt.Errorf("workflow has no active status: %w", err)
+	}
+	logEntry, err := task.TransitionWithWorkflow(activeStatus, by, note, wm, false)
 	if err != nil {
 		return fmt.Errorf("failed to transition task: %w", err)
 	}
@@ -191,7 +197,12 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 		task.Meta["needs_push"] = true
 	}
 
-	logEntry, err := task.Transition(StatusTodo, by, note)
+	wm := DefaultWorkflow()
+	initialStatus, err := wm.StatusForRole("initial")
+	if err != nil {
+		return fmt.Errorf("workflow has no initial status: %w", err)
+	}
+	logEntry, err := task.TransitionWithWorkflow(initialStatus, by, note, wm, false)
 	if err != nil {
 		return fmt.Errorf("failed to transition task: %w", err)
 	}
@@ -309,7 +320,12 @@ func (s *TaskService) DelegateTask(ctx context.Context, taskID string, fromAssig
 		oldAssignee = *task.AssignedTo
 	}
 	task.AssignedTo = &newAssigneeID
-	task.Status = StatusTodo // Reset for new assignee
+	wm := DefaultWorkflow()
+	initialStatus, err := wm.StatusForRole("initial")
+	if err != nil {
+		return fmt.Errorf("workflow has no initial status: %w", err)
+	}
+	task.Status = initialStatus
 	task.UpdatedAt = time.Now().UTC()
 
 	// Create log entry

@@ -148,9 +148,10 @@ func (m *MockRepository) FindTaskByOrigin(ctx context.Context, system, originID 
 
 func (m *MockRepository) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-threshold)
+	wm := DefaultWorkflow()
 	var count int64
 	for _, t := range m.Tasks {
-		if !t.Archived && (t.Status == StatusDone || t.Status == StatusSkipped) && t.UpdatedAt.Before(cutoff) {
+		if !t.Archived && wm.IsTerminal(t.Status) && t.UpdatedAt.Before(cutoff) {
 			t.Archived = true
 			count++
 		}

@@ -197,25 +197,24 @@ func parseTLS(line string) (*core.Task, error) {
 		Meta:      make(map[string]interface{}),
 	}
 
-	// Status mapping
+	// Status mapping via WorkflowManager
+	wm := core.DefaultWorkflow()
 	switch statusContent {
 	case "":
-		task.Status = core.StatusTodo
-	case "~":
-		task.Status = core.StatusInProgress
-	case "x":
-		task.Status = core.StatusDone
-	case "-":
-		task.Status = core.StatusSkipped
+		task.Status = core.StatusTodo // default
 	default:
-		// Fallback for cases like "[DONE]" or "[ ]"
-		sc := strings.ToLower(statusContent)
-		if strings.Contains(sc, "x") || strings.Contains(sc, "done") {
-			task.Status = core.StatusDone
-		} else if strings.Contains(sc, "~") || strings.Contains(sc, "progress") {
-			task.Status = core.StatusInProgress
+		if s, ok := wm.StatusForTLSMarker(statusContent); ok {
+			task.Status = s
 		} else {
-			task.Status = core.StatusTodo
+			// Legacy fallback
+			sc := strings.ToLower(statusContent)
+			if strings.Contains(sc, "x") || strings.Contains(sc, "done") {
+				task.Status = core.StatusDone
+			} else if strings.Contains(sc, "~") || strings.Contains(sc, "progress") {
+				task.Status = core.StatusInProgress
+			} else {
+				task.Status = core.StatusTodo
+			}
 		}
 	}
 

@@ -33,8 +33,14 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 - **Advanced Query Engine**: Power-user filtering with intuitive shorthands (`@me`, `#tag`), logical operators (AND/OR/NOT), and metadata-aware searching.
 - **External System Sync**: Bidirectional integration with GitHub Issues, Jira, and Linear while maintaining a strict boundary for internal agent tasks.
 - **Auto-Archiving**: Automatically clean up your workspace by archiving completed tasks after a configurable duration (default: 7 days), keeping your active list focused and high-performance.
-- **Modern TUI & CLI**: A keyboard-driven Terminal User Interface built with Bubble Tea, featuring a Kanban board, dashboard, and real-time flow monitoring.
-- **XDG Specification Compliance**: Zero-config persistence following standard OS paths for data, logs, and configuration.
+- **Configurable Workflows**: Define custom task statuses, state
+  machine transitions, and per-tag workflow overrides via config.
+  Semantic roles drive claim/unclaim/complete behavior.
+- **Modern TUI & CLI**: A keyboard-driven Terminal User Interface
+  built with Bubble Tea, featuring a Kanban board, dashboard, and
+  real-time flow monitoring.
+- **XDG Specification Compliance**: Zero-config persistence
+  following standard OS paths for data, logs, and configuration.
 
 ## 🛠 Installation
 
