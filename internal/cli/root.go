@@ -87,6 +87,11 @@ func initConfig() {
 					log.Warn("Failed to merge config", "path", configs[i], "error", err)
 				}
 			}
+			// Set the closest config as the active file so
+			// ConfigFileUsed() returns it downstream.
+			if len(configs) > 0 {
+				viper.SetConfigFile(configs[0])
+			}
 		}
 	}
 

@@ -7,11 +7,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	cachedDetection *ProjectDetection
+	detectionOnce   sync.Once
 )
 
 type ProjectDetection struct {
@@ -21,6 +27,19 @@ type ProjectDetection struct {
 }
 
 func DetectProject() *ProjectDetection {
+	detectionOnce.Do(func() {
+		cachedDetection = detectProjectOnce()
+	})
+	return cachedDetection
+}
+
+// ResetDetectionCache clears the cached detection result for testing.
+func ResetDetectionCache() {
+	detectionOnce = sync.Once{}
+	cachedDetection = nil
+}
+
+func detectProjectOnce() *ProjectDetection {
 	checkConfigPath := viper.GetString("config")
 	if checkConfigPath != "" {
 		viper.SetConfigFile(checkConfigPath)
@@ -207,6 +226,25 @@ func handleFallbackMode() *ProjectDetection {
 }
 
 func createConfigWithInferredID(projectID string) error {
+	configPath := ".tlc/config.yaml"
+
+	// Skip rewrite if config already exists with the same project ID
+	if data, err := os.ReadFile(configPath); err == nil {
+		var existing map[string]interface{}
+		if yaml.Unmarshal(data, &existing) == nil {
+			if proj, ok := existing["project"].(map[interface{}]interface{}); ok {
+				if proj["id"] == projectID {
+					return nil
+				}
+			}
+			if proj, ok := existing["project"].(map[string]interface{}); ok {
+				if proj["id"] == projectID {
+					return nil
+				}
+			}
+		}
+	}
+
 	if err := os.MkdirAll(".tlc", 0755); err != nil {
 		return err
 	}

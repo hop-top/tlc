@@ -10,8 +10,16 @@ import (
 	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+func newTestCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tlc",
+		Short: "Task Line CLI - Test",
+	}
+}
 
 // TestTaskCommands tests task CRUD operations through CLI
 // Tests create, list, update, show, and delete task commands
@@ -1099,4 +1107,472 @@ func TestTaskCommands(t *testing.T) {
 
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
+}
+
+// Helper function for test setup
+func setupTestDir(t *testing.T) (ctx context.Context, cleanup func()) {
+	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", tmpDir)
+	}
+
+	dbPath := filepath.Join(tmpDir, "test.sqlite")
+	todoPath := filepath.Join(tmpDir, "TODO")
+
+	viper.Reset()
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbPath)
+	viper.Set("task.todo_file", todoPath)
+	viper.Set("output.format", "json")
+
+	ctx = context.Background()
+
+	cleanup = func() {
+		os.RemoveAll(tmpDir)
+	}
+
+	return
+}
+
+// Test Task Creation with Assignee
+func TestTaskCreateWithAssignee(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Task with Assignee", "--assigned-to", "engineer-1"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create with assignee failed: %v", err)
+	}
+
+	s, _ := getStorage()
+	task, _ := s.GetTask(ctx, "T-0001")
+	if task == nil {
+		t.Fatal("task was not created")
+	}
+	if task.AssignedTo == nil {
+		t.Error("assignee field is nil, expected 'engineer-1'")
+	} else if *task.AssignedTo != "engineer-1" {
+		t.Errorf("assignee field is %s, expected 'engineer-1'", *task.AssignedTo)
+	}
+}
+
+// Test Task Creation with Tags
+func TestTaskCreateWithTags(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Task with Tags", "--tag", "auth", "--tag", "security"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create with tags failed: %v", err)
+	}
+
+	s, _ := getStorage()
+	task, _ := s.GetTask(ctx, "T-0001")
+	if task == nil {
+		t.Fatal("task was not created")
+	}
+	if len(task.Tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(task.Tags))
+	}
+
+	hasAuth := false
+	hasSecurity := false
+	for _, tag := range task.Tags {
+		if tag == "auth" {
+			hasAuth = true
+		}
+		if tag == "security" {
+			hasSecurity = true
+		}
+	}
+	if !hasAuth {
+		t.Error("missing 'auth' tag")
+	}
+	if !hasSecurity {
+		t.Error("missing 'security' tag")
+	}
+}
+
+// Test Filter Tasks by Tag
+func TestTaskFilterByTag(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	task1 := &core.Task{
+		ID:     "T-0001",
+		Title:  "Auth task",
+		Status: core.StatusTodo,
+		Tags:   []string{"auth", "security"},
+	}
+	task2 := &core.Task{
+		ID:     "T-0002",
+		Title:  "Docs task",
+		Status: core.StatusTodo,
+		Tags:   []string{"docs"},
+	}
+	s.CreateTask(ctx, task1)
+	s.CreateTask(ctx, task2)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--tag", "auth"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with tag filter failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Auth task") {
+		t.Error("expected 'Auth task' in output")
+	}
+	if contains(output, "Docs task") {
+		t.Error("did not expect 'Docs task' in output (filtered by tag 'auth')")
+	}
+}
+
+// Test Filter Tasks by Assignee
+func TestTaskFilterByAssignee(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	assignee1 := "engineer-1"
+	assignee2 := "engineer-2"
+	task1 := &core.Task{
+		ID:         "T-0001",
+		Title:      "Task for engineer-1",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee1,
+	}
+	task2 := &core.Task{
+		ID:         "T-0002",
+		Title:      "Task for engineer-2",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee2,
+	}
+	s.CreateTask(ctx, task1)
+	s.CreateTask(ctx, task2)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--assigned-to", "engineer-1"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with assignee filter failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Task for engineer-1") {
+		t.Error("expected 'Task for engineer-1' in output")
+	}
+	if contains(output, "Task for engineer-2") {
+		t.Error("did not expect 'Task for engineer-2' in output (filtered by assignee)")
+	}
+}
+
+// Test Filter Tasks by Status
+func TestTaskFilterByStatus(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	task1 := &core.Task{
+		ID:     "T-0001",
+		Title:  "TODO task",
+		Status: core.StatusTodo,
+	}
+	task2 := &core.Task{
+		ID:     "T-0002",
+		Title:  "IN_PROGRESS task",
+		Status: core.StatusInProgress,
+	}
+	s.CreateTask(ctx, task1)
+	s.CreateTask(ctx, task2)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "TODO"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with status filter failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "TODO task") {
+		t.Error("expected 'TODO task' in output")
+	}
+	if contains(output, "IN_PROGRESS task") {
+		t.Error("did not expect 'IN_PROGRESS task' in output (filtered by status TODO)")
+	}
+}
+
+// Test Filter Tasks by Current User (assigned-to me)
+func TestTaskFilterByAssigneeMe(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	currentUser := core.GetCurrentUser()
+	if currentUser == "" {
+		currentUser = "testuser"
+	}
+
+	assignee1 := currentUser
+	assignee2 := "other-user"
+	task1 := &core.Task{
+		ID:         "T-0001",
+		Title:      "My task",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee1,
+	}
+	task2 := &core.Task{
+		ID:         "T-0002",
+		Title:      "Other's task",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee2,
+	}
+	s.CreateTask(ctx, task1)
+	s.CreateTask(ctx, task2)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--assigned-to", "me"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with --assigned-to me failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "My task") {
+		t.Errorf("expected 'My task' in output (assigned to current user: %s)", currentUser)
+	}
+	if contains(output, "Other's task") {
+		t.Error("did not expect 'Other's task' in output (filtered by current user)")
+	}
+}
+
+// Test Update Assignee
+func TestTaskUpdateAssignee(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	assignee1 := "engineer-1"
+	task := &core.Task{
+		ID:         "T-0001",
+		Title:      "Task to reassign",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee1,
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--assigned-to", "engineer-2"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update assignee failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	if updatedTask.AssignedTo == nil {
+		t.Error("assignee field is nil after update")
+	} else if *updatedTask.AssignedTo != "engineer-2" {
+		t.Errorf("assignee field is %s, expected 'engineer-2'", *updatedTask.AssignedTo)
+	}
+}
+
+// Test Clear Assignee with null
+func TestTaskClearAssigneeNull(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	assignee1 := "engineer-1"
+	task := &core.Task{
+		ID:         "T-0001",
+		Title:      "Task with assignee",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee1,
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--assigned-to", "null"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update to clear assignee with null failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	if updatedTask.AssignedTo != nil {
+		t.Errorf("assignee field is %s, expected nil (cleared)", *updatedTask.AssignedTo)
+	}
+}
+
+// Test Clear Assignee with dash
+func TestTaskClearAssigneeDash(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	assignee1 := "engineer-1"
+	task := &core.Task{
+		ID:         "T-0001",
+		Title:      "Task with assignee",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee1,
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--assigned-to", "-"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update to clear assignee with dash failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	if updatedTask.AssignedTo != nil {
+		t.Errorf("assignee field is %s, expected nil (cleared)", *updatedTask.AssignedTo)
+	}
+}
+
+// Test Add Tag
+func TestTaskAddTag(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Task without urgent tag",
+		Status: core.StatusTodo,
+		Tags:   []string{"bug"},
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--add-tag", "urgent"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update to add tag failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	if len(updatedTask.Tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(updatedTask.Tags))
+	}
+
+	hasUrgent := false
+	hasBug := false
+	for _, tag := range updatedTask.Tags {
+		if tag == "urgent" {
+			hasUrgent = true
+		}
+		if tag == "bug" {
+			hasBug = true
+		}
+	}
+
+	if !hasUrgent {
+		t.Error("missing 'urgent' tag after add")
+	}
+	if !hasBug {
+		t.Error("missing 'bug' tag (should be preserved)")
+	}
+}
+
+// Test Remove Tag
+func TestTaskRemoveTag(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorage()
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Task with chore tag",
+		Status: core.StatusTodo,
+		Tags:   []string{"chore", "bug"},
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--remove-tag", "chore"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update to remove tag failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	if len(updatedTask.Tags) != 1 {
+		t.Errorf("expected 1 tag after removal, got %d", len(updatedTask.Tags))
+	}
+	if len(updatedTask.Tags) > 0 && updatedTask.Tags[0] != "bug" {
+		t.Errorf("expected 'bug' tag, got '%s'", updatedTask.Tags[0])
+	}
 }
