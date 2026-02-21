@@ -4,17 +4,26 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/spf13/viper"
 )
+
+func resetProjectDetection() {
+	viper.Reset()
+	core.ResetDetectionCache()
+}
 
 // TestConcurrentTaskCreation verifies UNIQUE constraint on composite key (project_id, id)
 // Multiple agents trying to create same task in same project = constraint error
 // Same task ID in different projects = success
 func TestConcurrentTaskCreation(t *testing.T) {
+	resetProjectDetection()
 	dbPath := "test_concurrent.db"
 	defer os.Remove(dbPath)
 
@@ -36,7 +45,7 @@ func TestConcurrentTaskCreation(t *testing.T) {
 	// Spawn 5 goroutines simulating different agents/sync processes
 	// Note: With composite primary key (project_id, id), tasks with same ID
 	// can coexist in different projects. For this test, we use the same project.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		wg.Add(1)
 		projectID := "org/test"
 		go func(agentID int) {
@@ -50,7 +59,7 @@ func TestConcurrentTaskCreation(t *testing.T) {
 				Reference: fmt.Sprintf("ref-%d", agentID),
 				CreatedAt: time.Now().UTC(),
 				UpdatedAt: time.Now().UTC(),
-				Meta:      map[string]interface{}{"agent": agentID},
+				Meta:      map[string]any{"agent": agentID},
 			}
 
 			err := s.CreateTask(ctx, task)
@@ -86,9 +95,20 @@ func TestConcurrentTaskCreation(t *testing.T) {
 // TestConcurrentFlowExecution simulates multiple parallel steps accessing tasks
 // Verifies concurrent updates don't cause data corruption or lost updates
 func TestConcurrentFlowExecution(t *testing.T) {
-	dbPath := "test_flow_concurrent.db"
-	defer os.Remove(dbPath)
+	resetProjectDetection()
 
+	tmpDir, err := os.MkdirTemp("", "tlc-concurrent-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "test_flow_concurrent.db")
 	s, err := NewSQLiteStorage(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
@@ -125,6 +145,10 @@ func TestConcurrentFlowExecution(t *testing.T) {
 			task, err := s.GetTask(ctx, taskID)
 			if err != nil {
 				errChan <- err
+				return
+			}
+			if task == nil {
+				errChan <- fmt.Errorf("task %s not found", taskID)
 				return
 			}
 
@@ -172,6 +196,7 @@ func TestConcurrentFlowExecution(t *testing.T) {
 // TestSyncIngest simulates the ingestTODO scenario with concurrent sync
 // Tests race condition where two agents read TODO and try to create same task
 func TestSyncIngest(t *testing.T) {
+	resetProjectDetection()
 	dbPath := "test_sync_ingest.db"
 	defer os.Remove(dbPath)
 
@@ -192,7 +217,7 @@ func TestSyncIngest(t *testing.T) {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		wg.Add(1)
 		go func(agentID int) {
 			defer wg.Done()
@@ -240,20 +265,5 @@ func containsUniqueConstraintError(err error) bool {
 		return false
 	}
 	errStr := err.Error()
-	return contains(errStr, "UNIQUE") && contains(errStr, "constraint")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-			findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(errStr, "UNIQUE") && strings.Contains(errStr, "constraint")
 }

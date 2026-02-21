@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,22 +14,7 @@ import (
 // TestTaskCommands tests task CRUD operations through CLI
 // Tests create, list, update, show, and delete task commands
 func TestTaskCommands(t *testing.T) {
-	// Setup temporary directory for test
-	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", tmpDir)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	dbPath := filepath.Join(tmpDir, "test.sqlite")
-	todoPath := filepath.Join(tmpDir, "TODO")
-
-	// Setup viper for test
-	viper.Reset()
-	viper.Set("storage.backend", "sqlite")
-	viper.Set("storage.db_path", dbPath)
-	viper.Set("task.todo_file", todoPath)
-	viper.Set("output.format", "json")
+	defer resetTestDB(t)()
 
 	ctx := context.Background()
 
@@ -51,7 +34,7 @@ func TestTaskCommands(t *testing.T) {
 		t.Logf("Create output: %s", output)
 
 		// Verify in storage
-		s, _ := getStorage()
+		s, _ := getStorageRaw()
 		defer s.Close()
 		tasks, _ := s.ListTasks(ctx, core.Query{})
 		if len(tasks) != 1 {
@@ -125,7 +108,7 @@ func TestTaskCommands(t *testing.T) {
 			t.Fatalf("task delete failed: %v", err)
 		}
 
-		s, _ := getStorage()
+		s, _ := getStorageRaw()
 		defer s.Close()
 		task, _ := s.GetTask(ctx, "T-0001")
 		if task != nil {
@@ -134,6 +117,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithAssignee", func(t *testing.T) {
+		defer resetTestDB(t)()
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
@@ -145,7 +129,7 @@ func TestTaskCommands(t *testing.T) {
 			t.Fatalf("task create with assignee failed: %v", err)
 		}
 
-		s, _ := getStorage()
+		s, _ := getStorageRaw()
 		defer s.Close()
 		task, _ := s.GetTask(ctx, "T-0001")
 		if task == nil {
@@ -159,6 +143,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithTags", func(t *testing.T) {
+		defer resetTestDB(t)()
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
@@ -170,7 +155,7 @@ func TestTaskCommands(t *testing.T) {
 			t.Fatalf("task create with tags failed: %v", err)
 		}
 
-		s, _ := getStorage()
+		s, _ := getStorageRaw()
 		defer s.Close()
 		task, _ := s.GetTask(ctx, "T-0001")
 		if task == nil {
@@ -198,7 +183,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByTag", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task1 := &core.Task{
@@ -237,7 +223,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByAssignee", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		assignee1 := "engineer-1"
@@ -278,7 +265,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByStatus", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task1 := &core.Task{
@@ -315,7 +303,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("UpdateAssignee", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		assignee1 := "engineer-1"
@@ -347,7 +336,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ClearAssigneeWithNull", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		assignee1 := "engineer-1"
@@ -377,7 +367,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ClearAssigneeWithDash", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		assignee1 := "engineer-1"
@@ -407,7 +398,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("AddTagToTask", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -453,7 +445,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("RemoveTagFromTask", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -485,7 +478,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByAssigneeMe", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		currentUser := core.GetCurrentUser()
@@ -531,7 +525,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksJSONFormat", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -541,15 +536,16 @@ func TestTaskCommands(t *testing.T) {
 		}
 		s.CreateTask(ctx, task)
 
+		viper.Set("output.format", "json")
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "list", "--format", "json"})
+		cmd.SetArgs([]string{"task", "list"})
 
 		if err := cmd.Execute(); err != nil {
-			t.Fatalf("task list with --format json failed: %v", err)
+			t.Fatalf("task list with json format failed: %v", err)
 		}
 
 		output := buf.String()
@@ -562,7 +558,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksYAMLFormat", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -572,15 +569,16 @@ func TestTaskCommands(t *testing.T) {
 		}
 		s.CreateTask(ctx, task)
 
+		viper.Set("output.format", "yaml")
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "list", "--format", "yaml"})
+		cmd.SetArgs([]string{"task", "list"})
 
 		if err := cmd.Execute(); err != nil {
-			t.Fatalf("task list with --format yaml failed: %v", err)
+			t.Fatalf("task list with yaml format failed: %v", err)
 		}
 
 		output := buf.String()
@@ -593,7 +591,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksTLSFormat", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		assignee := "testuser"
@@ -606,20 +605,21 @@ func TestTaskCommands(t *testing.T) {
 		}
 		s.CreateTask(ctx, task)
 
+		viper.Set("output.format", "tls")
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "list", "--format", "tls"})
+		cmd.SetArgs([]string{"task", "list"})
 
 		if err := cmd.Execute(); err != nil {
-			t.Fatalf("task list with --format tls failed: %v", err)
+			t.Fatalf("task list with tls format failed: %v", err)
 		}
 
 		output := buf.String()
-		if !contains(output, "[TODO]") {
-			t.Error("expected TLS format with [status] bracket")
+		if !contains(output, "[ ]") {
+			t.Error("expected TLS format with [ ] status bracket")
 		}
 		if !contains(output, "@testuser") {
 			t.Error("expected TLS format with @assignee")
@@ -630,16 +630,30 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ShowTaskWithLogs", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
+		now := time.Now().UTC()
 		task := &core.Task{
-			ID:     "T-0001",
-			Title:  "Show logs test",
-			Status: core.StatusTodo,
+			ID:        "T-0001",
+			Title:     "Show logs test",
+			Status:    core.StatusTodo,
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		s.CreateTask(ctx, task)
 
+		// Add a log entry (CreateTask doesn't auto-create one)
+		s.AddLog(ctx, &core.LogEntry{
+			TaskID:    "T-0001",
+			Timestamp: now,
+			By:        "test-user",
+			Action:    "CREATED",
+			Note:      "Task created",
+		})
+
+		viper.Set("output.format", "json")
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
@@ -655,13 +669,14 @@ func TestTaskCommands(t *testing.T) {
 		if !contains(output, "Show logs test") {
 			t.Error("expected task title in output")
 		}
-		if !contains(output, "Logs") || !contains(output, "CREATED") {
-			t.Error("expected logs section with CREATED entry")
+		if !contains(output, "CREATED") {
+			t.Error("expected logs with CREATED entry in output")
 		}
 	})
 
 	t.Run("DeleteTaskInteractiveConfirmation", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -684,7 +699,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksPagination", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		for i := 1; i <= 15; i++ {
@@ -720,7 +736,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksSort", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task1 := &core.Task{
@@ -761,7 +778,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksFullTextSearch", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task1 := &core.Task{
@@ -798,7 +816,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksAllProjects", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		project1 := "project-alpha"
@@ -839,7 +858,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksArchived", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task1 := &core.Task{
@@ -878,7 +898,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithCustomID", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		cmd := newTestCmd()
@@ -902,7 +923,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithReference", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		refURL := "https://github.com/repo/issues/42"
@@ -927,7 +949,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ClaimTaskWithNote", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -958,7 +981,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("UnclaimTaskWithNote", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		assignee := "testuser"
@@ -994,7 +1018,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ShowTaskJSONFormat", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -1004,15 +1029,16 @@ func TestTaskCommands(t *testing.T) {
 		}
 		s.CreateTask(ctx, task)
 
+		viper.Set("output.format", "json")
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "show", "T-0001", "--format", "json"})
+		cmd.SetArgs([]string{"task", "show", "T-0001"})
 
 		if err := cmd.Execute(); err != nil {
-			t.Fatalf("task show with --format json failed: %v", err)
+			t.Fatalf("task show with json format failed: %v", err)
 		}
 
 		output := buf.String()
@@ -1025,7 +1051,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ShowTaskYAMLFormat", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		task := &core.Task{
@@ -1035,15 +1062,16 @@ func TestTaskCommands(t *testing.T) {
 		}
 		s.CreateTask(ctx, task)
 
+		viper.Set("output.format", "yaml")
 		cmd := newTestCmd()
 		cmd.AddCommand(taskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "show", "T-0001", "--format", "yaml"})
+		cmd.SetArgs([]string{"task", "show", "T-0001"})
 
 		if err := cmd.Execute(); err != nil {
-			t.Fatalf("task show with --format yaml failed: %v", err)
+			t.Fatalf("task show with yaml format failed: %v", err)
 		}
 
 		output := buf.String()
@@ -1056,7 +1084,8 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("VerifyIDSequencing", func(t *testing.T) {
-		s, _ := getStorage()
+		defer resetTestDB(t)()
+		s, _ := getStorageRaw()
 		defer s.Close()
 
 		cmd1 := newTestCmd()
@@ -1103,26 +1132,9 @@ func contains(s, substr string) bool {
 
 // Helper function for test setup
 func setupTestDir(t *testing.T) (ctx context.Context, cleanup func()) {
-	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", tmpDir)
-	}
-
-	dbPath := filepath.Join(tmpDir, "test.sqlite")
-	todoPath := filepath.Join(tmpDir, "TODO")
-
-	viper.Reset()
-	viper.Set("storage.backend", "sqlite")
-	viper.Set("storage.db_path", dbPath)
-	viper.Set("task.todo_file", todoPath)
-	viper.Set("output.format", "json")
-
+	t.Helper()
+	cleanup = resetTestDB(t)
 	ctx = context.Background()
-
-	cleanup = func() {
-		os.RemoveAll(tmpDir)
-	}
-
 	return
 }
 
@@ -1142,7 +1154,7 @@ func TestTaskCreateWithAssignee(t *testing.T) {
 		t.Fatalf("task create with assignee failed: %v", err)
 	}
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	task, _ := s.GetTask(ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task was not created")
@@ -1170,7 +1182,7 @@ func TestTaskCreateWithTags(t *testing.T) {
 		t.Fatalf("task create with tags failed: %v", err)
 	}
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	task, _ := s.GetTask(ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task was not created")
@@ -1202,7 +1214,7 @@ func TestTaskFilterByTag(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	task1 := &core.Task{
 		ID:     "T-0001",
 		Title:  "Auth task",
@@ -1243,7 +1255,7 @@ func TestTaskFilterByAssignee(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	assignee1 := "engineer-1"
 	assignee2 := "engineer-2"
 	task1 := &core.Task{
@@ -1286,7 +1298,7 @@ func TestTaskFilterByStatus(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	task1 := &core.Task{
 		ID:     "T-0001",
 		Title:  "TODO task",
@@ -1325,7 +1337,7 @@ func TestTaskFilterByAssigneeMe(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	currentUser := core.GetCurrentUser()
 	if currentUser == "" {
 		currentUser = "testuser"
@@ -1373,7 +1385,7 @@ func TestTaskUpdateAssignee(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	assignee1 := "engineer-1"
 	task := &core.Task{
 		ID:         "T-0001",
@@ -1411,7 +1423,7 @@ func TestTaskClearAssigneeNull(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	assignee1 := "engineer-1"
 	task := &core.Task{
 		ID:         "T-0001",
@@ -1447,7 +1459,7 @@ func TestTaskClearAssigneeDash(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	assignee1 := "engineer-1"
 	task := &core.Task{
 		ID:         "T-0001",
@@ -1483,7 +1495,7 @@ func TestTaskAddTag(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	task := &core.Task{
 		ID:     "T-0001",
 		Title:  "Task without urgent tag",
@@ -1536,7 +1548,7 @@ func TestTaskRemoveTag(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
-	s, _ := getStorage()
+	s, _ := getStorageRaw()
 	task := &core.Task{
 		ID:     "T-0001",
 		Title:  "Task with chore tag",

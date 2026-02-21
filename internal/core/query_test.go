@@ -6,8 +6,9 @@ import (
 )
 
 func TestQuery_FilterByTag(t *testing.T) {
-	repo := &mockRepo{tasks: make(map[string]*Task)}
-	service := NewTaskService(repo, repo)
+	repo := NewMockRepository()
+	logRepo := NewMockLogRepository()
+	service := NewTaskService(repo, logRepo)
 
 	ctx := context.Background()
 	task1 := &Task{

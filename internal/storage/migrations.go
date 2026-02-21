@@ -24,7 +24,7 @@ var migrations = []migration{
 			description TEXT,
 			status TEXT NOT NULL,
 			assigned_to TEXT,
-			reference TEXT NOT NULL,
+			reference TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			meta TEXT,

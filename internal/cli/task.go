@@ -458,7 +458,7 @@ var taskListCmd = &cobra.Command{
 			query.Search = args[0]
 		}
 
-		if taskListMine {
+		if taskListMine || taskListAssignedTo == "me" {
 			taskListAssignedTo = core.GetCurrentUser()
 		}
 
@@ -471,7 +471,7 @@ var taskListCmd = &cobra.Command{
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "assigned_to", Value: taskListAssignedTo})
 		}
 		for _, tag := range taskListTag {
-			query.Filters = append(query.Filters, core.FieldFilter{Field: "tags", Value: tag})
+			query.Filters = append(query.Filters, core.FieldFilter{Field: "tags", Operator: core.OpContains, Value: tag})
 		}
 
 		tasks, err := s.ListTasks(ctx, query)

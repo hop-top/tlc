@@ -32,7 +32,73 @@ func (m *mockRepo) UpdateTaskWithLog(ctx context.Context, t *Task, e *LogEntry) 
 }
 
 func (m *mockRepo) ListTasks(ctx context.Context, q Query) ([]*Task, error) {
-	return nil, nil
+	var tasks []*Task
+	for _, t := range m.tasks {
+		matches := true
+		for _, filter := range q.Filters {
+			if !m.applyFilter(t, filter) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			tasks = append(tasks, t)
+		}
+	}
+	return tasks, nil
+}
+
+func (m *mockRepo) applyFilter(task *Task, filter FieldFilter) bool {
+	switch filter.Field {
+	case "tags":
+		tags, ok := filter.Value.(string)
+		if !ok {
+			return false
+		}
+		switch filter.Operator {
+		case OpContains:
+			for _, tag := range task.Tags {
+				if tag == tags {
+					return true
+				}
+			}
+			return false
+		}
+		return false
+	case "assigned_to":
+		switch filter.Operator {
+		case OpEq:
+			assignee, ok := filter.Value.(string)
+			if !ok {
+				return task.AssignedTo == nil
+			}
+			if task.AssignedTo == nil {
+				return assignee == ""
+			}
+			return *task.AssignedTo == assignee
+		case OpNotEq:
+			assignee, ok := filter.Value.(string)
+			if !ok {
+				return task.AssignedTo != nil
+			}
+			if task.AssignedTo == nil {
+				return assignee != ""
+			}
+			return *task.AssignedTo != assignee
+		}
+		return false
+	case "status":
+		status, ok := filter.Value.(TaskStatus)
+		if !ok {
+			return false
+		}
+		switch filter.Operator {
+		case OpEq:
+			return task.Status == status
+		}
+		return false
+	}
+	return false
 }
 
 func (m *mockRepo) DeleteTask(ctx context.Context, id string) error {

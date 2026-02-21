@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +18,7 @@ import (
 // Simulates sync pull assigning project_id to tasks from GitHub
 // Verifies tasks appear in correct project context when listed
 func TestGitHubSync_ProjectScoping(t *testing.T) {
+	resetProjectDetection()
 	ctx := context.Background()
 	tempDir := t.TempDir()
 
@@ -139,10 +141,13 @@ storage:
 		t.Logf("Lists tasks with AllProjects=false (simulating CLI in project)")
 		t.Logf("Verifies only tasks with matching project_id are returned")
 		t.Logf("Confirms all GitHub-synced tasks appear")
-		// Change to project directory
-		oldCwd, _ := os.Getwd()
-		defer os.Chdir(oldCwd)
-		os.Chdir(projDir)
+		// Simulate being in project context by pointing viper at the project config
+		resetProjectDetection()
+		cfgPath := filepath.Join(projDir, ".tlc", "config.yaml")
+		viper.SetConfigFile(cfgPath)
+		viper.SetConfigType("yaml")
+		viper.ReadInConfig()
+		defer resetProjectDetection()
 
 		// List tasks with AllProjects=false (this is what the CLI does by default in project context)
 		tasks, err := s.ListTasks(ctx, core.Query{AllProjects: false})
@@ -205,8 +210,10 @@ storage:
 		t.Logf("Lists tasks (no project filter applied)")
 		t.Logf("Verifies all tasks from all projects are returned")
 		// Change to a directory without .tlc (simulating being outside project)
+		resetProjectDetection()
 		oldCwd, _ := os.Getwd()
 		defer os.Chdir(oldCwd)
+		defer resetProjectDetection()
 		os.Chdir(tempDir)
 
 		// List tasks without project filter
@@ -222,6 +229,7 @@ storage:
 // Verifies same GitHub issue ID can exist in different projects
 // Verifies each project only sees its own tasks
 func TestGitHubSync_MultipleProjects(t *testing.T) {
+	resetProjectDetection()
 	ctx := context.Background()
 	tempDir := t.TempDir()
 
@@ -329,11 +337,10 @@ storage:
 		t.Logf("Lists tasks for project1, filters by project1's project_id")
 		t.Logf("Lists tasks for project2, filters by project2's project_id")
 		t.Logf("Verifies each project sees only its tasks")
-		// Test manual filtering by project_id
-		// This simulates what ListTasks does when in a project context
+		// List all tasks, then manually filter by project_id
+		resetProjectDetection()
 
-		// Filter for project1
-		query1 := core.Query{}
+		query1 := core.Query{AllProjects: true}
 		tasks1, err := s.ListTasks(ctx, query1)
 		require.NoError(t, err)
 
@@ -364,8 +371,15 @@ storage:
 // TestGitHubSync_TaskUpdatePreservesProjectID tests sync updates preserve project scoping
 // Verifies project_id is preserved when GitHub sync updates task properties
 func TestGitHubSync_TaskUpdatePreservesProjectID(t *testing.T) {
+	resetProjectDetection()
+	oldCwd, _ := os.Getwd()
 	ctx := context.Background()
 	tempDir := t.TempDir()
+
+	// Work from tempDir so DetectProject returns InProject=false (no git repo)
+	os.Chdir(tempDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
 
 	projDir := filepath.Join(tempDir, "project1")
 	tlcDir := filepath.Join(projDir, ".tlc")

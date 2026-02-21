@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,9 +13,14 @@ import (
 // TestSQLiteStorage_CRUD tests basic Create, Read, Update operations for tasks
 // Verifies task lifecycle: create, retrieve, update, and log entries
 func TestSQLiteStorage_CRUD(t *testing.T) {
-	dbPath := "test_crud.db"
-	defer os.Remove(dbPath)
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
 
+	dbPath := filepath.Join(tmpDir, "test_crud.db")
 	s, err := NewSQLiteStorage(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
@@ -87,9 +93,14 @@ func TestSQLiteStorage_CRUD(t *testing.T) {
 // TestSQLiteStorage_Query tests filtering, searching, and pagination
 // Verifies status filters, text search, pagination, and log queries
 func TestSQLiteStorage_Query(t *testing.T) {
-	dbPath := "test_query.db"
-	defer os.Remove(dbPath)
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
 
+	dbPath := filepath.Join(tmpDir, "test_query.db")
 	s, err := NewSQLiteStorage(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
@@ -145,9 +156,14 @@ func TestSQLiteStorage_Query(t *testing.T) {
 // TestStorage_QueryORLogic tests OR logic in query filters
 // Verifies multiple status filters work with OR logic
 func TestStorage_QueryORLogic(t *testing.T) {
-	dbPath := "test_or_logic.db"
-	defer os.Remove(dbPath)
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
 
+	dbPath := filepath.Join(tmpDir, "test_or_logic.db")
 	s, err := NewSQLiteStorage(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)

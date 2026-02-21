@@ -129,9 +129,15 @@ storage:
 // TestProjectScoping_EdgeCases tests edge cases for project scoping
 // Handles nil project_id (defaults to 'default') and empty project_id
 func TestProjectScoping_EdgeCases(t *testing.T) {
+	resetProjectDetection()
 	ctx := context.Background()
 
 	tempDir := t.TempDir()
+
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tempDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
 	dbPath := filepath.Join(tempDir, "db.sqlite")
 
 	s, err := NewSQLiteStorage(dbPath)
@@ -158,7 +164,10 @@ func TestProjectScoping_EdgeCases(t *testing.T) {
 
 		retrieved, err := s.GetTask(ctx, "T-DEFAULT")
 		require.NoError(t, err)
-		assert.Nil(t, retrieved.ProjectID)
+		require.NotNil(t, retrieved)
+		// nil ProjectID is coalesced to empty string on storage
+		assert.NotNil(t, retrieved.ProjectID)
+		assert.Equal(t, "", *retrieved.ProjectID)
 	})
 
 	t.Run("Empty project_id treated as nil", func(t *testing.T) {

@@ -47,18 +47,29 @@ func (s *TaskService) ArchiveTasks(ctx context.Context, threshold time.Duration)
 }
 
 func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, note string) error {
-	if task.OriginSystem != nil && *task.OriginSystem != "" {
+	hasOriginSystem := task.OriginSystem != nil && *task.OriginSystem != ""
+	var originSystem string
+	if hasOriginSystem {
+		originSystem = *task.OriginSystem
+	} else if task.Meta != nil {
+		if os, ok := task.Meta["origin_system"].(string); ok && os != "" {
+			hasOriginSystem = true
+			originSystem = os
+		}
+	}
+
+	if hasOriginSystem {
 		if task.Meta == nil {
 			task.Meta = make(map[string]interface{})
 		}
 		task.Meta["needs_push"] = true
-		
+
 		logEntry := &LogEntry{
 			TaskID:    task.ID,
 			Timestamp: time.Now().UTC(),
 			By:        by,
 			Action:    ActionComment,
-			Note:      fmt.Sprintf("Task marked for push to %s", *task.OriginSystem),
+			Note:      fmt.Sprintf("Task marked for push to %s", originSystem),
 		}
 		if err := s.logRepo.AddLog(ctx, logEntry); err != nil {
 			return err
@@ -98,7 +109,26 @@ func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, n
 		return fmt.Errorf("task %s not found", taskID)
 	}
 
+	if task.AssignedTo != nil && *task.AssignedTo != by {
+		return fmt.Errorf("task is already claimed by %s", *task.AssignedTo)
+	}
+
 	task.AssignedTo = &by
+
+	hasOriginSystem := task.OriginSystem != nil && *task.OriginSystem != ""
+	if !hasOriginSystem && task.Meta != nil {
+		if originSystem, ok := task.Meta["origin_system"].(string); ok && originSystem != "" {
+			hasOriginSystem = true
+		}
+	}
+
+	if hasOriginSystem {
+		if task.Meta == nil {
+			task.Meta = make(map[string]interface{})
+		}
+		task.Meta["needs_push"] = true
+	}
+
 	logEntry, err := task.Transition(StatusInProgress, by, note)
 	if err != nil {
 		return err
@@ -118,6 +148,21 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 	}
 
 	task.AssignedTo = nil
+
+	hasOriginSystem := task.OriginSystem != nil && *task.OriginSystem != ""
+	if !hasOriginSystem && task.Meta != nil {
+		if originSystem, ok := task.Meta["origin_system"].(string); ok && originSystem != "" {
+			hasOriginSystem = true
+		}
+	}
+
+	if hasOriginSystem {
+		if task.Meta == nil {
+			task.Meta = make(map[string]interface{})
+		}
+		task.Meta["needs_push"] = true
+	}
+
 	logEntry, err := task.Transition(StatusTodo, by, note)
 	if err != nil {
 		return err

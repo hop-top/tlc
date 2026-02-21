@@ -1,9 +1,95 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+// resetTestDB creates a fresh temporary DB for test isolation.
+// It resets viper, the detection cache, and the dbSyncOnce guard so
+// each test gets a clean slate. Changes CWD to the temp dir so
+// DetectProject() doesn't pick up the real git repo.
+// Returns a cleanup function that restores the original CWD.
+func resetTestDB(t *testing.T) func() {
+	t.Helper()
+	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+
+	viper.Reset()
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", filepath.Join(tmpDir, "test.sqlite"))
+	viper.Set("task.todo_file", filepath.Join(tmpDir, "TODO"))
+	core.ResetDetectionCache()
+	dbSyncOnce = sync.Once{}
+	resetTaskFlags()
+
+	return func() {
+		os.Chdir(origDir)
+		core.ResetDetectionCache()
+		os.RemoveAll(tmpDir)
+	}
+}
+
+// resetTaskFlags resets all global flag variables and Cobra's internal
+// flag state so that values don't carry between test executions.
+func resetTaskFlags() {
+	// Reset all globals to their init() defaults
+	taskID = ""
+	taskTitle = ""
+	taskDescription = ""
+	taskStatus = "TODO"
+	taskAssignedTo = ""
+	taskTags = nil
+	taskReference = ""
+	taskInteractive = false
+
+	taskListStatus = nil
+	taskListAssignedTo = ""
+	taskListTag = nil
+	taskListMine = false
+	taskListArchived = false
+	taskListAllProjects = false
+	taskListSortBy = "created_at"
+	taskListSortDirection = "desc"
+	taskListLimit = 100
+	taskListOffset = 0
+
+	taskShowLogs = false
+	taskShowLogSortDirection = ""
+
+	taskUpdateTitle = ""
+	taskUpdateDescription = ""
+	taskUpdateStatus = ""
+	taskUpdateAssignedTo = ""
+	taskUpdateAddTags = nil
+	taskUpdateRemoveTags = nil
+
+	taskDeleteYes = false
+	taskClaimNote = ""
+	taskUnclaimNote = ""
+
+	// Clear Cobra's "changed" state on all flags
+	for _, cmd := range []*cobra.Command{
+		taskCreateCmd, taskListCmd, taskShowCmd,
+		taskUpdateCmd, taskDeleteCmd, taskClaimCmd, taskUnclaimCmd,
+	} {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+		})
+	}
+}
 
 func newTestCmd() *cobra.Command {
 	cmd := &cobra.Command{

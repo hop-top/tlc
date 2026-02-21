@@ -17,9 +17,16 @@ import (
 // TestProjectScoping_E2E runs comprehensive end-to-end tests for project scoping
 // Tests task ID uniqueness across projects, filtering, sequences, updates, deletes, and logs
 func TestProjectScoping_E2E(t *testing.T) {
+	resetProjectDetection()
 	ctx := context.Background()
 
 	tempDir := t.TempDir()
+
+	// Work from tempDir so DetectProject returns InProject=false (no git)
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tempDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
 
 	dbPath := filepath.Join(tempDir, "db.sqlite")
 
@@ -197,6 +204,7 @@ func TestProjectScoping_E2E(t *testing.T) {
 // TestProjectScoping_TODOFileSync tests TODO file synchronization with project scoping
 // Verifies project-specific todo.txt filtering
 func TestProjectScoping_TODOFileSync(t *testing.T) {
+	resetProjectDetection()
 	tempDir := t.TempDir()
 
 	projDir := filepath.Join(tempDir, "project1")
@@ -270,6 +278,7 @@ func TestProjectScoping_TODOFileSync(t *testing.T) {
 }
 
 func TestProjectScoping_Migration(t *testing.T) {
+	resetProjectDetection()
 	t.Logf("Verifies that migration 7 successfully:")
 	t.Logf("1. Creates tasks_new table with composite primary key (project_id, id)")
 	t.Logf("2. Migrates existing data with COALESCE(project_id, 'default')")
