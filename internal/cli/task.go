@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/plugin"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/plugin"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"

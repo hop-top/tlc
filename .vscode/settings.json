@@ -9,7 +9,7 @@
   "go.formatTool": "goimports",
   "go.formatFlags": [
     "-local",
-    "github.com/google/oss-tlc-cli"
+    "hop.top/tlc"
   ],
   "[go]": {
     "editor.formatOnSave": true,

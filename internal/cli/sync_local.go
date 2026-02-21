@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/storage"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 	"github.com/spf13/viper"
 )
 

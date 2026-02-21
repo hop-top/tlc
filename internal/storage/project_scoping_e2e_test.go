@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"hop.top/tlc/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

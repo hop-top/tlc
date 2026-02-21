@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/config"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/storage"
+	"hop.top/tlc/internal/config"
+	"hop.top/tlc/internal/storage"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

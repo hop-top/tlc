@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"hop.top/tlc/internal/core"
 	_ "modernc.org/sqlite"
 )
 

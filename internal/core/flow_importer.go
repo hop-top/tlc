@@ -360,7 +360,7 @@ func (fi *FlowImporter) callLLM(ctx context.Context, apiURL, apiKey, model, prom
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("HTTP-Referer", "https://github.com/IdeaCraftersLabs/oss-tlc-cli")
+	req.Header.Set("HTTP-Referer", "https://github.com/hop-top/tlc")
 
 	resp, err := fi.httpClient.Do(req)
 	if err != nil {

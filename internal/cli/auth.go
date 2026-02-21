@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/auth"
+	"hop.top/tlc/internal/auth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

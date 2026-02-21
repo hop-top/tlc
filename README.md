@@ -39,14 +39,14 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 
 ### Quick Install (Build from source)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IdeaCraftersLabs/oss-tlc-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hop-top/tlc/main/install.sh | bash
 ```
 
 ### Build manually
 ```bash
 # Clone the repository
-git clone https://github.com/IdeaCraftersLabs/oss-tlc-cli.git
-cd oss-tlc-cli
+git clone https://github.com/hop-top/tlc.git
+cd tlc
 
 # Build the binary
 mkdir -p bin

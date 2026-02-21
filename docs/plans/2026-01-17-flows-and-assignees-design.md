@@ -596,7 +596,7 @@ delegation:
 ## File Structure
 
 ```
-oss-tlc-cli/
+tlc/
 ├── flows/                    # Flow definitions
 │   ├── brainstorming.yaml
 │   ├── systematic-debugging.yaml

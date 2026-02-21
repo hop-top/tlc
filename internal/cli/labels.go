@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/labels"
+	"hop.top/tlc/internal/labels"
 	"github.com/spf13/cobra"
 )
 

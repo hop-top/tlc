@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"

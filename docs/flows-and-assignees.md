@@ -141,7 +141,7 @@ delegation:
 ## File Structure
 
 ```
-oss-tlc-cli/
+tlc/
 ├── examples/
 │   ├── flows/
 │   │   └── brainstorming.yaml

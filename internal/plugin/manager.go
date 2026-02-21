@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"hop.top/tlc/internal/core"
 	"gopkg.in/yaml.v3"
 )
 

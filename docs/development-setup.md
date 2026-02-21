@@ -10,8 +10,8 @@
 
 1. Clone and setup:
    ```bash
-   git clone https://github.com/google/oss-tlc-cli.git
-   cd oss-tlc-cli
+   git clone https://github.com/hop-top/tlc.git
+   cd tlc
    ```
 
 2. Install development tools:

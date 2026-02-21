@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/config"
+	"hop.top/tlc/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

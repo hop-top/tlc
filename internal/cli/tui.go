@@ -5,8 +5,8 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/tui"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/tui"
 	"github.com/spf13/cobra"
 )
 

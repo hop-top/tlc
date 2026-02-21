@@ -1,4 +1,4 @@
-# Air configuration for oss-tlc-cli
+# Air configuration for tlc
 # https://github.com/cosmtrek/air
 
 root = "."

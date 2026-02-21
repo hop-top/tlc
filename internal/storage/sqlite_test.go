@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"hop.top/tlc/internal/core"
 )
 
 // TestSQLiteStorage_CRUD tests basic Create, Read, Update operations for tasks

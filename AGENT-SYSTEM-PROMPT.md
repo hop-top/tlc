@@ -5,7 +5,7 @@
 You are working on the TLC (Task Line CLI) project. The project uses a task list file in **Task Line Syntax (TLS)** format located at:
 
 ```
-/sessions/vibrant-admiring-gates/mnt/oss-tlc-cli/TODO
+/sessions/vibrant-admiring-gates/mnt/tlc/TODO
 ```
 
 Since the TLC CLI tool doesn't exist yet (you're building it!), you need to manually work with this task list file until the tool is functional.
@@ -107,7 +107,7 @@ When you see `ref:docs/some-spec.md`, read that document:
 
 ```bash
 # Example: T-0003 references task-crud-spec
-cat /sessions/vibrant-admiring-gates/mnt/oss-tlc-cli/docs/task-crud-spec-0.1.md
+cat /sessions/vibrant-admiring-gates/mnt/tlc/docs/task-crud-spec-0.1.md
 ```
 
 ### 4. Reporting Progress
@@ -263,7 +263,7 @@ t.Run("test_name", func(t *testing.T) {
 
 ## Documentation References
 
-All specification documents are in `/sessions/vibrant-admiring-gates/mnt/oss-tlc-cli/docs/`:
+All specification documents are in `/sessions/vibrant-admiring-gates/mnt/tlc/docs/`:
 
 - `task-crud-spec-0.1.md` - Task data model and CRUD operations
 - `task-line-spec-0.1.md` - Task Line Syntax grammar

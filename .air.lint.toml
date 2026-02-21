@@ -1,4 +1,4 @@
-# Air configuration for linting oss-tlc-cli
+# Air configuration for linting tlc
 # Watches for Go file changes and runs golangci-lint
 
 root = "."

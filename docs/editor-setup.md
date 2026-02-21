@@ -65,7 +65,7 @@ VS Code settings are already configured in `.vscode/settings.json` and will be a
 1. Open Preferences → Editor → Code Style → Go
 2. **Imports tab**:
    - Sorting type: `goimports`
-   - Local package path: `github.com/google/oss-tlc-cli`
+   - Local package path: `hop.top/tlc`
 3. **Other tab**:
    - Line length: 120
 
@@ -139,7 +139,7 @@ null_ls.setup {
     }),
     -- Formatting
     null_ls.builtins.formatting.goimports.with({
-      extra_args = {"-local", "github.com/google/oss-tlc-cli"}
+      extra_args = {"-local", "hop.top/tlc"}
     }),
   },
 }
@@ -186,7 +186,7 @@ let g:ale_fixers = {
 \}
 
 let g:ale_go_golangci_lint_options = '--config .golangci.yml --fast'
-let g:ale_go_goimports_options = '-local github.com/google/oss-tlc-cli'
+let g:ale_go_goimports_options = '-local hop.top/tlc'
 
 " Fix files on save
 let g:ale_fix_on_save = 1
@@ -204,7 +204,7 @@ Add to your `.vimrc`:
 " vim-go configuration
 let g:go_fmt_command = "goimports"
 let g:go_fmt_options = {
-\   'goimports': '-local github.com/google/oss-tlc-cli',
+\   'goimports': '-local hop.top/tlc',
 \}
 
 " Use golangci-lint
@@ -251,7 +251,7 @@ Add to your Emacs configuration:
 
 ;; Set goimports options
 (setq gofmt-command "goimports")
-(setq gofmt-args '("-local" "github.com/google/oss-tlc-cli"))
+(setq gofmt-args '("-local" "hop.top/tlc"))
 ```
 
 ### Using flycheck with golangci-lint
@@ -311,7 +311,7 @@ Add to your Emacs configuration:
 ```json
 {
   "gofmt_cmd": "goimports",
-  "gofmt_args": ["-local", "github.com/google/oss-tlc-cli"],
+  "gofmt_args": ["-local", "hop.top/tlc"],
   "fmt_on_save": true
 }
 ```

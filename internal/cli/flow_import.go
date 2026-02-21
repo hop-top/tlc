@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

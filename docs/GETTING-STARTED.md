@@ -293,6 +293,6 @@ If you're stuck:
 1. Check which **stage** you're on
 2. Re-read the **docs** for that stage
 3. Look at **examples** in the linked specs
-4. Ask in [GitHub Discussions](https://github.com/IdeaCraftersLabs/oss-tlc-cli/discussions)
+4. Ask in [GitHub Discussions](https://github.com/hop-top/tlc/discussions)
 
 **Remember**: Each stage builds on the previous. Don't skip ahead!

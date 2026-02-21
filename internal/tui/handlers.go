@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/tui/styles"
-	"github.com/IdeaCraftersLabs/oss-tlc-cli/pkg/themepicker"
+	"hop.top/tlc/internal/tui/styles"
+	"hop.top/tlc/pkg/themepicker"
 	"github.com/spf13/viper"
 )
 

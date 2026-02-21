@@ -1,4 +1,4 @@
-# Pre-commit hooks for oss-tlc-cli
+# Pre-commit hooks for tlc
 # https://pre-commit.com/
 
 repos:
@@ -22,7 +22,7 @@ repos:
       - id: go-fmt
         args: ['-s']
       - id: go-imports
-        args: ['-local', 'github.com/google/oss-tlc-cli']
+        args: ['-local', 'hop.top/tlc']
       - id: go-vet
       - id: go-unit-tests
         args: ['-short', '-race']
