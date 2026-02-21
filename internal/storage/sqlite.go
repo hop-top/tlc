@@ -72,12 +72,18 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			lastSyncAt = &s
 		}
 
+		// Coalesce nil ProjectID to empty string to prevent NULL composite PK duplication
+		var projectID string
+		if task.ProjectID != nil {
+			projectID = *task.ProjectID
+		}
+
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
-			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, task.ProjectID,
+			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
 		)
 		return err
 	})

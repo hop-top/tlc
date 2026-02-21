@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/config"
@@ -109,24 +110,7 @@ func initConfig() {
 		log.Warn("Failed to unmarshal config for validation", "error", err)
 	} else {
 		if err := cfg.Validate(); err != nil {
-			log.Fatal("Invalid configuration", "error", err)
-		}
-	}
-
-	// Sync local TODO file into SQLite
-	if err := ingestTODO(); err != nil {
-		log.Warn("Failed to ingest TODO file", "error", err)
-	}
-
-	// Auto-archive tasks
-	if s, err := getStorage(); err == nil {
-		defer s.Close()
-		threshold := viper.GetDuration("task.archive_threshold")
-		if threshold > 0 {
-			count, err := s.ArchiveTasks(context.Background(), threshold)
-			if err == nil && count > 0 {
-				log.Info("Auto-archived tasks", "count", count)
-			}
+			log.Warn("Invalid configuration", "error", err)
 		}
 	}
 
@@ -234,7 +218,33 @@ func setDefaults() {
 	viper.SetDefault("ui.table_style", "unicode")
 }
 
-func getStorage() (*storage.SQLiteStorage, error) {
+var dbSyncOnce sync.Once
+
+// ensureDBSynced runs TODO ingestion and auto-archive once per process.
+// Called lazily on first getStorage() so commands that don't touch the
+// DB (doctor, init, help, config, version, etc.) pay zero startup cost.
+func ensureDBSynced(s *storage.SQLiteStorage) {
+	dbSyncOnce.Do(func() {
+		// Sync local TODO file into SQLite
+		if err := ingestTODOWith(s); err != nil {
+			log.Warn("Failed to ingest TODO file", "error", err)
+		}
+
+		// Auto-archive tasks
+		threshold := viper.GetDuration("task.archive_threshold")
+		if threshold > 0 {
+			count, err := s.ArchiveTasks(context.Background(), threshold)
+			if err == nil && count > 0 {
+				log.Info("Auto-archived tasks", "count", count)
+			}
+		}
+	})
+}
+
+// getStorageRaw opens the SQLite database without running TODO ingestion
+// or auto-archive. Use this for diagnostic commands (doctor) that just
+// need to test the connection.
+func getStorageRaw() (*storage.SQLiteStorage, error) {
 	backend := viper.GetString("storage.backend")
 	if backend != "sqlite" {
 		return nil, fmt.Errorf("unsupported storage backend: %s", backend)
@@ -242,7 +252,6 @@ func getStorage() (*storage.SQLiteStorage, error) {
 
 	dbPath := viper.GetString("storage.db_path")
 	if dbPath == "" {
-		// This case is unlikely given setDefaults, but handled for safety
 		dataHome := os.Getenv("XDG_DATA_HOME")
 		if dataHome == "" {
 			home, _ := os.UserHomeDir()
@@ -257,4 +266,16 @@ func getStorage() (*storage.SQLiteStorage, error) {
 	}
 
 	return storage.NewSQLiteStorage(dbPath)
+}
+
+// getStorage opens the SQLite database and ensures TODO ingestion and
+// auto-archive have run (once per process).
+func getStorage() (*storage.SQLiteStorage, error) {
+	s, err := getStorageRaw()
+	if err != nil {
+		return nil, err
+	}
+
+	ensureDBSynced(s)
+	return s, nil
 }

@@ -363,7 +363,7 @@ func checkDBPathWritable(fix bool) checkResult {
 }
 
 func checkDBOpens(_ bool) checkResult {
-	s, err := getStorage()
+	s, err := getStorageRaw()
 	if err != nil {
 		return checkResult{
 			name:     "database opens successfully",
@@ -381,7 +381,7 @@ func checkDBOpens(_ bool) checkResult {
 }
 
 func checkSchemaVersion(fix bool) checkResult {
-	s, err := getStorage()
+	s, err := getStorageRaw()
 	if err != nil {
 		return checkResult{
 			name:     "schema version is current",
@@ -618,9 +618,11 @@ func runDoctor(cmd *cobra.Command, fix bool) error {
 }
 
 var doctorCmd = &cobra.Command{
-	Use:   "doctor",
-	Short: "Check environment and configuration health",
-	Long:  "Run diagnostic checks on your TLC environment and optionally fix issues.",
+	Use:           "doctor",
+	Short:         "Check environment and configuration health",
+	Long:          "Run diagnostic checks on your TLC environment and optionally fix issues.",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fix, _ := cmd.Flags().GetBool("fix")
 		return runDoctor(cmd, fix)

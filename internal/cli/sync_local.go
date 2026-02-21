@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/core"
+	"github.com/IdeaCraftersLabs/oss-tlc-cli/internal/storage"
 	"github.com/spf13/viper"
 )
 
@@ -97,8 +98,10 @@ func syncToProjectTODO() error {
 	return nil
 }
 
-// ingestTODO reads the TODO file and updates SQLite if changes are found.
-func ingestTODO() error {
+// ingestTODOWith reads the TODO file and updates the given storage if changes are found.
+// This variant accepts a pre-opened storage to avoid opening a second connection
+// during lazy initialization in getStorage().
+func ingestTODOWith(s *storage.SQLiteStorage) error {
 	f, err := os.Open(viper.GetString("task.todo_file"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -107,12 +110,6 @@ func ingestTODO() error {
 		return err
 	}
 	defer f.Close()
-
-	s, err := getStorage()
-	if err != nil {
-		return err
-	}
-	defer s.Close()
 
 	ctx := context.Background()
 	scanner := bufio.NewScanner(f)
