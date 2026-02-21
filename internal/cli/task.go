@@ -50,6 +50,7 @@ var (
 
 	taskClaimNote   string
 	taskUnclaimNote string
+	taskCompleteNote string
 )
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
@@ -238,6 +239,41 @@ var taskUnclaimCmd = &cobra.Command{
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
+		return syncTODOAll()
+	},
+}
+
+var taskCompleteCmd = &cobra.Command{
+	Use:   "complete <task-id>",
+	Short: "Mark a task as done",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
+		ctx := context.Background()
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get task: %w", err)
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", id)
+		}
+
+		logEntry, err := task.Transition(core.StatusDone, core.GetCurrentUser(), taskCompleteNote)
+		if err != nil {
+			return fmt.Errorf("failed to transition task: %w", err)
+		}
+
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+			return err
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", id)
 		return syncTODOAll()
 	},
 }
@@ -706,6 +742,8 @@ func init() {
 
 	taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
 
+	taskCompleteCmd.Flags().StringVarP(&taskCompleteNote, "note", "n", "", "Completion note")
+
 	taskCmd.AddCommand(taskCreateCmd)
 
 	taskCmd.AddCommand(taskListCmd)
@@ -719,6 +757,8 @@ func init() {
 	taskCmd.AddCommand(taskClaimCmd)
 
 	taskCmd.AddCommand(taskUnclaimCmd)
+
+	taskCmd.AddCommand(taskCompleteCmd)
 
 	rootCmd.AddCommand(taskCmd)
 }
