@@ -53,6 +53,11 @@ func shouldTrackTLC(cmd *cobra.Command) (bool, error) {
 		return false, nil
 	}
 
+	// Skip prompt if stdin is not a terminal
+	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+		return false, nil
+	}
+
 	// Prompt user
 	var shouldTrack bool
 	form := huh.NewForm(
