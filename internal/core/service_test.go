@@ -11,27 +11,27 @@ type mockRepo struct {
 	logs  []*LogEntry
 }
 
-func (m *mockRepo) CreateTask(ctx context.Context, t *Task) error {
+func (m *mockRepo) CreateTask(_ context.Context, t *Task) error {
 	m.tasks[t.ID] = t
 	return nil
 }
 
-func (m *mockRepo) GetTask(ctx context.Context, id string) (*Task, error) {
+func (m *mockRepo) GetTask(_ context.Context, id string) (*Task, error) {
 	return m.tasks[id], nil
 }
 
-func (m *mockRepo) UpdateTask(ctx context.Context, t *Task) error {
+func (m *mockRepo) UpdateTask(_ context.Context, t *Task) error {
 	m.tasks[t.ID] = t
 	return nil
 }
 
-func (m *mockRepo) UpdateTaskWithLog(ctx context.Context, t *Task, e *LogEntry) error {
+func (m *mockRepo) UpdateTaskWithLog(_ context.Context, t *Task, e *LogEntry) error {
 	m.tasks[t.ID] = t
 	m.logs = append(m.logs, e)
 	return nil
 }
 
-func (m *mockRepo) ListTasks(ctx context.Context, q Query) ([]*Task, error) {
+func (m *mockRepo) ListTasks(_ context.Context, q Query) ([]*Task, error) {
 	var tasks []*Task
 	for _, t := range m.tasks {
 		matches := true
@@ -101,12 +101,12 @@ func (m *mockRepo) applyFilter(task *Task, filter FieldFilter) bool {
 	return false
 }
 
-func (m *mockRepo) DeleteTask(ctx context.Context, id string) error {
+func (m *mockRepo) DeleteTask(_ context.Context, id string) error {
 	delete(m.tasks, id)
 	return nil
 }
 
-func (m *mockRepo) GetTasksNeedingPush(ctx context.Context) ([]*Task, error) {
+func (m *mockRepo) GetTasksNeedingPush(_ context.Context) ([]*Task, error) {
 	var result []*Task
 	for _, t := range m.tasks {
 		if t.NeedsPush() {
@@ -116,7 +116,7 @@ func (m *mockRepo) GetTasksNeedingPush(ctx context.Context) ([]*Task, error) {
 	return result, nil
 }
 
-func (m *mockRepo) FindTaskByOrigin(ctx context.Context, system, originID string) (*Task, error) {
+func (m *mockRepo) FindTaskByOrigin(_ context.Context, system, originID string) (*Task, error) {
 	for _, t := range m.tasks {
 		if t.OriginSystem != nil && *t.OriginSystem == system {
 			if id, ok := t.Meta["origin_id"].(string); ok && id == originID {
@@ -127,7 +127,7 @@ func (m *mockRepo) FindTaskByOrigin(ctx context.Context, system, originID string
 	return nil, nil
 }
 
-func (m *mockRepo) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
+func (m *mockRepo) ArchiveTasks(_ context.Context, threshold time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-threshold)
 	var count int64
 	for _, t := range m.tasks {
@@ -139,32 +139,32 @@ func (m *mockRepo) ArchiveTasks(ctx context.Context, threshold time.Duration) (i
 	return count, nil
 }
 
-func (m *mockRepo) CreateFlowRun(ctx context.Context, run *FlowRun) error {
+func (m *mockRepo) CreateFlowRun(_ context.Context, _ *FlowRun) error {
 	return nil
 }
 
-func (m *mockRepo) GetFlowRun(ctx context.Context, id string) (*FlowRun, error) {
+func (m *mockRepo) GetFlowRun(_ context.Context, _ string) (*FlowRun, error) {
 	return nil, nil
 }
 
-func (m *mockRepo) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
+func (m *mockRepo) UpdateFlowRun(_ context.Context, _ *FlowRun) error {
 	return nil
 }
 
-func (m *mockRepo) ListFlowRuns(ctx context.Context, q Query) ([]*FlowRun, error) {
+func (m *mockRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, error) {
 	return nil, nil
 }
 
-func (m *mockRepo) AddLog(ctx context.Context, e *LogEntry) error {
+func (m *mockRepo) AddLog(_ context.Context, e *LogEntry) error {
 	m.logs = append(m.logs, e)
 	return nil
 }
 
-func (m *mockRepo) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error) {
+func (m *mockRepo) GetLogs(_ context.Context, _ string, _ string) ([]*LogEntry, error) {
 	return m.logs, nil
 }
 
-func (m *mockRepo) ListLogs(ctx context.Context, q LogQuery) ([]*LogEntry, error) {
+func (m *mockRepo) ListLogs(_ context.Context, _ LogQuery) ([]*LogEntry, error) {
 	return m.logs, nil
 }
 

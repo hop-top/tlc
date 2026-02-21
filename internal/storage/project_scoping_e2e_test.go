@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/tlc/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/tlc/internal/core"
 )
 
 // TestProjectScoping_E2E runs comprehensive end-to-end tests for project scoping
-// Tests task ID uniqueness across projects, filtering, sequences, updates, deletes, and logs
+// Tests task ID uniqueness across projects, filtering, sequences, updates, deletes, and logs.
 func TestProjectScoping_E2E(t *testing.T) {
 	resetProjectDetection()
 	ctx := context.Background()
@@ -202,16 +202,16 @@ func TestProjectScoping_E2E(t *testing.T) {
 }
 
 // TestProjectScoping_TODOFileSync tests TODO file synchronization with project scoping
-// Verifies project-specific todo.txt filtering
+// Verifies project-specific todo.txt filtering.
 func TestProjectScoping_TODOFileSync(t *testing.T) {
 	resetProjectDetection()
 	tempDir := t.TempDir()
 
 	projDir := filepath.Join(tempDir, "project1")
-	require.NoError(t, os.MkdirAll(projDir, 0755))
+	require.NoError(t, os.MkdirAll(projDir, 0o755))
 
 	tlcDir := filepath.Join(projDir, ".tlc")
-	require.NoError(t, os.MkdirAll(tlcDir, 0755))
+	require.NoError(t, os.MkdirAll(tlcDir, 0o755))
 
 	todoFile := filepath.Join(tlcDir, "todo.txt")
 

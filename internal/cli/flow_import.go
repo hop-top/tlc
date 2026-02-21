@@ -1,12 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
 )
 
 var flowImportCmd = &cobra.Command{
@@ -39,22 +40,22 @@ Examples:
 
 		importer := core.NewFlowImporter()
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Importing flow from: %s\n\n", url)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Importing flow from: %s\n\n", url)
 
-		flow, err := importer.ImportFromURL(url)
+		flow, err := importer.ImportFromURL(context.Background(), url)
 		if err != nil {
 			return fmt.Errorf("failed to import flow: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully imported flow: %s\n", flow.ID)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Name: %s\n", flow.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully imported flow: %s\n", flow.ID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Name: %s\n", flow.Name)
 		if flow.Description != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Description: %s\n", flow.Description)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Description: %s\n", flow.Description)
 		}
 		if flow.Config != nil && flow.Config.Category != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Category: %s\n", flow.Config.Category)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Category: %s\n", flow.Config.Category)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "  Steps: %d\n\n", len(flow.Steps))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Steps: %d\n\n", len(flow.Steps))
 
 		data, err := yaml.Marshal(flow)
 		if err != nil {
@@ -62,13 +63,13 @@ Examples:
 		}
 
 		if outputFile != "" {
-			if err := os.WriteFile(outputFile, data, 0644); err != nil {
+			if err := os.WriteFile(outputFile, data, 0o600); err != nil {
 				return fmt.Errorf("failed to write flow file: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Flow saved to: %s\n", outputFile)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Flow saved to: %s\n", outputFile)
 		} else {
-			fmt.Fprintln(cmd.OutOrStdout(), "---")
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "---")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		}
 
 		return nil

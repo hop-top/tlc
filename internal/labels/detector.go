@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-// DetectProjectType attempts to detect the project type based on files in the path
+// DetectProjectType attempts to detect the project type based on files in the path.
 func DetectProjectType(path string) ProjectType {
 	if exists(filepath.Join(path, "go.mod")) {
 		if exists(filepath.Join(path, "cmd")) {

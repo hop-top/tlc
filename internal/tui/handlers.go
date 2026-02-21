@@ -5,23 +5,33 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/log"
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/tui/styles"
 	"hop.top/tlc/pkg/themepicker"
-	"github.com/spf13/viper"
+)
+
+const (
+	keyCtrlC     = "ctrl+c"
+	keyDown      = "down"
+	keyEnter     = "enter"
+	keyEsc       = "esc"
+	keyBackspace = "backspace"
+	sortDesc     = "desc"
 )
 
 func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", keyCtrlC:
 			return m, tea.Quit
 		case "/":
-			m.view = "search"
+			m.view = viewSearch
 			m.searchInput.Focus()
 			m.searchInput.SetValue("")
 			return m, nil
-		case "j", "down":
+		case "j", keyDown:
 			if m.selected < len(m.tasks)-1 {
 				m.selected++
 			}
@@ -39,7 +49,7 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.syncPull
 		case "v":
 			m.selected = 0
-			m.view = "kanban"
+			m.view = viewKanban
 			return m, nil
 		case "f":
 			if len(m.tasks) > 0 {
@@ -60,7 +70,7 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		case "n":
 			return m, m.createTask()
 		case "t":
-			m.view = "theme_picker"
+			m.view = viewThemePicker
 			tm, _ := m.themePicker.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 			m.themePicker = tm.(themepicker.Model)
 			return m, nil
@@ -76,22 +86,22 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			if len(m.tasks) > 0 {
 				return m, m.rotateStatus(m.tasks[m.selected])
 			}
-		case "enter":
+		case keyEnter:
 			if len(m.tasks) > 0 {
-				m.view = "detail"
+				m.view = viewDetail
 				m.viewport.GotoTop()
 				return m, m.fetchLogs
 			}
-		case "esc":
+		case keyEsc:
 			if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
 				m.searchInput.SetValue("")
 				m.activeFilters = nil
 				return m, m.fetchTasks
 			}
-			m.view = "dashboard"
+			m.view = viewDashboard
 			return m, nil
-		case "backspace":
-			m.view = "dashboard"
+		case keyBackspace:
+			m.view = viewDashboard
 			return m, nil
 		}
 	}
@@ -105,7 +115,7 @@ func handleDetailUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", keyCtrlC:
 			return m, tea.Quit
 		case "r":
 			return m, m.fetchTasks
@@ -122,18 +132,18 @@ func handleDetailUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 				return m, m.rotateStatus(m.tasks[m.selected])
 			}
 		case "o":
-			if m.logSortDirection == "desc" {
-				m.logSortDirection = "asc"
+			if m.logSortDirection == sortDesc {
+				m.logSortDirection = sortAsc
 			} else {
-				m.logSortDirection = "desc"
+				m.logSortDirection = sortDesc
 			}
 			return m, m.fetchLogs
-		case "esc":
-			m.view = "dashboard"
+		case keyEsc:
+			m.view = viewDashboard
 			m.viewport.GotoTop()
 			return m, nil
-		case "backspace":
-			m.view = "dashboard"
+		case keyBackspace:
+			m.view = viewDashboard
 			m.viewport.GotoTop()
 			return m, nil
 		}
@@ -148,9 +158,9 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", keyCtrlC:
 			return m, tea.Quit
-		case "j", "down":
+		case "j", keyDown:
 			if m.selected < len(m.tasks)-1 {
 				m.selected++
 			}
@@ -174,7 +184,7 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.fetchTasks
 		case "v":
 			m.selected = 0
-			m.view = "flows"
+			m.view = viewFlows
 			return m, m.fetchFlowRuns
 		case "c":
 			if len(m.tasks) > 0 {
@@ -188,18 +198,18 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			if len(m.tasks) > 0 {
 				return m, m.rotateStatus(m.tasks[m.selected])
 			}
-		case "enter":
+		case keyEnter:
 			if len(m.tasks) > 0 {
-				m.view = "detail"
+				m.view = viewDetail
 				m.viewport.GotoTop()
 				return m, m.fetchLogs
 			}
-		case "esc":
-			m.view = "dashboard"
+		case keyEsc:
+			m.view = viewDashboard
 			m.viewport.GotoTop()
 			return m, nil
-		case "backspace":
-			m.view = "dashboard"
+		case keyBackspace:
+			m.view = viewDashboard
 			m.viewport.GotoTop()
 			return m, nil
 		}
@@ -214,9 +224,9 @@ func handleFlowsUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", keyCtrlC:
 			return m, tea.Quit
-		case "j", "down":
+		case "j", keyDown:
 			if m.selected < len(m.flowRuns)-1 {
 				m.selected++
 			}
@@ -232,13 +242,13 @@ func handleFlowsUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.fetchFlowRuns
 		case "v":
 			m.selected = 0
-			m.view = "dashboard"
+			m.view = viewDashboard
 			return m, m.fetchTasks
-		case "esc":
-			m.view = "dashboard"
+		case keyEsc:
+			m.view = viewDashboard
 			return m, nil
-		case "backspace":
-			m.view = "dashboard"
+		case keyBackspace:
+			m.view = viewDashboard
 			return m, nil
 		}
 	}
@@ -252,8 +262,8 @@ func handleSearchUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "enter", "esc":
-			m.view = "dashboard"
+		case keyEnter, keyEsc:
+			m.view = viewDashboard
 			return m, m.fetchTasks
 		}
 	}
@@ -269,11 +279,11 @@ func handleFormUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		m.form = f
 	}
 	if m.form.State == huh.StateCompleted {
-		m.view = "dashboard"
+		m.view = viewDashboard
 		return m, m.saveTask(m.taskTitle, m.taskDescription)
 	}
 	if m.form.State == huh.StateAborted {
-		m.view = "dashboard"
+		m.view = viewDashboard
 		return m, nil
 	}
 	return m, cmd
@@ -282,8 +292,8 @@ func handleFormUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 func handleThemePickerUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "esc" {
-			m.view = "dashboard"
+		if msg.String() == keyEsc {
+			m.view = viewDashboard
 			return m, nil
 		}
 		if msg.String() == "R" {
@@ -331,9 +341,11 @@ func handleThemePickerUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 		styles.ApplyTheme(themeToApply)
 		viper.Set("ui.theme", themeToApply.Name)
-		viper.WriteConfig()
+		if err := viper.WriteConfig(); err != nil {
+			log.Warn("Failed to save theme preference", "error", err)
+		}
 
-		m.view = "dashboard"
+		m.view = viewDashboard
 		return m, nil
 	}
 

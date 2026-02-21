@@ -6,6 +6,11 @@ import (
 	"testing"
 )
 
+const (
+	testInvalid = "invalid"
+	testPrompt  = "prompt"
+)
+
 func TestLoadConfig_Merging(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
 	if err != nil {
@@ -14,7 +19,7 @@ func TestLoadConfig_Merging(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	projectRoot := filepath.Join(tmpDir, "project")
-	os.MkdirAll(filepath.Join(projectRoot, ".tlc"), 0755)
+	os.MkdirAll(filepath.Join(projectRoot, ".tlc"), 0o755)
 
 	projectConfigPath := filepath.Join(projectRoot, ".tlc", "config.yaml")
 	projectConfigData := `
@@ -23,7 +28,7 @@ output:
 task:
   default_status: IN_PROGRESS
 `
-	if err := os.WriteFile(projectConfigPath, []byte(projectConfigData), 0644); err != nil {
+	if err := os.WriteFile(projectConfigPath, []byte(projectConfigData), 0o644); err != nil {
 		t.Fatalf("failed to write project config: %v", err)
 	}
 
@@ -60,13 +65,13 @@ func TestConfig_Validate(t *testing.T) {
 	}{
 		{
 			name:    "valid default config",
-			setup:   func(c *Config) {},
+			setup:   func(_ *Config) {},
 			wantErr: false,
 		},
 		{
-			name: "invalid output format",
+			name: testInvalid + " output format",
 			setup: func(c *Config) {
-				c.Output.Format = "invalid"
+				c.Output.Format = testInvalid
 			},
 			wantErr: true,
 		},
@@ -79,23 +84,23 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid storage backend",
+			name: testInvalid + " storage backend",
 			setup: func(c *Config) {
-				c.Storage.Backend = "invalid"
+				c.Storage.Backend = testInvalid
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid fallback_mode",
+			name: testInvalid + " fallback_mode",
 			setup: func(c *Config) {
-				c.Project.FallbackMode = "invalid"
+				c.Project.FallbackMode = testInvalid
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid duplicate_id_strategy",
+			name: testInvalid + " duplicate_id_strategy",
 			setup: func(c *Config) {
-				c.Project.DuplicateIDStrategy = "invalid"
+				c.Project.DuplicateIDStrategy = testInvalid
 			},
 			wantErr: true,
 		},
@@ -114,9 +119,9 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid fallback_mode prompt",
+			name: "valid fallback_mode " + testPrompt,
 			setup: func(c *Config) {
-				c.Project.FallbackMode = "prompt"
+				c.Project.FallbackMode = testPrompt
 			},
 			wantErr: false,
 		},
@@ -135,9 +140,9 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid duplicate_id_strategy prompt",
+			name: "valid duplicate_id_strategy " + testPrompt,
 			setup: func(c *Config) {
-				c.Project.DuplicateIDStrategy = "prompt"
+				c.Project.DuplicateIDStrategy = testPrompt
 			},
 			wantErr: false,
 		},

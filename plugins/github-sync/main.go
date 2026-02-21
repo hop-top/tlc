@@ -227,7 +227,7 @@ func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error
 	for {
 		issues, resp, err := client.Issues.ListByRepo(ctx, owner, repo, opts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list github issues: %w", err)
 		}
 
 		for _, issue := range issues {
@@ -266,7 +266,7 @@ func createGitHubIssue(repoFull string, task *Task) error {
 	req := MapTaskToGitHubIssueRequest(task)
 	issue, _, err := client.Issues.Create(ctx, owner, repo, req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create github issue: %w", err)
 	}
 
 	// Update task with origin info
@@ -309,7 +309,10 @@ func updateGitHubIssue(repoFull string, task *Task) error {
 
 	req := MapTaskToGitHubIssueRequest(task)
 	_, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to edit github issue: %w", err)
+	}
+	return nil
 }
 
 func deleteGitHubIssue(repoFull string, task *Task) error {
@@ -345,7 +348,10 @@ func deleteGitHubIssue(repoFull string, task *Task) error {
 	}
 
 	_, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to close github issue: %w", err)
+	}
+	return nil
 }
 
 func sendResponse(resp Response) {

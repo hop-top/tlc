@@ -40,11 +40,11 @@ func TestDetectProjectType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			projDir := filepath.Join(tmpDir, tt.name)
-			os.MkdirAll(projDir, 0755)
+			os.MkdirAll(projDir, 0o755)
 			for _, f := range tt.files {
 				fPath := filepath.Join(projDir, f)
-				os.MkdirAll(filepath.Dir(fPath), 0755)
-				os.WriteFile(fPath, []byte(""), 0644)
+				os.MkdirAll(filepath.Dir(fPath), 0o755)
+				os.WriteFile(fPath, []byte(""), 0o644)
 			}
 
 			got := DetectProjectType(projDir)

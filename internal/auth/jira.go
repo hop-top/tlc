@@ -2,22 +2,23 @@ package auth
 
 import (
 	"fmt"
+
 	"github.com/andygrunwald/go-jira"
 )
 
-// JiraAuthenticator handles Jira authentication
+// JiraAuthenticator handles Jira authentication.
 type JiraAuthenticator struct {
 	store Store
 }
 
-// NewJiraAuthenticator creates a new JiraAuthenticator
+// NewJiraAuthenticator creates a new JiraAuthenticator.
 func NewJiraAuthenticator(store Store) *JiraAuthenticator {
 	return &JiraAuthenticator{
 		store: store,
 	}
 }
 
-// LoginWithAPIToken authenticates using a Jira API Token
+// LoginWithAPIToken authenticates using a Jira API Token.
 func (a *JiraAuthenticator) LoginWithAPIToken(url, email, token, accountName string) (*Credential, error) {
 	tp := jira.BasicAuthTransport{
 		Username: email,

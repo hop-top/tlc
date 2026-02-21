@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -33,18 +34,24 @@ func (pm *PermissionManager) Load() error {
 
 	data, err := os.ReadFile(pm.configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read permissions file: %w", err)
 	}
 
-	return yaml.Unmarshal(data, &pm.grants)
+	if err := yaml.Unmarshal(data, &pm.grants); err != nil {
+		return fmt.Errorf("failed to unmarshal permissions: %w", err)
+	}
+	return nil
 }
 
 func (pm *PermissionManager) Save() error {
 	data, err := yaml.Marshal(pm.grants)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal permissions: %w", err)
 	}
-	return os.WriteFile(pm.configPath, data, 0600)
+	if err := os.WriteFile(pm.configPath, data, 0o600); err != nil {
+		return fmt.Errorf("failed to write permissions file: %w", err)
+	}
+	return nil
 }
 
 func (pm *PermissionManager) IsGranted(pluginName, permission string) bool {

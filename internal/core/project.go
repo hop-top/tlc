@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,11 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	projectIDUnknown = "unknown"
+	fallbackModeAuto = "auto"
 )
 
 var (
@@ -44,7 +50,7 @@ func detectProjectOnce() *ProjectDetection {
 	if checkConfigPath != "" {
 		viper.SetConfigFile(checkConfigPath)
 		viper.SetConfigType("yaml")
-		viper.ReadInConfig()
+		_ = viper.ReadInConfig()
 	}
 
 	configPath := viper.ConfigFileUsed()
@@ -72,7 +78,7 @@ func detectProjectOnce() *ProjectDetection {
 	if projectID == "" {
 		projectID = detectProjectID()
 		viper.Set("project.id", projectID)
-		viper.WriteConfig()
+		_ = viper.WriteConfig()
 	}
 
 	return &ProjectDetection{
@@ -92,11 +98,11 @@ func detectProjectID() string {
 	if detected := detectFromDirectory(); detected != "" {
 		return detected
 	}
-	return "unknown"
+	return projectIDUnknown
 }
 
 func DetectFromGitRemote() string {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd := exec.CommandContext(context.Background(), "git", "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -128,7 +134,7 @@ func DetectFromGitRemote() string {
 }
 
 func detectFromGitConfig() string {
-	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
+	cmd := exec.CommandContext(context.Background(), "git", "config", "--get", "remote.origin.url")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -136,9 +142,9 @@ func detectFromGitConfig() string {
 	url := strings.TrimSpace(string(output))
 
 	if url == "" {
-		cmd := exec.Command("git", "config", "--get", "user.name")
+		cmd := exec.CommandContext(context.Background(), "git", "config", "--get", "user.name")
 		name, _ := cmd.Output()
-		cmd = exec.Command("git", "config", "--get", "user.email")
+		cmd = exec.CommandContext(context.Background(), "git", "config", "--get", "user.email")
 		email, _ := cmd.Output()
 		if name != nil && email != nil {
 			return strings.TrimSpace(string(name) + "-" + string(email))
@@ -167,13 +173,13 @@ func detectFromDirectory() string {
 		cwd = newCwd
 	}
 
-	return "unknown"
+	return projectIDUnknown
 }
 
 func handleFallbackMode() *ProjectDetection {
 	mode := viper.GetString("project.fallback_mode")
 	if mode == "" {
-		mode = "auto"
+		mode = fallbackModeAuto
 	}
 
 	inferredID := DetectFromGitRemote()
@@ -182,7 +188,7 @@ func handleFallbackMode() *ProjectDetection {
 	}
 
 	switch mode {
-	case "auto":
+	case fallbackModeAuto:
 		if err := CreateConfigWithInferredID(inferredID); err == nil {
 			return &ProjectDetection{
 				ProjectID:  inferredID,
@@ -245,8 +251,8 @@ func CreateConfigWithInferredID(projectID string) error {
 		}
 	}
 
-	if err := os.MkdirAll(".tlc", 0755); err != nil {
-		return err
+	if err := os.MkdirAll(".tlc", 0o750); err != nil {
+		return fmt.Errorf("failed to create .tlc directory: %w", err)
 	}
 
 	config := map[string]interface{}{
@@ -258,11 +264,11 @@ func CreateConfigWithInferredID(projectID string) error {
 
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(".tlc/config.yaml", data, 0644); err != nil {
-		return err
+	if err := os.WriteFile(".tlc/config.yaml", data, 0o600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	log.Info("Detected project from git remote, created .tlc/config.yaml", "project_id", projectID)
@@ -286,5 +292,8 @@ func promptFallbackMode(projectID string) (string, error) {
 	)
 
 	err := form.Run()
-	return choice, err
+	if err != nil {
+		return "", fmt.Errorf("failed to run fallback mode prompt: %w", err)
+	}
+	return choice, nil
 }

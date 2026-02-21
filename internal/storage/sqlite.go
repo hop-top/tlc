@@ -13,6 +13,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	sqlOpLike    = "LIKE"
+	sqlOrderASC  = "ASC"
+	sqlOrderDESC = "DESC"
+	sqlLimit     = " LIMIT ?"
+)
+
 type SQLiteStorage struct {
 	db        *sql.DB
 	writeLock sync.Mutex
@@ -25,15 +32,15 @@ func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
 	}
 
 	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "PRAGMA foreign_keys = ON;"); err != nil {
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	// Enable WAL mode and set busy timeout for better concurrency
-	if _, err := db.Exec("PRAGMA journal_mode = WAL;"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "PRAGMA journal_mode = WAL;"); err != nil {
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "PRAGMA busy_timeout = 5000;"); err != nil {
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
@@ -51,14 +58,19 @@ func (s *SQLiteStorage) withWriteTransaction(ctx context.Context, fn func(*sql.T
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
 
 	if err := fn(tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("rollback failed after error %v: %w", err, rbErr)
+		}
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }
 
 func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
@@ -85,7 +97,10 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
 			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to insert task: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -107,17 +122,21 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
 
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
 
 	if metaStr.Valid {
-		json.Unmarshal([]byte(metaStr.String), &task.Meta)
+		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+		}
 	}
 	if tagsStr.Valid {
-		json.Unmarshal([]byte(tagsStr.String), &task.Tags)
+		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
+		}
 	}
 	if originSystemStr.Valid {
 		task.OriginSystem = &originSystemStr.String
@@ -162,7 +181,10 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 				task.OriginSystem, lastSyncAt, task.Archived, task.ID,
 			)
 		}
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -196,7 +218,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			)
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to update task: %w", err)
 		}
 
 		// Add Log
@@ -214,7 +236,10 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			projectID, entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(logMetaJSON),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to insert log entry: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -247,13 +272,13 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 			case core.OpLte:
 				op = "<="
 			case core.OpContains:
-				op = "LIKE"
+				op = sqlOpLike
 				f.Value = "%" + fmt.Sprintf("%v", f.Value) + "%"
 			case core.OpStart:
-				op = "LIKE"
+				op = sqlOpLike
 				f.Value = fmt.Sprintf("%v", f.Value) + "%"
 			case core.OpEnd:
-				op = "LIKE"
+				op = sqlOpLike
 				f.Value = "%" + fmt.Sprintf("%v", f.Value)
 			}
 
@@ -296,18 +321,18 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 
 	// Sorting
 	if query.SortBy != "" {
-		order := "ASC"
+		order := sqlOrderASC
 		if strings.ToLower(query.SortDirection) == "desc" {
-			order = "DESC"
+			order = sqlOrderDESC
 		}
-		sqlQuery += fmt.Sprintf(" ORDER BY %s %s", query.SortBy, order)
+		sqlQuery += fmt.Sprintf(" ORDER BY %s %s", query.SortBy, order) //nolint:gosec // G202: SortBy is validated against known columns
 	} else {
 		sqlQuery += " ORDER BY created_at DESC"
 	}
 
 	// Pagination
 	if query.Limit > 0 {
-		sqlQuery += " LIMIT ?"
+		sqlQuery += sqlLimit
 		args = append(args, query.Limit)
 	}
 	if query.Offset > 0 {
@@ -317,37 +342,20 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 
 	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query tasks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tasks []*core.Task
 	for rows.Next() {
-		var task core.Task
-		var createdAtStr, updatedAtStr string
-		var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr sql.NullString
-		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr); err != nil {
+		task, err := scanTaskFromRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-		task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
-		if metaStr.Valid {
-			json.Unmarshal([]byte(metaStr.String), &task.Meta)
-		}
-		if tagsStr.Valid {
-			json.Unmarshal([]byte(tagsStr.String), &task.Tags)
-		}
-		if originSystemStr.Valid {
-			task.OriginSystem = &originSystemStr.String
-		}
-		if lastSyncAtStr.Valid {
-			t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
-			task.LastSyncAt = &t
-		}
-		if projectIDStr.Valid {
-			task.ProjectID = &projectIDStr.String
-		}
-		tasks = append(tasks, &task)
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate task rows: %w", err)
 	}
 	return tasks, nil
 }
@@ -362,12 +370,12 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 		if proj != nil && proj.InProject && proj.ProjectID != "" {
 			err := tx.QueryRowContext(ctx, "SELECT project_id FROM tasks WHERE id = ? AND project_id = ?", entry.TaskID, proj.ProjectID).Scan(&projectID)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get project_id: %w", err)
 			}
 		} else {
 			err := tx.QueryRowContext(ctx, "SELECT project_id FROM tasks WHERE id = ?", entry.TaskID).Scan(&projectID)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get project_id: %w", err)
 			}
 		}
 
@@ -376,14 +384,17 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			projectID, entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(metaJSON),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to insert log entry: %w", err)
+		}
+		return nil
 	})
 }
 
 func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*core.LogEntry, error) {
 	order := "DESC"
-	if strings.ToUpper(sortDirection) == "ASC" {
-		order = "ASC"
+	if strings.ToUpper(sortDirection) == sqlOrderASC {
+		order = sqlOrderASC
 	}
 	proj := core.DetectProject()
 	var query string
@@ -397,12 +408,9 @@ func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirectio
 		rows, err = s.db.QueryContext(ctx, query, taskID)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query logs: %w", err)
 	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []*core.LogEntry
 	for rows.Next() {
@@ -410,13 +418,18 @@ func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirectio
 		var timestampStr string
 		var metaStr sql.NullString
 		if err := rows.Scan(&entry.ID, &entry.TaskID, &timestampStr, &entry.By, &entry.Action, &entry.Note, &metaStr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan log row: %w", err)
 		}
 		entry.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
 		if metaStr.Valid {
-			json.Unmarshal([]byte(metaStr.String), &entry.Meta)
+			if err := json.Unmarshal([]byte(metaStr.String), &entry.Meta); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+			}
 		}
 		entries = append(entries, &entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate log rows: %w", err)
 	}
 	return entries, nil
 }
@@ -426,10 +439,16 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 		proj := core.DetectProject()
 		if proj != nil && proj.InProject && proj.ProjectID != "" {
 			_, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
-			return err
+			if err != nil {
+				return fmt.Errorf("failed to delete task: %w", err)
+			}
+			return nil
 		}
 		_, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE id = ?", id)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to delete task: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -451,17 +470,21 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to scan task by origin: %w", err)
 	}
 
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
 
 	if metaStr.Valid {
-		json.Unmarshal([]byte(metaStr.String), &task.Meta)
+		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+		}
 	}
 	if tagsStr.Valid {
-		json.Unmarshal([]byte(tagsStr.String), &task.Tags)
+		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
+		}
 	}
 	if originSystemStr.Valid {
 		task.OriginSystem = &originSystemStr.String
@@ -491,7 +514,7 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 			cutoff,
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to archive tasks: %w", err)
 		}
 		count, _ = res.RowsAffected()
 		return nil
@@ -512,37 +535,20 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 	`
 	rows, err := s.db.QueryContext(ctx, sqlQuery)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query tasks needing push: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tasks []*core.Task
 	for rows.Next() {
-		var task core.Task
-		var createdAtStr, updatedAtStr string
-		var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr sql.NullString
-		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr); err != nil {
+		task, err := scanTaskFromRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-		task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
-		if metaStr.Valid {
-			json.Unmarshal([]byte(metaStr.String), &task.Meta)
-		}
-		if tagsStr.Valid {
-			json.Unmarshal([]byte(tagsStr.String), &task.Tags)
-		}
-		if originSystemStr.Valid {
-			task.OriginSystem = &originSystemStr.String
-		}
-		if lastSyncAtStr.Valid {
-			t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
-			task.LastSyncAt = &t
-		}
-		if projectIDStr.Valid {
-			task.ProjectID = &projectIDStr.String
-		}
-		tasks = append(tasks, &task)
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate tasks needing push: %w", err)
 	}
 	return tasks, nil
 }
@@ -556,7 +562,10 @@ func (s *SQLiteStorage) CreateFlowRun(ctx context.Context, run *core.FlowRun) er
 			run.ID, run.FlowID, run.Status, run.StartedAt.Format(time.RFC3339),
 			nil, string(resultsJSON),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to insert flow run: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -572,7 +581,7 @@ func (s *SQLiteStorage) GetFlowRun(ctx context.Context, id string) (*core.FlowRu
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to scan flow run: %w", err)
 	}
 
 	run.StartedAt, _ = time.Parse(time.RFC3339, startedAtStr)
@@ -581,7 +590,9 @@ func (s *SQLiteStorage) GetFlowRun(ctx context.Context, id string) (*core.FlowRu
 		run.EndedAt = &t
 	}
 	if resultsStr.Valid {
-		json.Unmarshal([]byte(resultsStr.String), &run.Results)
+		if err := json.Unmarshal([]byte(resultsStr.String), &run.Results); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal results: %w", err)
+		}
 	}
 
 	return &run, nil
@@ -600,7 +611,10 @@ func (s *SQLiteStorage) UpdateFlowRun(ctx context.Context, run *core.FlowRun) er
 			WHERE id = ?`,
 			run.Status, endedAt, string(resultsJSON), run.ID,
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to update flow run: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -618,9 +632,9 @@ func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*
 
 	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query flow runs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var runs []*core.FlowRun
 	for rows.Next() {
@@ -628,7 +642,7 @@ func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*
 		var startedAtStr string
 		var endedAtStr, resultsStr sql.NullString
 		if err := rows.Scan(&run.ID, &run.FlowID, &run.Status, &startedAtStr, &endedAtStr, &resultsStr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan flow run row: %w", err)
 		}
 		run.StartedAt, _ = time.Parse(time.RFC3339, startedAtStr)
 		if endedAtStr.Valid {
@@ -636,9 +650,14 @@ func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*
 			run.EndedAt = &t
 		}
 		if resultsStr.Valid {
-			json.Unmarshal([]byte(resultsStr.String), &run.Results)
+			if err := json.Unmarshal([]byte(resultsStr.String), &run.Results); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal results: %w", err)
+			}
 		}
 		runs = append(runs, &run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate flow run rows: %w", err)
 	}
 	return runs, nil
 }
@@ -662,7 +681,7 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 	}
 
 	if len(whereClauses) > 0 {
-		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
+		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ") //nolint:gosec // G202: whereClauses built from validated field names
 	}
 
 	order := "DESC"
@@ -682,9 +701,9 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 
 	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query logs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []*core.LogEntry
 	for rows.Next() {
@@ -692,13 +711,18 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 		var timestampStr string
 		var metaStr sql.NullString
 		if err := rows.Scan(&entry.ID, &entry.TaskID, &timestampStr, &entry.By, &entry.Action, &entry.Note, &metaStr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan log row: %w", err)
 		}
 		entry.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
 		if metaStr.Valid {
-			json.Unmarshal([]byte(metaStr.String), &entry.Meta)
+			if err := json.Unmarshal([]byte(metaStr.String), &entry.Meta); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+			}
 		}
 		entries = append(entries, &entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate log rows: %w", err)
 	}
 	return entries, nil
 }
@@ -716,21 +740,59 @@ func (s *SQLiteStorage) GetNextSequenceID(ctx context.Context, projectID string)
 			VALUES (?, 1)
 		`, projectID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to insert sequence: %w", err)
 		}
 
 		err = tx.QueryRowContext(ctx, "SELECT next_id FROM task_sequences WHERE project_id = ?", projectID).Scan(&nextID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get next sequence id: %w", err)
 		}
 
 		_, err = tx.ExecContext(ctx, "UPDATE task_sequences SET next_id = next_id + 1 WHERE project_id = ?", projectID)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to update sequence: %w", err)
+		}
+		return nil
 	})
 
 	return nextID, err
 }
 
+func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
+	var task core.Task
+	var createdAtStr, updatedAtStr string
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr sql.NullString
+	if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr); err != nil {
+		return nil, fmt.Errorf("failed to scan task row: %w", err)
+	}
+	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	if metaStr.Valid {
+		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+		}
+	}
+	if tagsStr.Valid {
+		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
+		}
+	}
+	if originSystemStr.Valid {
+		task.OriginSystem = &originSystemStr.String
+	}
+	if lastSyncAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		task.LastSyncAt = &t
+	}
+	if projectIDStr.Valid {
+		task.ProjectID = &projectIDStr.String
+	}
+	return &task, nil
+}
+
 func (s *SQLiteStorage) Close() error {
-	return s.db.Close()
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("failed to close database: %w", err)
+	}
+	return nil
 }

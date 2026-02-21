@@ -8,7 +8,7 @@ import (
 )
 
 // TestFormatFlowStatus tests flow status formatting
-// Verifies all flow statuses are formatted correctly and contain status text
+// Verifies all flow statuses are formatted correctly and contain status text.
 func TestFormatFlowStatus(t *testing.T) {
 	tests := []struct {
 		status core.FlowStatus

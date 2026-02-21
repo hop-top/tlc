@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -81,7 +82,7 @@ const LatestMigrationVersion = 1
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
 	var version int
-	err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	err := s.db.QueryRowContext(context.Background(), "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
 	if err != nil {
 		return 0, fmt.Errorf("failed to query schema version: %w", err)
 	}
@@ -90,7 +91,7 @@ func (s *SQLiteStorage) SchemaVersion() (int, error) {
 
 func (s *SQLiteStorage) migrate() error {
 	var currentVersion int
-	err := s.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&currentVersion)
+	err := s.db.QueryRowContext(context.Background(), "SELECT MAX(version) FROM schema_migrations").Scan(&currentVersion)
 	if err != nil {
 		// Table might not exist yet
 		currentVersion = 0
@@ -98,10 +99,10 @@ func (s *SQLiteStorage) migrate() error {
 
 	for _, m := range migrations {
 		if m.version > currentVersion {
-			if _, err := s.db.Exec(m.query); err != nil {
+			if _, err := s.db.ExecContext(context.Background(), m.query); err != nil {
 				return fmt.Errorf("migration to version %d failed: %w", m.version, err)
 			}
-			if _, err := s.db.Exec("INSERT INTO schema_migrations (version) VALUES (?)", m.version); err != nil {
+			if _, err := s.db.ExecContext(context.Background(), "INSERT INTO schema_migrations (version) VALUES (?)", m.version); err != nil {
 				return fmt.Errorf("failed to record migration version %d: %w", m.version, err)
 			}
 		}

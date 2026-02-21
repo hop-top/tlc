@@ -9,14 +9,14 @@ import (
 )
 
 // TestInitConfig tests configuration loading from file
-// Verifies config file is loaded and parsed correctly
+// Verifies config file is loaded and parsed correctly.
 func TestInitConfig(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "tlc-root-test-*")
 	defer os.RemoveAll(tmpDir)
 
 	// Create a dummy config file
 	configPath := filepath.Join(tmpDir, ".tlc.yaml")
-	os.WriteFile(configPath, []byte("storage:\n  backend: sqlite\n  db_path: ./test.sqlite\n"), 0644)
+	os.WriteFile(configPath, []byte("storage:\n  backend: sqlite\n  db_path: ./test.sqlite\n"), 0o644)
 
 	// Change working directory to tmpDir to test findAllConfigs
 	oldWd, _ := os.Getwd()
@@ -41,7 +41,7 @@ func TestInitConfig(t *testing.T) {
 }
 
 // TestRootCmdDefault verifies root command is configured
-// Checks RunE handler is set for TUI launch
+// Checks RunE handler is set for TUI launch.
 func TestRootCmdDefault(t *testing.T) {
 	// We can't easily test TUI launch in a unit test without it hanging or failing on no TTY.
 	// But we can verify RunE is set.
@@ -51,17 +51,17 @@ func TestRootCmdDefault(t *testing.T) {
 }
 
 // TestFindAllConfigs tests config file discovery
-// Finds all .tlc.yaml files in parent directories
+// Finds all .tlc.yaml files in parent directories.
 func TestFindAllConfigs(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "tlc-findconfigs-*")
 	defer os.RemoveAll(tmpDir)
 
 	subDir := filepath.Join(tmpDir, "a", "b", "c")
-	os.MkdirAll(subDir, 0755)
+	os.MkdirAll(subDir, 0o755)
 
 	// Create configs at different levels
-	os.WriteFile(filepath.Join(tmpDir, ".tlc.yaml"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "a", "b", ".tlc.yaml"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(tmpDir, ".tlc.yaml"), []byte(""), 0o644)
+	os.WriteFile(filepath.Join(tmpDir, "a", "b", ".tlc.yaml"), []byte(""), 0o644)
 
 	configs := findAllConfigs(subDir)
 	if len(configs) != 2 {

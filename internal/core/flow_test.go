@@ -189,7 +189,7 @@ func TestFlowExecutor_Retry(t *testing.T) {
 	// Task that fails first time then succeeds?
 	// Actually executeTaskStep is deterministic success in my current mock.
 	// I need a way to make it fail.
-	
+
 	// Setup flow: retry(T-1)
 	flow := &Flow{
 		ID:        "flow:test:retry",
@@ -250,7 +250,7 @@ func TestFlowExecutor_Cancel(t *testing.T) {
 	// Better yet, just test checkStatus directly.
 	run := &FlowRun{ID: "test-run", Status: FlowStatusRunning}
 	repo.CreateFlowRun(ctx, run)
-	
+
 	err := executor.checkStatus(ctx, run, "test")
 	if err != nil {
 		t.Errorf("checkStatus: expected nil err for Running, got %v", err)
@@ -278,7 +278,7 @@ func TestFlowExecutor_PauseResume(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		run.Status = FlowStatusPaused
 		repo.UpdateFlowRun(ctx, run)
-		
+
 		time.Sleep(100 * time.Millisecond)
 		run.Status = FlowStatusRunning
 		repo.UpdateFlowRun(ctx, run)
@@ -288,15 +288,11 @@ func TestFlowExecutor_PauseResume(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected eventually running, got error: %v", err)
 	}
-	
+
 	if run.Status != FlowStatusRunning {
 		t.Errorf("expected status Running after resume, got %s", run.Status)
 	}
 }
-
-
-
-
 
 func TestParseFlow_Validation(t *testing.T) {
 	tests := []struct {
@@ -356,5 +352,3 @@ steps:
 		})
 	}
 }
-
-

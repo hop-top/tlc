@@ -3,13 +3,13 @@ package core
 // Assignee represents a specialized task executor with specific capabilities.
 // Assignees are the TLC equivalent of superpowers agents.
 type Assignee struct {
-	ID           string                `json:"assignee_id" yaml:"assignee_id"`
-	Name         string                `json:"name" yaml:"name"`
-	Version      string                `json:"version" yaml:"version"`
-	Description  string                `json:"description" yaml:"description"`
-	Capabilities AssigneeCapabilities  `json:"capabilities" yaml:"capabilities"`
-	Instructions string                `json:"instructions,omitempty" yaml:"instructions,omitempty"`
-	Delegation   *DelegationRules      `json:"delegation,omitempty" yaml:"delegation,omitempty"`
+	ID           string               `json:"assignee_id" yaml:"assignee_id"`
+	Name         string               `json:"name" yaml:"name"`
+	Version      string               `json:"version" yaml:"version"`
+	Description  string               `json:"description" yaml:"description"`
+	Capabilities AssigneeCapabilities `json:"capabilities" yaml:"capabilities"`
+	Instructions string               `json:"instructions,omitempty" yaml:"instructions,omitempty"`
+	Delegation   *DelegationRules     `json:"delegation,omitempty" yaml:"delegation,omitempty"`
 }
 
 // AssigneeCapabilities defines what an assignee can do.
@@ -47,7 +47,7 @@ func (a *Assignee) CanDelegate(reason string) (string, bool) {
 }
 
 // CheckUnblocks returns the list of task types this assignee can unblock.
-func (a *Assignee) CheckUnblocks(completedTask *Task) []string {
+func (a *Assignee) CheckUnblocks(_ *Task) []string {
 	if a.Delegation == nil {
 		return nil
 	}

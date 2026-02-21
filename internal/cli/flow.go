@@ -10,14 +10,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
 )
 
 var (
-	flowRunFile   string
 	flowRunBy     string
 	flowStatusAll bool
 )
@@ -66,52 +65,46 @@ Usage:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flowFile := args[0]
 
-		// Read and parse flow file
 		f, err := os.Open(flowFile)
 		if err != nil {
 			return fmt.Errorf("failed to open flow file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		flow, err := core.ParseFlow(f, flowFile)
 		if err != nil {
 			return fmt.Errorf("failed to parse flow: %w", err)
 		}
 
-		// Get storage
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 
-		// Create flow executor
 		executor := core.NewFlowExecutor(s, s)
 
-		// Determine actor
 		by := flowRunBy
 		if by == "" {
 			by = core.GetCurrentUser()
 		}
 
-		// Execute flow
-		fmt.Fprintf(cmd.OutOrStdout(), "Starting flow: %s (ID: %s)\n", flow.Name, flow.ID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Starting flow: %s (ID: %s)\n", flow.Name, flow.ID)
 		run, err := executor.Execute(ctx, flow, by)
 		if err != nil {
 			return fmt.Errorf("flow execution failed: %w", err)
 		}
 
-		// Output result
-		fmt.Fprintf(cmd.OutOrStdout(), "\nFlow execution completed!\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  Run ID: %s\n", run.ID)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n", run.Status)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Started: %s\n", run.StartedAt.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFlow execution completed!\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Run ID: %s\n", run.ID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n", run.Status)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Started: %s\n", run.StartedAt.Format("2006-01-02 15:04:05"))
 		if run.EndedAt != nil {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Ended: %s\n", run.EndedAt.Format("2006-01-02 15:04:05"))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Ended: %s\n", run.EndedAt.Format("2006-01-02 15:04:05"))
 			duration := run.EndedAt.Sub(run.StartedAt)
-			fmt.Fprintf(cmd.OutOrStdout(), "  Duration: %s\n", duration)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Duration: %s\n", duration)
 		}
 
 		return nil
@@ -138,11 +131,10 @@ Output formats:
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 
-		// If specific run ID provided
 		if len(args) > 0 {
 			runID := args[0]
 			run, err := s.GetFlowRun(ctx, runID)
@@ -158,7 +150,6 @@ Output formats:
 			return nil
 		}
 
-		// Otherwise list all runs
 		if !flowStatusAll {
 			return fmt.Errorf("either provide a run-id or use --all flag")
 		}
@@ -178,12 +169,12 @@ var flowListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all flow runs",
 	Long:  `List all flow execution runs with their status.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		runs, err := s.ListFlowRuns(ctx, core.Query{})
@@ -200,28 +191,27 @@ var flowListCmd = &cobra.Command{
 func printFlowRun(cmd *cobra.Command, run *core.FlowRun, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case "json":
+	case formatJSON:
 		data, _ := json.MarshalIndent(run, "", "  ")
-		fmt.Fprintln(out, string(data))
-	case "yaml":
+		_, _ = fmt.Fprintln(out, string(data))
+	case formatYAML:
 		data, _ := yaml.Marshal(run)
-		fmt.Fprintln(out, string(data))
+		_, _ = fmt.Fprintln(out, string(data))
 	default:
-		// Pretty print
-		fmt.Fprintf(out, "Flow Run: %s\n", run.ID)
-		fmt.Fprintf(out, "  Flow ID: %s\n", run.FlowID)
-		fmt.Fprintf(out, "  Status: %s\n", formatFlowStatus(run.Status))
-		fmt.Fprintf(out, "  Started: %s\n", run.StartedAt.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(out, "Flow Run: %s\n", run.ID)
+		_, _ = fmt.Fprintf(out, "  Flow ID: %s\n", run.FlowID)
+		_, _ = fmt.Fprintf(out, "  Status: %s\n", formatFlowStatus(run.Status))
+		_, _ = fmt.Fprintf(out, "  Started: %s\n", run.StartedAt.Format("2006-01-02 15:04:05"))
 		if run.EndedAt != nil {
-			fmt.Fprintf(out, "  Ended: %s\n", run.EndedAt.Format("2006-01-02 15:04:05"))
+			_, _ = fmt.Fprintf(out, "  Ended: %s\n", run.EndedAt.Format("2006-01-02 15:04:05"))
 			duration := run.EndedAt.Sub(run.StartedAt)
-			fmt.Fprintf(out, "  Duration: %s\n", duration)
+			_, _ = fmt.Fprintf(out, "  Duration: %s\n", duration)
 		}
 
 		if len(run.Results) > 0 {
-			fmt.Fprintln(out, "\n  Results:")
+			_, _ = fmt.Fprintln(out, "\n  Results:")
 			for k, v := range run.Results {
-				fmt.Fprintf(out, "    %s: %v\n", k, v)
+				_, _ = fmt.Fprintf(out, "    %s: %v\n", k, v)
 			}
 		}
 	}
@@ -232,13 +222,13 @@ func formatFlowRuns(cmd *cobra.Command, runs []*core.FlowRun, format string) {
 	switch format {
 	case "json":
 		data, _ := json.MarshalIndent(runs, "", "  ")
-		fmt.Fprintln(out, string(data))
+		_, _ = fmt.Fprintln(out, string(data))
 	case "yaml":
 		data, _ := yaml.Marshal(runs)
-		fmt.Fprintln(out, string(data))
+		_, _ = fmt.Fprintln(out, string(data))
 	default:
 		if len(runs) == 0 {
-			fmt.Fprintln(out, "No flow runs found")
+			_, _ = fmt.Fprintln(out, "No flow runs found")
 			return
 		}
 		renderFlowRunsTable(out, runs)
@@ -254,7 +244,7 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 		{Title: "Duration", Width: 12},
 	}
 
-	rows := []table.Row{}
+	rows := make([]table.Row, 0, len(runs))
 	for _, r := range runs {
 		duration := "-"
 		if r.EndedAt != nil {
@@ -286,8 +276,8 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 		Bold(true)
 	tbl.SetStyles(s)
 
-	fmt.Fprintln(out, tbl.View())
-	fmt.Fprintf(out, "\nShowing %d flow runs\n", len(runs))
+	_, _ = fmt.Fprintln(out, tbl.View())
+	_, _ = fmt.Fprintf(out, "\nShowing %d flow runs\n", len(runs))
 }
 
 func formatFlowStatus(status core.FlowStatus) string {
@@ -321,48 +311,42 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flowFile := args[0]
 
-		// Read and parse flow file
 		f, err := os.Open(flowFile)
 		if err != nil {
 			return fmt.Errorf("failed to open flow file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		flow, err := core.ParseFlow(f, flowFile)
 		if err != nil {
 			return fmt.Errorf("failed to parse flow: %w", err)
 		}
 
-		// Get storage
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 
-		// Create flow executor
 		executor := core.NewFlowExecutor(s, s)
 
-		// Generate run ID
 		runID := fmt.Sprintf("run:%s", generateID())
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Invoking flow: %s (ID: %s)\n", flow.Name, flow.ID)
-		fmt.Fprintf(cmd.OutOrStdout(), "Run ID: %s\n\n", runID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Invoking flow: %s (ID: %s)\n", flow.Name, flow.ID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Run ID: %s\n\n", runID)
 
-		// Extract tasks from flow
 		tasks, err := executor.ExtractTasksFromFlow(ctx, flow, runID)
 		if err != nil {
 			return fmt.Errorf("failed to extract tasks from flow: %w", err)
 		}
 
 		if len(tasks) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "No tasks to generate. Flow has no task templates.\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No tasks to generate. Flow has no task templates.\n")
 			return nil
 		}
 
-		// Load assignees
 		assigneesDir := "examples/assignees"
 		assigneeLoader := core.NewAssigneeLoader(assigneesDir)
 		assignees, err := assigneeLoader.LoadAll()
@@ -371,22 +355,18 @@ Example:
 		}
 
 		if len(assignees) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "Warning: No assignees available. Tasks will not be auto-assigned.\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: No assignees available. Tasks will not be auto-assigned.\n")
 		}
 
-		// Create assignment engine
 		engine := core.NewAssignmentEngine(assignees)
 
-		// Create task service
 		taskService := core.NewTaskService(s, s)
 
-		// Determine actor
 		by := flowRunBy
 		if by == "" {
 			by = core.GetCurrentUser()
 		}
 
-		// Create and assign tasks
 		for _, task := range tasks {
 			if err := taskService.CreateTaskWithAssignment(ctx, task, engine, by, fmt.Sprintf("Created by flow %s", flow.ID)); err != nil {
 				return fmt.Errorf("failed to create task %s: %w", task.ID, err)
@@ -397,11 +377,11 @@ Example:
 				assigneeName = *task.AssignedTo
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created task %s: %s (assigned to %s)\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created task %s: %s (assigned to %s)\n",
 				task.ID, task.Title, assigneeName)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "\nFlow %s invoked successfully. Created %d tasks.\n",
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFlow %s invoked successfully. Created %d tasks.\n",
 			flow.ID, len(tasks))
 
 		return nil
@@ -409,7 +389,6 @@ Example:
 }
 
 func generateID() string {
-	// Simple timestamp-based ID
 	return fmt.Sprintf("%d", time.Now().Unix())
 }
 

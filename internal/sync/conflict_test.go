@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/tlc/internal/core"
 	"github.com/stretchr/testify/assert"
+	"hop.top/tlc/internal/core"
 )
 
 func TestDetectConflict(t *testing.T) {
@@ -318,31 +318,30 @@ func TestResolveConflict(t *testing.T) {
 }
 
 func TestResolveConflict_TaskFields(t *testing.T) {
+	makeTestConflict := func() *Conflict {
+		return &Conflict{
+			TaskID: "T-1",
+			LocalTask: &core.Task{
+				ID:          "T-1",
+				Title:       "Local",
+				Description: "Local desc",
+				Status:      core.StatusTodo,
+				Tags:        []string{"local"},
+				UpdatedAt:   time.Now(),
+			},
+			RemoteTask: &core.Task{
+				ID:          "GH-1",
+				Title:       "Remote",
+				Description: "Remote desc",
+				Status:      core.StatusInProgress,
+				Tags:        []string{"remote"},
+				UpdatedAt:   time.Now().Add(time.Minute),
+			},
+		}
+	}
 
 	t.Run("RemoteWins preserves all fields", func(t *testing.T) {
-		local := &core.Task{
-			ID:          "T-1",
-			Title:       "Local",
-			Description: "Local desc",
-			Status:      core.StatusTodo,
-			Tags:        []string{"local"},
-			UpdatedAt:   time.Now(),
-		}
-		remote := &core.Task{
-			ID:          "GH-1",
-			Title:       "Remote",
-			Description: "Remote desc",
-			Status:      core.StatusInProgress,
-			Tags:        []string{"remote"},
-			UpdatedAt:   time.Now().Add(time.Minute),
-		}
-
-		conflict := &Conflict{
-			TaskID:     "T-1",
-			LocalTask:  local,
-			RemoteTask: remote,
-		}
-
+		conflict := makeTestConflict()
 		resolved, updated := ResolveConflict(conflict, StrategyRemoteWins)
 		assert.Equal(t, "Remote", resolved.Title)
 		assert.Equal(t, "Remote desc", resolved.Description)
@@ -352,29 +351,7 @@ func TestResolveConflict_TaskFields(t *testing.T) {
 	})
 
 	t.Run("LocalWins preserves all fields", func(t *testing.T) {
-		local := &core.Task{
-			ID:          "T-1",
-			Title:       "Local",
-			Description: "Local desc",
-			Status:      core.StatusTodo,
-			Tags:        []string{"local"},
-			UpdatedAt:   time.Now(),
-		}
-		remote := &core.Task{
-			ID:          "GH-1",
-			Title:       "Remote",
-			Description: "Remote desc",
-			Status:      core.StatusInProgress,
-			Tags:        []string{"remote"},
-			UpdatedAt:   time.Now().Add(time.Minute),
-		}
-
-		conflict := &Conflict{
-			TaskID:     "T-1",
-			LocalTask:  local,
-			RemoteTask: remote,
-		}
-
+		conflict := makeTestConflict()
 		resolved, updated := ResolveConflict(conflict, StrategyLocalWins)
 		assert.Equal(t, "Local", resolved.Title)
 		assert.Equal(t, "Local desc", resolved.Description)

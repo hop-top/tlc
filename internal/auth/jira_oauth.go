@@ -9,7 +9,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// JiraOAuthConfig returns the OAuth2 configuration for Jira
+// JiraOAuthConfig returns the OAuth2 configuration for Jira.
 func JiraOAuthConfig(clientID, clientSecret string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     clientID,
@@ -23,7 +23,7 @@ func JiraOAuthConfig(clientID, clientSecret string) *oauth2.Config {
 	}
 }
 
-// LoginWithJiraOAuth performs the interactive OAuth flow for Jira
+// LoginWithJiraOAuth performs the interactive OAuth flow for Jira.
 func (a *JiraAuthenticator) LoginWithJiraOAuth(ctx context.Context, config *oauth2.Config) (*Credential, error) {
 	state := "random-jira-state"
 	// Jira OAuth requires audience parameter in AuthCodeURL for API access
@@ -35,7 +35,10 @@ func (a *JiraAuthenticator) LoginWithJiraOAuth(ctx context.Context, config *oaut
 	codeChan := make(chan string)
 	errChan := make(chan error)
 
-	server := &http.Server{Addr: ":8081"}
+	server := &http.Server{
+		Addr:              ":8081",
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state") != state {
@@ -47,7 +50,7 @@ func (a *JiraAuthenticator) LoginWithJiraOAuth(ctx context.Context, config *oaut
 			errChan <- fmt.Errorf("no code received")
 			return
 		}
-		fmt.Fprintf(w, "Authentication successful! You can close this window.")
+		_, _ = fmt.Fprintf(w, "Authentication successful! You can close this window.")
 		codeChan <- code
 	})
 
@@ -64,7 +67,7 @@ func (a *JiraAuthenticator) LoginWithJiraOAuth(ctx context.Context, config *oaut
 			return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 		}
 
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 
 		cred := &Credential{
 			Service: "jira",
@@ -78,17 +81,17 @@ func (a *JiraAuthenticator) LoginWithJiraOAuth(ctx context.Context, config *oaut
 		}
 
 		if err := a.store.Upsert(cred); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to upsert credential: %w", err)
 		}
 
 		return cred, nil
 
 	case err := <-errChan:
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 		return nil, err
 
 	case <-time.After(5 * time.Minute):
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 		return nil, fmt.Errorf("authentication timed out")
 	}
 }

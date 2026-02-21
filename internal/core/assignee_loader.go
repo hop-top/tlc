@@ -54,12 +54,12 @@ func (l *AssigneeLoader) LoadAll() ([]*Assignee, error) {
 func (l *AssigneeLoader) LoadAssignee(filePath string) (*Assignee, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read assignee file: %w", err)
 	}
 
 	var assignee Assignee
 	if err := yaml.Unmarshal(data, &assignee); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal assignee: %w", err)
 	}
 
 	return &assignee, nil

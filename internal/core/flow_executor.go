@@ -25,7 +25,7 @@ func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
 // Execute initiates a flow run.
 func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*FlowRun, error) {
 	runID := "run:" + uuid.New().String()
-	
+
 	run := &FlowRun{
 		ID:        runID,
 		FlowID:    flow.ID,
@@ -64,21 +64,25 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 
 	var mu sync.Mutex
 	err := e.runSequential(ctx, flow, run, stepStatuses, &mu, isChild, by)
-	
+
 	endedAt := time.Now()
 	run.EndedAt = &endedAt
-	
+
 	if err != nil {
 		run.Status = FlowStatusFailed
-		e.repo.UpdateFlowRun(ctx, run)
+		if updateErr := e.repo.UpdateFlowRun(ctx, run); updateErr != nil {
+			return nil, fmt.Errorf("flow failed and update failed: %v (original error: %w)", updateErr, err)
+		}
 		e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_END", fmt.Sprintf("Flow failed: %v", err), map[string]any{"status": "failed", "error": err.Error()})
 		return run, err
 	}
 
 	run.Status = FlowStatusSucceeded
-	e.repo.UpdateFlowRun(ctx, run)
+	if updateErr := e.repo.UpdateFlowRun(ctx, run); updateErr != nil {
+		return nil, fmt.Errorf("flow succeeded but update failed: %w", updateErr)
+	}
 	e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_END", "Flow completed successfully", map[string]any{"status": "succeeded"})
-	
+
 	return run, nil
 }
 
@@ -92,7 +96,7 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 
 		readyStepID := ""
 		allSucceeded := true
-		
+
 		for id, step := range flow.Steps {
 			// Skip steps that are managed by a container
 			if isChild[id] {
@@ -115,7 +119,7 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 					break
 				}
 			}
-			
+
 			if ready {
 				readyStepID = id
 				break
@@ -137,11 +141,11 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 	}
 }
 
-func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, by string) error {
+func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, _ string) error {
 	for {
 		current, err := e.repo.GetFlowRun(ctx, run.ID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get flow run: %w", err)
 		}
 		if current == nil {
 			return fmt.Errorf("flow run %s disappeared", run.ID)
@@ -213,7 +217,9 @@ func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *Flow
 	}
 	run.Progress = float64(completed) / float64(len(flow.Steps))
 	mu.Unlock()
-	e.repo.UpdateFlowRun(ctx, run)
+	if err := e.repo.UpdateFlowRun(ctx, run); err != nil {
+		return
+	}
 }
 
 func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
@@ -231,7 +237,7 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 		wg.Add(1)
 		go func(cid string) {
 			defer wg.Done()
-			
+
 			if sem != nil {
 				sem <- struct{}{}
 				defer func() { <-sem }()
@@ -283,13 +289,10 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 }
 
 func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string) error {
-	// Resolve task
 	taskID := step.TaskRef
-	// This should use the TaskService or Repository to transition status
-	// For now, we'll simulate or use e.repo
 	task, err := e.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
 		return fmt.Errorf("task %s not found", taskID)
@@ -300,27 +303,35 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 	if task.Status == StatusTodo {
 		task.Status = StatusInProgress
 		task.UpdatedAt = time.Now()
-		e.repo.UpdateTask(ctx, task)
-		e.logRepo.AddLog(ctx, &LogEntry{
+		if err := e.repo.UpdateTask(ctx, task); err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
+		if err := e.logRepo.AddLog(ctx, &LogEntry{
 			TaskID:    taskID,
 			Timestamp: time.Now(),
 			By:        by,
 			Action:    "CLAIMED",
 			Note:      "Claimed by flow executor",
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to add log: %w", err)
+		}
 	}
 
 	// Complete task
 	task.Status = StatusDone
 	task.UpdatedAt = time.Now()
-	e.repo.UpdateTask(ctx, task)
-	e.logRepo.AddLog(ctx, &LogEntry{
+	if err := e.repo.UpdateTask(ctx, task); err != nil {
+		return fmt.Errorf("failed to update task: %w", err)
+	}
+	if err := e.logRepo.AddLog(ctx, &LogEntry{
 		TaskID:    taskID,
 		Timestamp: time.Now(),
 		By:        by,
 		Action:    "DONE",
 		Note:      "Completed by flow executor",
-	})
+	}); err != nil {
+		return fmt.Errorf("failed to add log: %w", err)
+	}
 
 	return nil
 }
@@ -329,12 +340,12 @@ func (e *FlowExecutor) emitFlowLog(ctx context.Context, flowID, runID, by, actio
 	if e.logRepo == nil {
 		return
 	}
-	e.logRepo.AddLog(ctx, &LogEntry{
+	_ = e.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now(),
 		By:        by,
 		Action:    action,
 		Note:      note,
-		Meta:      map[string]any{
+		Meta: map[string]any{
 			"flow_id": flowID,
 			"run_id":  runID,
 			"extra":   meta,
@@ -346,12 +357,12 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 	if e.logRepo == nil {
 		return
 	}
-	e.logRepo.AddLog(ctx, &LogEntry{
+	_ = e.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now(),
 		By:        by,
 		Action:    action,
 		Note:      note,
-		Meta:      map[string]any{
+		Meta: map[string]any{
 			"flow_id": flowID,
 			"run_id":  runID,
 			"step_id": stepID,
@@ -362,15 +373,12 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 
 // ExtractTasksFromFlow generates tasks from flow steps with task templates.
 // This enables flows to coordinate task creation for assignee execution.
-func (e *FlowExecutor) ExtractTasksFromFlow(ctx context.Context, flow *Flow, runID string) ([]*Task, error) {
+func (e *FlowExecutor) ExtractTasksFromFlow(_ context.Context, flow *Flow, runID string) ([]*Task, error) {
 	tasks := []*Task{}
 
 	for stepID, step := range flow.Steps {
 		if step.Type == StepTypeTask && step.TaskTemplate != nil {
-			task, err := e.generateTaskFromTemplate(flow, runID, stepID, step)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate task for step %s: %w", stepID, err)
-			}
+			task := e.generateTaskFromTemplate(flow, runID, stepID, step)
 			tasks = append(tasks, task)
 		}
 	}
@@ -379,7 +387,7 @@ func (e *FlowExecutor) ExtractTasksFromFlow(ctx context.Context, flow *Flow, run
 }
 
 // generateTaskFromTemplate creates a task from a step's task template.
-func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string, step Step) (*Task, error) {
+func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string, step Step) *Task {
 	taskID := generateTaskID()
 
 	task := &Task{
@@ -399,7 +407,7 @@ func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string
 		},
 	}
 
-	return task, nil
+	return task
 }
 
 // generateTaskID creates a unique task ID (e.g., T-0042).

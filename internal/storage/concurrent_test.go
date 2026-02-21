@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/core"
 )
 
 func resetProjectDetection() {
@@ -21,7 +21,7 @@ func resetProjectDetection() {
 
 // TestConcurrentTaskCreation verifies UNIQUE constraint on composite key (project_id, id)
 // Multiple agents trying to create same task in same project = constraint error
-// Same task ID in different projects = success
+// Same task ID in different projects = success.
 func TestConcurrentTaskCreation(t *testing.T) {
 	resetProjectDetection()
 	dbPath := "test_concurrent.db"
@@ -93,7 +93,7 @@ func TestConcurrentTaskCreation(t *testing.T) {
 }
 
 // TestConcurrentFlowExecution simulates multiple parallel steps accessing tasks
-// Verifies concurrent updates don't cause data corruption or lost updates
+// Verifies concurrent updates don't cause data corruption or lost updates.
 func TestConcurrentFlowExecution(t *testing.T) {
 	resetProjectDetection()
 
@@ -194,7 +194,7 @@ func TestConcurrentFlowExecution(t *testing.T) {
 }
 
 // TestSyncIngest simulates the ingestTODO scenario with concurrent sync
-// Tests race condition where two agents read TODO and try to create same task
+// Tests race condition where two agents read TODO and try to create same task.
 func TestSyncIngest(t *testing.T) {
 	resetProjectDetection()
 	dbPath := "test_sync_ingest.db"

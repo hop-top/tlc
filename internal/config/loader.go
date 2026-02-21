@@ -85,9 +85,12 @@ func LoadConfig(projectRoot string) (*Config, error) {
 func mergeFile(cfg *Config, path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read config file: %w", err)
 	}
-	return yaml.Unmarshal(data, cfg)
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	return nil
 }
 
 func applyEnvOverrides(cfg *Config) {

@@ -8,7 +8,7 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// Store defines the interface for credential storage
+// Store defines the interface for credential storage.
 type Store interface {
 	Get(service, account string) (*Credential, error)
 	Upsert(cred *Credential) error
@@ -16,12 +16,12 @@ type Store interface {
 	List(service string) ([]string, error)
 }
 
-// KeychainStore implements Store using OS keychain
+// KeychainStore implements Store using OS keychain.
 type KeychainStore struct {
 	appName string
 }
 
-// NewKeychainStore creates a new KeychainStore
+// NewKeychainStore creates a new KeychainStore.
 func NewKeychainStore(appName string) *KeychainStore {
 	return &KeychainStore{
 		appName: appName,
@@ -32,7 +32,7 @@ func (s *KeychainStore) getFullService(service string) string {
 	return fmt.Sprintf("%s-%s", s.appName, service)
 }
 
-// Get retrieves a credential from keychain
+// Get retrieves a credential from keychain.
 func (s *KeychainStore) Get(service, account string) (*Credential, error) {
 	fullService := s.getFullService(service)
 	data, err := keyring.Get(fullService, account)
@@ -51,7 +51,7 @@ func (s *KeychainStore) Get(service, account string) (*Credential, error) {
 	return &cred, nil
 }
 
-// Upsert saves or updates a credential in keychain
+// Upsert saves or updates a credential in keychain.
 func (s *KeychainStore) Upsert(cred *Credential) error {
 	if cred.CreatedAt.IsZero() {
 		cred.CreatedAt = time.Now()
@@ -71,7 +71,7 @@ func (s *KeychainStore) Upsert(cred *Credential) error {
 	return nil
 }
 
-// Delete removes a credential from keychain
+// Delete removes a credential from keychain.
 func (s *KeychainStore) Delete(service, account string) error {
 	fullService := s.getFullService(service)
 	if err := keyring.Delete(fullService, account); err != nil {
@@ -86,6 +86,6 @@ func (s *KeychainStore) Delete(service, account string) error {
 // List is not natively supported by go-keyring in a cross-platform way for all services.
 // Usually, we might need to store a list of accounts separately or just use it as is.
 // For now, we'll return an error or implement a simple registry if needed.
-func (s *KeychainStore) List(service string) ([]string, error) {
+func (s *KeychainStore) List(_ string) ([]string, error) {
 	return nil, fmt.Errorf("list operation not supported by keychain store")
 }

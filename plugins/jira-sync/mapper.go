@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"time"
+
 	"github.com/andygrunwald/go-jira"
 )
 
-// Task represents the TLC task structure as used by plugins
+// Task represents the TLC task structure as used by plugins.
 type Task struct {
 	ID          string                 `json:"id"`
 	Title       string                 `json:"title"`
@@ -19,14 +20,15 @@ type Task struct {
 	Meta        map[string]interface{} `json:"meta,omitempty"`
 }
 
-// MapJiraIssueToTask maps a Jira issue to a TLC task
+// MapJiraIssueToTask maps a Jira issue to a TLC task.
 func MapJiraIssueToTask(issue *jira.Issue) *Task {
 	status := "TODO"
 	if issue.Fields.Status != nil {
 		s := issue.Fields.Status.Name
-		if s == "Done" || s == "Closed" || s == "Resolved" {
+		switch s {
+		case "Done", "Closed", "Resolved":
 			status = "DONE"
-		} else if s == "In Progress" {
+		case "In Progress":
 			status = "IN_PROGRESS"
 		}
 	}

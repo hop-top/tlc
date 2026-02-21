@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
-	"github.com/spf13/viper"
 )
 
 // syncTODOAll syncs tasks to both global and project-specific todo.txt files.
@@ -28,7 +28,7 @@ func syncToTODO() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
 	tasks, err := s.ListTasks(ctx, core.Query{
@@ -37,21 +37,23 @@ func syncToTODO() error {
 		AllProjects:   true,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
 	todoFile := viper.GetString("task.todo_file")
-	os.MkdirAll(filepath.Dir(todoFile), 0755)
+	if err := os.MkdirAll(filepath.Dir(todoFile), 0o750); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 	f, err := os.Create(todoFile)
 	if err != nil {
 		return fmt.Errorf("failed to create TODO file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	for _, t := range tasks {
 		_, err := f.WriteString(formatTLS(t) + "\n")
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to write task to TODO file: %w", err)
 		}
 	}
 
@@ -69,7 +71,7 @@ func syncToProjectTODO() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
 	tasks, err := s.ListTasks(ctx, core.Query{
@@ -77,21 +79,23 @@ func syncToProjectTODO() error {
 		SortDirection: "asc",
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
 	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), "todo.txt")
-	os.MkdirAll(filepath.Dir(todoFile), 0755)
+	if err := os.MkdirAll(filepath.Dir(todoFile), 0o750); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 	f, err := os.Create(todoFile)
 	if err != nil {
 		return fmt.Errorf("failed to create project TODO file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	for _, t := range tasks {
 		_, err := f.WriteString(formatTLS(t) + "\n")
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to write task to project TODO file: %w", err)
 		}
 	}
 
@@ -107,9 +111,9 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("failed to open TODO file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := context.Background()
 	scanner := bufio.NewScanner(f)
@@ -126,7 +130,6 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 			continue
 		}
 
-		// Check if task exists
 		existing, _ := s.GetTask(ctx, task.ID)
 		if existing == nil {
 			if task.CreatedAt.IsZero() {
@@ -135,9 +138,10 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 			if task.UpdatedAt.IsZero() {
 				task.UpdatedAt = task.CreatedAt
 			}
-			s.CreateTask(ctx, task)
+			if err := s.CreateTask(ctx, task); err != nil {
+				fmt.Printf("Warning: failed to create task %s: %v\n", task.ID, err)
+			}
 		} else {
-			// Update if different (simplified check)
 			if existing.Status != task.Status || existing.Title != task.Title {
 				existing.Status = task.Status
 				existing.Title = task.Title
@@ -148,16 +152,20 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 				} else {
 					existing.UpdatedAt = task.UpdatedAt
 				}
-				// Merge meta
 				for k, v := range task.Meta {
 					existing.Meta[k] = v
 				}
-				s.UpdateTask(ctx, existing)
+				if err := s.UpdateTask(ctx, existing); err != nil {
+					fmt.Printf("Warning: failed to update task %s: %v\n", existing.ID, err)
+				}
 			}
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to scan TODO file: %w", err)
+	}
+	return nil
 }
 
 // parseTLS is a basic parser for Task Line Syntax.
@@ -227,15 +235,16 @@ func parseTLS(line string) (*core.Task, error) {
 		} else if strings.Contains(token, "=") {
 			kv := strings.SplitN(token, "=", 2)
 			key, val := kv[0], kv[1]
-			if key == "created_at" {
+			switch key {
+			case "created_at":
 				if t, err := time.Parse(time.RFC3339, val); err == nil {
 					task.CreatedAt = t
 				}
-			} else if key == "updated_at" {
+			case "updated_at":
 				if t, err := time.Parse(time.RFC3339, val); err == nil {
 					task.UpdatedAt = t
 				}
-			} else {
+			default:
 				task.Meta[key] = val
 			}
 		} else if strings.HasPrefix(token, "ref:") {

@@ -5,12 +5,25 @@ import (
 	"time"
 )
 
+// ProjectConfig contains project-specific configuration.
 type ProjectConfig struct {
 	ID                  string `yaml:"id"`
 	FallbackMode        string `yaml:"fallback_mode"`
 	DuplicateIDStrategy string `yaml:"duplicate_id_strategy"`
 }
 
+type Config struct {
+	Version string        `yaml:"version"`
+	Project ProjectConfig `yaml:"project"`
+	Output  OutputConfig  `yaml:"output"`
+	Task    TaskConfig    `yaml:"task"`
+	Git     GitConfig     `yaml:"git"`
+	Sync    SyncConfig    `yaml:"sync"`
+	Storage StorageConfig `yaml:"storage"`
+	UI      UIConfig      `yaml:"ui"`
+}
+
+// Validate validates the project configuration.
 func (p *ProjectConfig) Validate() error {
 	switch p.FallbackMode {
 	case "", "auto", "detected", "prompt":
@@ -25,18 +38,7 @@ func (p *ProjectConfig) Validate() error {
 	return nil
 }
 
-// Config represents the TLC configuration
-type Config struct {
-	Version string        `yaml:"version"`
-	Output  OutputConfig  `yaml:"output"`
-	Task    TaskConfig    `yaml:"task"`
-	Project ProjectConfig `yaml:"project"`
-	Git     GitConfig     `yaml:"git"`
-	Sync    SyncConfig    `yaml:"sync"`
-	Storage StorageConfig `yaml:"storage"`
-	UI      UIConfig      `yaml:"ui"`
-}
-
+// Validate validates the complete configuration.
 func (c *Config) Validate() error {
 	if err := c.Output.Validate(); err != nil {
 		return err
@@ -56,6 +58,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// OutputConfig contains output-related configuration.
 type OutputConfig struct {
 	Format  string `yaml:"format"`
 	Color   bool   `yaml:"color"`
@@ -64,6 +67,7 @@ type OutputConfig struct {
 	LogFile string `yaml:"log_file"`
 }
 
+// Validate validates the output configuration.
 func (o *OutputConfig) Validate() error {
 	switch o.Format {
 	case "table", "json", "yaml", "tls", "":
@@ -73,6 +77,7 @@ func (o *OutputConfig) Validate() error {
 	}
 }
 
+// TaskConfig contains task-related configuration.
 type TaskConfig struct {
 	DefaultStatus    string        `yaml:"default_status"`
 	IDFormat         string        `yaml:"id_format"`
@@ -82,29 +87,34 @@ type TaskConfig struct {
 	ArchiveThreshold time.Duration `yaml:"archive_threshold"`
 }
 
+// Validate validates the task configuration.
 func (t *TaskConfig) Validate() error {
 	// Status validation logic could be shared with core
 	return nil
 }
 
+// GitConfig contains git-related configuration.
 type GitConfig struct {
 	Track  bool            `yaml:"track"`
 	Branch GitBranchConfig `yaml:"branch"`
 	Commit GitCommitConfig `yaml:"commit"`
 }
 
+// GitBranchConfig contains git branch configuration.
 type GitBranchConfig struct {
 	PrefixFromType bool   `yaml:"prefix_from_type"`
 	ZeroPadIssue   int    `yaml:"zero_pad_issue"`
 	Separator      string `yaml:"separator"`
 }
 
+// GitCommitConfig contains git commit configuration.
 type GitCommitConfig struct {
 	AutoGenerate bool   `yaml:"auto_generate"`
 	Template     string `yaml:"template"`
 	CoAuthor     string `yaml:"co_author"`
 }
 
+// SyncConfig contains synchronization configuration.
 type SyncConfig struct {
 	Enabled          bool             `yaml:"enabled"`
 	AutoPush         bool             `yaml:"auto_push"`
@@ -116,6 +126,7 @@ type SyncConfig struct {
 	Linear           LinearSyncConfig `yaml:"linear"`
 }
 
+// Validate validates the sync configuration.
 func (s *SyncConfig) Validate() error {
 	if s.GitHub.Enabled && s.GitHub.Repo == "" {
 		return fmt.Errorf("sync.github.repo is required when GitHub sync is enabled")
@@ -123,6 +134,7 @@ func (s *SyncConfig) Validate() error {
 	return nil
 }
 
+// GitHubSyncConfig contains GitHub sync configuration.
 type GitHubSyncConfig struct {
 	Enabled          bool   `yaml:"enabled"`
 	Repo             string `yaml:"repo"`
@@ -131,6 +143,7 @@ type GitHubSyncConfig struct {
 	ImportMilestones bool   `yaml:"import_milestones"`
 }
 
+// JiraSyncConfig contains Jira sync configuration.
 type JiraSyncConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 	URL           string `yaml:"url"`
@@ -138,18 +151,21 @@ type JiraSyncConfig struct {
 	SyncDirection string `yaml:"sync_direction"`
 }
 
+// LinearSyncConfig contains Linear sync configuration.
 type LinearSyncConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 	TeamID        string `yaml:"team_id"`
 	SyncDirection string `yaml:"sync_direction"`
 }
 
+// StorageConfig contains storage configuration.
 type StorageConfig struct {
 	Backend          string `yaml:"backend"`
 	DBPath           string `yaml:"db_path"`
 	ConnectionString string `yaml:"connection_string"`
 }
 
+// Validate validates the storage configuration.
 func (s *StorageConfig) Validate() error {
 	switch s.Backend {
 	case "sqlite", "local", "postgres", "":
@@ -159,6 +175,7 @@ func (s *StorageConfig) Validate() error {
 	}
 }
 
+// UIConfig contains UI-related configuration.
 type UIConfig struct {
 	Pager            string            `yaml:"pager"`
 	Editor           string            `yaml:"editor"`

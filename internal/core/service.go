@@ -20,7 +20,7 @@ func NewTaskService(repo Repository, logRepo LogRepository) *TaskService {
 
 func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, note string) error {
 	if err := s.repo.CreateTask(ctx, task); err != nil {
-		return err
+		return fmt.Errorf("failed to create task: %w", err)
 	}
 
 	logEntry := &LogEntry{
@@ -31,22 +31,37 @@ func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, not
 		Note:      note,
 	}
 
-	return s.logRepo.AddLog(ctx, logEntry)
+	if err := s.logRepo.AddLog(ctx, logEntry); err != nil {
+		return fmt.Errorf("failed to add log: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) ListTasks(ctx context.Context, query Query) ([]*Task, error) {
-	return s.repo.ListTasks(ctx, query)
+	tasks, err := s.repo.ListTasks(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tasks: %w", err)
+	}
+	return tasks, nil
 }
 
 func (s *TaskService) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error) {
-	return s.repo.ListFlowRuns(ctx, query)
+	runs, err := s.repo.ListFlowRuns(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list flow runs: %w", err)
+	}
+	return runs, nil
 }
 
 func (s *TaskService) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
-	return s.repo.ArchiveTasks(ctx, threshold)
+	count, err := s.repo.ArchiveTasks(ctx, threshold)
+	if err != nil {
+		return 0, fmt.Errorf("failed to archive tasks: %w", err)
+	}
+	return count, nil
 }
 
-func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, note string) error {
+func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, _ string) error {
 	hasOriginSystem := task.OriginSystem != nil && *task.OriginSystem != ""
 	var originSystem string
 	if hasOriginSystem {
@@ -72,21 +87,28 @@ func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, not
 			Note:      fmt.Sprintf("Task marked for push to %s", originSystem),
 		}
 		if err := s.logRepo.AddLog(ctx, logEntry); err != nil {
-			return err
+			return fmt.Errorf("failed to add log: %w", err)
 		}
 	}
 
-	return s.repo.UpdateTask(ctx, task)
+	if err := s.repo.UpdateTask(ctx, task); err != nil {
+		return fmt.Errorf("failed to update task: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error) {
-	return s.logRepo.GetLogs(ctx, taskID, sortDirection)
+	logs, err := s.logRepo.GetLogs(ctx, taskID, sortDirection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get logs: %w", err)
+	}
+	return logs, nil
 }
 
 func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next TaskStatus, by string, note string) error {
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
 		return fmt.Errorf("task %s not found", taskID)
@@ -94,16 +116,19 @@ func (s *TaskService) TransitionStatus(ctx context.Context, taskID string, next 
 
 	logEntry, err := task.Transition(next, by, note)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to transition task: %w", err)
 	}
 
-	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
+	if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+		return fmt.Errorf("failed to update task with log: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, note string) error {
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
 		return fmt.Errorf("task %s not found", taskID)
@@ -131,17 +156,20 @@ func (s *TaskService) ClaimTask(ctx context.Context, taskID string, by string, n
 
 	logEntry, err := task.Transition(StatusInProgress, by, note)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to transition task: %w", err)
 	}
 	logEntry.Action = ActionClaimed
 
-	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
+	if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+		return fmt.Errorf("failed to update task with log: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string, note string) error {
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
 		return fmt.Errorf("task %s not found", taskID)
@@ -165,81 +193,93 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 
 	logEntry, err := task.Transition(StatusTodo, by, note)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to transition task: %w", err)
 	}
 	logEntry.Action = ActionReleased
 
-	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
+	if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+		return fmt.Errorf("failed to update task with log: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) PauseFlowRun(ctx context.Context, runID string, by string, note string) error {
 	run, err := s.repo.GetFlowRun(ctx, runID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get flow run: %w", err)
 	}
 	if run == nil {
 		return fmt.Errorf("flow run %s not found", runID)
 	}
 	run.Status = FlowStatusPaused
 	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return err
+		return fmt.Errorf("failed to update flow run: %w", err)
 	}
-	return s.logRepo.AddLog(ctx, &LogEntry{
+	if err := s.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now().UTC(),
 		By:        by,
 		Action:    "FLOW_PAUSED",
 		Note:      note,
 		Meta:      map[string]any{"run_id": runID},
-	})
+	}); err != nil {
+		return fmt.Errorf("failed to add log: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) ResumeFlowRun(ctx context.Context, runID string, by string, note string) error {
 	run, err := s.repo.GetFlowRun(ctx, runID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get flow run: %w", err)
 	}
 	if run == nil {
 		return fmt.Errorf("flow run %s not found", runID)
 	}
 	run.Status = FlowStatusRunning
 	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return err
+		return fmt.Errorf("failed to update flow run: %w", err)
 	}
-	return s.logRepo.AddLog(ctx, &LogEntry{
+	if err := s.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now().UTC(),
 		By:        by,
 		Action:    "FLOW_RESUMED",
 		Note:      note,
 		Meta:      map[string]any{"run_id": runID},
-	})
+	}); err != nil {
+		return fmt.Errorf("failed to add log: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskService) CancelFlowRun(ctx context.Context, runID string, by string, note string) error {
 	run, err := s.repo.GetFlowRun(ctx, runID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get flow run: %w", err)
 	}
 	if run == nil {
 		return fmt.Errorf("flow run %s not found", runID)
 	}
 	run.Status = FlowStatusCanceled
 	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return err
+		return fmt.Errorf("failed to update flow run: %w", err)
 	}
-	return s.logRepo.AddLog(ctx, &LogEntry{
+	if err := s.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now().UTC(),
 		By:        by,
 		Action:    "FLOW_CANCELED",
 		Note:      note,
 		Meta:      map[string]any{"run_id": runID},
-	})
+	}); err != nil {
+		return fmt.Errorf("failed to add log: %w", err)
+	}
+	return nil
 }
 
 // CreateTaskWithAssignment creates a task and auto-assigns it to the best-matching assignee.
 func (s *TaskService) CreateTaskWithAssignment(ctx context.Context, task *Task, engine *AssignmentEngine, by string, note string) error {
 	// Create task first
 	if err := s.CreateTask(ctx, task, by, note); err != nil {
-		return err
+		return fmt.Errorf("failed to create task: %w", err)
 	}
 
 	// Find best assignee
@@ -253,7 +293,9 @@ func (s *TaskService) CreateTaskWithAssignment(ctx context.Context, task *Task, 
 			Action:    ActionComment,
 			Note:      fmt.Sprintf("Warning: could not auto-assign task: %v", err),
 		}
-		s.logRepo.AddLog(ctx, logEntry)
+		if logErr := s.logRepo.AddLog(ctx, logEntry); logErr != nil {
+			return fmt.Errorf("failed to write assignment warning log: %w", logErr)
+		}
 		return nil
 	}
 
@@ -275,17 +317,17 @@ func (s *TaskService) CreateTaskWithAssignment(ctx context.Context, task *Task, 
 	}
 
 	if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
-		return err
+		return fmt.Errorf("failed to update task with log: %w", err)
 	}
 
 	return nil
 }
 
 // DelegateTask delegates a task from one assignee to another based on delegation rules.
-func (s *TaskService) DelegateTask(ctx context.Context, taskID string, fromAssignee *Assignee, reason, by, note string) error {
+func (s *TaskService) DelegateTask(ctx context.Context, taskID string, fromAssignee *Assignee, reason, by, _ string) error {
 	task, err := s.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
 		return fmt.Errorf("task %s not found", taskID)
@@ -320,7 +362,10 @@ func (s *TaskService) DelegateTask(ctx context.Context, taskID string, fromAssig
 		},
 	}
 
-	return s.repo.UpdateTaskWithLog(ctx, task, logEntry)
+	if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+		return fmt.Errorf("failed to update task with log: %w", err)
+	}
+	return nil
 }
 
 // UnblockTasks finds and unblocks tasks that were blocked by the completed task.
@@ -334,7 +379,7 @@ func (s *TaskService) UnblockTasks(ctx context.Context, completedTaskID string, 
 	// For now, we'll use metadata to track blockers
 	allTasks, err := s.repo.ListTasks(ctx, Query{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
 	for _, task := range allTasks {
@@ -370,7 +415,7 @@ func (s *TaskService) UnblockTasks(ctx context.Context, completedTaskID string, 
 		}
 
 		if err := s.repo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
-			return err
+			return fmt.Errorf("failed to update task with log: %w", err)
 		}
 	}
 
@@ -393,49 +438,49 @@ func extractTaskType(task *Task) string {
 }
 
 const (
-	// Task CRUD Actions
+	// Task CRUD Actions.
 	ActionCreated = "CREATED"
 	ActionUpdated = "UPDATED"
 	ActionDeleted = "DELETED"
 
-	// Task Status Actions
+	// Task Status Actions.
 	ActionClaimed    = "CLAIMED"
 	ActionReleased   = "RELEASED"
 	ActionReassigned = "REASSIGNED"
 	ActionDone       = "DONE"
 	ActionSkipped    = "SKIPPED"
 
-	// Task Execution Actions
+	// Task Execution Actions.
 	ActionExecStart   = "EXEC_START"
 	ActionExecEnd     = "EXEC_END"
 	ActionExecAttempt = "EXEC_ATTEMPT"
 
-	// Collaboration Actions
+	// Collaboration Actions.
 	ActionComment  = "COMMENT"
 	ActionBlocked  = "BLOCKED"
 	ActionSplit    = "SPLIT"
 	ActionMerged   = "MERGED"
 	ActionMigrated = "MIGRATED"
 
-	// Failure and Retry Actions
+	// Failure and Retry Actions.
 	ActionFailure = "FAILURE"
 	ActionRetry   = "RETRY"
 
-	// Flow Orchestration Actions
+	// Flow Orchestration Actions.
 	ActionFlowStart  = "FLOW_START"
 	ActionFlowEnd    = "FLOW_END"
 	ActionStepStart  = "STEP_START"
 	ActionStepEnd    = "STEP_END"
 	ActionBranchEval = "BRANCH_EVAL"
 
-	// External System Sync Actions
+	// External System Sync Actions.
 	ActionSyncImported = "SYNC_IMPORTED"
 	ActionSyncPulled   = "SYNC_PULLED"
 	ActionSyncPushed   = "SYNC_PUSHED"
 	ActionSyncConflict = "SYNC_CONFLICT"
 	ActionSyncError    = "SYNC_ERROR"
 
-	// Assignee Actions (new)
+	// Assignee Actions (new).
 	ActionAutoAssigned = "AUTO_ASSIGNED"
 	ActionDelegated    = "DELEGATED"
 	ActionUnblocked    = "UNBLOCKED"

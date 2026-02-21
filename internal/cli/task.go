@@ -7,12 +7,12 @@ import (
 	"os"
 	"time"
 
-	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/plugin"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/plugin"
 )
 
 var (
@@ -52,7 +52,7 @@ var (
 	taskUnclaimNote string
 )
 
-func updateSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, s core.Repository) error {
+func updateSyncedTask(ctx context.Context, task *core.Task, s core.Repository) error {
 	if task.OriginSystem == nil || *task.OriginSystem == "" {
 		return fmt.Errorf("task does not have an origin system")
 	}
@@ -61,7 +61,7 @@ func updateSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, 
 	fmt.Printf("Syncing task %s to %s...\n", task.ID, system)
 
 	if err := s.UpdateTask(ctx, task); err != nil {
-		return err
+		return fmt.Errorf("failed to update task: %w", err)
 	}
 
 	binPath := getPluginPath(system)
@@ -69,7 +69,7 @@ func updateSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, 
 	if err != nil {
 		return fmt.Errorf("failed to start plugin %s: %w", system, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	params := map[string]interface{}{
 		"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
@@ -101,7 +101,7 @@ func updateSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, 
 	return nil
 }
 
-func deleteSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, s core.Repository) error {
+func deleteSyncedTask(_ context.Context, task *core.Task, _ core.Repository) error {
 	if task.OriginSystem == nil || *task.OriginSystem == "" {
 		return fmt.Errorf("task does not have an origin system")
 	}
@@ -114,7 +114,7 @@ func deleteSyncedTask(cmd *cobra.Command, ctx context.Context, task *core.Task, 
 	if err != nil {
 		return fmt.Errorf("failed to start plugin %s: %w", system, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	params := map[string]interface{}{
 		"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
@@ -155,12 +155,12 @@ var taskClaimCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		task, err := s.GetTask(ctx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get task: %w", err)
 		}
 		if task == nil {
 			return fmt.Errorf("task not found: %s", id)
@@ -171,26 +171,26 @@ var taskClaimCmd = &cobra.Command{
 
 		log, err := task.Transition(core.StatusInProgress, user, taskClaimNote)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
 		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := updateSyncedTask(cmd, ctx, task, s); err != nil {
+			if err := updateSyncedTask(ctx, task, s); err != nil {
 				return err
 			}
 			if err := s.AddLog(ctx, log); err != nil {
-				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
 			}
 		} else {
 			if err := s.UpdateTask(ctx, task); err != nil {
-				return err
+				return fmt.Errorf("failed to update task: %w", err)
 			}
 			if err := s.AddLog(ctx, log); err != nil {
-				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
 			}
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
 		return syncTODOAll()
 	},
 }
@@ -205,12 +205,12 @@ var taskUnclaimCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		task, err := s.GetTask(ctx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get task: %w", err)
 		}
 		if task == nil {
 			return fmt.Errorf("task not found: %s", id)
@@ -220,26 +220,26 @@ var taskUnclaimCmd = &cobra.Command{
 
 		log, err := task.Transition(core.StatusTodo, core.GetCurrentUser(), taskUnclaimNote)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
 		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := updateSyncedTask(cmd, ctx, task, s); err != nil {
+			if err := updateSyncedTask(ctx, task, s); err != nil {
 				return err
 			}
 			if err := s.AddLog(ctx, log); err != nil {
-				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
 			}
 		} else {
 			if err := s.UpdateTask(ctx, task); err != nil {
-				return err
+				return fmt.Errorf("failed to update task: %w", err)
 			}
 			if err := s.AddLog(ctx, log); err != nil {
-				fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
 			}
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
 		return syncTODOAll()
 	},
 }
@@ -262,7 +262,7 @@ var taskCreateCmd = &cobra.Command{
 			return fmt.Errorf("title is required")
 		}
 
-		_, err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskTags, taskReference, make(map[string]interface{}))
+		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskTags, taskReference, make(map[string]interface{}))
 		if err != nil {
 			return err
 		}
@@ -345,7 +345,7 @@ func createTaskInteractive(initialTitle string) error {
 	)
 
 	if err := form.Run(); err != nil {
-		return err
+		return fmt.Errorf("failed to run form: %w", err)
 	}
 
 	meta := make(map[string]interface{})
@@ -356,20 +356,20 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	_, err := saveTask(os.Stdout, "", title, description, status, assignee, tags, "", meta)
+	err := saveTask(os.Stdout, "", title, description, status, assignee, tags, "", meta)
 	if err != nil {
 		return err
 	}
 	return syncToTODO()
 }
 
-func saveTask(w io.Writer, id, title, description, status, assignedTo string, tags []string, reference string, meta map[string]interface{}) (*core.Task, error) {
+func saveTask(w io.Writer, id, title, description, status, assignedTo string, tags []string, reference string, meta map[string]interface{}) error {
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 	s, err := getStorage()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
 
@@ -381,7 +381,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo string, ta
 		}
 		seq, err := s.GetNextSequenceID(ctx, projectID)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("failed to get next sequence ID: %w", err)
 		}
 		finalID = fmt.Sprintf("T-%04d", seq)
 	}
@@ -416,7 +416,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo string, ta
 	}
 
 	if err := s.CreateTask(ctx, task); err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create task: %w", err)
 	}
 
 	logEntry := &core.LogEntry{
@@ -427,11 +427,11 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo string, ta
 		Note:      "Task created via CLI",
 	}
 	if err := s.AddLog(ctx, logEntry); err != nil {
-		fmt.Fprintf(w, "Warning: failed to write log: %v\n", err)
+		_, _ = fmt.Fprintf(w, "Warning: failed to write log: %v\n", err)
 	}
 
-	fmt.Fprintf(w, "Created task %s: %s\n", task.ID, task.Title)
-	return task, nil
+	_, _ = fmt.Fprintf(w, "Created task %s: %s\n", task.ID, task.Title)
+	return nil
 }
 
 var taskListCmd = &cobra.Command{
@@ -442,7 +442,7 @@ var taskListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		query := core.Query{
@@ -462,10 +462,8 @@ var taskListCmd = &cobra.Command{
 			taskListAssignedTo = core.GetCurrentUser()
 		}
 
-		if taskListStatus != nil {
-			for _, st := range taskListStatus {
-				query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
-			}
+		for _, st := range taskListStatus {
+			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
 		}
 		if taskListAssignedTo != "" {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "assigned_to", Value: taskListAssignedTo})
@@ -476,7 +474,7 @@ var taskListCmd = &cobra.Command{
 
 		tasks, err := s.ListTasks(ctx, query)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
 		format := viper.GetString("output.format")
@@ -495,19 +493,19 @@ var taskShowCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		task, err := s.GetTask(ctx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get task: %w", err)
 		}
 		if task == nil {
 			return fmt.Errorf("task not found: %s", id)
 		}
 
 		var logs []*core.LogEntry
-		if taskShowLogs || viper.GetString("output.format") != "table" {
+		if taskShowLogs || viper.GetString("output.format") != formatTable {
 			direction := taskShowLogSortDirection
 			if direction == "" {
 				direction = viper.GetString("ui.log_sort_direction")
@@ -517,7 +515,7 @@ var taskShowCmd = &cobra.Command{
 			}
 			logs, err = s.GetLogs(ctx, id, direction)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get logs: %w", err)
 			}
 		}
 
@@ -537,12 +535,12 @@ var taskUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		task, err := s.GetTask(ctx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get task: %w", err)
 		}
 		if task == nil {
 			return fmt.Errorf("task not found: %s", id)
@@ -572,7 +570,7 @@ var taskUpdateCmd = &cobra.Command{
 			nextStatus := core.TaskStatus(taskUpdateStatus)
 			log, err := task.Transition(nextStatus, core.GetCurrentUser(), "Manual update")
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to transition task: %w", err)
 			}
 			if err := s.AddLog(ctx, log); err != nil {
 				fmt.Printf("Warning: failed to write log: %v\n", err)
@@ -603,20 +601,19 @@ var taskUpdateCmd = &cobra.Command{
 			task.UpdatedAt = now
 
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
-				if err := updateSyncedTask(cmd, ctx, task, s); err != nil {
+				if err := updateSyncedTask(ctx, task, s); err != nil {
 					return err
 				}
 			} else {
 				if err := s.UpdateTask(ctx, task); err != nil {
-					return err
+					return fmt.Errorf("failed to update task: %w", err)
 				}
 				fmt.Printf("Updated task %s\n", task.ID)
 			}
 
 			return syncTODOAll()
-		} else {
-			fmt.Println("No changes specified")
 		}
+		fmt.Println("No changes specified")
 
 		return nil
 	},
@@ -626,18 +623,18 @@ var taskDeleteCmd = &cobra.Command{
 	Use:   "delete <task-id>",
 	Short: "Delete a task",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		task, err := s.GetTask(ctx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get task: %w", err)
 		}
 		if task == nil {
 			return fmt.Errorf("task not found: %s", id)
@@ -651,7 +648,7 @@ var taskDeleteCmd = &cobra.Command{
 				Value(&confirm).
 				Run()
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to run confirm dialog: %w", err)
 			}
 			if !confirm {
 				fmt.Println("Aborted")
@@ -660,13 +657,13 @@ var taskDeleteCmd = &cobra.Command{
 		}
 
 		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := deleteSyncedTask(cmd, ctx, task, s); err != nil {
+			if err := deleteSyncedTask(ctx, task, s); err != nil {
 				return err
 			}
 		}
 
 		if err := s.DeleteTask(ctx, id); err != nil {
-			return err
+			return fmt.Errorf("failed to delete task: %w", err)
 		}
 
 		fmt.Printf("Deleted task %s\n", id)
@@ -726,5 +723,4 @@ func init() {
 	taskCmd.AddCommand(taskUnclaimCmd)
 
 	rootCmd.AddCommand(taskCmd)
-
 }

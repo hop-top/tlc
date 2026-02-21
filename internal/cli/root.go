@@ -10,12 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"hop.top/tlc/internal/config"
-	"hop.top/tlc/internal/storage"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
+	"hop.top/tlc/internal/storage"
 )
+
+const backendSQLite = "sqlite"
 
 var cfgFile string
 
@@ -29,6 +31,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// Execute runs the root command and handles any errors.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -45,10 +48,18 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose logging")
 	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
 
-	viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("format"))
-	viper.BindPFlag("output.color", rootCmd.PersistentFlags().Lookup("no-color"))
-	viper.BindPFlag("output.verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("output.quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+	if err := viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("format")); err != nil {
+		log.Warn("Failed to bind format flag", "error", err)
+	}
+	if err := viper.BindPFlag("output.color", rootCmd.PersistentFlags().Lookup("no-color")); err != nil {
+		log.Warn("Failed to bind color flag", "error", err)
+	}
+	if err := viper.BindPFlag("output.verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
+		log.Warn("Failed to bind verbose flag", "error", err)
+	}
+	if err := viper.BindPFlag("output.quiet", rootCmd.PersistentFlags().Lookup("quiet")); err != nil {
+		log.Warn("Failed to bind quiet flag", "error", err)
+	}
 }
 
 func initConfig() {
@@ -156,16 +167,18 @@ func setupLogging() {
 		options.Level = log.InfoLevel
 	}
 
-	var writer = os.Stderr
+	writer := os.Stderr
 	logFile := viper.GetString("output.log_file")
 	if logFile != "" {
-		// Ensure directory exists
-		os.MkdirAll(filepath.Dir(logFile), 0755)
-		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err == nil {
-			writer = f
+		if err := os.MkdirAll(filepath.Dir(logFile), 0o750); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create log directory: %v\n", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", logFile, err)
+			f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+			if err == nil {
+				writer = f
+			} else {
+				fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", logFile, err)
+			}
 		}
 	}
 
@@ -210,7 +223,7 @@ func setDefaults() {
 	viper.SetDefault("git.commit.auto_generate", true)
 	viper.SetDefault("git.commit.template", "{type}: {description} (closes #{issue})")
 
-	viper.SetDefault("storage.backend", "sqlite")
+	viper.SetDefault("storage.backend", backendSQLite)
 	viper.SetDefault("ui.pager", "auto")
 	viper.SetDefault("ui.editor", os.Getenv("EDITOR"))
 	viper.SetDefault("ui.date_format", "2006-01-02 15:04:05")
@@ -246,7 +259,7 @@ func ensureDBSynced(s *storage.SQLiteStorage) {
 // need to test the connection.
 func getStorageRaw() (*storage.SQLiteStorage, error) {
 	backend := viper.GetString("storage.backend")
-	if backend != "sqlite" {
+	if backend != backendSQLite {
 		return nil, fmt.Errorf("unsupported storage backend: %s", backend)
 	}
 
@@ -261,11 +274,15 @@ func getStorageRaw() (*storage.SQLiteStorage, error) {
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil { //nolint:gosec // G703: dbPath from config or standard data dir
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
-	return storage.NewSQLiteStorage(dbPath)
+	s, err := storage.NewSQLiteStorage(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sqlite storage: %w", err)
+	}
+	return s, nil
 }
 
 // getStorage opens the SQLite database and ensures TODO ingestion and

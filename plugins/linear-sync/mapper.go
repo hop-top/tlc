@@ -2,7 +2,7 @@ package main
 
 import "time"
 
-// Task represents the TLC task structure as used by plugins
+// Task represents the TLC task structure as used by plugins.
 type Task struct {
 	ID          string                 `json:"id"`
 	Title       string                 `json:"title"`
@@ -15,7 +15,7 @@ type Task struct {
 	Meta        map[string]interface{} `json:"meta,omitempty"`
 }
 
-// MapLinearIssueToTask maps a Linear issue to a TLC task
+// MapLinearIssueToTask maps a Linear issue to a TLC task.
 func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 	id := issue["id"].(string)
 	identifier := issue["identifier"].(string)
@@ -32,9 +32,10 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 	stateName := state["name"].(string)
 
 	status := "TODO"
-	if stateName == "Done" || stateName == "Canceled" {
+	switch stateName {
+	case "Done", "Canceled":
 		status = "DONE"
-	} else if stateName == "In Progress" {
+	case "In Progress":
 		status = "IN_PROGRESS"
 	}
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// MockStore is a mock implementation of the Store interface for testing.
 type MockStore struct {
 	creds map[string]*Credential
 }
@@ -13,6 +14,7 @@ func NewMockStore() *MockStore {
 	return &MockStore{creds: make(map[string]*Credential)}
 }
 
+// Get retrieves a credential from the mock store.
 func (m *MockStore) Get(service, account string) (*Credential, error) {
 	key := fmt.Sprintf("%s:%s", service, account)
 	if c, ok := m.creds[key]; ok {
@@ -21,18 +23,21 @@ func (m *MockStore) Get(service, account string) (*Credential, error) {
 	return nil, fmt.Errorf("not found")
 }
 
+// Upsert saves or updates a credential in the mock store.
 func (m *MockStore) Upsert(cred *Credential) error {
 	key := fmt.Sprintf("%s:%s", cred.Service, cred.Account)
 	m.creds[key] = cred
 	return nil
 }
 
+// Delete removes a credential from the mock store.
 func (m *MockStore) Delete(service, account string) error {
 	key := fmt.Sprintf("%s:%s", service, account)
 	delete(m.creds, key)
 	return nil
 }
 
+// List returns all accounts for a given service in the mock store.
 func (m *MockStore) List(service string) ([]string, error) {
 	res := []string{}
 	for k := range m.creds {

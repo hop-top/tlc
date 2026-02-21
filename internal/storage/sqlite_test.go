@@ -11,7 +11,7 @@ import (
 )
 
 // TestSQLiteStorage_CRUD tests basic Create, Read, Update operations for tasks
-// Verifies task lifecycle: create, retrieve, update, and log entries
+// Verifies task lifecycle: create, retrieve, update, and log entries.
 func TestSQLiteStorage_CRUD(t *testing.T) {
 	resetProjectDetection()
 	tmpDir := t.TempDir()
@@ -91,7 +91,7 @@ func TestSQLiteStorage_CRUD(t *testing.T) {
 }
 
 // TestSQLiteStorage_Query tests filtering, searching, and pagination
-// Verifies status filters, text search, pagination, and log queries
+// Verifies status filters, text search, pagination, and log queries.
 func TestSQLiteStorage_Query(t *testing.T) {
 	resetProjectDetection()
 	tmpDir := t.TempDir()
@@ -154,7 +154,7 @@ func TestSQLiteStorage_Query(t *testing.T) {
 }
 
 // TestStorage_QueryORLogic tests OR logic in query filters
-// Verifies multiple status filters work with OR logic
+// Verifies multiple status filters work with OR logic.
 func TestStorage_QueryORLogic(t *testing.T) {
 	resetProjectDetection()
 	tmpDir := t.TempDir()
@@ -201,7 +201,7 @@ func TestStorage_QueryORLogic(t *testing.T) {
 }
 
 // TestSQLiteStorage_FlowRuns tests flow run CRUD operations
-// Verifies flow run lifecycle: create, retrieve, update with status changes
+// Verifies flow run lifecycle: create, retrieve, update with status changes.
 func TestSQLiteStorage_FlowRuns(t *testing.T) {
 	dbPath := "test_flow_runs.db"
 	defer os.Remove(dbPath)
@@ -253,7 +253,7 @@ func TestSQLiteStorage_FlowRuns(t *testing.T) {
 }
 
 // TestSQLiteStorage_ChangeTracking tests sync status tracking
-// Identifies tasks needing push: dirty (updated after sync) and never synced
+// Identifies tasks needing push: dirty (updated after sync) and never synced.
 func TestSQLiteStorage_ChangeTracking(t *testing.T) {
 	dbPath := "test_change_tracking.db"
 	defer os.Remove(dbPath)

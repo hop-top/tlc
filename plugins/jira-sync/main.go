@@ -153,7 +153,7 @@ func fetchJiraIssues(url, project, lastSyncAt string) ([]interface{}, error) {
 
 	client, err := jira.NewClient(tp.Client(), url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create jira client: %w", err)
 	}
 
 	jql := fmt.Sprintf("project = %s", project)
@@ -166,7 +166,7 @@ func fetchJiraIssues(url, project, lastSyncAt string) ([]interface{}, error) {
 
 	issues, _, err := client.Issue.Search(jql, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to search jira issues: %w", err)
 	}
 
 	tasks := []interface{}{}
@@ -191,7 +191,7 @@ func pushToJira(url, projectKey string, tasks []Task) (*SyncPushResult, error) {
 
 	client, err := jira.NewClient(tp.Client(), url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create jira client: %w", err)
 	}
 
 	result := &SyncPushResult{
@@ -234,7 +234,7 @@ func createJiraIssue(client *jira.Client, projectKey string, task *Task) error {
 
 	newIssue, _, err := client.Issue.Create(issue)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create jira issue: %w", err)
 	}
 
 	// Update task metadata with origin info
@@ -261,7 +261,7 @@ func updateJiraIssue(client *jira.Client, issueID string, task *Task) error {
 
 	_, _, err := client.Issue.Update(issue)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update jira issue: %w", err)
 	}
 
 	// Handle status transition
@@ -272,7 +272,7 @@ func transitionJiraIssue(client *jira.Client, issueID string, status string) err
 	// 1. Get available transitions
 	transitions, _, err := client.Issue.GetTransitions(issueID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get jira transitions: %w", err)
 	}
 
 	targetStatus := ""
@@ -290,14 +290,17 @@ func transitionJiraIssue(client *jira.Client, issueID string, status string) err
 	for _, t := range transitions {
 		if strings.EqualFold(t.To.Name, targetStatus) || strings.EqualFold(t.Name, targetStatus) {
 			_, err := client.Issue.DoTransition(issueID, t.ID)
-			return err
+			if err != nil {
+				return fmt.Errorf("failed to transition jira issue: %w", err)
+			}
+			return nil
 		}
 	}
 
 	return nil // Transition not found or not allowed
 }
 
-func deleteFromJira(url, projectKey string, tasks []Task) (*SyncDeleteResult, error) {
+func deleteFromJira(url, _ string, tasks []Task) (*SyncDeleteResult, error) {
 	email := os.Getenv("JIRA_EMAIL")
 	token := os.Getenv("JIRA_TOKEN")
 	if email == "" || token == "" {
@@ -311,7 +314,7 @@ func deleteFromJira(url, projectKey string, tasks []Task) (*SyncDeleteResult, er
 
 	client, err := jira.NewClient(tp.Client(), url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create jira client: %w", err)
 	}
 
 	result := &SyncDeleteResult{
@@ -339,7 +342,10 @@ func deleteFromJira(url, projectKey string, tasks []Task) (*SyncDeleteResult, er
 
 func deleteJiraIssue(client *jira.Client, issueID string) error {
 	_, err := client.Issue.Delete(issueID)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete jira issue: %w", err)
+	}
+	return nil
 }
 
 func sendResponse(resp Response) {

@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"hop.top/tlc/internal/labels"
 	"github.com/spf13/cobra"
+	"hop.top/tlc/internal/labels"
 )
 
-var (
-	projectType string
-)
+var projectType string
 
 var labelCmd = &cobra.Command{
 	Use:   "label",
@@ -20,7 +18,7 @@ var labelCmd = &cobra.Command{
 var labelInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Auto-detect and initialize project labels",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		wd, _ := os.Getwd()
 
 		var pType labels.ProjectType
@@ -45,7 +43,7 @@ var labelInitCmd = &cobra.Command{
 var labelListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List labels in the current project",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println("Project labels:")
 		// Logic to list labels from storage
 	},
@@ -54,7 +52,7 @@ var labelListCmd = &cobra.Command{
 var labelTemplatesCmd = &cobra.Command{
 	Use:   "templates",
 	Short: "List available label templates",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		pTypes := []labels.ProjectType{
 			labels.TypeGoBinary,
 			labels.TypeReactFrontend,

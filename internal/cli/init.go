@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/storage"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 func getDataHome() string {
@@ -71,7 +71,7 @@ func shouldTrackTLC(cmd *cobra.Command) (bool, error) {
 
 	// Use accessible mode for testing (bypasses TUI)
 	if err := form.WithAccessible(true).Run(); err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to run form: %w", err)
 	}
 
 	return shouldTrack, nil
@@ -85,12 +85,16 @@ var (
 	duplicateIDStrategy string
 )
 
+const (
+	strategyShare = "share"
+)
+
 func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *bool, fallbackMode *string, duplicateIDStrategy *string) error {
 	if _, err := os.Stat(".tlc"); err == nil && !*force {
 		return fmt.Errorf(".tlc directory already exists. Use --force to overwrite")
 	}
 
-	if err := os.MkdirAll(".tlc", 0755); err != nil {
+	if err := os.MkdirAll(".tlc", 0o750); err != nil {
 		return fmt.Errorf("failed to create .tlc directory: %w", err)
 	}
 
@@ -111,7 +115,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 
 	s, err := getStorage()
 	if err == nil {
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 		ctx := context.Background()
 
 		existingTasks, err := s.ListTasks(ctx, core.Query{
@@ -121,11 +125,11 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		if err == nil && len(existingTasks) > 0 {
 			strategy := *duplicateIDStrategy
 			if strategy == "" {
-				strategy = "share"
+				strategy = strategyShare
 			}
 
 			switch strategy {
-			case "share":
+			case strategyShare:
 				log.Warn("Sharing existing project", "project_id", detectedID, "task_count", len(existingTasks))
 				finalProjectID = detectedID
 
@@ -158,7 +162,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 
 	duplicateIDStrategyVal := *duplicateIDStrategy
 	if duplicateIDStrategyVal == "" {
-		duplicateIDStrategyVal = "share"
+		duplicateIDStrategyVal = strategyShare
 	}
 	projectCfg["duplicate_id_strategy"] = duplicateIDStrategyVal
 	config["project"] = projectCfg
@@ -180,13 +184,6 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 
 	if !cmd.Flags().Changed("track") && !cmd.Flags().Changed("no-track") && !viper.IsSet("git.track") && track {
 		gitCfg["track"] = true
-		data, err := yaml.Marshal(config)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %w", err)
-		}
-		if err := os.WriteFile(".tlc/config.yaml", data, 0644); err != nil {
-			return fmt.Errorf("failed to write config.yaml: %w", err)
-		}
 	}
 
 	data, err := yaml.Marshal(config)
@@ -194,14 +191,14 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(".tlc/config.yaml", data, 0644); err != nil {
+	if err := os.WriteFile(".tlc/config.yaml", data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config.yaml: %w", err)
 	}
 
 	if _, err := os.Stat(".git"); err == nil {
-		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			content, _ := os.ReadFile(".gitignore")
 			contentStr := string(content)
 
@@ -256,7 +253,7 @@ func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) 
 				Title(fmt.Sprintf("Project '%s' already exists with %d tasks", projectID, taskCount)).
 				Description("How should TLC handle this clone?").
 				Options(
-					huh.NewOption("Share existing project (recommended)", "share"),
+					huh.NewOption("Share existing project (recommended)", strategyShare),
 					huh.NewOption("Create unique project for this clone", "unique"),
 				).
 				Value(&choice),
@@ -264,14 +261,14 @@ func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) 
 	)
 
 	err := form.Run()
-	return choice, err
+	return choice, fmt.Errorf("failed to run form: %w", err)
 }
 
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize TLC in current directory",
 	Long:  "Create .tlc directory and default configuration file.",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		return runInit(cmd, &storageBackend, &dbPath, &force, &fallbackMode, &duplicateIDStrategy)
 	},
 }
@@ -283,7 +280,7 @@ func init() {
 	initCmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")
 	initCmd.Flags().Bool("no-track", false, "Do not add .tlc/ to .gitignore")
 	initCmd.Flags().StringVar(&fallbackMode, "fallback-mode", "", "Project fallback mode: auto, detected, prompt (default: auto)")
-	initCmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: share)")
+	initCmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: "+strategyShare+")")
 
 	rootCmd.AddCommand(initCmd)
 }

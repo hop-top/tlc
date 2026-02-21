@@ -58,18 +58,18 @@ func NewFlowImporter() *FlowImporter {
 	}
 }
 
-func (fi *FlowImporter) ImportFromURL(url string) (*Flow, error) {
+func (fi *FlowImporter) ImportFromURL(ctx context.Context, url string) (*Flow, error) {
 	rawURL, err := fi.convertToRawURL(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert URL: %w", err)
 	}
 
-	mainContent, err := fi.fetchContent(rawURL)
+	mainContent, err := fi.fetchContent(ctx, rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch content: %w", err)
 	}
 
-	referencedFiles := fi.fetchReferencedFiles(mainContent, rawURL)
+	referencedFiles := fi.fetchReferencedFiles(ctx, mainContent, rawURL)
 
 	fullContent := fi.combineContent(mainContent, referencedFiles)
 
@@ -96,19 +96,23 @@ func (fi *FlowImporter) convertToRawURL(url string) (string, error) {
 		matches[1], matches[2], matches[3], matches[4]), nil
 }
 
-func (fi *FlowImporter) fetchContent(url string) (string, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (fi *FlowImporter) fetchContent(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("User-Agent", userAgent)
 
-	resp, err := fi.httpClient.Do(req)
+	resp, err := fi.httpClient.Do(req) //nolint:gosec // G704: url validated by convertToRawURL to be github.com only
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			err = fmt.Errorf("failed to close response body: %w", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d: failed to fetch content from %s", resp.StatusCode, url)
@@ -153,7 +157,7 @@ func (fi *FlowImporter) extractRelativeLinks(content string) []string {
 	return result
 }
 
-func (fi *FlowImporter) fetchReferencedFiles(mainContent, mainURL string) []ReferencedFile {
+func (fi *FlowImporter) fetchReferencedFiles(ctx context.Context, mainContent, mainURL string) []ReferencedFile {
 	links := fi.extractRelativeLinks(mainContent)
 	if len(links) == 0 {
 		return nil
@@ -167,7 +171,7 @@ func (fi *FlowImporter) fetchReferencedFiles(mainContent, mainURL string) []Refe
 		link = strings.TrimPrefix(link, "./")
 		rawURL := baseURL + "/" + prefixPath + "/" + link
 
-		content, err := fi.fetchContent(rawURL)
+		content, err := fi.fetchContent(ctx, rawURL)
 		if err != nil {
 			continue
 		}
@@ -362,11 +366,15 @@ func (fi *FlowImporter) callLLM(ctx context.Context, apiURL, apiKey, model, prom
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("HTTP-Referer", "https://github.com/hop-top/tlc")
 
-	resp, err := fi.httpClient.Do(req)
+	resp, err := fi.httpClient.Do(req) //nolint:gosec // G704: apiURL from env var, user configures trusted endpoint
 	if err != nil {
 		return "", fmt.Errorf("failed to call LLM API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			err = fmt.Errorf("failed to close response body: %w", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

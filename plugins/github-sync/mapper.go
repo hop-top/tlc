@@ -3,10 +3,15 @@ package main
 import (
 	"fmt"
 	"time"
+
 	"github.com/google/go-github/v69/github"
 )
 
-// Task represents the TLC task structure as used by plugins
+const (
+	githubStateClosed = "closed"
+)
+
+// Task represents the TLC task structure as used by plugins.
 type Task struct {
 	ID          string                 `json:"id"`
 	Title       string                 `json:"title"`
@@ -19,7 +24,7 @@ type Task struct {
 	Meta        map[string]interface{} `json:"meta,omitempty"`
 }
 
-// MapGitHubIssueToTask maps a GitHub issue to a TLC task
+// MapGitHubIssueToTask maps a GitHub issue to a TLC task.
 func MapGitHubIssueToTask(issue *github.Issue) *Task {
 	number := issue.GetNumber()
 	title := issue.GetTitle()
@@ -27,7 +32,7 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 	body := issue.GetBody()
 
 	status := "TODO"
-	if state == "closed" {
+	if state == githubStateClosed {
 		status = "DONE"
 	}
 
@@ -52,7 +57,7 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 
 	// Map labels to tags
 	if len(issue.Labels) > 0 {
-		tags := []string{}
+		tags := make([]string, 0, len(issue.Labels))
 		for _, label := range issue.Labels {
 			tags = append(tags, label.GetName())
 		}
@@ -68,7 +73,7 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 	return task
 }
 
-// MapTaskToGitHubIssueRequest maps a TLC task to a GitHub issue request
+// MapTaskToGitHubIssueRequest maps a TLC task to a GitHub issue request.
 func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
 	state := "open"
 	if task.Status == "DONE" || task.Status == "SKIPPED" {
@@ -76,10 +81,10 @@ func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
 	}
 
 	req := &github.IssueRequest{
-		Title:    &task.Title,
-		Body:     &task.Description,
-		State:    &state,
-		Labels:   &task.Tags,
+		Title:  &task.Title,
+		Body:   &task.Description,
+		State:  &state,
+		Labels: &task.Tags,
 	}
 
 	if task.AssignedTo != "" {

@@ -18,7 +18,7 @@ func (m Model) fetchTasks() tea.Msg {
 	}
 	tasks, err := m.service.ListTasks(context.Background(), query)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
 	// Sort tasks by status order
@@ -46,7 +46,7 @@ func (m Model) fetchLogs() tea.Msg {
 	taskID := m.tasks[m.selected].ID
 	logs, err := m.service.GetLogs(context.Background(), taskID, m.logSortDirection)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get logs: %w", err)
 	}
 	return logsMsg(logs)
 }
@@ -57,7 +57,7 @@ func (m Model) fetchFlowRuns() tea.Msg {
 	}
 	runs, err := m.service.ListFlowRuns(context.Background(), query)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list flow runs: %w", err)
 	}
 	return flowRunsMsg(runs)
 }
@@ -71,9 +71,8 @@ func (m Model) claimTask(id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		user := core.GetCurrentUser()
-		err := m.service.ClaimTask(ctx, id, user, "Claimed via TUI")
-		if err != nil {
-			return err
+		if err := m.service.ClaimTask(ctx, id, user, "Claimed via TUI"); err != nil {
+			return fmt.Errorf("failed to claim task: %w", err)
 		}
 		return m.fetchTasks()
 	}
@@ -83,9 +82,8 @@ func (m Model) unclaimTask(id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		user := core.GetCurrentUser()
-		err := m.service.UnclaimTask(ctx, id, user, "Unclaimed via TUI")
-		if err != nil {
-			return err
+		if err := m.service.UnclaimTask(ctx, id, user, "Unclaimed via TUI"); err != nil {
+			return fmt.Errorf("failed to unclaim task: %w", err)
 		}
 		return m.fetchTasks()
 	}
@@ -108,7 +106,7 @@ func (m Model) rotateStatus(task *core.Task) tea.Cmd {
 
 		err := m.service.TransitionStatus(ctx, task.ID, next, core.GetCurrentUser(), "Rotated via TUI")
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to transition status: %w", err)
 		}
 		return m.fetchTasks()
 	}
@@ -143,7 +141,7 @@ func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 		next := statusOrder[newIdx]
 		err := m.service.TransitionStatus(ctx, task.ID, next, core.GetCurrentUser(), "Moved via Kanban")
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to move task: %w", err)
 		}
 		return m.fetchTasks()
 	}
@@ -198,9 +196,8 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 			task.ProjectID = &proj.ProjectID
 		}
 
-		err := m.service.CreateTask(ctx, task, core.GetCurrentUser(), "Created via TUI")
-		if err != nil {
-			return err
+		if err := m.service.CreateTask(ctx, task, core.GetCurrentUser(), "Created via TUI"); err != nil {
+			return fmt.Errorf("failed to create task: %w", err)
 		}
 		return m.fetchTasks()
 	}

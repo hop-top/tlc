@@ -11,7 +11,7 @@ import (
 )
 
 // TestInitCmd tests tlc init command functionality
-// Tests basic init, --track flag, .gitignore handling, and config structure
+// Tests basic init, --track flag, .gitignore handling, and config structure.
 func TestInitCmd(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -172,13 +172,13 @@ func TestInitCmd(t *testing.T) {
 			viper.Reset()
 
 			if tt.setupGit {
-				if err := os.Mkdir(".git", 0755); err != nil {
+				if err := os.Mkdir(".git", 0o755); err != nil {
 					t.Fatalf("failed to create .git: %v", err)
 				}
 			}
 
 			if tt.existingGitignore != "" {
-				if err := os.WriteFile(".gitignore", []byte(tt.existingGitignore), 0644); err != nil {
+				if err := os.WriteFile(".gitignore", []byte(tt.existingGitignore), 0o644); err != nil {
 					t.Fatalf("failed to create .gitignore: %v", err)
 				}
 			}
@@ -231,7 +231,7 @@ func TestInitCmd(t *testing.T) {
 }
 
 // TestInitCmd_ExistingTLC tests init command when .tlc directory already exists
-// Verifies behavior with existing TLC directory and --force flag
+// Verifies behavior with existing TLC directory and --force flag.
 func TestInitCmd_ExistingTLC(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -241,8 +241,8 @@ func TestInitCmd_ExistingTLC(t *testing.T) {
 	}{
 		{
 			name: "fail without --force",
-			setup: func(tmpDir string) error {
-				return os.MkdirAll(".tlc", 0755)
+			setup: func(_ string) error {
+				return os.MkdirAll(".tlc", 0o755)
 			},
 			args:    []string{"init"},
 			wantErr: true,
@@ -251,8 +251,8 @@ func TestInitCmd_ExistingTLC(t *testing.T) {
 			name: "succeed with --force",
 			setup: func(tmpDir string) error {
 				tlcDir := filepath.Join(tmpDir, ".tlc")
-				os.MkdirAll(tlcDir, 0755)
-				os.WriteFile(filepath.Join(tlcDir, "old.txt"), []byte("old content"), 0644)
+				os.MkdirAll(tlcDir, 0o755)
+				os.WriteFile(filepath.Join(tlcDir, "old.txt"), []byte("old content"), 0o644)
 				return nil
 			},
 			args:    []string{"init", "--force"},
@@ -302,7 +302,7 @@ func TestInitCmd_ExistingTLC(t *testing.T) {
 }
 
 // TestInitCmd_WithGlobalConfig tests init command with global configuration
-// Verifies project-specific config doesn't interfere with global settings
+// Verifies project-specific config doesn't interfere with global settings.
 func TestInitCmd_WithGlobalConfig(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -362,15 +362,15 @@ git:
 			viper.Reset()
 
 			if tt.setupGit {
-				if err := os.Mkdir(".git", 0755); err != nil {
+				if err := os.Mkdir(".git", 0o755); err != nil {
 					t.Fatalf("failed to create .git: %v", err)
 				}
 			}
 
 			homeDir := filepath.Join(tmpDir, "home")
-			os.MkdirAll(filepath.Join(homeDir, ".config", "tlc"), 0755)
+			os.MkdirAll(filepath.Join(homeDir, ".config", "tlc"), 0o755)
 			configPath := filepath.Join(homeDir, ".config", "tlc", "config.yaml")
-			if err := os.WriteFile(configPath, []byte(tt.globalConfig), 0644); err != nil {
+			if err := os.WriteFile(configPath, []byte(tt.globalConfig), 0o644); err != nil {
 				t.Fatalf("failed to write global config: %v", err)
 			}
 
@@ -407,8 +407,8 @@ git:
 
 				if tt.name == "init with --no-track flag" {
 					t.Logf(".gitignore content length: %d, bytes: %q", len(content), content)
-					t.Logf(".gitignore bytes: %v", []byte(content))
-					t.Logf(".gitignore hex: %x", []byte(content))
+					t.Logf(".gitignore bytes: %v", content)
+					t.Logf(".gitignore hex: %x", content)
 				}
 
 				for _, want := range tt.wantInGitignore {
@@ -427,7 +427,7 @@ git:
 }
 
 // TestInitCmd_ConfigStructure tests config file structure
-// Verifies all required config sections are present
+// Verifies all required config sections are present.
 func TestInitCmd_ConfigStructure(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-init-config-*")
 	if err != nil {
@@ -494,8 +494,57 @@ func TestInitCmd_ConfigStructure(t *testing.T) {
 	}
 }
 
-// TestInitCmd_WithFallbackMode tests --fallback-mode flag
-// Verifies project.fallback_mode is set correctly (auto/detected/prompt)
+func runInitConfigTest(t *testing.T, args []string, wantFallback, wantDupStrategy string) {
+	t.Helper()
+	tmpDir, err := os.MkdirTemp("", "tlc-init-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	viper.Reset()
+
+	cmd := newTestCmd()
+	initCmd := newTestInitCmd()
+	cmd.AddCommand(initCmd)
+
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs(args)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	configPath := filepath.Join(".tlc", "config.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read config: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("failed to unmarshal config: %v", err)
+	}
+
+	if projectCfg, ok := config["project"].(map[string]interface{}); ok {
+		if fallbackMode, ok := projectCfg["fallback_mode"].(string); !ok || fallbackMode != wantFallback {
+			t.Errorf("expected fallback_mode %s, got %v", wantFallback, projectCfg["fallback_mode"])
+		}
+		if dupStrategy, ok := projectCfg["duplicate_id_strategy"].(string); !ok || dupStrategy != wantDupStrategy {
+			t.Errorf("expected duplicate_id_strategy %s, got %v", wantDupStrategy, projectCfg["duplicate_id_strategy"])
+		}
+	} else {
+		t.Error("project config section not found")
+	}
+}
+
 func TestInitCmd_WithFallbackMode(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -525,59 +574,11 @@ func TestInitCmd_WithFallbackMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "tlc-init-fallback-*")
-			if err != nil {
-				t.Fatalf("failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
-
-			oldWd, _ := os.Getwd()
-			os.Chdir(tmpDir)
-			defer os.Chdir(oldWd)
-
-			viper.Reset()
-
-			cmd := newTestCmd()
-			initCmd := newTestInitCmd()
-			cmd.AddCommand(initCmd)
-
-			buf := new(strings.Builder)
-			cmd.SetOut(buf)
-			cmd.SetErr(buf)
-			cmd.SetArgs(tt.args)
-
-			err = cmd.Execute()
-			if err != nil {
-				t.Fatalf("Execute() failed: %v", err)
-			}
-
-			configPath := filepath.Join(".tlc", "config.yaml")
-			data, err := os.ReadFile(configPath)
-			if err != nil {
-				t.Fatalf("failed to read config: %v", err)
-			}
-
-			var config map[string]interface{}
-			if err := yaml.Unmarshal(data, &config); err != nil {
-				t.Fatalf("failed to unmarshal config: %v", err)
-			}
-
-			if projectCfg, ok := config["project"].(map[string]interface{}); ok {
-				if fallbackMode, ok := projectCfg["fallback_mode"].(string); !ok || fallbackMode != tt.wantFallback {
-					t.Errorf("expected fallback_mode %s, got %v", tt.wantFallback, projectCfg["fallback_mode"])
-				}
-				if dupStrategy, ok := projectCfg["duplicate_id_strategy"].(string); !ok || dupStrategy != tt.wantDupStrategy {
-					t.Errorf("expected duplicate_id_strategy %s, got %v", tt.wantDupStrategy, projectCfg["duplicate_id_strategy"])
-				}
-			} else {
-				t.Error("project config section not found")
-			}
+			runInitConfigTest(t, tt.args, tt.wantFallback, tt.wantDupStrategy)
 		})
 	}
 }
 
-// TestInitCmd_WithDuplicateIDStrategy tests --duplicate-id-strategy flag
-// Verifies project.duplicate_id_strategy is set correctly (share/unique/prompt)
 func TestInitCmd_WithDuplicateIDStrategy(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -607,59 +608,13 @@ func TestInitCmd_WithDuplicateIDStrategy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "tlc-init-dup-*")
-			if err != nil {
-				t.Fatalf("failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
-
-			oldWd, _ := os.Getwd()
-			os.Chdir(tmpDir)
-			defer os.Chdir(oldWd)
-
-			viper.Reset()
-
-			cmd := newTestCmd()
-			initCmd := newTestInitCmd()
-			cmd.AddCommand(initCmd)
-
-			buf := new(strings.Builder)
-			cmd.SetOut(buf)
-			cmd.SetErr(buf)
-			cmd.SetArgs(tt.args)
-
-			err = cmd.Execute()
-			if err != nil {
-				t.Fatalf("Execute() failed: %v", err)
-			}
-
-			configPath := filepath.Join(".tlc", "config.yaml")
-			data, err := os.ReadFile(configPath)
-			if err != nil {
-				t.Fatalf("failed to read config: %v", err)
-			}
-
-			var config map[string]interface{}
-			if err := yaml.Unmarshal(data, &config); err != nil {
-				t.Fatalf("failed to unmarshal config: %v", err)
-			}
-
-			if projectCfg, ok := config["project"].(map[string]interface{}); ok {
-				if dupStrategy, ok := projectCfg["duplicate_id_strategy"].(string); !ok || dupStrategy != tt.wantStrategy {
-					t.Errorf("expected duplicate_id_strategy %s, got %v", tt.wantStrategy, projectCfg["duplicate_id_strategy"])
-				}
-				if fallbackMode, ok := projectCfg["fallback_mode"].(string); !ok || fallbackMode != tt.wantFallback {
-					t.Errorf("expected fallback_mode %s, got %v", tt.wantFallback, projectCfg["fallback_mode"])
-				}
-			} else {
-				t.Error("project config section not found")
-			}
+			runInitConfigTest(t, tt.args, tt.wantFallback, tt.wantStrategy)
 		})
 	}
 }
 
 // TestInitCmd_ConfigStructureWithProject tests config includes project section
-// Verifies project.id, project.fallback_mode, and project.duplicate_id_strategy exist
+// Verifies project.id, project.fallback_mode, and project.duplicate_id_strategy exist.
 func TestInitCmd_ConfigStructureWithProject(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-init-project-*")
 	if err != nil {

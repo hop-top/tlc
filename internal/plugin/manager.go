@@ -5,11 +5,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"hop.top/tlc/internal/core"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
 )
 
-// Manager handles plugin discovery and lifecycle
+// Manager handles plugin discovery and lifecycle.
 type Manager struct {
 	pluginsDir string
 	plugins    map[string]*core.PluginManifest
@@ -63,19 +63,19 @@ func (m *Manager) Discover() error {
 func (m *Manager) loadManifest(path string) (*core.PluginManifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read manifest file: %w", err)
 	}
 
 	var manifest core.PluginManifest
 	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
 
 	return &manifest, nil
 }
 
 func (m *Manager) List() []*core.PluginManifest {
-	var list []*core.PluginManifest
+	list := make([]*core.PluginManifest, 0, len(m.plugins))
 	for _, p := range m.plugins {
 		list = append(list, p)
 	}

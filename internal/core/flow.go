@@ -101,10 +101,10 @@ type Step struct {
 
 // TaskTemplate defines how to generate tasks from flow steps.
 type TaskTemplate struct {
-	Title        string             `json:"title" yaml:"title"`
-	Description  string             `json:"description,omitempty" yaml:"description,omitempty"`
-	Requirements *TaskRequirements  `json:"requirements,omitempty" yaml:"requirements,omitempty"`
-	Context      map[string]any     `json:"context,omitempty" yaml:"context,omitempty"`
+	Title        string            `json:"title" yaml:"title"`
+	Description  string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Requirements *TaskRequirements `json:"requirements,omitempty" yaml:"requirements,omitempty"`
+	Context      map[string]any    `json:"context,omitempty" yaml:"context,omitempty"`
 }
 
 // TaskRequirements specifies capabilities needed to execute a task.

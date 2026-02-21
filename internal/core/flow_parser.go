@@ -120,7 +120,7 @@ func detectCycles(f *Flow) error {
 		recStack[id] = true
 
 		step := f.Steps[id]
-		// In TFS, edges are primarily depends_on (reverse logic for execution, 
+		// In TFS, edges are primarily depends_on (reverse logic for execution,
 		// but for definition validation, we check if dependency graph is DAG)
 		for _, dep := range step.DependsOn {
 			if !visited[dep] {

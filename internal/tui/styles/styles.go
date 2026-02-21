@@ -2,7 +2,7 @@ package styles
 
 import "github.com/charmbracelet/lipgloss"
 
-// Theme defines the color palette
+// Theme defines the color palette.
 type Theme struct {
 	Name       string
 	Primary    lipgloss.Color
@@ -16,9 +16,9 @@ type Theme struct {
 	TagColors  []string
 }
 
-// Methods to satisfy themepicker.Theme interface
-func (t Theme) DisplayName() string       { return t.Name }
-func (t Theme) Desc() string              { return "Internal Theme" }
+// Methods to satisfy themepicker.Theme interface.
+func (t Theme) DisplayName() string           { return t.Name }
+func (t Theme) Desc() string                  { return "Internal Theme" }
 func (t Theme) GetPrimary() lipgloss.Color    { return t.Primary }
 func (t Theme) GetSecondary() lipgloss.Color  { return t.Secondary }
 func (t Theme) GetSuccess() lipgloss.Color    { return t.Success }
@@ -28,22 +28,22 @@ func (t Theme) GetMuted() lipgloss.Color      { return t.Muted }
 func (t Theme) GetBackground() lipgloss.Color { return t.Background }
 func (t Theme) GetForeground() lipgloss.Color { return t.Foreground }
 
-// Styles contains all application styles derived from a Theme
+// Styles contains all application styles derived from a Theme.
 type Styles struct {
-	Title           lipgloss.Style
-	Label           lipgloss.Style
-	Muted           lipgloss.Style
-	Warning         lipgloss.Style
-	Error           lipgloss.Style
-	Todo            lipgloss.Style
-	InProgress      lipgloss.Style
-	Done            lipgloss.Style
-	Skipped         lipgloss.Style
-	Box             lipgloss.Style
-	TagColors       []string
+	Title      lipgloss.Style
+	Label      lipgloss.Style
+	Muted      lipgloss.Style
+	Warning    lipgloss.Style
+	Error      lipgloss.Style
+	Todo       lipgloss.Style
+	InProgress lipgloss.Style
+	Done       lipgloss.Style
+	Skipped    lipgloss.Style
+	Box        lipgloss.Style
+	TagColors  []string
 }
 
-// DefaultTheme returns the built-in default theme
+// DefaultTheme returns the built-in default theme.
 func DefaultTheme() Theme {
 	return Theme{
 		Name:       "Default",
@@ -61,7 +61,7 @@ func DefaultTheme() Theme {
 	}
 }
 
-// NewStyles creates a new Styles struct from a Theme
+// NewStyles creates a new Styles struct from a Theme.
 func NewStyles(t Theme) *Styles {
 	return &Styles{
 		Title:      lipgloss.NewStyle().Foreground(t.Primary).Bold(true),
@@ -81,10 +81,10 @@ func NewStyles(t Theme) *Styles {
 	}
 }
 
-// Global instance for backward compatibility (optional, or we can refactor usage)
+// Global instance for backward compatibility (optional, or we can refactor usage).
 var Current = NewStyles(DefaultTheme())
 
-// Deprecated: Use Current.Primary instead (kept for now to avoid breaking build immediately)
+// Deprecated: Use Current.Primary instead (kept for now to avoid breaking build immediately).
 var (
 	PrimaryColor = DefaultTheme().Primary
 	SuccessColor = DefaultTheme().Success
@@ -107,13 +107,13 @@ var (
 
 func ApplyTheme(t Theme) {
 	Current = NewStyles(t)
-	
+
 	PrimaryColor = t.Primary
 	SuccessColor = t.Success
 	WarningColor = t.Warning
 	ErrorColor = t.Error
 	MutedColor = t.Muted
-	
+
 	TitleStyle = Current.Title
 	LabelStyle = Current.Label
 	MutedStyle = Current.Muted
@@ -126,4 +126,3 @@ func ApplyTheme(t Theme) {
 	BoxStyle = Current.Box
 	TagColors = Current.TagColors
 }
-

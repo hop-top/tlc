@@ -10,10 +10,10 @@ import (
 type ConflictStrategy string
 
 const (
-	StrategyRemoteWins   ConflictStrategy = "remote-wins"
-	StrategyLocalWins    ConflictStrategy = "local-wins"
-	StrategyManual       ConflictStrategy = "manual"
-	StrategyLastWrite    ConflictStrategy = "last-write-wins"
+	StrategyRemoteWins ConflictStrategy = "remote-wins"
+	StrategyLocalWins  ConflictStrategy = "local-wins"
+	StrategyManual     ConflictStrategy = "manual"
+	StrategyLastWrite  ConflictStrategy = "last-write-wins"
 )
 
 type Conflict struct {
@@ -37,7 +37,7 @@ func DetectConflict(local *core.Task, remote *core.Task) *Conflict {
 	// Local is modified if UpdatedAt > LastSyncAt
 	// We use a small buffer (1s) to account for database vs API precision differences
 	localModified := local.UpdatedAt.After(local.LastSyncAt.Add(time.Second))
-	
+
 	// Remote is modified if its UpdatedAt > LastSyncAt
 	remoteModified := remote.UpdatedAt.After(local.LastSyncAt.Add(time.Second))
 

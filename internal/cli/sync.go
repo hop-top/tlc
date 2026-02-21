@@ -10,11 +10,19 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/plugin"
 	"hop.top/tlc/internal/sync"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+)
+
+const (
+	syncSystemGitHub   = "github"
+	syncDirectionPull  = "pull"
+	syncDirectionBidir = "bidirectional"
+	syncDirectionPush  = "push"
+	syncSystemUnknown  = "unknown"
 )
 
 var (
@@ -34,17 +42,18 @@ var syncCmd = &cobra.Command{
 //
 //	if current config has different direction, it will be upgraded to bidirectional
 func autoConfigureGitHub(directionHint string) error {
+	ctx := context.Background()
 	// Check if we're in a git repo
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree")
 	if err := cmd.Run(); err != nil {
-		return nil // Not in a git repo, skip auto-config
+		return nil //nolint:nilerr // Not in a git repo, skip auto-config
 	}
 
 	// Get remote URL
-	cmd = exec.Command("git", "remote", "get-url", "origin")
+	cmd = exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err != nil {
-		return nil // No origin remote, skip auto-config
+		return nil //nolint:nilerr // No origin remote, skip auto-config
 	}
 
 	remoteURL := strings.TrimSpace(string(output))
@@ -90,13 +99,13 @@ func autoConfigureGitHub(directionHint string) error {
 		// No direction configured, set from hint
 		newDirection = directionHint
 		needsUpdate = true
-	} else if existingDirection != "bidirectional" {
+	} else if existingDirection != syncDirectionBidir {
 		// Check if we need to upgrade to bidirectional
-		if existingDirection == "pull" && directionHint == "push" {
-			newDirection = "bidirectional"
+		if existingDirection == syncDirectionPull && directionHint == syncDirectionPush {
+			newDirection = syncDirectionBidir
 			needsUpdate = true
-		} else if existingDirection == "push" && directionHint == "pull" {
-			newDirection = "bidirectional"
+		} else if existingDirection == syncDirectionPush && directionHint == syncDirectionPull {
+			newDirection = syncDirectionBidir
 			needsUpdate = true
 		}
 	}
@@ -112,12 +121,11 @@ func autoConfigureGitHub(directionHint string) error {
 
 	// Try to get token from gh CLI if available
 	if _, err := exec.LookPath("gh"); err == nil {
-		cmd = exec.Command("gh", "auth", "token")
+		cmd = exec.CommandContext(ctx, "gh", "auth", "token")
 		if tokenOutput, err := cmd.Output(); err == nil {
 			token := strings.TrimSpace(string(tokenOutput))
 			if token != "" {
-				// Store token in environment for this session
-				os.Setenv("GITHUB_TOKEN", token)
+				_ = os.Setenv("GITHUB_TOKEN", token)
 				viper.Set("sync.github.use_gh_auth", true)
 			}
 		}
@@ -163,17 +171,17 @@ func autoConfigureGitHub(directionHint string) error {
 
 func runSyncPull(cmd *cobra.Command, system string) error {
 	// Auto-configure GitHub if needed
-	if system == "github" {
-		if err := autoConfigureGitHub("pull"); err != nil {
+	if system == syncSystemGitHub {
+		if err := autoConfigureGitHub(syncDirectionPull); err != nil {
 			return err
 		}
 		// Always try to get token from gh if available and not already set
 		if os.Getenv("GITHUB_TOKEN") == "" {
 			if _, err := exec.LookPath("gh"); err == nil {
-				ghCmd := exec.Command("gh", "auth", "token")
+				ghCmd := exec.CommandContext(context.Background(), "gh", "auth", "token")
 				if tokenOutput, err := ghCmd.Output(); err == nil {
 					token := strings.TrimSpace(string(tokenOutput))
-					os.Setenv("GITHUB_TOKEN", token)
+					_ = os.Setenv("GITHUB_TOKEN", token)
 				}
 			}
 		}
@@ -183,7 +191,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
 
@@ -206,7 +214,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start plugin %s: %w", system, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	params := map[string]interface{}{
 		"repo":         viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
@@ -219,15 +227,16 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 
 	err = client.Call("sync.pull", params, &result)
 	if err != nil {
-		// Log error for tasks of this system
 		for _, t := range tasksForSystem {
-			s.AddLog(ctx, &core.LogEntry{
+			if logErr := s.AddLog(ctx, &core.LogEntry{
 				TaskID:    t.ID,
 				Timestamp: time.Now().UTC(),
 				By:        "system",
 				Action:    "SYNC_ERROR",
 				Note:      fmt.Sprintf("Sync pull failed: %v", err),
-			})
+			}); logErr != nil {
+				fmt.Printf("Warning: failed to add log for task %s: %v\n", t.ID, logErr)
+			}
 		}
 		return fmt.Errorf("sync pull RPC failed: %w", err)
 	}
@@ -279,7 +288,9 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 					Action:    "SYNC_IMPORTED",
 					Note:      fmt.Sprintf("Imported from %s", system),
 				}
-				s.AddLog(ctx, logEntry)
+				if logErr := s.AddLog(ctx, logEntry); logErr != nil {
+					fmt.Printf("Warning: failed to add log for task %s: %v\n", remoteTask.ID, logErr)
+				}
 			}
 			continue
 		}
@@ -319,7 +330,9 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 						Action:    "SYNC_CONFLICT",
 						Note:      fmt.Sprintf("Resolved conflict using %s", strategy),
 					}
-					s.AddLog(ctx, logEntry)
+					if logErr := s.AddLog(ctx, logEntry); logErr != nil {
+						fmt.Printf("Warning: failed to add log for task %s: %v\n", existing.ID, logErr)
+					}
 				}
 			}
 		} else {
@@ -339,13 +352,15 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 						Action:    "SYNC_PULLED",
 						Note:      fmt.Sprintf("Updated from %s", system),
 					}
-					s.AddLog(ctx, logEntry)
+					if logErr := s.AddLog(ctx, logEntry); logErr != nil {
+						fmt.Printf("Warning: failed to add log for task %s: %v\n", existing.ID, logErr)
+					}
 				}
 			}
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n",
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n",
 		system, createdCount, updatedCount, conflictCount)
 
 	return syncTODOAll()
@@ -364,21 +379,22 @@ var syncPushCmd = &cobra.Command{
 	Use:   "push <system>",
 	Short: "Push local changes to an external system",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		system := args[0]
+		ctx := context.Background()
 
 		// Auto-configure GitHub if needed
-		if system == "github" {
-			if err := autoConfigureGitHub("push"); err != nil {
+		if system == syncSystemGitHub {
+			if err := autoConfigureGitHub(syncDirectionPush); err != nil {
 				return err
 			}
 			// Always try to get token from gh if available and not already set
 			if os.Getenv("GITHUB_TOKEN") == "" {
 				if _, err := exec.LookPath("gh"); err == nil {
-					ghCmd := exec.Command("gh", "auth", "token")
+					ghCmd := exec.CommandContext(ctx, "gh", "auth", "token")
 					if tokenOutput, err := ghCmd.Output(); err == nil {
 						token := strings.TrimSpace(string(tokenOutput))
-						os.Setenv("GITHUB_TOKEN", token)
+						_ = os.Setenv("GITHUB_TOKEN", token)
 					}
 				}
 			}
@@ -388,9 +404,8 @@ var syncPushCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
-		ctx := context.Background()
 		var tasks []*core.Task
 		if syncPushForce {
 			// Get all tasks for this system
@@ -401,12 +416,12 @@ var syncPushCmd = &cobra.Command{
 			}
 			tasks, err = s.ListTasks(ctx, query)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to list tasks: %w", err)
 			}
 		} else {
 			allNeedingPush, err := s.GetTasksNeedingPush(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get tasks needing push: %w", err)
 			}
 			for _, t := range allNeedingPush {
 				if t.OriginSystem != nil && *t.OriginSystem == system {
@@ -432,13 +447,15 @@ var syncPushCmd = &cobra.Command{
 
 		// Operation-level logging
 		for _, t := range tasks {
-			s.AddLog(ctx, &core.LogEntry{
+			if logErr := s.AddLog(ctx, &core.LogEntry{
 				TaskID:    t.ID,
 				Timestamp: time.Now().UTC(),
 				By:        core.GetCurrentUser(),
 				Action:    "COMMENT",
 				Note:      fmt.Sprintf("Starting sync push to %s", system),
-			})
+			}); logErr != nil {
+				fmt.Printf("Warning: failed to add log for task %s: %v\n", t.ID, logErr)
+			}
 		}
 
 		binPath := getPluginPath(system)
@@ -446,7 +463,7 @@ var syncPushCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to start plugin %s: %w", system, err)
 		}
-		defer client.Close()
+		defer func() { _ = client.Close() }()
 
 		params := map[string]interface{}{
 			"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
@@ -483,7 +500,9 @@ var syncPushCmd = &cobra.Command{
 				Action:    "SYNC_PUSHED",
 				Note:      fmt.Sprintf("Changes pushed to %s", system),
 			}
-			s.AddLog(ctx, logEntry)
+			if logErr := s.AddLog(ctx, logEntry); logErr != nil {
+				fmt.Printf("Warning: failed to add log for task %s: %v\n", id, logErr)
+			}
 			successCount++
 		}
 
@@ -492,13 +511,15 @@ var syncPushCmd = &cobra.Command{
 			fmt.Printf("✗ Failed to push %d tasks:\n", len(result.Failed))
 			for id, errStr := range result.Failed {
 				fmt.Printf("  - %s: %s\n", id, errStr)
-				s.AddLog(ctx, &core.LogEntry{
+				if logErr := s.AddLog(ctx, &core.LogEntry{
 					TaskID:    id,
 					Timestamp: time.Now().UTC(),
 					By:        core.GetCurrentUser(),
 					Action:    "SYNC_ERROR",
 					Note:      fmt.Sprintf("Failed to push to %s: %s", system, errStr),
-				})
+				}); logErr != nil {
+					fmt.Printf("Warning: failed to add log for task %s: %v\n", id, logErr)
+				}
 			}
 		}
 
@@ -524,22 +545,21 @@ var syncConfigCmd = &cobra.Command{
 		}
 
 		// Auto-configure for GitHub
-		if system == "github" {
-			if err := autoConfigureGitHub("bidirectional"); err != nil {
+		if system == syncSystemGitHub {
+			if err := autoConfigureGitHub(syncDirectionBidir); err != nil {
 				return err
 			}
 		}
 
 		// Display configuration
-		fmt.Fprintf(out, "Sync configuration for %s:\n", system)
-		fmt.Fprintf(out, "  Repo: %s\n", viper.GetString(fmt.Sprintf("sync.%s.repo", system)))
-		fmt.Fprintf(out, "  Direction: %s\n", viper.GetString(fmt.Sprintf("sync.%s.direction", system)))
+		_, _ = fmt.Fprintf(out, "Sync configuration for %s:\n", system)
+		_, _ = fmt.Fprintf(out, "  Repo: %s\n", viper.GetString(fmt.Sprintf("sync.%s.repo", system)))
+		_, _ = fmt.Fprintf(out, "  Direction: %s\n", viper.GetString(fmt.Sprintf("sync.%s.direction", system)))
 
-		// Automatically trigger sync pull for GitHub after successful configuration
-		if system == "github" {
-			fmt.Fprintf(out, "\nPulling issues from GitHub...\n")
+		if system == syncSystemGitHub {
+			_, _ = fmt.Fprintf(out, "\nPulling issues from GitHub...\n")
 			if err := runSyncPull(cmd, system); err != nil {
-				fmt.Fprintf(out, "Warning: Initial pull failed: %v\n", err)
+				_, _ = fmt.Fprintf(out, "Warning: Initial pull failed: %v\n", err)
 			}
 		}
 
@@ -550,17 +570,17 @@ var syncConfigCmd = &cobra.Command{
 var syncStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show sync status and push queue",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 		tasks, err := s.GetTasksNeedingPush(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get tasks needing push: %w", err)
 		}
 
 		if len(tasks) == 0 {
@@ -573,7 +593,7 @@ var syncStatusCmd = &cobra.Command{
 		// Group by system
 		bySystem := make(map[string][]*core.Task)
 		for _, t := range tasks {
-			system := "unknown"
+			system := syncSystemUnknown
 			if t.OriginSystem != nil {
 				system = *t.OriginSystem
 			}

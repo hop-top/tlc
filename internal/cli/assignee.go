@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
+	"hop.top/tlc/internal/core"
 )
 
 func init() {
@@ -31,7 +31,7 @@ func newAssigneeListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all available assignees",
 		Long:  "Display all assignees with their capabilities",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			// Get assignees directory from config or default
 			assigneesDir := filepath.Join("examples", "assignees")
 
@@ -82,7 +82,7 @@ func newAssigneeShowCmd() *cobra.Command {
 		Use:   "show <assignee-id>",
 		Short: "Show detailed information about an assignee",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			assigneeID := args[0]
 			assigneesDir := filepath.Join("examples", "assignees")
 

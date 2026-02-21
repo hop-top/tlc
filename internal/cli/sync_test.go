@@ -10,7 +10,7 @@ import (
 )
 
 // TestSyncCommands tests sync command configuration
-// Tests sync config, GitHub auto-configuration, and direction upgrades
+// Tests sync config, GitHub auto-configuration, and direction upgrades.
 func TestSyncCommands(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "tlc-sync-test-*")
 	defer os.RemoveAll(tmpDir)
@@ -52,7 +52,6 @@ func TestSyncCommands(t *testing.T) {
 		// This test will only work if we're in a valid git repo
 		// If not in a git repo, auto-config should silently skip
 		err := autoConfigureGitHub("pull")
-
 		// Should not error
 		if err != nil {
 			t.Errorf("autoConfigureGitHub should not error: %v", err)

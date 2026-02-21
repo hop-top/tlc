@@ -3,22 +3,23 @@ package auth
 import (
 	"context"
 	"fmt"
+
 	"github.com/machinebox/graphql"
 )
 
-// LinearAuthenticator handles Linear authentication
+// LinearAuthenticator handles Linear authentication.
 type LinearAuthenticator struct {
 	store Store
 }
 
-// NewLinearAuthenticator creates a new LinearAuthenticator
+// NewLinearAuthenticator creates a new LinearAuthenticator.
 func NewLinearAuthenticator(store Store) *LinearAuthenticator {
 	return &LinearAuthenticator{
 		store: store,
 	}
 }
 
-// LoginWithAPIKey authenticates using a Linear API Key
+// LoginWithAPIKey authenticates using a Linear API Key.
 func (a *LinearAuthenticator) LoginWithAPIKey(ctx context.Context, apiKey, accountName string) (*Credential, error) {
 	client := graphql.NewClient("https://api.linear.app/graphql")
 

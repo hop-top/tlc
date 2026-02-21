@@ -2,27 +2,26 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"hop.top/tlc/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/tlc/internal/core"
 )
 
 // TestTODOFileSync_ProjectScoping tests TODO file filtering by project
 // Verifies local .tlc/todo.txt contains only current project tasks
-// Verifies global todo.txt contains tasks from all projects
+// Verifies global todo.txt contains tasks from all projects.
 func TestTODOFileSync_ProjectScoping(t *testing.T) {
 	tempDir := t.TempDir()
 
 	projDir := filepath.Join(tempDir, "project1")
 	tlcDir := filepath.Join(projDir, ".tlc")
-	require.NoError(t, os.MkdirAll(tlcDir, 0755))
+	require.NoError(t, os.MkdirAll(tlcDir, 0o755))
 
 	configPath := filepath.Join(tlcDir, "config.yaml")
 	configContent := `
@@ -32,7 +31,7 @@ storage:
   db_path: %s
 `
 	configContent = strings.Replace(configContent, "%s", filepath.Join(tempDir, "db.sqlite"), 1)
-	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 
 	ctx := context.Background()
 	dbPath := filepath.Join(tempDir, "db.sqlite")
@@ -84,7 +83,7 @@ storage:
 
 		for _, task := range tasks {
 			if task.ProjectID != nil && *task.ProjectID == proj1ID {
-				f.WriteString(formatTLSHelper(task) + "\n")
+				f.WriteString(formatTLS(task) + "\n")
 			}
 		}
 		f.Close()
@@ -111,7 +110,7 @@ storage:
 		require.NoError(t, err)
 
 		for _, task := range tasks {
-			f.WriteString(formatTLSHelper(task) + "\n")
+			f.WriteString(formatTLS(task) + "\n")
 		}
 		f.Close()
 
@@ -127,7 +126,7 @@ storage:
 }
 
 // TestProjectScoping_EdgeCases tests edge cases for project scoping
-// Handles nil project_id (defaults to 'default') and empty project_id
+// Handles nil project_id (defaults to 'default') and empty project_id.
 func TestProjectScoping_EdgeCases(t *testing.T) {
 	resetProjectDetection()
 	ctx := context.Background()
@@ -194,52 +193,4 @@ func TestProjectScoping_EdgeCases(t *testing.T) {
 		assert.NotNil(t, retrieved.ProjectID)
 		assert.Equal(t, "", *retrieved.ProjectID)
 	})
-}
-
-func formatTLSHelper(t *core.Task) string {
-	status := "[ ]"
-	switch t.Status {
-	case core.StatusInProgress:
-		status = "[~]"
-	case core.StatusDone:
-		status = "[x]"
-	case core.StatusSkipped:
-		status = "[-]"
-	}
-
-	parts := []string{status, t.ID, t.Title}
-
-	if t.AssignedTo != nil && *t.AssignedTo != "" {
-		parts = append(parts, "@"+*t.AssignedTo)
-	}
-
-	for _, tag := range t.Tags {
-		parts = append(parts, "#"+tag)
-	}
-
-	if t.Reference != "" && t.Reference != "task://"+t.ID {
-		parts = append(parts, "ref:"+t.Reference)
-	}
-
-	if !t.CreatedAt.IsZero() {
-		parts = append(parts, "created_at="+t.CreatedAt.Format(time.RFC3339))
-	}
-	if !t.UpdatedAt.IsZero() {
-		parts = append(parts, "updated_at="+t.UpdatedAt.Format(time.RFC3339))
-	}
-
-	for k, v := range t.Meta {
-		switch k {
-		case "prio":
-			parts = append(parts, "prio:"+fmt.Sprintf("%v", v))
-		case "domain":
-			parts = append(parts, "domain:"+fmt.Sprintf("%v", v))
-		case "due":
-			parts = append(parts, "due:"+fmt.Sprintf("%v", v))
-		default:
-			parts = append(parts, fmt.Sprintf("%s=%v", k, v))
-		}
-	}
-
-	return strings.Join(parts, " ")
 }

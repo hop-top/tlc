@@ -8,10 +8,17 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
+)
+
+const (
+	formatJSON  = "json"
+	formatYAML  = "yaml"
+	formatTable = "table"
+	sortDesc    = "desc"
 )
 
 var (
@@ -67,7 +74,7 @@ Examples:
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
 
@@ -83,7 +90,7 @@ Examples:
 
 		// Default sort direction
 		if query.SortDirection == "" {
-			query.SortDirection = "desc"
+			query.SortDirection = sortDesc
 		}
 
 		// Get logs
@@ -102,12 +109,12 @@ Examples:
 func formatLogs(cmd *cobra.Command, logs []*core.LogEntry, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case "json":
+	case formatJSON:
 		data, _ := json.MarshalIndent(logs, "", "  ")
-		fmt.Fprintln(out, string(data))
-	case "yaml":
+		_, _ = fmt.Fprintln(out, string(data))
+	case formatYAML:
 		data, _ := yaml.Marshal(logs)
-		fmt.Fprintln(out, string(data))
+		_, _ = fmt.Fprintln(out, string(data))
 	default: // table
 		renderLogTable(out, logs)
 	}
@@ -115,7 +122,7 @@ func formatLogs(cmd *cobra.Command, logs []*core.LogEntry, format string) {
 
 func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 	if len(logs) == 0 {
-		fmt.Fprintln(w, "No logs found")
+		_, _ = fmt.Fprintln(w, "No logs found")
 		return
 	}
 
@@ -159,31 +166,31 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 		Bold(true)
 	tbl.SetStyles(s)
 
-	fmt.Fprintln(w, tbl.View())
-	fmt.Fprintf(w, "\nShowing %d log entries\n", len(logs))
+	_, _ = fmt.Fprintln(w, tbl.View())
+	_, _ = fmt.Fprintf(w, "\nShowing %d log entries\n", len(logs))
 }
 
 func formatLogAction(action string) string {
 	actionColors := map[string]lipgloss.Color{
-		"CREATED":        lipgloss.Color("42"),  // green
-		"CLAIMED":        lipgloss.Color("39"),  // blue
-		"RELEASED":       lipgloss.Color("214"), // yellow
-		"REASSIGNED":     lipgloss.Color("208"), // orange
-		"UPDATED":        lipgloss.Color("45"),  // cyan
-		"DONE":           lipgloss.Color("46"),  // bright green
-		"SKIPPED":        lipgloss.Color("226"), // yellow
-		"FAILURE":        lipgloss.Color("196"), // red
-		"RETRY":          lipgloss.Color("214"), // orange
-		"COMMENT":        lipgloss.Color("245"), // gray
-		"SYNC_IMPORTED":  lipgloss.Color("51"),  // cyan
-		"SYNC_PULLED":    lipgloss.Color("51"),  // cyan
-		"SYNC_PUSHED":    lipgloss.Color("51"),  // cyan
-		"SYNC_CONFLICT":  lipgloss.Color("196"), // red
-		"SYNC_ERROR":     lipgloss.Color("196"), // red
-		"FLOW_START":     lipgloss.Color("39"),  // blue
-		"FLOW_END":       lipgloss.Color("42"),  // green
-		"STEP_START":     lipgloss.Color("39"),  // blue
-		"STEP_END":       lipgloss.Color("42"),  // green
+		"CREATED":       lipgloss.Color("42"),  // green
+		"CLAIMED":       lipgloss.Color("39"),  // blue
+		"RELEASED":      lipgloss.Color("214"), // yellow
+		"REASSIGNED":    lipgloss.Color("208"), // orange
+		"UPDATED":       lipgloss.Color("45"),  // cyan
+		"DONE":          lipgloss.Color("46"),  // bright green
+		"SKIPPED":       lipgloss.Color("226"), // yellow
+		"FAILURE":       lipgloss.Color("196"), // red
+		"RETRY":         lipgloss.Color("214"), // orange
+		"COMMENT":       lipgloss.Color("245"), // gray
+		"SYNC_IMPORTED": lipgloss.Color("51"),  // cyan
+		"SYNC_PULLED":   lipgloss.Color("51"),  // cyan
+		"SYNC_PUSHED":   lipgloss.Color("51"),  // cyan
+		"SYNC_CONFLICT": lipgloss.Color("196"), // red
+		"SYNC_ERROR":    lipgloss.Color("196"), // red
+		"FLOW_START":    lipgloss.Color("39"),  // blue
+		"FLOW_END":      lipgloss.Color("42"),  // green
+		"STEP_START":    lipgloss.Color("39"),  // blue
+		"STEP_END":      lipgloss.Color("42"),  // green
 	}
 
 	color, exists := actionColors[action]
@@ -202,7 +209,7 @@ func init() {
 	logCmd.Flags().StringVar(&logUntil, "until", "", "Filter logs until timestamp (RFC3339)")
 	logCmd.Flags().IntVarP(&logLimit, "limit", "n", 100, "Maximum number of logs to return")
 	logCmd.Flags().IntVar(&logOffset, "offset", 0, "Skip first N logs (for pagination)")
-	logCmd.Flags().StringVar(&logSortDirection, "sort", "desc", "Sort direction: asc or desc")
+	logCmd.Flags().StringVar(&logSortDirection, "sort", sortDesc, "Sort direction: asc or desc")
 	logCmd.Flags().BoolVar(&logAll, "all", false, "Show logs from all tasks")
 
 	rootCmd.AddCommand(logCmd)

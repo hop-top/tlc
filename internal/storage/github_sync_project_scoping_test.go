@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/tlc/internal/core"
 )
 
 // TestGitHubSync_ProjectScoping tests GitHub sync with project scoping
 // Simulates sync pull assigning project_id to tasks from GitHub
-// Verifies tasks appear in correct project context when listed
+// Verifies tasks appear in correct project context when listed.
 func TestGitHubSync_ProjectScoping(t *testing.T) {
 	resetProjectDetection()
 	ctx := context.Background()
@@ -25,7 +25,7 @@ func TestGitHubSync_ProjectScoping(t *testing.T) {
 	// Setup project directory
 	projDir := filepath.Join(tempDir, "project1")
 	tlcDir := filepath.Join(projDir, ".tlc")
-	require.NoError(t, os.MkdirAll(tlcDir, 0755))
+	require.NoError(t, os.MkdirAll(tlcDir, 0o755))
 
 	// Create config with project ID
 	configPath := filepath.Join(tlcDir, "config.yaml")
@@ -36,7 +36,7 @@ storage:
   db_path: %s
 `
 	configContent = strings.Replace(configContent, "%s", filepath.Join(tempDir, "db.sqlite"), 1)
-	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 
 	// Initialize storage
 	dbPath := filepath.Join(tempDir, "db.sqlite")
@@ -227,7 +227,7 @@ storage:
 
 // TestGitHubSync_MultipleProjects tests GitHub sync across multiple projects
 // Verifies same GitHub issue ID can exist in different projects
-// Verifies each project only sees its own tasks
+// Verifies each project only sees its own tasks.
 func TestGitHubSync_MultipleProjects(t *testing.T) {
 	resetProjectDetection()
 	ctx := context.Background()
@@ -239,7 +239,7 @@ func TestGitHubSync_MultipleProjects(t *testing.T) {
 
 	for _, projDir := range []string{proj1Dir, proj2Dir} {
 		tlcDir := filepath.Join(projDir, ".tlc")
-		require.NoError(t, os.MkdirAll(tlcDir, 0755))
+		require.NoError(t, os.MkdirAll(tlcDir, 0o755))
 
 		configPath := filepath.Join(tlcDir, "config.yaml")
 		var projID string
@@ -257,7 +257,7 @@ storage:
 `
 		configContent = strings.Replace(configContent, "%s", filepath.Join(tempDir, "db.sqlite"), 1)
 		configContent = strings.Replace(configContent, "%s", projID, 1)
-		require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+		require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 	}
 
 	// Initialize storage
@@ -369,7 +369,7 @@ storage:
 }
 
 // TestGitHubSync_TaskUpdatePreservesProjectID tests sync updates preserve project scoping
-// Verifies project_id is preserved when GitHub sync updates task properties
+// Verifies project_id is preserved when GitHub sync updates task properties.
 func TestGitHubSync_TaskUpdatePreservesProjectID(t *testing.T) {
 	resetProjectDetection()
 	oldCwd, _ := os.Getwd()
@@ -383,7 +383,7 @@ func TestGitHubSync_TaskUpdatePreservesProjectID(t *testing.T) {
 
 	projDir := filepath.Join(tempDir, "project1")
 	tlcDir := filepath.Join(projDir, ".tlc")
-	require.NoError(t, os.MkdirAll(tlcDir, 0755))
+	require.NoError(t, os.MkdirAll(tlcDir, 0o755))
 
 	configPath := filepath.Join(tlcDir, "config.yaml")
 	configContent := `
@@ -393,7 +393,7 @@ storage:
   db_path: %s
 `
 	configContent = strings.Replace(configContent, "%s", filepath.Join(tempDir, "db.sqlite"), 1)
-	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 
 	dbPath := filepath.Join(tempDir, "db.sqlite")
 	s, err := NewSQLiteStorage(dbPath)

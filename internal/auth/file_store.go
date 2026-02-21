@@ -21,7 +21,7 @@ const (
 	iterations = 100000
 )
 
-// FileStore implements Store using an encrypted file
+// FileStore implements Store using an encrypted file.
 type FileStore struct {
 	path     string
 	password string
@@ -39,7 +39,7 @@ type credentialFile struct {
 	Credentials []encryptedCredential `json:"credentials"`
 }
 
-// NewFileStore creates a new FileStore
+// NewFileStore creates a new FileStore.
 func NewFileStore(path string, password string) *FileStore {
 	return &FileStore{
 		path:     path,
@@ -71,7 +71,7 @@ func (s *FileStore) loadFile() (*credentialFile, error) {
 
 func (s *FileStore) saveFile(file *credentialFile) error {
 	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -80,14 +80,14 @@ func (s *FileStore) saveFile(file *credentialFile) error {
 		return fmt.Errorf("failed to marshal credential file: %w", err)
 	}
 
-	if err := os.WriteFile(s.path, data, 0600); err != nil {
+	if err := os.WriteFile(s.path, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write credential file: %w", err)
 	}
 
 	return nil
 }
 
-// Get retrieves a credential from file
+// Get retrieves a credential from file.
 func (s *FileStore) Get(service, account string) (*Credential, error) {
 	file, err := s.loadFile()
 	if err != nil {
@@ -99,12 +99,12 @@ func (s *FileStore) Get(service, account string) (*Credential, error) {
 			key := s.deriveKey(ec.Salt)
 			block, err := aes.NewCipher(key)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to create cipher: %w", err)
 			}
 
 			aesgcm, err := cipher.NewGCM(block)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to create GCM: %w", err)
 			}
 
 			plaintext, err := aesgcm.Open(nil, ec.Nonce, ec.Ciphertext, nil)
@@ -124,7 +124,7 @@ func (s *FileStore) Get(service, account string) (*Credential, error) {
 	return nil, fmt.Errorf("credential not found")
 }
 
-// Upsert saves or updates a credential in file
+// Upsert saves or updates a credential in file.
 func (s *FileStore) Upsert(cred *Credential) error {
 	if cred.CreatedAt.IsZero() {
 		cred.CreatedAt = time.Now()
@@ -133,28 +133,28 @@ func (s *FileStore) Upsert(cred *Credential) error {
 
 	plaintext, err := json.Marshal(cred)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal credential: %w", err)
 	}
 
 	salt := make([]byte, saltSize)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		return err
+		return fmt.Errorf("failed to generate salt: %w", err)
 	}
 
 	key := s.deriveKey(salt)
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create cipher: %w", err)
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	nonce := make([]byte, aesgcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return err
+		return fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
 	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
@@ -192,7 +192,7 @@ func (s *FileStore) Upsert(cred *Credential) error {
 	return s.saveFile(file)
 }
 
-// Delete removes a credential from file
+// Delete removes a credential from file.
 func (s *FileStore) Delete(service, account string) error {
 	file, err := s.loadFile()
 	if err != nil {
@@ -211,7 +211,7 @@ func (s *FileStore) Delete(service, account string) error {
 	return s.saveFile(file)
 }
 
-// List returns accounts for a service
+// List returns accounts for a service.
 func (s *FileStore) List(service string) ([]string, error) {
 	file, err := s.loadFile()
 	if err != nil {

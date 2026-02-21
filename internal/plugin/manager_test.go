@@ -15,7 +15,7 @@ func TestManager_Discover(t *testing.T) {
 
 	// Create a mock plugin
 	p1Dir := filepath.Join(tmpDir, "test-plugin")
-	os.MkdirAll(p1Dir, 0755)
+	os.MkdirAll(p1Dir, 0o755)
 	manifestData := `
 name: test-plugin
 version: 1.0.0
@@ -23,7 +23,7 @@ type: external-sync
 description: A test plugin
 entry_point: ./test-plugin
 `
-	os.WriteFile(filepath.Join(p1Dir, "manifest.yaml"), []byte(manifestData), 0644)
+	os.WriteFile(filepath.Join(p1Dir, "manifest.yaml"), []byte(manifestData), 0o644)
 
 	manager := NewManager(tmpDir)
 	if err := manager.Discover(); err != nil {

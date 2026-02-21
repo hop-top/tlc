@@ -6,7 +6,7 @@ import (
 )
 
 // TestFormatLogAction tests log action formatting
-// Verifies all log actions are formatted correctly
+// Verifies all log actions are formatted correctly.
 func TestFormatLogAction(t *testing.T) {
 	tests := []struct {
 		action string

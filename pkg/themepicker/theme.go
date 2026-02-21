@@ -2,7 +2,7 @@ package themepicker
 
 import "github.com/charmbracelet/lipgloss"
 
-// BasicTheme is a concrete implementation of Theme
+// BasicTheme is a concrete implementation of Theme.
 type BasicTheme struct {
 	NameVal       string
 	DescVal       string
@@ -28,7 +28,7 @@ func (t BasicTheme) GetMuted() lipgloss.Color      { return t.MutedVal }
 func (t BasicTheme) GetBackground() lipgloss.Color { return t.BackgroundVal }
 func (t BasicTheme) GetForeground() lipgloss.Color { return t.ForegroundVal }
 
-// LazyTheme represents a theme that needs to be loaded
+// LazyTheme represents a theme that needs to be loaded.
 type LazyTheme struct {
 	Name string
 }
@@ -36,7 +36,7 @@ type LazyTheme struct {
 func (t LazyTheme) DisplayName() string { return t.Name }
 func (t LazyTheme) Desc() string        { return "Loading..." }
 
-// Default colors for unloaded theme
+// Default colors for unloaded theme.
 func (t LazyTheme) GetPrimary() lipgloss.Color    { return lipgloss.Color("240") }
 func (t LazyTheme) GetSecondary() lipgloss.Color  { return lipgloss.Color("240") }
 func (t LazyTheme) GetSuccess() lipgloss.Color    { return lipgloss.Color("240") }

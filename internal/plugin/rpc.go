@@ -2,13 +2,14 @@ package plugin
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
 )
 
-// RPCClient handles JSON-RPC communication over stdio
+// RPCClient handles JSON-RPC communication over stdio.
 type RPCClient struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -35,20 +36,20 @@ type RPCError struct {
 	Message string `json:"message"`
 }
 
-// NewRPCClient starts a plugin and returns an RPC client
+// NewRPCClient starts a plugin and returns an RPC client.
 func NewRPCClient(binPath string) (*RPCClient, error) {
-	cmd := exec.Command(binPath)
+	cmd := exec.CommandContext(context.Background(), binPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start plugin: %w", err)
 	}
 
 	// Increase buffer size to handle large responses (e.g., many GitHub issues)
@@ -64,7 +65,7 @@ func NewRPCClient(binPath string) (*RPCClient, error) {
 	}, nil
 }
 
-// Call makes a JSON-RPC call
+// Call makes a JSON-RPC call.
 func (c *RPCClient) Call(method string, params interface{}, result interface{}) error {
 	id := c.nextID
 	c.nextID++
@@ -78,11 +79,11 @@ func (c *RPCClient) Call(method string, params interface{}, result interface{}) 
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	if _, err := fmt.Fprintf(c.stdin, "%s\n", data); err != nil {
-		return err
+		return fmt.Errorf("failed to write request: %w", err)
 	}
 
 	if !c.stdout.Scan() {
@@ -91,7 +92,7 @@ func (c *RPCClient) Call(method string, params interface{}, result interface{}) 
 
 	var resp Response
 	if err := json.Unmarshal(c.stdout.Bytes(), &resp); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	if resp.Error != nil {
@@ -99,14 +100,21 @@ func (c *RPCClient) Call(method string, params interface{}, result interface{}) 
 	}
 
 	if result != nil {
-		return json.Unmarshal(resp.Result, result)
+		if err := json.Unmarshal(resp.Result, result); err != nil {
+			return fmt.Errorf("failed to unmarshal result: %w", err)
+		}
 	}
 
 	return nil
 }
 
-// Close terminates the plugin
+// Close terminates the plugin.
 func (c *RPCClient) Close() error {
-	c.stdin.Close()
-	return c.cmd.Wait()
+	if err := c.stdin.Close(); err != nil {
+		return fmt.Errorf("failed to close stdin: %w", err)
+	}
+	if err := c.cmd.Wait(); err != nil {
+		return fmt.Errorf("failed to wait for plugin: %w", err)
+	}
+	return nil
 }

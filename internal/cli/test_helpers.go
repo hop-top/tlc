@@ -6,10 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	"hop.top/tlc/internal/core"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/core"
 )
 
 // resetTestDB creates a fresh temporary DB for test isolation.
@@ -25,7 +25,7 @@ func resetTestDB(t *testing.T) func() {
 	}
 
 	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
+	_ = os.Chdir(tmpDir)
 
 	viper.Reset()
 	viper.Set("storage.backend", "sqlite")
@@ -36,9 +36,9 @@ func resetTestDB(t *testing.T) func() {
 	resetTaskFlags()
 
 	return func() {
-		os.Chdir(origDir)
+		_ = os.Chdir(origDir)
 		core.ResetDetectionCache()
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	}
 }
 
@@ -103,16 +103,16 @@ func newTestCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "verbose logging")
 	cmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
 
-	viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format"))
-	viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color"))
-	viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))
+	_ = viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format"))
+	_ = viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color"))
+	_ = viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))
 
 	return cmd
 }
 
 func newTestInitCmd() *cobra.Command {
-	storageBackend := "sqlite"
+	storageBackend := backendSQLite
 	dbPath := ""
 	force := false
 	fallbackMode := ""
@@ -121,12 +121,12 @@ func newTestInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize TLC in current directory",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runInit(cmd, &storageBackend, &dbPath, &force, &fallbackMode, &duplicateIDStrategy)
 		},
 	}
 
-	cmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
+	cmd.Flags().StringVar(&storageBackend, "storage", backendSQLite, "Storage backend: local, sqlite")
 	cmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
 	cmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")

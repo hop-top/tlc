@@ -7,9 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	helpLLMFormat string
-)
+var helpLLMFormat string
 
 var helpCmd = &cobra.Command{
 	Use:   "help",
@@ -22,7 +20,7 @@ var helpLLMCmd = &cobra.Command{
 	Short: "Output LLM/agent tool definition for TLC",
 	Long: `Output the tool definition that AI agents and LLMs can use to interact with TLC.
 This command outputs a JSON schema that describes how to call TLC commands programmatically.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		var output interface{}
 
 		switch helpLLMFormat {
@@ -51,210 +49,93 @@ func init() {
 	helpLLMCmd.Flags().StringVar(&helpLLMFormat, "format", "json", "Output format (json, mcp, openai, anthropic)")
 }
 
-// getMCPToolDefinition returns the MCP-formatted tool definition
+const (
+	toolName        = "manage_tlc_task"
+	toolDescription = "Create, list, or update tasks in the TLC (Task Line CLI) system for internal planning and tracking."
+)
+
+func getToolProperties() map[string]interface{} {
+	return map[string]interface{}{
+		"action": map[string]interface{}{
+			"type":        "string",
+			"enum":        []string{"create", "list", "update", "show", "claim", "unclaim"},
+			"description": "The action to perform on tasks.",
+		},
+		"task_id": map[string]interface{}{
+			"type":        "string",
+			"description": "The unique ID of the task (e.g., 'T-0042'). Required for 'update', 'show', 'claim', and 'unclaim'.",
+		},
+		"title": map[string]interface{}{
+			"type":        "string",
+			"description": "The title of the task. Required for 'create'.",
+		},
+		"status": map[string]interface{}{
+			"type":        "string",
+			"enum":        []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"},
+			"description": "The status of the task.",
+		},
+		"assigned_to": map[string]interface{}{
+			"type":        "string",
+			"description": "The username of the assignee (e.g., 'engineer-1').",
+		},
+		"tags": map[string]interface{}{
+			"type": "array",
+			"items": map[string]string{
+				"type": "string",
+			},
+			"description": "A list of tags for categorization (e.g., ['infra', 'bug']).",
+		},
+		"description": map[string]interface{}{
+			"type":        "string",
+			"description": "A detailed description of the task.",
+		},
+		"reference": map[string]interface{}{
+			"type":        "string",
+			"description": "A reference pointer (URL, file path, or documentation reference).",
+		},
+	}
+}
+
+func getToolInputSchema(_ string) map[string]interface{} {
+	return map[string]interface{}{
+		"type":       "object",
+		"properties": getToolProperties(),
+		"required":   []string{"action"},
+	}
+}
+
 func getMCPToolDefinition() map[string]interface{} {
 	return map[string]interface{}{
-		"name":        "manage_tlc_task",
-		"description": "Create, list, or update tasks in the TLC (Task Line CLI) system for internal planning and tracking.",
-		"inputSchema": map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"action": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"create", "list", "update", "show", "claim", "unclaim"},
-					"description": "The action to perform on tasks.",
-				},
-				"task_id": map[string]interface{}{
-					"type":        "string",
-					"description": "The unique ID of the task (e.g., 'T-0042'). Required for 'update', 'show', 'claim', and 'unclaim'.",
-				},
-				"title": map[string]interface{}{
-					"type":        "string",
-					"description": "The title of the task. Required for 'create'.",
-				},
-				"status": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"},
-					"description": "The status of the task.",
-				},
-				"assigned_to": map[string]interface{}{
-					"type":        "string",
-					"description": "The username of the assignee (e.g., 'engineer-1').",
-				},
-				"tags": map[string]interface{}{
-					"type": "array",
-					"items": map[string]string{
-						"type": "string",
-					},
-					"description": "A list of tags for categorization (e.g., ['infra', 'bug']).",
-				},
-				"description": map[string]interface{}{
-					"type":        "string",
-					"description": "A detailed description of the task.",
-				},
-				"reference": map[string]interface{}{
-					"type":        "string",
-					"description": "A reference pointer (URL, file path, or documentation reference).",
-				},
-			},
-			"required": []string{"action"},
-		},
+		"name":        toolName,
+		"description": toolDescription,
+		"inputSchema": getToolInputSchema("inputSchema"),
 	}
 }
 
-// getAnthropicToolDefinition returns the Anthropic Messages API tool format
 func getAnthropicToolDefinition() map[string]interface{} {
 	return map[string]interface{}{
-		"name":        "manage_tlc_task",
-		"description": "Create, list, or update tasks in the TLC (Task Line CLI) system for internal planning and tracking.",
-		"input_schema": map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"action": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"create", "list", "update", "show", "claim", "unclaim"},
-					"description": "The action to perform on tasks.",
-				},
-				"task_id": map[string]interface{}{
-					"type":        "string",
-					"description": "The unique ID of the task (e.g., 'T-0042'). Required for 'update', 'show', 'claim', and 'unclaim'.",
-				},
-				"title": map[string]interface{}{
-					"type":        "string",
-					"description": "The title of the task. Required for 'create'.",
-				},
-				"status": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"},
-					"description": "The status of the task.",
-				},
-				"assigned_to": map[string]interface{}{
-					"type":        "string",
-					"description": "The username of the assignee (e.g., 'engineer-1').",
-				},
-				"tags": map[string]interface{}{
-					"type": "array",
-					"items": map[string]string{
-						"type": "string",
-					},
-					"description": "A list of tags for categorization (e.g., ['infra', 'bug']).",
-				},
-				"description": map[string]interface{}{
-					"type":        "string",
-					"description": "A detailed description of the task.",
-				},
-				"reference": map[string]interface{}{
-					"type":        "string",
-					"description": "A reference pointer (URL, file path, or documentation reference).",
-				},
-			},
-			"required": []string{"action"},
-		},
+		"name":         toolName,
+		"description":  toolDescription,
+		"input_schema": getToolInputSchema("input_schema"),
 	}
 }
 
-// getOpenAIToolDefinition returns the OpenAI function calling format
 func getOpenAIToolDefinition() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "function",
 		"function": map[string]interface{}{
-			"name":        "manage_tlc_task",
-			"description": "Create, list, or update tasks in the TLC (Task Line CLI) system for internal planning and tracking.",
-			"parameters": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"action": map[string]interface{}{
-						"type":        "string",
-						"enum":        []string{"create", "list", "update", "show", "claim", "unclaim"},
-						"description": "The action to perform on tasks.",
-					},
-					"task_id": map[string]interface{}{
-						"type":        "string",
-						"description": "The unique ID of the task (e.g., 'T-0042'). Required for 'update', 'show', 'claim', and 'unclaim'.",
-					},
-					"title": map[string]interface{}{
-						"type":        "string",
-						"description": "The title of the task. Required for 'create'.",
-					},
-					"status": map[string]interface{}{
-						"type":        "string",
-						"enum":        []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"},
-						"description": "The status of the task.",
-					},
-					"assigned_to": map[string]interface{}{
-						"type":        "string",
-						"description": "The username of the assignee (e.g., 'engineer-1').",
-					},
-					"tags": map[string]interface{}{
-						"type": "array",
-						"items": map[string]string{
-							"type": "string",
-						},
-						"description": "A list of tags for categorization (e.g., ['infra', 'bug']).",
-					},
-					"description": map[string]interface{}{
-						"type":        "string",
-						"description": "A detailed description of the task.",
-					},
-					"reference": map[string]interface{}{
-						"type":        "string",
-						"description": "A reference pointer (URL, file path, or documentation reference).",
-					},
-				},
-				"required": []string{"action"},
-			},
+			"name":        toolName,
+			"description": toolDescription,
+			"parameters":  getToolInputSchema("parameters"),
 		},
 	}
 }
 
-// getToolDefinition returns the standard tool definition for AI agents
 func getToolDefinition() map[string]interface{} {
 	return map[string]interface{}{
-		"name":        "manage_tlc_task",
-		"description": "Create, list, or update tasks in the TLC (Task Line CLI) system for internal planning and tracking.",
-		"parameters": map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"action": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"create", "list", "update", "show", "claim", "unclaim"},
-					"description": "The action to perform on tasks.",
-				},
-				"task_id": map[string]interface{}{
-					"type":        "string",
-					"description": "The unique ID of the task (e.g., 'T-0042'). Required for 'update', 'show', 'claim', and 'unclaim'.",
-				},
-				"title": map[string]interface{}{
-					"type":        "string",
-					"description": "The title of the task. Required for 'create'.",
-				},
-				"status": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"},
-					"description": "The status of the task.",
-				},
-				"assigned_to": map[string]interface{}{
-					"type":        "string",
-					"description": "The username of the assignee (e.g., 'engineer-1').",
-				},
-				"tags": map[string]interface{}{
-					"type": "array",
-					"items": map[string]string{
-						"type": "string",
-					},
-					"description": "A list of tags for categorization (e.g., ['infra', 'bug']).",
-				},
-				"description": map[string]interface{}{
-					"type":        "string",
-					"description": "A detailed description of the task.",
-				},
-				"reference": map[string]interface{}{
-					"type":        "string",
-					"description": "A reference pointer (URL, file path, or documentation reference).",
-				},
-			},
-			"required": []string{"action"},
-		},
+		"name":        toolName,
+		"description": toolDescription,
+		"parameters":  getToolInputSchema("parameters"),
 		"examples": []map[string]interface{}{
 			{
 				"description": "Creating a task",

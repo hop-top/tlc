@@ -9,19 +9,19 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// GitHubAuthenticator handles GitHub authentication
+// GitHubAuthenticator handles GitHub authentication.
 type GitHubAuthenticator struct {
 	store Store
 }
 
-// NewGitHubAuthenticator creates a new GitHubAuthenticator
+// NewGitHubAuthenticator creates a new GitHubAuthenticator.
 func NewGitHubAuthenticator(store Store) *GitHubAuthenticator {
 	return &GitHubAuthenticator{
 		store: store,
 	}
 }
 
-// LoginWithPAT authenticates using a Personal Access Token
+// LoginWithPAT authenticates using a Personal Access Token.
 func (a *GitHubAuthenticator) LoginWithPAT(ctx context.Context, token string, accountName string) (*Credential, error) {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
@@ -55,12 +55,16 @@ func (a *GitHubAuthenticator) LoginWithPAT(ctx context.Context, token string, ac
 	return cred, nil
 }
 
-// GetCredential retrieves the GitHub credential for an account
+// GetCredential retrieves the GitHub credential for an account.
 func (a *GitHubAuthenticator) GetCredential(service, account string) (*Credential, error) {
-	return a.store.Get(service, account)
+	cred, err := a.store.Get(service, account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get credential: %w", err)
+	}
+	return cred, nil
 }
 
-// RefreshToken refreshes the OAuth token if needed
+// RefreshToken refreshes the OAuth token if needed.
 func (a *GitHubAuthenticator) RefreshToken(ctx context.Context, config *oauth2.Config, account string) (*Credential, error) {
 	cred, err := a.GetCredential("github", account)
 	if err != nil {
@@ -94,7 +98,7 @@ func (a *GitHubAuthenticator) RefreshToken(ctx context.Context, config *oauth2.C
 	cred.UpdatedAt = time.Now()
 
 	if err := a.store.Upsert(cred); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to upsert credential: %w", err)
 	}
 
 	return cred, nil

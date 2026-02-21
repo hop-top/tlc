@@ -8,11 +8,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Theme represents a color palette interface for the picker
+// Theme represents a color palette interface for the picker.
 type Theme interface {
 	DisplayName() string
 	Desc() string
-	
+
 	// Colors for preview
 	GetPrimary() lipgloss.Color
 	GetSecondary() lipgloss.Color
@@ -80,7 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		
+
 		// Split width: List gets 1/3, Preview gets 2/3
 		listWidth := m.width / 3
 		if listWidth < 30 {
@@ -109,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Update item
 					items[idx] = item{theme: msg.Theme}
 					m.list.SetItems(items) // Trigger list update
-					
+
 					// If this was the selected item, update selection
 					if m.selected != nil && m.selected.DisplayName() == msg.Theme.DisplayName() {
 						m.selected = msg.Theme
@@ -122,11 +122,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
-	
+
 	// Update selected for preview and trigger lazy load
 	if i, ok := m.list.SelectedItem().(item); ok {
 		m.selected = i.theme
-		
+
 		// Lazy load if needed
 		if _, isLazy := m.selected.(LazyTheme); isLazy && m.fetcher != nil {
 			name := m.selected.DisplayName()
@@ -140,7 +140,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 	}
-	
+
 	return m, cmd
 }
 
@@ -159,9 +159,9 @@ func (m Model) renderPreview() string {
 	if m.selected == nil {
 		return ""
 	}
-	
+
 	t := m.selected
-	
+
 	// Create styles based on the selected theme for preview
 	primary := lipgloss.NewStyle().Foreground(t.GetPrimary())
 	secondary := lipgloss.NewStyle().Foreground(t.GetSecondary())
@@ -169,9 +169,9 @@ func (m Model) renderPreview() string {
 	warning := lipgloss.NewStyle().Foreground(t.GetWarning())
 	errStyle := lipgloss.NewStyle().Foreground(t.GetError())
 	muted := lipgloss.NewStyle().Foreground(t.GetMuted())
-	
+
 	// Styles
-	title := primary.Copy().Bold(true).Render
+	title := primary.Bold(true).Render
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.GetSecondary()).
@@ -180,10 +180,10 @@ func (m Model) renderPreview() string {
 		Render
 
 	var b strings.Builder
-	
-b.WriteString(title("Preview: " + t.DisplayName()))
+
+	b.WriteString(title("Preview: " + t.DisplayName()))
 	b.WriteString("\n\n")
-	
+
 	// Color Palette
 	b.WriteString("Palette:\n")
 	b.WriteString(primary.Render("██ ") + "Primary\n")
@@ -201,8 +201,8 @@ b.WriteString(title("Preview: " + t.DisplayName()))
 	b.WriteString(primary.Render("[~]") + " Implement theme picker " + muted.Render("@jadb") + "\n")
 	b.WriteString(lipgloss.NewStyle().Render("[ ]") + " Update documentation\n")
 	b.WriteString(warning.Render("[-]") + " Fix race condition " + muted.Render("#bug") + "\n")
-	
-b.WriteString("\n")
+
+	b.WriteString("\n")
 	b.WriteString(title("Logs Example"))
 	b.WriteString("\n")
 	b.WriteString(muted.Render("12:00:01") + " " + success.Render("SUCCESS") + " Build completed\n")

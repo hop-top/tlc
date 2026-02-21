@@ -1,3 +1,4 @@
+//nolint:revive // Mock implementations don't use all parameters
 package core
 
 import (
@@ -178,7 +179,7 @@ func (m *MockRepository) UpdateFlowRun(ctx context.Context, run *FlowRun) error 
 }
 
 func (m *MockRepository) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error) {
-	var runs []*FlowRun
+	runs := make([]*FlowRun, 0, len(m.FlowRuns))
 	for _, r := range m.FlowRuns {
 		runs = append(runs, r)
 	}

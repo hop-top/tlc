@@ -8,8 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	testOriginGitHub = "github"
+	testAgent1       = "agent-1"
+)
+
 func TestTask_NeedsPush(t *testing.T) {
-	origin := "github"
+	origin := testOriginGitHub
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -387,14 +392,14 @@ func TestClaimSyncToOrigin(t *testing.T) {
 	repo := &mockRepo{tasks: make(map[string]*Task)}
 	service := NewTaskService(repo, repo)
 
-	assignee := "agent-1"
+	assignee := testAgent1
 	task := &Task{
 		ID:         "T-101",
 		Title:      "Task to claim and sync",
 		Status:     StatusTodo,
 		AssignedTo: &assignee,
 		Meta: map[string]interface{}{
-			"origin_system": "github",
+			"origin_system": testOriginGitHub,
 			"origin_id":     "101",
 		},
 	}

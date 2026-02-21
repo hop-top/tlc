@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"hop.top/tlc/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 )
 
 var configCmd = &cobra.Command{
@@ -17,7 +17,7 @@ var configCmd = &cobra.Command{
 var configValidateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate configuration",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		var cfg config.Config
 		if err := viper.Unmarshal(&cfg); err != nil {
 			return fmt.Errorf("failed to unmarshal config: %w", err)
@@ -33,7 +33,7 @@ var configValidateCmd = &cobra.Command{
 var configListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configuration",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		keys := viper.AllKeys()
 		sort.Strings(keys)
 
@@ -47,7 +47,7 @@ var configGetCmd = &cobra.Command{
 	Use:   "get <key>",
 	Short: "Get config value",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		key := args[0]
 		if !viper.IsSet(key) {
 			fmt.Printf("Error: key %s not set\n", key)
@@ -61,18 +61,18 @@ var configSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Set config value",
 	Args:  cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		key := args[0]
 		value := args[1]
-		
+
 		viper.Set(key, value)
-		
+
 		if err := viper.WriteConfig(); err != nil {
 			if err := viper.SafeWriteConfig(); err != nil {
 				return fmt.Errorf("failed to save config: %w", err)
 			}
 		}
-		
+
 		fmt.Printf("Set %s = %s\n", key, value)
 		return nil
 	},

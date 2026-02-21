@@ -5,18 +5,18 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"hop.top/tlc/internal/auth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/auth"
 )
 
 var (
-	token      string
-	account    string
-	jiraURL    string
-	jiraEmail  string
-	linearKey  string
-	oauthFlow  bool
+	token     string
+	account   string
+	jiraURL   string
+	jiraEmail string
+	linearKey string
+	oauthFlow bool
 )
 
 var authCmd = &cobra.Command{
@@ -28,10 +28,10 @@ var loginCmd = &cobra.Command{
 	Use:   "login <system>",
 	Short: "Authenticate with an external system",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		system := args[0]
 		store := auth.NewKeychainStore("tlc")
-		
+
 		ctx := context.Background()
 
 		switch system {
@@ -88,7 +88,7 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout <system>",
 	Short: "Remove stored credentials",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		system := args[0]
 		store := auth.NewKeychainStore("tlc")
 		if err := store.Delete(system, account); err != nil {
@@ -101,7 +101,7 @@ var logoutCmd = &cobra.Command{
 var authStatusCmd = &cobra.Command{
 	Use:   "status [system]",
 	Short: "Show authentication status",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		store := auth.NewKeychainStore("tlc")
 		systems := []string{"github", "jira", "linear"}
 		if len(args) > 0 {

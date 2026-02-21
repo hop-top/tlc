@@ -1,8 +1,11 @@
+// Package auth_test provides tests for the auth package.
 package auth
 
 import (
 	"testing"
 )
+
+const testToken = "test-token"
 
 func TestGitHubAuthenticator(t *testing.T) {
 	store := NewMockStore()
@@ -14,7 +17,7 @@ func TestGitHubAuthenticator(t *testing.T) {
 		Account: "test-user",
 		Payload: CredentialPayload{
 			Type:  TypeAPIToken,
-			Token: "test-token",
+			Token: testToken,
 		},
 	}
 	store.Upsert(cred)
@@ -23,8 +26,8 @@ func TestGitHubAuthenticator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get: %v", err)
 	}
-	if got.Payload.Token != "test-token" {
-		t.Errorf("expected test-token, got %s", got.Payload.Token)
+	if got.Payload.Token != testToken {
+		t.Errorf("expected %s, got %s", testToken, got.Payload.Token)
 	}
 }
 

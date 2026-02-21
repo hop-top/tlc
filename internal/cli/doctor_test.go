@@ -45,10 +45,10 @@ func TestDoctorCmd_AllPass(t *testing.T) {
 	tmpDir, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
-	os.MkdirAll(".tlc", 0755)
+	os.Mkdir(".git", 0o755)
+	os.MkdirAll(".tlc", 0o755)
 	config := "version: 0.1\nproject:\n  id: org/repo\n"
-	os.WriteFile(".tlc/config.yaml", []byte(config), 0644)
+	os.WriteFile(".tlc/config.yaml", []byte(config), 0o644)
 
 	dbPath := filepath.Join(tmpDir, "db.sqlite")
 	viper.Set("storage.db_path", dbPath)
@@ -73,7 +73,7 @@ func TestDoctorCmd_MissingTlcDir(t *testing.T) {
 	_, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
+	os.Mkdir(".git", 0o755)
 	viper.Set("git.track", false)
 	viper.Set("storage.backend", "sqlite")
 
@@ -90,7 +90,7 @@ func TestDoctorCmd_MissingTlcDir_Fix(t *testing.T) {
 	_, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
+	os.Mkdir(".git", 0o755)
 	viper.Set("git.track", false)
 	viper.Set("storage.backend", "sqlite")
 
@@ -107,8 +107,8 @@ func TestDoctorCmd_MissingConfig(t *testing.T) {
 	_, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
-	os.MkdirAll(".tlc", 0755)
+	os.Mkdir(".git", 0o755)
+	os.MkdirAll(".tlc", 0o755)
 	viper.Set("git.track", false)
 	viper.Set("storage.backend", "sqlite")
 
@@ -125,8 +125,8 @@ func TestDoctorCmd_MissingConfig_Fix(t *testing.T) {
 	_, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
-	os.MkdirAll(".tlc", 0755)
+	os.Mkdir(".git", 0o755)
+	os.MkdirAll(".tlc", 0o755)
 	viper.Set("git.track", false)
 	viper.Set("storage.backend", "sqlite")
 
@@ -140,9 +140,9 @@ func TestDoctorCmd_InvalidYAML(t *testing.T) {
 	tmpDir, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
-	os.MkdirAll(".tlc", 0755)
-	os.WriteFile(".tlc/config.yaml", []byte("{{{invalid yaml"), 0644)
+	os.Mkdir(".git", 0o755)
+	os.MkdirAll(".tlc", 0o755)
+	os.WriteFile(".tlc/config.yaml", []byte("{{{invalid yaml"), 0o644)
 	viper.Set("git.track", false)
 	viper.Set("storage.backend", "sqlite")
 	viper.Set("storage.db_path", filepath.Join(tmpDir, "db.sqlite"))
@@ -176,9 +176,9 @@ func TestDoctorCmd_GitignoreMissing(t *testing.T) {
 	tmpDir, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
-	os.MkdirAll(".tlc", 0755)
-	os.WriteFile(".tlc/config.yaml", []byte("version: 0.1\nproject:\n  id: test\n"), 0644)
+	os.Mkdir(".git", 0o755)
+	os.MkdirAll(".tlc", 0o755)
+	os.WriteFile(".tlc/config.yaml", []byte("version: 0.1\nproject:\n  id: test\n"), 0o644)
 	viper.Set("git.track", true)
 	viper.Set("project.id", "test")
 	viper.Set("storage.backend", "sqlite")
@@ -197,10 +197,10 @@ func TestDoctorCmd_GitignoreFix(t *testing.T) {
 	tmpDir, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
-	os.MkdirAll(".tlc", 0755)
-	os.WriteFile(".tlc/config.yaml", []byte("version: 0.1\nproject:\n  id: test\n"), 0644)
-	os.WriteFile(".gitignore", []byte("*.log\n"), 0644)
+	os.Mkdir(".git", 0o755)
+	os.MkdirAll(".tlc", 0o755)
+	os.WriteFile(".tlc/config.yaml", []byte("version: 0.1\nproject:\n  id: test\n"), 0o644)
+	os.WriteFile(".gitignore", []byte("*.log\n"), 0o644)
 	viper.Set("git.track", true)
 	viper.Set("project.id", "test")
 	viper.Set("storage.backend", "sqlite")
@@ -224,7 +224,7 @@ func TestDoctorCmd_OutputFormat(t *testing.T) {
 	_, cleanup := setupDoctorTest(t)
 	defer cleanup()
 
-	os.Mkdir(".git", 0755)
+	os.Mkdir(".git", 0o755)
 	viper.Set("git.track", false)
 	viper.Set("storage.backend", "sqlite")
 

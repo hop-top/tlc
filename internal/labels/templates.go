@@ -1,6 +1,6 @@
 package labels
 
-// ProjectType represents a categorized project type
+// ProjectType represents a categorized project type.
 type ProjectType string
 
 const (
@@ -8,18 +8,18 @@ const (
 	TypeGoSocket      ProjectType = "go-socket"
 	TypePythonMVC     ProjectType = "python-mvc"
 	TypeReactFrontend ProjectType = "react-frontend"
-	TypeMicroservices  ProjectType = "microservices"
+	TypeMicroservices ProjectType = "microservices"
 	TypeGeneric       ProjectType = "generic"
 )
 
-// Label represents a GitHub label
+// Label represents a GitHub label.
 type Label struct {
 	Name        string
 	Color       string
 	Description string
 }
 
-// GetTemplates returns suggested labels for a project type
+// GetTemplates returns suggested labels for a project type.
 func GetTemplates(projectType ProjectType) []Label {
 	common := []Label{
 		{Name: "feat", Color: "0052CC", Description: "New feature"},

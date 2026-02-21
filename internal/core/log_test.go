@@ -6,11 +6,13 @@ import (
 	"time"
 )
 
+const testTaskID1 = "T-1"
+
 func TestLogEntry_Structure(t *testing.T) {
 	now := time.Now().UTC()
 	entry := &LogEntry{
 		ID:        1,
-		TaskID:    "T-1",
+		TaskID:    testTaskID1,
 		Timestamp: now,
 		By:        "user",
 		Action:    "CREATED",
@@ -18,8 +20,8 @@ func TestLogEntry_Structure(t *testing.T) {
 		Meta:      map[string]interface{}{"key": "value"},
 	}
 
-	if entry.TaskID != "T-1" {
-		t.Errorf("expected TaskID T-1, got %s", entry.TaskID)
+	if entry.TaskID != testTaskID1 {
+		t.Errorf("expected TaskID %s, got %s", testTaskID1, entry.TaskID)
 	}
 	if entry.Action != "CREATED" {
 		t.Errorf("expected Action CREATED, got %s", entry.Action)
@@ -33,7 +35,7 @@ func TestTaskService_LoggingIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	task := &Task{
-		ID:        "T-1",
+		ID:        testTaskID1,
 		Title:     "Test",
 		Status:    StatusTodo,
 		CreatedAt: time.Now(),

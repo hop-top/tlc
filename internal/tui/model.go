@@ -5,38 +5,39 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 	"hop.top/tlc/pkg/themepicker"
-	"github.com/spf13/viper"
 )
 
-type tasksMsg []*core.Task
-type flowRunsMsg []*core.FlowRun
-type logsMsg []*core.LogEntry
+type (
+	tasksMsg    []*core.Task
+	flowRunsMsg []*core.FlowRun
+	logsMsg     []*core.LogEntry
+)
 
 type Model struct {
-	service         *core.TaskService
-	view            string // "dashboard", "list", "detail", "search", "form", "kanban", "flows", "theme_picker"
-	tasks           []*core.Task
-	flowRuns        []*core.FlowRun
-	selected        int
-	width           int
-	height          int
-	searchInput     textinput.Model
-	activeFilters   []core.FieldFilter
-	viewport        viewport.Model
-	taskLogs        []*core.LogEntry
+	service          *core.TaskService
+	view             string // "dashboard", "list", "detail", "search", "form", "kanban", "flows", "theme_picker"
+	tasks            []*core.Task
+	flowRuns         []*core.FlowRun
+	selected         int
+	width            int
+	height           int
+	searchInput      textinput.Model
+	activeFilters    []core.FieldFilter
+	viewport         viewport.Model
+	taskLogs         []*core.LogEntry
 	logSortDirection string
-	form            *huh.Form
-	themePicker     themepicker.Model
-	taskTitle       string
-	taskDescription string
-	err             error
+	form             *huh.Form
+	themePicker      themepicker.Model
+	taskTitle        string
+	taskDescription  string
+	err              error
 }
 
 func NewModel(service *core.TaskService) Model {
-
 	ti := textinput.New()
 	ti.Placeholder = "Search tasks..."
 
@@ -54,19 +55,18 @@ func NewModel(service *core.TaskService) Model {
 	tp.SetFetcher(themepicker.FetchTheme)
 
 	return Model{
-		service:     service,
-		view:        "dashboard",
-		searchInput: ti,
-		viewport:    vp,
-		logSortDirection:    direction,
-		themePicker: tp,
+		service:          service,
+		view:             "dashboard",
+		searchInput:      ti,
+		viewport:         vp,
+		logSortDirection: direction,
+		themePicker:      tp,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	return m.fetchTasks
 }
-
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 1. Handle common messages first
@@ -84,7 +84,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.themePicker = tm.(themepicker.Model)
 		return m, cmd
 	case tea.MouseMsg:
-		if msg.Type == tea.MouseLeft && m.view == "dashboard" {
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && m.view == "dashboard" { //nolint:staticcheck // SA1019: using new mouse API
 			// Basic selection on click (not fully implemented)
 		}
 	case error:
@@ -127,7 +127,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-
 func (m Model) addFilter(field, value string) Model {
 	// Avoid duplicate filters
 	for _, f := range m.activeFilters {
@@ -142,7 +141,6 @@ func (m Model) addFilter(field, value string) Model {
 	})
 	return m
 }
-
 
 func (m Model) syncViewport() Model {
 	line := m.getLineOfSelected()

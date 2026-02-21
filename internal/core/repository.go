@@ -50,11 +50,11 @@ type LogRepository interface {
 }
 
 type LogQuery struct {
-	TaskID    string
-	Action    string
-	By        string
-	Limit     int
-	Offset    int
+	TaskID        string
+	Action        string
+	By            string
+	Limit         int
+	Offset        int
 	SortDirection string // "asc" or "desc"
 }
 

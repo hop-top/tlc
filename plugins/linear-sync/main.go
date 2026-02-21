@@ -169,7 +169,7 @@ func fetchLinearIssues(teamName, lastSyncAt string) ([]interface{}, error) {
 	}
 
 	if err := client.Run(ctx, teamReq, &teamResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query linear teams: %w", err)
 	}
 
 	if len(teamResp.Teams.Nodes) == 0 {
@@ -217,7 +217,7 @@ func fetchLinearIssues(teamName, lastSyncAt string) ([]interface{}, error) {
 	}
 
 	if err := client.Run(ctx, issueReq, &issueResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query linear issues: %w", err)
 	}
 
 	tasks := []interface{}{}
@@ -253,7 +253,7 @@ func pushToLinear(teamName string, tasks []Task) (*SyncPushResult, error) {
 		} `json:"teams"`
 	}
 	if err := client.Run(ctx, teamReq, &teamResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query linear teams: %w", err)
 	}
 	if len(teamResp.Teams.Nodes) == 0 {
 		return nil, fmt.Errorf("team not found: %s", teamName)
@@ -312,7 +312,7 @@ func createLinearIssue(client *graphql.Client, ctx context.Context, apiKey, team
 	}
 
 	if err := client.Run(ctx, req, &resp); err != nil {
-		return err
+		return fmt.Errorf("failed to create linear issue: %w", err)
 	}
 	if !resp.IssueCreate.Success {
 		return fmt.Errorf("issue creation failed")
@@ -351,7 +351,7 @@ func updateLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issu
 	}
 
 	if err := client.Run(ctx, req, &resp); err != nil {
-		return err
+		return fmt.Errorf("failed to update linear issue: %w", err)
 	}
 	if !resp.IssueUpdate.Success {
 		return fmt.Errorf("issue update failed")
@@ -359,7 +359,7 @@ func updateLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issu
 	return nil
 }
 
-func deleteFromLinear(teamName string, tasks []Task) (*SyncDeleteResult, error) {
+func deleteFromLinear(_ string, tasks []Task) (*SyncDeleteResult, error) {
 	apiKey := os.Getenv("LINEAR_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("LINEAR_API_KEY not set")
@@ -409,7 +409,7 @@ func deleteLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issu
 	}
 
 	if err := client.Run(ctx, req, &resp); err != nil {
-		return err
+		return fmt.Errorf("failed to delete linear issue: %w", err)
 	}
 	if !resp.IssueDelete.Success {
 		return fmt.Errorf("issue deletion failed")

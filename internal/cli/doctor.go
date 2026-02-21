@@ -1,19 +1,20 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"hop.top/tlc/internal/config"
-	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/storage"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/config"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 type checkResult struct {
@@ -47,7 +48,7 @@ func statusIcon(status string) string {
 }
 
 func checkGitInstalled(_ bool) checkResult {
-	cmd := exec.Command("git", "--version")
+	cmd := exec.CommandContext(context.Background(), "git", "--version")
 	out, err := cmd.Output()
 	if err != nil {
 		return checkResult{
@@ -91,7 +92,7 @@ func checkInsideGitRepo(_ bool) checkResult {
 }
 
 func checkGitRemote(_ bool) checkResult {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd := exec.CommandContext(context.Background(), "git", "remote", "get-url", "origin")
 	out, err := cmd.Output()
 	if err != nil {
 		return checkResult{
@@ -120,7 +121,7 @@ func checkTlcDirExists(fix bool) checkResult {
 		}
 	}
 	if fix {
-		if err := os.MkdirAll(".tlc", 0755); err != nil {
+		if err := os.MkdirAll(".tlc", 0o750); err != nil {
 			return checkResult{
 				name:     ".tlc/ directory exists",
 				category: "Config",
@@ -160,7 +161,7 @@ func checkConfigExists(fix bool) checkResult {
 	if fix {
 		inferredID := core.DetectFromGitRemote()
 		if inferredID == "" {
-			inferredID = "unknown"
+			inferredID = syncSystemUnknown
 		}
 		if err := core.CreateConfigWithInferredID(inferredID); err != nil {
 			return checkResult{
@@ -290,7 +291,7 @@ func checkProjectIDSet(fix bool) checkResult {
 		proj["id"] = detected
 		raw["project"] = proj
 		out, _ := yaml.Marshal(raw)
-		if err := os.WriteFile(configPath, out, 0644); err != nil {
+		if err := os.WriteFile(configPath, out, 0o600); err != nil {
 			return checkResult{
 				name:     "project.id is set",
 				category: "Project",
@@ -334,7 +335,7 @@ func checkDBPathWritable(fix bool) checkResult {
 		}
 	}
 	if fix {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return checkResult{
 				name:     "database path writable",
 				category: "Storage",
@@ -372,7 +373,7 @@ func checkDBOpens(_ bool) checkResult {
 			message:  err.Error(),
 		}
 	}
-	s.Close()
+	_ = s.Close()
 	return checkResult{
 		name:     "database opens successfully",
 		category: "Storage",
@@ -391,7 +392,7 @@ func checkSchemaVersion(fix bool) checkResult {
 			fixable:  true,
 		}
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	version, err := s.SchemaVersion()
 	if err != nil {
@@ -451,7 +452,7 @@ func checkGitignoreHasTlc(fix bool) checkResult {
 	content, err := os.ReadFile(".gitignore")
 	if err != nil {
 		if fix {
-			if err := os.WriteFile(".gitignore", []byte(".tlc/\n"), 0644); err != nil {
+			if err := os.WriteFile(".gitignore", []byte(".tlc/\n"), 0o600); err != nil {
 				return checkResult{
 					name:     ".gitignore has .tlc/ entry",
 					category: "Git Integration",
@@ -488,7 +489,7 @@ func checkGitignoreHasTlc(fix bool) checkResult {
 	}
 
 	if fix {
-		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
 			return checkResult{
 				name:     ".gitignore has .tlc/ entry",
@@ -498,7 +499,7 @@ func checkGitignoreHasTlc(fix bool) checkResult {
 				fixable:  true,
 			}
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := f.WriteString(".tlc/\n"); err != nil {
 			return checkResult{
 				name:     ".gitignore has .tlc/ entry",
@@ -548,7 +549,7 @@ func runDoctor(cmd *cobra.Command, fix bool) error {
 	out := cmd.OutOrStdout()
 	checks := allChecks()
 
-	var results []checkResult
+	results := make([]checkResult, 0, len(checks))
 	for _, check := range checks {
 		results = append(results, check(fix))
 	}
@@ -563,9 +564,9 @@ func runDoctor(cmd *cobra.Command, fix bool) error {
 		grouped[r.category] = append(grouped[r.category], r)
 	}
 
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out)
 	for _, cat := range categories {
-		fmt.Fprintf(out, "  %s\n", titleStyle.Render(cat))
+		_, _ = fmt.Fprintf(out, "  %s\n", titleStyle.Render(cat))
 		for _, r := range grouped[cat] {
 			icon := statusIcon(r.status)
 			line := fmt.Sprintf("    %s %s", icon, r.name)
@@ -575,9 +576,9 @@ func runDoctor(cmd *cobra.Command, fix bool) error {
 			if r.fixed {
 				line += passStyle.Render(fmt.Sprintf(" → fixed (%s)", r.fixMsg))
 			}
-			fmt.Fprintln(out, line)
+			_, _ = fmt.Fprintln(out, line)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	// Summary
@@ -595,7 +596,7 @@ func runDoctor(cmd *cobra.Command, fix bool) error {
 
 	summary := fmt.Sprintf("%d checks, %d passed, %d warnings, %d failed",
 		len(results), passed, warnings, failed)
-	fmt.Fprintf(out, "%s\n", summary)
+	_, _ = fmt.Fprintf(out, "%s\n", summary)
 
 	if failed > 0 && !fix {
 		hasFixable := false
@@ -606,7 +607,7 @@ func runDoctor(cmd *cobra.Command, fix bool) error {
 			}
 		}
 		if hasFixable {
-			fmt.Fprintf(out, "\nRun %s to attempt fixes.\n",
+			_, _ = fmt.Fprintf(out, "\nRun %s to attempt fixes.\n",
 				titleStyle.Render("tlc doctor --fix"))
 		}
 	}
@@ -623,7 +624,7 @@ var doctorCmd = &cobra.Command{
 	Long:          "Run diagnostic checks on your TLC environment and optionally fix issues.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		fix, _ := cmd.Flags().GetBool("fix")
 		return runDoctor(cmd, fix)
 	},
