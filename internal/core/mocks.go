@@ -4,10 +4,12 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 type MockRepository struct {
+	mu       sync.Mutex
 	Tasks    map[string]*Task
 	FlowRuns map[string]*FlowRun
 	logs     []*LogEntry
@@ -27,6 +29,8 @@ func (m *MockRepository) CreateTask(ctx context.Context, task *Task) error {
 }
 
 func (m *MockRepository) GetTask(ctx context.Context, id string) (*Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	task, ok := m.Tasks[id]
 	if !ok {
 		return nil, nil
@@ -35,6 +39,8 @@ func (m *MockRepository) GetTask(ctx context.Context, id string) (*Task, error) 
 }
 
 func (m *MockRepository) UpdateTask(ctx context.Context, task *Task) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Tasks[task.ID] = task
 	return nil
 }
@@ -152,15 +158,21 @@ func (m *MockRepository) ArchiveTasks(ctx context.Context, threshold time.Durati
 }
 
 func (m *MockRepository) CreateFlowRun(ctx context.Context, run *FlowRun) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.FlowRuns[run.ID] = run
 	return nil
 }
 
 func (m *MockRepository) GetFlowRun(ctx context.Context, id string) (*FlowRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.FlowRuns[id], nil
 }
 
 func (m *MockRepository) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.FlowRuns[run.ID] = run
 	return nil
 }
@@ -174,6 +186,7 @@ func (m *MockRepository) ListFlowRuns(ctx context.Context, query Query) ([]*Flow
 }
 
 type MockLogRepository struct {
+	mu   sync.Mutex
 	Logs []*LogEntry
 }
 
@@ -184,6 +197,8 @@ func NewMockLogRepository() *MockLogRepository {
 }
 
 func (m *MockLogRepository) AddLog(ctx context.Context, entry *LogEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Logs = append(m.Logs, entry)
 	return nil
 }

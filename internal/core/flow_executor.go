@@ -62,7 +62,8 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 		}
 	}
 
-	err := e.runSequential(ctx, flow, run, stepStatuses, isChild, by)
+	var mu sync.Mutex
+	err := e.runSequential(ctx, flow, run, stepStatuses, &mu, isChild, by)
 	
 	endedAt := time.Now()
 	run.EndedAt = &endedAt
@@ -81,7 +82,7 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 	return run, nil
 }
 
-func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, isChild map[string]bool, by string) error {
+func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, mu *sync.Mutex, isChild map[string]bool, by string) error {
 	// Simple strategy: repeatedly find ready steps until none left or all succeeded
 	for {
 		// Check for external control signals (pause/cancel)
@@ -130,7 +131,7 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 		}
 
 		// Execute the ready step
-		if err := e.executeStep(ctx, flow, run, readyStepID, statuses, by); err != nil {
+		if err := e.executeStep(ctx, flow, run, readyStepID, statuses, mu, by); err != nil {
 			return err
 		}
 	}
@@ -161,9 +162,13 @@ func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, by string)
 	}
 }
 
-func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, by string) error {
+func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
 	step := flow.Steps[stepID]
+
+	mu.Lock()
 	statuses[stepID] = StepStatusRunning
+	mu.Unlock()
+
 	e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_START", fmt.Sprintf("Starting step: %s", step.Title), nil)
 
 	var err error
@@ -171,30 +176,35 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 	case StepTypeTask:
 		err = e.executeTaskStep(ctx, step, by)
 	case StepTypeParallel:
-		err = e.executeParallelStep(ctx, flow, run, step, statuses, by)
+		err = e.executeParallelStep(ctx, flow, run, step, statuses, mu, by)
 	case StepTypeRetry:
-		err = e.executeRetryStep(ctx, flow, run, step, statuses, by)
+		err = e.executeRetryStep(ctx, flow, run, step, statuses, mu, by)
 	default:
 		// Other types (branch, etc.) will be implemented in subsequent tasks
 		return fmt.Errorf("unsupported step type for execution: %s", step.Type)
 	}
 
+	mu.Lock()
 	if err != nil {
 		statuses[stepID] = StepStatusFailed
+		mu.Unlock()
 		e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END", fmt.Sprintf("Step failed: %v", err), map[string]any{"status": "failed"})
 		return err
 	}
 
 	statuses[stepID] = StepStatusSucceeded
-	e.updateProgress(ctx, flow, run, statuses)
+	mu.Unlock()
+
+	e.updateProgress(ctx, flow, run, statuses, mu)
 	e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END", "Step completed", map[string]any{"status": "succeeded"})
 	return nil
 }
 
-func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus) {
+func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, mu *sync.Mutex) {
 	if len(flow.Steps) == 0 {
 		return
 	}
+	mu.Lock()
 	completed := 0
 	for _, s := range statuses {
 		if s == StepStatusSucceeded || s == StepStatusSkipped || s == StepStatusFailed {
@@ -202,10 +212,11 @@ func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *Flow
 		}
 	}
 	run.Progress = float64(completed) / float64(len(flow.Steps))
+	mu.Unlock()
 	e.repo.UpdateFlowRun(ctx, run)
 }
 
-func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, by string) error {
+func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -226,7 +237,7 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 				defer func() { <-sem }()
 			}
 
-			if err := e.executeStep(ctx, flow, run, cid, statuses, by); err != nil {
+			if err := e.executeStep(ctx, flow, run, cid, statuses, mu, by); err != nil {
 				errOnce.Do(func() {
 					firstErr = err
 				})
@@ -238,7 +249,7 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 	return firstErr
 }
 
-func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, by string) error {
+func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
 	maxAttempts := 1
 	backoffMS := 0
 	if step.Policy != nil {
@@ -256,10 +267,12 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 				time.Sleep(time.Duration(backoffMS) * time.Millisecond)
 			}
 			// Reset child status to allow re-execution
+			mu.Lock()
 			statuses[step.Child] = StepStatusPending
+			mu.Unlock()
 		}
 
-		err := e.executeStep(ctx, flow, run, step.Child, statuses, by)
+		err := e.executeStep(ctx, flow, run, step.Child, statuses, mu, by)
 		if err == nil {
 			return nil
 		}
