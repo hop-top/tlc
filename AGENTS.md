@@ -1,146 +1,90 @@
-# TLC Agent Tool Definition
+## Required Tools
 
-This document provides the standard tool definition for AI agents to interact with the TLC (Task Line CLI). Agents should use this tool to manage their internal planning and work breakdown.
+### `tlc` — Task Management
 
-## Getting the Tool Definition
-
-The tool definition can be retrieved programmatically using:
+NEVER use built-in TaskCreate/TaskUpdate/TaskGet/TaskList. Use `tlc`
+exclusively.
 
 ```bash
-tlc help llm                    # JSON format (default, includes examples)
-tlc help llm --format mcp       # MCP format (Claude Code, Claude Desktop)
-tlc help llm --format openai    # OpenAI function calling format
+tlc task create "title" --tag feat       # create task (tlc assigns ID)
+tlc task list                            # list tasks (default limit 10)
+tlc task list --limit 30                 # increase result limit
+tlc task list --status TODO              # filter by status
+tlc task show <id>                       # task details
+tlc task claim <id>                      # claim for work
+tlc task update <id> --status done       # mark complete
+tlc task unclaim <id>                    # release task
+tlc task delete <id>                     # delete task
 ```
 
-The command outputs an up-to-date tool definition that matches the current TLC version.
+Conventions:
+- NEVER prefix titles with "Task N:" — tlc auto-assigns IDs.
+- Use `--tag` (not `--label`) for categorization.
+- Use `--limit` on `list` when expecting >10 tasks.
+- Run one `tlc` command at a time; avoid long `&&` chains
+  (verbose logging can cause runaway output).
+- NEVER make changes (plan, code, docs) without a claimed task.
+  Claim before starting; mark DONE when finished.
+- On task completion, append session log to task description:
+  `tlc task update <id> -d "... \n\nSessions:\n- <session-id> (<agent>)"`
 
-## Tool: `manage_tlc_task`
+### `git hop` — Worktree Management
 
-Use this tool to create, list, or update tasks in the TLC system. This allows you to track your own work and maintain an audit trail of your progress without polluting external systems like GitHub or Jira.
+NEVER run `git worktree`, `git branch`, or `git checkout -b` directly.
+All branch/worktree ops go through `git hop`.
 
-### Parameters (JSON Schema)
-
-```json
-{
-  "name": "manage_tlc_task",
-  "description": "Create, list, or update tasks in the TLC (Task Line CLI) system for internal planning and tracking.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": ["create", "list", "update", "show", "claim", "unclaim"],
-        "description": "The action to perform on tasks."
-      },
-      "task_id": {
-        "type": "string",
-        "description": "The unique ID of the task (e.g., 'T-0042'). Required for 'update' and 'show'."
-      },
-      "title": {
-        "type": "string",
-        "description": "The title of the task. Required for 'create'."
-      },
-      "status": {
-        "type": "string",
-        "enum": ["TODO", "IN_PROGRESS", "DONE", "SKIPPED"],
-        "description": "The status of the task."
-      },
-      "assigned_to": {
-        "type": "string",
-        "description": "The username of the assignee (e.g., 'engineer-1')."
-      },
-      "tags": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "A list of tags for categorization (e.g., ['infra', 'bug'])."
-      },
-      "description": {
-        "type": "string",
-        "description": "A detailed description of the task."
-      }
-    },
-    "required": ["action"]
-  }
-}
-```
-
-### Internal Implementation (Reference)
-
-When an agent calls this tool, the orchestrator should execute the corresponding `tlc` CLI command.
-
-#### Example: Creating a task
-**Tool Call:**
-```json
-{
-  "action": "create",
-  "title": "Implement authentication middleware",
-  "assigned_to": "engineer-1",
-  "tags": ["auth", "security"]
-}
-```
-**Command Executed:**
 ```bash
-tlc task create "Implement authentication middleware" --assigned-to engineer-1 --tag auth --tag security
+git hop add <branch>                     # create worktree + branch
+git hop list                             # list worktrees
+git hop remove <branch>                  # remove worktree (interactive confirm)
+# NOTE: --force does NOT skip the prompt. Pipe `echo "y" |` if needed.
+git hop status                           # show working tree status
+git hop prune                            # clean orphans
 ```
 
-#### Example: Marking a task as in-progress
-**Tool Call:**
-```json
-{
-  "action": "update",
-  "task_id": "T-0042",
-  "status": "IN_PROGRESS"
-}
-```
-**Command Executed:**
+Refuse to work in a non-topic branch. Branch naming:
+`{category}/{id}-{short-description}` (e.g. `feat/001-session-lifecycle`).
+
+### `xray` — Code Discovery
+
+NEVER blindly grep/glob large portions of the codebase. Use `xray`
+first to understand structure before diving into files.
+
 ```bash
-tlc task update T-0042 --status IN_PROGRESS
+xray scan                                # scan + index codebase
+xray map                                 # visual codebase map
+xray explore                             # interactive exploration
+xray explore -s "keyword"                # search code for keyword
+xray explore -m "*.go"                   # find files by pattern
+xray graph                               # CFG/DFG analysis
 ```
 
-#### Example: Listing my pending tasks
-**Tool Call:**
-```json
-{
-  "action": "list",
-  "status": "TODO",
-  "assigned_to": "engineer-1"
-}
-```
-**Command Executed:**
-```bash
-tlc task list --status TODO --assigned-to engineer-1
-```
+Read `.xray` files when present in directories for cached context.
 
-#### Example: Claiming a task
-**Tool Call:**
-```json
-{
-  "action": "claim",
-  "task_id": "T-0042"
-}
-```
-**Command Executed:**
-```bash
-tlc task claim T-0042
-```
+## Project Goals
 
-#### Example: Releasing a task
-**Tool Call:**
-```json
-{
-  "action": "unclaim",
-  "task_id": "T-0042"
-}
-```
-**Command Executed:**
-```bash
-tlc task unclaim T-0042
-```
+1. Build `rux` as a deterministic orchestration engine for interactive
+   terminal applications (PTY/tmux abstraction).
+2. CLI-first; SDK layer for programmatic Go integration.
+3. Story-driven delivery via `docs/stories/` and `docs/personas/`.
 
-## Best Practices for Agents
+## Story and Plan Workflow
 
-1.  **Plan First**: Before starting a complex task, use the `create` action to break it down into smaller sub-tasks.
-2.  **Stay Updated**: Always move a task to `IN_PROGRESS` when you start working on it, and to `DONE` when finished.
-3.  **Use Tags**: Apply domain tags (e.g., `#storage`, `#cli`, `#sync`) to help teammates filter and understand your work.
-4.  **Reference IDs**: When committing code or sending messages, refer to the Task IDs (e.g., "Refs: tlc/T-0042") to maintain a clear link between planning and execution.
-5.  **Self-Update**: When TLC is updated, refresh your tool knowledge by running `tlc help llm` which auto-detects your environment and outputs format-specific instructions.
+1. `docs/stories/README.md` is source of truth for requirements.
+2. Keep plans in `docs/plans/` in sync with implementation.
+3. Behavior changes must update matching story acceptance criteria.
+
+## Coding Expectations
+
+1. Go 1.24.x; module path `github.com/hop-top/rux`.
+2. Keep files <500 LOC; split/refactor as needed.
+3. DRY; design patterns; avoid cyclomatic complexity.
+4. Deterministic tests; explicit exit-code assertions for CLI.
+5. No sleep-based automation in tests or runtime.
+
+## Required Docs to Keep Updated
+
+- `README.md`
+- `CHANGELOG.md`
+- `docs/stories/README.md`
+- `docs/personas/*.md`
