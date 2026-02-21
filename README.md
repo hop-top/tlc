@@ -9,10 +9,11 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/github/spec-kit/actions/workflows/release.yml"><img src="https://github.com/github/spec-kit/actions/workflows/release.yml/badge.svg" alt="Release"/></a>
-    <a href="https://github.com/github/spec-kit/stargazers"><img src="https://img.shields.io/github/stars/github/spec-kit?style=social" alt="GitHub stars"/></a>
-    <a href="https://github.com/github/spec-kit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/github/spec-kit" alt="License"/></a>
-    <a href="https://github.github.io/spec-kit/"><img src="https://img.shields.io/badge/docs-GitHub_Pages-blue" alt="Documentation"/></a>
+    <a href="https://github.com/hop-top/tlc/releases"><img src="https://img.shields.io/github/release/hop-top/tlc.svg" alt="Release"/></a>
+    <a href="https://pkg.go.dev/hop.top/tlc?tab=doc"><img src="https://pkg.go.dev/badge/hop.top/tlc.svg" alt="GoDoc"/></a>
+    <a href="https://github.com/hop-top/tlc/actions"><img src="https://github.com/hop-top/tlc/actions/workflows/ci.yml/badge.svg" alt="Build Status"/></a>
+    <a href="https://github.com/hop-top/tlc/stargazers"><img src="https://img.shields.io/github/stars/hop-top/tlc?style=social" alt="GitHub stars"/></a>
+    <a href="https://github.com/hop-top/tlc/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hop-top/tlc" alt="License"/></a>
 </p>
 
 
@@ -376,3 +377,22 @@ Detailed specifications can be found in the `docs/` directory:
 - [Sync Architecture](docs/sync-architecture-0.1.md)
 - [CLI Spec](docs/tlc-cli-spec-0.1.md)
 - [TUI Spec](docs/tlc-tui-spec-0.1.md)
+
+## Contributing
+
+Contributions are welcome! Check the
+[open issues](https://github.com/hop-top/tlc/issues) for things to
+work on, or open a pull request with your improvements. All PRs are
+appreciated -- whether it is a bug fix, new feature, or documentation
+update.
+
+## Feedback
+
+Found a bug or have a feature request? Open an issue on the
+[GitHub Issues](https://github.com/hop-top/tlc/issues) page. For
+questions and general discussion, use
+[GitHub Discussions](https://github.com/hop-top/tlc/discussions).
+
+## License
+
+[MIT](LICENSE)

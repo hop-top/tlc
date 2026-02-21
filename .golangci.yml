@@ -54,6 +54,21 @@ linters-settings:
       - G104 # Duplicates errcheck
       - G304 # Allow file path variables in CLI
 
+  nakedret:
+    max-func-lines: 30
+
+  nestif:
+    min-complexity: 5
+
+  nolintlint:
+    require-explanation: true
+    require-specific: true
+    allow-unused: false
+
+  godot:
+    scope: declarations
+    capital: false
+
   stylecheck:
     checks: ["all", "-ST1003"] # Allow ID naming
 
@@ -74,24 +89,37 @@ linters:
     - unused
     # Security
     - gosec
+    - noctx
     # Quality
+    - bodyclose
     - gocyclo
     - gocognit
     - dupl
     - goconst
+    - godot
+    - goprintffuncname
     - misspell
+    - nakedret
+    - nestif
+    - nilerr
     - unconvert
     - unparam
     # Style
     - revive
     - whitespace
     # Errors
+    - nolintlint
     - wrapcheck
     # Testing
     - testpackage
     - tparallel
     # Performance
     - prealloc
+    # SQL / IO
+    - rowserrcheck
+    - sqlclosecheck
+    # Modules
+    - gomoddirectives
 
   disable:
     - gochecknoglobals # Will enable with exclude paths
@@ -102,7 +130,7 @@ linters:
 
 formatters:
   enable:
-    - gofmt
+    - gofumpt
     - goimports
 
 issues:
