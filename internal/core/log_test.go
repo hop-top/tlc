@@ -9,15 +9,9 @@ import (
 const testTaskID1 = "T-1"
 
 func TestLogEntry_Structure(t *testing.T) {
-	now := time.Now().UTC()
 	entry := &LogEntry{
-		ID:        1,
-		TaskID:    testTaskID1,
-		Timestamp: now,
-		By:        "user",
-		Action:    "CREATED",
-		Note:      "initial",
-		Meta:      map[string]interface{}{"key": "value"},
+		TaskID: testTaskID1,
+		Action: "CREATED",
 	}
 
 	if entry.TaskID != testTaskID1 {

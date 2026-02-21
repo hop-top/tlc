@@ -203,7 +203,7 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 	return nil
 }
 
-func (s *TaskService) PauseFlowRun(ctx context.Context, runID string, by string, note string) error {
+func (s *TaskService) updateFlowRunStatus(ctx context.Context, runID, action, by, note string, status FlowStatus) error {
 	run, err := s.repo.GetFlowRun(ctx, runID)
 	if err != nil {
 		return fmt.Errorf("failed to get flow run: %w", err)
@@ -211,68 +211,32 @@ func (s *TaskService) PauseFlowRun(ctx context.Context, runID string, by string,
 	if run == nil {
 		return fmt.Errorf("flow run %s not found", runID)
 	}
-	run.Status = FlowStatusPaused
+	run.Status = status
 	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
 		return fmt.Errorf("failed to update flow run: %w", err)
 	}
 	if err := s.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now().UTC(),
 		By:        by,
-		Action:    "FLOW_PAUSED",
+		Action:    action,
 		Note:      note,
 		Meta:      map[string]any{"run_id": runID},
 	}); err != nil {
 		return fmt.Errorf("failed to add log: %w", err)
 	}
 	return nil
+}
+
+func (s *TaskService) PauseFlowRun(ctx context.Context, runID string, by string, note string) error {
+	return s.updateFlowRunStatus(ctx, runID, "FLOW_PAUSED", by, note, FlowStatusPaused)
 }
 
 func (s *TaskService) ResumeFlowRun(ctx context.Context, runID string, by string, note string) error {
-	run, err := s.repo.GetFlowRun(ctx, runID)
-	if err != nil {
-		return fmt.Errorf("failed to get flow run: %w", err)
-	}
-	if run == nil {
-		return fmt.Errorf("flow run %s not found", runID)
-	}
-	run.Status = FlowStatusRunning
-	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return fmt.Errorf("failed to update flow run: %w", err)
-	}
-	if err := s.logRepo.AddLog(ctx, &LogEntry{
-		Timestamp: time.Now().UTC(),
-		By:        by,
-		Action:    "FLOW_RESUMED",
-		Note:      note,
-		Meta:      map[string]any{"run_id": runID},
-	}); err != nil {
-		return fmt.Errorf("failed to add log: %w", err)
-	}
-	return nil
+	return s.updateFlowRunStatus(ctx, runID, "FLOW_RESUMED", by, note, FlowStatusRunning)
 }
 
 func (s *TaskService) CancelFlowRun(ctx context.Context, runID string, by string, note string) error {
-	run, err := s.repo.GetFlowRun(ctx, runID)
-	if err != nil {
-		return fmt.Errorf("failed to get flow run: %w", err)
-	}
-	if run == nil {
-		return fmt.Errorf("flow run %s not found", runID)
-	}
-	run.Status = FlowStatusCanceled
-	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return fmt.Errorf("failed to update flow run: %w", err)
-	}
-	if err := s.logRepo.AddLog(ctx, &LogEntry{
-		Timestamp: time.Now().UTC(),
-		By:        by,
-		Action:    "FLOW_CANCELED",
-		Note:      note,
-		Meta:      map[string]any{"run_id": runID},
-	}); err != nil {
-		return fmt.Errorf("failed to add log: %w", err)
-	}
-	return nil
+	return s.updateFlowRunStatus(ctx, runID, "FLOW_CANCELED", by, note, FlowStatusCanceled)
 }
 
 // CreateTaskWithAssignment creates a task and auto-assigns it to the best-matching assignee.

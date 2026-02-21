@@ -1,0 +1,8 @@
+- add agnostic LLM service
+- add LLM routing rules
+- add auto-tagging (add missing tags, fix faulty tags, create required tags)
+- add bugfix, hotfix, feat, ci, docs flows
+- add task prep (validating, researching, documenting, planning)
+- test task requiring HITL
+- add flow create|archive|unarchive...
+- labels -> label

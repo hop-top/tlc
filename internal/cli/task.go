@@ -52,6 +52,28 @@ var (
 	taskUnclaimNote string
 )
 
+func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
+	core.Repository
+	core.LogRepository
+}) error {
+	if task.OriginSystem != nil && *task.OriginSystem != "" {
+		if err := updateSyncedTask(ctx, task, s); err != nil {
+			return err
+		}
+		if err := s.AddLog(ctx, log); err != nil {
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		}
+	} else {
+		if err := s.UpdateTask(ctx, task); err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
+		if err := s.AddLog(ctx, log); err != nil {
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		}
+	}
+	return nil
+}
+
 func updateSyncedTask(ctx context.Context, task *core.Task, s core.Repository) error {
 	if task.OriginSystem == nil || *task.OriginSystem == "" {
 		return fmt.Errorf("task does not have an origin system")
@@ -174,20 +196,8 @@ var taskClaimCmd = &cobra.Command{
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
-		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := updateSyncedTask(ctx, task, s); err != nil {
-				return err
-			}
-			if err := s.AddLog(ctx, log); err != nil {
-				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
-			}
-		} else {
-			if err := s.UpdateTask(ctx, task); err != nil {
-				return fmt.Errorf("failed to update task: %w", err)
-			}
-			if err := s.AddLog(ctx, log); err != nil {
-				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
-			}
+		if err := saveTaskWithLog(ctx, cmd, task, log, s); err != nil {
+			return err
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
@@ -223,20 +233,8 @@ var taskUnclaimCmd = &cobra.Command{
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
-		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := updateSyncedTask(ctx, task, s); err != nil {
-				return err
-			}
-			if err := s.AddLog(ctx, log); err != nil {
-				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
-			}
-		} else {
-			if err := s.UpdateTask(ctx, task); err != nil {
-				return fmt.Errorf("failed to update task: %w", err)
-			}
-			if err := s.AddLog(ctx, log); err != nil {
-				_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
-			}
+		if err := saveTaskWithLog(ctx, cmd, task, log, s); err != nil {
+			return err
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)

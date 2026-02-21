@@ -60,38 +60,5 @@ func (a *JiraAuthenticator) LoginWithJiraOAuth(ctx context.Context, config *oaut
 		}
 	}()
 
-	select {
-	case code := <-codeChan:
-		token, err := config.Exchange(ctx, code)
-		if err != nil {
-			return nil, fmt.Errorf("failed to exchange code for token: %w", err)
-		}
-
-		_ = server.Shutdown(ctx)
-
-		cred := &Credential{
-			Service: "jira",
-			Account: "default",
-			Payload: CredentialPayload{
-				Type:         TypeOAuth,
-				AccessToken:  token.AccessToken,
-				RefreshToken: token.RefreshToken,
-				ExpiresAt:    &token.Expiry,
-			},
-		}
-
-		if err := a.store.Upsert(cred); err != nil {
-			return nil, fmt.Errorf("failed to upsert credential: %w", err)
-		}
-
-		return cred, nil
-
-	case err := <-errChan:
-		_ = server.Shutdown(ctx)
-		return nil, err
-
-	case <-time.After(5 * time.Minute):
-		_ = server.Shutdown(ctx)
-		return nil, fmt.Errorf("authentication timed out")
-	}
+	return awaitOAuthCallback(ctx, config, "jira", a.store, server, codeChan, errChan)
 }

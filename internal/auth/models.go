@@ -15,14 +15,14 @@ const (
 // CredentialPayload contains the actual sensitive data.
 type CredentialPayload struct {
 	Type         CredentialType `json:"type"`
-	AccessToken  string         `json:"access_token,omitempty"`  //nolint:gosec // G117: intentionally stores OAuth access token
-	RefreshToken string         `json:"refresh_token,omitempty"` //nolint:gosec // G117: intentionally stores OAuth refresh token
+	AccessToken  string         `json:"access_token,omitempty"`
+	RefreshToken string         `json:"refresh_token,omitempty"`
 	ExpiresAt    *time.Time     `json:"expires_at,omitempty"`
 	Scopes       []string       `json:"scopes,omitempty"`
 	URL          string         `json:"url,omitempty"`
 	Email        string         `json:"email,omitempty"`
-	Token        string         `json:"token,omitempty"`   // For API tokens
-	APIKey       string         `json:"api_key,omitempty"` //nolint:gosec // G117: intentionally stores API key
+	Token        string         `json:"token,omitempty"` // For API tokens
+	APIKey       string         `json:"api_key,omitempty"`
 }
 
 // Credential represents a stored credential.

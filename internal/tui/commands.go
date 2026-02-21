@@ -147,7 +147,7 @@ func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 	}
 }
 
-func (m Model) createTask() tea.Cmd {
+func (m Model) createTask() (Model, tea.Cmd) {
 	m.taskTitle = ""
 	m.taskDescription = ""
 
@@ -169,7 +169,7 @@ func (m Model) createTask() tea.Cmd {
 		),
 	)
 	m.view = "form"
-	return m.form.Init()
+	return m, m.form.Init()
 }
 
 func (m Model) saveTask(title, description string) tea.Cmd {

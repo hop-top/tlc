@@ -68,7 +68,7 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 				}
 			}
 		case "n":
-			return m, m.createTask()
+			return m.createTask()
 		case "t":
 			m.view = viewThemePicker
 			tm, _ := m.themePicker.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
