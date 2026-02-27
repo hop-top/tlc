@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -525,6 +526,142 @@ func checkGitignoreHasTlc(fix bool) checkResult {
 	}
 }
 
+func checkProjectTodoSynced(fix bool) checkResult {
+	proj := core.DetectProject()
+	if proj == nil || !proj.InProject || proj.ConfigPath == "" {
+		return checkResult{
+			name:     "project todo.txt synced",
+			category: "Data",
+			status:   "pass",
+			message:  "no project context",
+			fixable:  true,
+		}
+	}
+
+	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), "todo.txt")
+	data, err := os.ReadFile(todoFile)
+	if err != nil || len(strings.TrimSpace(string(data))) == 0 {
+		return checkResult{
+			name:     "project todo.txt synced",
+			category: "Data",
+			status:   "pass",
+			message:  "no project todo.txt or empty",
+			fixable:  true,
+		}
+	}
+
+	// Parse lines to see how many tasks exist in the file.
+	var fileTasks []*core.Task
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		t, err := parseTLS(line)
+		if err != nil {
+			continue
+		}
+		fileTasks = append(fileTasks, t)
+	}
+
+	if len(fileTasks) == 0 {
+		return checkResult{
+			name:     "project todo.txt synced",
+			category: "Data",
+			status:   "pass",
+			fixable:  true,
+		}
+	}
+
+	// Open storage to check which tasks are missing or stale.
+	s, err := getStorageRaw()
+	if err != nil {
+		return checkResult{
+			name:     "project todo.txt synced",
+			category: "Data",
+			status:   "warn",
+			message:  fmt.Sprintf("cannot open db: %v", err),
+			fixable:  true,
+		}
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	var drifted int
+	for _, ft := range fileTasks {
+		existing, _ := s.GetTask(ctx, ft.ID)
+		if existing == nil {
+			drifted++
+			continue
+		}
+		if existing.Status != ft.Status || existing.Title != ft.Title {
+			drifted++
+		}
+	}
+
+	if drifted == 0 {
+		return checkResult{
+			name:     "project todo.txt synced",
+			category: "Data",
+			status:   "pass",
+			message:  fmt.Sprintf("%d tasks in sync", len(fileTasks)),
+			fixable:  true,
+		}
+	}
+
+	if !fix {
+		return checkResult{
+			name:     "project todo.txt synced",
+			category: "Data",
+			status:   "warn",
+			message:  fmt.Sprintf("%d/%d tasks out of sync", drifted, len(fileTasks)),
+			fixable:  true,
+		}
+	}
+
+	// Fix: sync each task from the file into the database by ID.
+	var created, updated int
+	for _, ft := range fileTasks {
+		if proj.ProjectID != "" {
+			ft.ProjectID = &proj.ProjectID
+		}
+		existing, _ := s.GetTask(ctx, ft.ID)
+		if existing == nil {
+			if ft.CreatedAt.IsZero() {
+				ft.CreatedAt = time.Now()
+			}
+			if ft.UpdatedAt.IsZero() {
+				ft.UpdatedAt = ft.CreatedAt
+			}
+			if err := s.CreateTask(ctx, ft); err == nil {
+				created++
+			}
+		} else {
+			if existing.Status != ft.Status || existing.Title != ft.Title {
+				existing.Status = ft.Status
+				existing.Title = ft.Title
+				existing.AssignedTo = ft.AssignedTo
+				existing.Tags = ft.Tags
+				existing.UpdatedAt = time.Now()
+				for k, v := range ft.Meta {
+					existing.Meta[k] = v
+				}
+				if err := s.UpdateTask(ctx, existing); err == nil {
+					updated++
+				}
+			}
+		}
+	}
+
+	return checkResult{
+		name:     "project todo.txt synced",
+		category: "Data",
+		status:   "pass",
+		fixable:  true,
+		fixed:    true,
+		fixMsg:   fmt.Sprintf("synced %d created, %d updated", created, updated),
+	}
+}
+
 func allChecks() []doctorCheck {
 	return []doctorCheck{
 		checkGitInstalled,
@@ -539,6 +676,7 @@ func allChecks() []doctorCheck {
 		checkDBOpens,
 		checkSchemaVersion,
 		checkGitignoreHasTlc,
+		checkProjectTodoSynced,
 	}
 }
 
