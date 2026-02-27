@@ -107,10 +107,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	config["output"] = output
 
 	projectCfg := make(map[string]interface{})
-	detectedID := core.DetectFromGitRemote()
-	if detectedID == "" {
-		detectedID = "unknown"
-	}
+	detectedID := core.DetectProjectID()
 	finalProjectID := detectedID
 
 	s, err := getStorage()

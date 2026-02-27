@@ -76,7 +76,7 @@ func detectProjectOnce() *ProjectDetection {
 
 	projectID := viper.GetString("project.id")
 	if projectID == "" {
-		projectID = detectProjectID()
+		projectID = DetectProjectID()
 		viper.Set("project.id", projectID)
 		_ = viper.WriteConfig()
 	}
@@ -88,14 +88,16 @@ func detectProjectOnce() *ProjectDetection {
 	}
 }
 
-func detectProjectID() string {
+// DetectProjectID returns a project identifier using a fallback chain:
+// git remote origin > git toplevel directory > filesystem walk.
+func DetectProjectID() string {
 	if detected := DetectFromGitRemote(); detected != "" {
 		return detected
 	}
-	if detected := detectFromGitConfig(); detected != "" {
+	if detected := detectFromGitToplevel(); detected != "" {
 		return detected
 	}
-	if detected := detectFromDirectory(); detected != "" {
+	if detected := detectFromDirectory(); detected != "" && detected != projectIDUnknown {
 		return detected
 	}
 	return projectIDUnknown
@@ -133,33 +135,24 @@ func DetectFromGitRemote() string {
 	return ""
 }
 
-func detectFromGitConfig() string {
-	cmd := exec.CommandContext(context.Background(), "git", "config", "--get", "remote.origin.url")
+func detectFromGitToplevel() string {
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-	url := strings.TrimSpace(string(output))
-
-	if url == "" {
-		cmd := exec.CommandContext(context.Background(), "git", "config", "--get", "user.name")
-		name, _ := cmd.Output()
-		cmd = exec.CommandContext(context.Background(), "git", "config", "--get", "user.email")
-		email, _ := cmd.Output()
-		if name != nil && email != nil {
-			return strings.TrimSpace(string(name) + "-" + string(email))
-		}
+	toplevel := strings.TrimSpace(string(output))
+	if toplevel == "" {
+		return ""
 	}
-	return ""
+	return filepath.Base(toplevel)
 }
 
 func detectFromDirectory() string {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "unknown"
+		return projectIDUnknown
 	}
-
-	cwd = filepath.Dir(cwd)
 
 	for {
 		if _, err := os.Stat(filepath.Join(cwd, ".git")); err == nil {
@@ -182,8 +175,8 @@ func handleFallbackMode() *ProjectDetection {
 		mode = fallbackModeAuto
 	}
 
-	inferredID := DetectFromGitRemote()
-	if inferredID == "" {
+	inferredID := DetectProjectID()
+	if inferredID == "" || inferredID == projectIDUnknown {
 		return &ProjectDetection{InProject: false}
 	}
 

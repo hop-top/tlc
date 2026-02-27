@@ -159,10 +159,7 @@ func checkConfigExists(fix bool) checkResult {
 		}
 	}
 	if fix {
-		inferredID := core.DetectFromGitRemote()
-		if inferredID == "" {
-			inferredID = syncSystemUnknown
-		}
+		inferredID := core.DetectProjectID()
 		if err := core.CreateConfigWithInferredID(inferredID); err != nil {
 			return checkResult{
 				name:     ".tlc/config.yaml exists",
@@ -253,13 +250,13 @@ func checkProjectIDSet(fix bool) checkResult {
 		}
 	}
 	if fix {
-		detected := core.DetectFromGitRemote()
-		if detected == "" {
+		detected := core.DetectProjectID()
+		if detected == "" || detected == "unknown" {
 			return checkResult{
 				name:     "project.id is set",
 				category: "Project",
 				status:   "fail",
-				message:  "cannot detect from git remote",
+				message:  "cannot detect project ID",
 				fixable:  true,
 			}
 		}
