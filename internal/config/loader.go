@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,14 +62,14 @@ func LoadConfig(projectRoot string) (*Config, error) {
 	// 1. User config
 	home, _ := os.UserHomeDir()
 	userConfigPath := filepath.Join(home, ".config", "tlc", "config.yaml")
-	if err := mergeFile(cfg, userConfigPath); err != nil && !os.IsNotExist(err) {
+	if err := mergeFile(cfg, userConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("failed to load user config: %w", err)
 	}
 
 	// 2. Project config
 	if projectRoot != "" {
 		projectConfigPath := filepath.Join(projectRoot, ".tlc", "config.yaml")
-		if err := mergeFile(cfg, projectConfigPath); err != nil && !os.IsNotExist(err) {
+		if err := mergeFile(cfg, projectConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("failed to load project config: %w", err)
 		}
 	}

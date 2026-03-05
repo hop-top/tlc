@@ -135,15 +135,20 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 				log.Info("Created unique project", "project_id", finalProjectID, "parent", detectedID)
 
 			case "prompt":
-				choice, err := promptDuplicateIDStrategy(detectedID, len(existingTasks))
-				if err != nil {
-					return fmt.Errorf("failed to prompt for duplicate strategy: %w", err)
-				}
-				if choice == "unique" {
-					finalProjectID = generateUniqueProjectID(ctx, s, detectedID)
-					log.Info("Created unique project", "project_id", finalProjectID, "parent", detectedID)
+				if cmd.Flags().Changed("duplicate-id-strategy") {
+					// Strategy explicitly set via flag — just save it, don't prompt now
+					log.Warn("Sharing existing project (prompt strategy set for future use)", "project_id", detectedID, "task_count", len(existingTasks))
 				} else {
-					log.Warn("Sharing existing project", "project_id", detectedID, "task_count", len(existingTasks))
+					choice, err := promptDuplicateIDStrategy(detectedID, len(existingTasks))
+					if err != nil {
+						return fmt.Errorf("failed to prompt for duplicate strategy: %w", err)
+					}
+					if choice == "unique" {
+						finalProjectID = generateUniqueProjectID(ctx, s, detectedID)
+						log.Info("Created unique project", "project_id", finalProjectID, "parent", detectedID)
+					} else {
+						log.Warn("Sharing existing project", "project_id", detectedID, "task_count", len(existingTasks))
+					}
 				}
 			}
 		}
