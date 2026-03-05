@@ -110,7 +110,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	detectedID := core.DetectProjectID()
 	finalProjectID := detectedID
 
-	s, err := getStorage()
+	s, err := getStorageRaw()
 	if err == nil {
 		defer func() { _ = s.Close() }()
 		ctx := context.Background()

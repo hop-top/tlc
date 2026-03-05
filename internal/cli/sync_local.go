@@ -115,6 +115,13 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 	}
 	defer func() { _ = f.Close() }()
 
+	// Determine current project ID so ingested tasks are scoped correctly.
+	proj := core.DetectProject()
+	var projectID string
+	if proj != nil && proj.InProject && proj.ProjectID != "" {
+		projectID = proj.ProjectID
+	}
+
 	ctx := context.Background()
 	scanner := bufio.NewScanner(f)
 
@@ -128,6 +135,12 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 		if err != nil {
 			fmt.Printf("Warning: failed to parse line: %s (%v)\n", line, err)
 			continue
+		}
+
+		// Assign current project ID so GetTask (project-scoped) finds
+		// the right record and CreateTask inserts under the correct project.
+		if projectID != "" {
+			task.ProjectID = &projectID
 		}
 
 		existing, _ := s.GetTask(ctx, task.ID)
