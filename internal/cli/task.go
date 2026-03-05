@@ -50,8 +50,9 @@ var (
 
 	taskClaimNote    string
 	taskUnclaimNote  string
-	taskCompleteNote string
-	taskUpdateForce  bool
+	taskCompleteNote     string
+	taskCompleteNoVerify bool
+	taskUpdateForce      bool
 )
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
@@ -290,7 +291,7 @@ var taskCompleteCmd = &cobra.Command{
 			return fmt.Errorf("workflow has no completed status: %w", wmErr)
 		}
 		logEntry, err := task.TransitionWithWorkflow(
-			completedStatus, user, taskCompleteNote, wm, true,
+			completedStatus, user, taskCompleteNote, wm, taskCompleteNoVerify,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
@@ -782,6 +783,7 @@ func init() {
 	taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
 
 	taskCompleteCmd.Flags().StringVarP(&taskCompleteNote, "note", "n", "", "Completion note")
+	taskCompleteCmd.Flags().BoolVar(&taskCompleteNoVerify, "no-verify", false, "Skip state machine validation")
 
 	taskCmd.AddCommand(taskCreateCmd)
 
