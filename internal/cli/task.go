@@ -279,13 +279,18 @@ var taskCompleteCmd = &cobra.Command{
 			return fmt.Errorf("task not found: %s", id)
 		}
 
+		user := core.GetCurrentUser()
+		if task.AssignedTo == nil || *task.AssignedTo == "" {
+			task.AssignedTo = &user
+		}
+
 		wm := core.DefaultWorkflow()
 		completedStatus, wmErr := wm.StatusForRole("completed")
 		if wmErr != nil {
 			return fmt.Errorf("workflow has no completed status: %w", wmErr)
 		}
 		logEntry, err := task.TransitionWithWorkflow(
-			completedStatus, core.GetCurrentUser(), taskCompleteNote, wm, false,
+			completedStatus, user, taskCompleteNote, wm, true,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
