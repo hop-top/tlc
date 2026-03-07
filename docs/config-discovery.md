@@ -2,7 +2,11 @@
 
 ## Overview
 
-TLC uses a **custom directory traversal** (`findAllConfigs()`) to discover project configuration files, rather than relying on Viper's static path search. This enables TLC to work correctly with nested projects, git worktrees, and multi-clone workflows.
+TLC uses a **custom directory traversal** (`findAllConfigs()`) to discover project
+configuration files, rather than relying on Viper's static path search. The walk-up is
+bounded by the common ancestor of the current working directory and the user-global
+config directory, which keeps inheritance local to the user's workspace while still
+supporting nested projects and worktrees.
 
 ## Problem with Viper Native Search
 
@@ -44,10 +48,10 @@ func findAllConfigs(startDir string) []string
 
 ### Algorithm
 
-The function implements a **bottom-up directory traversal**:
+The function implements a **bounded bottom-up directory traversal**:
 
 ```go
-func findAllConfigs(startDir string) []string {
+func findAllConfigs(startDir, stopDir string) []string {
     var configs []string
     curr := startDir
     
@@ -64,6 +68,10 @@ func findAllConfigs(startDir string) []string {
             configs = append(configs, tlcDirConfig)
         }
         
+        if stopDir != "" && curr == stopDir {
+            break
+        }
+
         // 3. Move up to parent directory
         parent := filepath.Dir(curr)
         if parent == curr {  // Reached filesystem root
@@ -81,7 +89,8 @@ func findAllConfigs(startDir string) []string {
 1. **Dynamic Starting Point**: Begins from current working directory (`os.Getwd()`)
 2. **Hierarchical Traversal**: Moves up one directory at a time
 3. **Multiple Config Formats**: Supports both `.tlc.yaml` and `.tlc/config.yaml`
-4. **Termination Condition**: Stops when `filepath.Dir(dir)` returns the same path (filesystem root)
+4. **Termination Condition**: Stops when the walk reaches the computed boundary
+   directory, or filesystem root if the common ancestor is `/`
 5. **Return Order**: Configs collected from root-most to closest, later reversed
 
 ## How TLC Uses the Walk-Up
@@ -100,9 +109,10 @@ func initConfig() {
     viper.SetConfigName("config")
     viper.ReadInConfig()
     
-    // Stage 2: Walk up from current directory
+    // Stage 2: Walk up from current directory up to the common ancestor
+    // of cwd and the user-global config directory
     curr, _ := os.Getwd()
-    configs := findAllConfigs(curr)
+    configs := findAllConfigs(curr, resolveProjectConfigBoundary(curr))
     
     // Merge them from root-most to closest
     // so that closer files overwrite further ones
@@ -123,10 +133,11 @@ Configs are merged in this order (later configs override earlier ones):
 
 1. `/etc/tlc/config.yaml` (system)
 2. `~/.config/tlc/config.yaml` (user home)
-3. `/repo/.tlc/config.yaml` (root-most found by walk-up)
-4. `/repo/subproject/.tlc/config.yaml` (closer found by walk-up)
-5. `/repo/subproject/feature/.tlc/config.yaml` (closest - CWD)
-6. Environment variables (`TLC_*`)
+3. `{boundary}/.tlc/config.yaml` (if present at the common-ancestor boundary)
+4. `/repo/.tlc/config.yaml` (root-most found below the boundary)
+5. `/repo/subproject/.tlc/config.yaml` (closer found by walk-up)
+6. `/repo/subproject/feature/.tlc/config.yaml` (closest - CWD)
+7. Environment variables (`TLC_*`)
 
 ## Example Scenarios
 
@@ -155,7 +166,7 @@ Configs are merged in this order (later configs override earlier ones):
 7. Move up to `/monorepo/`
 8. Check `.tlc.yaml` → not found
 9. Check `.tlc/config.yaml` → **FOUND** → Add to list
-10. Move up to `/` (root)
+10. Move up to `~/` (the common ancestor with `~/.config/tlc`)
 11. Stop
 
 **Config List Returned**:
@@ -201,7 +212,7 @@ Configs are merged in this order (later configs override earlier ones):
 10. Move up to `~/`
 11. Check `.tlc.yaml` → not found
 12. Check `.tlc/config.yaml` → not found
-13. Move up to `/` (root)
+13. Move up to `~/` (the common ancestor with `~/.config/tlc`)
 14. Stop
 
 **Config List Returned**:
@@ -244,7 +255,7 @@ Configs are merged in this order (later configs override earlier ones):
 7. Move up to `~/`
 8. Check `.tlc.yaml` → not found
 9. Check `.tlc/config.yaml` → not found
-10. Move up to `/` (root)
+10. Move up to `~/` (the common ancestor with `~/.config/tlc`)
 11. Stop
 
 **Config List Returned**:
@@ -350,12 +361,13 @@ DetectProject():
 ### Performance Considerations
 
 1. **Filesystem Calls**: Each directory level performs 2 `os.Stat()` calls
-2. **Traversal Depth**: Typically 5-10 levels deep (from project to home/root)
+2. **Traversal Depth**: Typically 5-10 levels deep (from project to the computed boundary)
 3. **Total Calls**: 10-20 syscalls per TLC invocation (negligible)
 
 ### Edge Cases Handled
 
-1. **No filesystem root check**: Stops when `filepath.Dir(curr) == curr`
+1. **Bounded walk-up**: Stops at the common ancestor of `cwd` and the user-global config
+   directory, or at filesystem root when that ancestor is `/`
 2. **Multiple config files**: Same directory can have both `.tlc.yaml` and `.tlc/config.yaml`
 3. **Permission errors**: `os.Stat()` errors are silently ignored (file doesn't exist)
 4. **Symlinks**: `filepath.Dir()` and `os.Stat()` work with symlinks naturally
@@ -396,7 +408,7 @@ Current approach chosen for: **Simplicity, explicit control, easy to debug**
 
 ## References
 
-- **Implementation**: `internal/cli/root.go:131-155`
+- **Implementation**: `internal/cli/root.go`
 - **Usage**: `internal/cli/root.go:78-90` (merge loop)
 - **Related**: `internal/core/project.go` (uses merged config)
 - **Git Remote Fallback**: `docs/IMPLEMENTATION_PLAN_remote_fallback_and_duplicate_handling.md`

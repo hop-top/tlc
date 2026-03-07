@@ -8,7 +8,11 @@
 
 ## Story
 
-As a System, I want to discover and merge configuration from the current directory and all parent directories up to $HOME (or user-defined global config root), so that projects nested within a larger organization can inherit configuration and tasks from parent directories.
+As a System, I want to discover and merge configuration from the current directory and
+all parent directories up to the common ancestor of the current working directory and
+the user-global config directory, so that projects nested within a larger organization
+can inherit configuration and tasks from parent directories without traversing unrelated
+paths.
 
 ## Acceptance Scenarios
 
@@ -16,7 +20,7 @@ As a System, I want to discover and merge configuration from the current directo
    - `/Users/jadb/projects/team/project-a/.tlc/config.yaml` (current directory)
    - `/Users/jadb/projects/team/.tlc/config.yaml` (parent)
    - `/Users/jadb/projects/.tlc/config.yaml` (grandparent)
-   - `/Users/jadb/.tlc/config.yaml` (home root)
+   - `/Users/jadb/.tlc/config.yaml` (common-ancestor boundary, if present)
    - `/Users/jadb/.config/tlc/config.yaml` (global user config)
    - System defaults
 
@@ -28,19 +32,23 @@ As a System, I want to discover and merge configuration from the current directo
 
 5. **Given** tasks with same ID exist in multiple `.tlc/tasks.md` files in hierarchy, **When** loading tasks, **Then** child directory task takes precedence (closest to working directory wins)
 
-6. **Given** user sets custom global config path to `~/Documents/tlc/config.yaml`, **When** config is loaded, **Then** system stops traversing at `~/Documents/.tlc/` or uses `~/Documents/tlc/config.yaml` as global config (whichever exists)
+6. **Given** the common ancestor of `cwd` and the user-global config directory is
+   `/`, **When** config is loaded, **Then** traversal continues to filesystem root
 
 7. **Given** TLC is running on Windows, **When** config is loaded, **Then** system uses Windows-appropriate paths:
    - User config: `%APPDATA%\tlc\config.yaml`
-   - Home traversal stops at `%USERPROFILE%`
+   - Traversal stops at the common ancestor of `%USERPROFILE%\...cwd...` and
+     `%APPDATA%\tlc`
    - Project configs: `.tlc/config.yaml` in each directory
 
 8. **Given** TLC is running on Linux/macOS, **When** config is loaded, **Then** system uses Unix-appropriate paths:
    - User config: `~/.config/tlc/config.yaml` (or `~/.tlc/config.yaml` as fallback)
-   - Home traversal stops at `$HOME`
+   - Traversal stops at the common ancestor of `cwd` and `~/.config/tlc`
    - Project configs: `.tlc/config.yaml` in each directory
 
-9. **Given** no `.tlc` directories exist in parent hierarchy, **When** config is loaded, **Then** system uses global user config and system defaults only
+9. **Given** no `.tlc` directories exist between `cwd` and the computed boundary,
+   **When** config is loaded, **Then** system uses global user config and system
+   defaults only
 
 10. **Given** user runs `tlc config list`, **When** multiple config files exist in hierarchy, **Then** output shows merged config with source annotations for each value (e.g., "output.format: table (from: project)")
 
@@ -51,8 +59,8 @@ As a System, I want to discover and merge configuration from the current directo
 **Traversal Strategy:**
 - Start from current working directory
 - Walk up directory tree checking for `.tlc/config.yaml` at each level
-- Stop when reaching $HOME (macOS/Linux) or %USERPROFILE% (Windows)
-- Or stop at user-defined global config root if configured
+- Stop when reaching the common ancestor of `cwd` and the user-global config directory
+- If that ancestor is `/`, traversal continues to filesystem root
 
 **Merging Semantics:**
 - Config values: deeper (closer to cwd) overrides shallower
@@ -65,15 +73,10 @@ As a System, I want to discover and merge configuration from the current directo
 - Linux: $HOME = `/home/username`, XDG config at `~/.config/tlc/config.yaml`
 - Windows: $USERPROFILE = `C:\Users\username`, APPDATA = `%APPDATA%\tlc\config.yaml`
 
-**Custom Global Config Root:**
-- Support `TLC_GLOBAL_ROOT` environment variable
-- Example: `TLC_GLOBAL_ROOT=/Users/jadb/Documents/tlc` stops traversal at `/Users/jadb/Documents`
-- Or checks `/Users/jadb/Documents/tlc/config.yaml` as global config
-
 **Performance Considerations:**
 - Cache discovered config paths per session
 - Limit traversal depth to prevent infinite loops (e.g., 100 directories max)
-- Early exit when $HOME boundary detected
+- Early exit when the computed boundary is reached
 
 **What's Currently Implemented:**
 - ✅ User config: `~/.config/tlc/config.yaml` (hardcoded for Unix)
@@ -81,13 +84,10 @@ As a System, I want to discover and merge configuration from the current directo
 - ✅ Config merging logic exists in `internal/config/loader.go`
 
 **What's Missing:**
-- ❌ Directory traversal up the path
-- ❌ Stopping at $HOME or custom global root
 - ❌ Windows path support
 - ❌ Task merging from multiple `.tlc/` directories
 - ❌ Task deduplication by ID
 - ❌ Source annotations in `tlc config list`
-- ❌ Custom global config root via environment variable
 - ❌ Traversal depth limiting
 
 ## Implementation Plan

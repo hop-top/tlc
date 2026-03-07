@@ -87,10 +87,11 @@ func initConfig() {
 			}
 		}
 
-		// 2. Cascade project-specific configs from current dir up to root
+		// 2. Cascade project-specific configs from current dir up to the
+		// common ancestor of cwd and the user-global config directory.
 		curr, err := os.Getwd()
 		if err == nil {
-			configs := findAllConfigs(curr)
+			configs := findAllConfigs(curr, resolveProjectConfigBoundary(curr))
 			// Merge them in order from root-most to closest
 			// so that closer files overwrite further ones.
 			for i := len(configs) - 1; i >= 0; i-- {
@@ -128,9 +129,87 @@ func initConfig() {
 	setupLogging()
 }
 
-func findAllConfigs(startDir string) []string {
+func userGlobalConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "tlc", "config.yaml"), nil
+}
+
+func normalizeConfigPath(path string) string {
+	if path == "" {
+		return ""
+	}
+
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	path = filepath.Clean(path)
+
+	// Best effort only. Non-existent paths still participate in boundary
+	// calculation via their cleaned absolute form.
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+
+	return filepath.Clean(path)
+}
+
+func commonAncestorDir(a, b string) (string, error) {
+	a = normalizeConfigPath(a)
+	b = normalizeConfigPath(b)
+	if a == "" || b == "" {
+		return "", fmt.Errorf("paths must not be empty")
+	}
+
+	if volA, volB := filepath.VolumeName(a), filepath.VolumeName(b); volA != volB {
+		return "", fmt.Errorf("paths are on different volumes")
+	}
+
+	ancestors := make(map[string]struct{})
+	for curr := a; ; curr = filepath.Dir(curr) {
+		ancestors[curr] = struct{}{}
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			break
+		}
+	}
+
+	for curr := b; ; curr = filepath.Dir(curr) {
+		if _, ok := ancestors[curr]; ok {
+			return curr, nil
+		}
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("no common ancestor")
+}
+
+func resolveProjectConfigBoundary(startDir string) string {
+	globalConfigPath, err := userGlobalConfigPath()
+	if err != nil {
+		return ""
+	}
+
+	boundary, err := commonAncestorDir(startDir, filepath.Dir(globalConfigPath))
+	if err != nil {
+		return ""
+	}
+
+	return boundary
+}
+
+func findAllConfigs(startDir, stopDir string) []string {
 	var configs []string
-	curr := startDir
+	curr := normalizeConfigPath(startDir)
+	stopDir = normalizeConfigPath(stopDir)
+	if curr == "" {
+		return configs
+	}
 	for {
 		// Check for .tlc.yaml
 		tlcYaml := filepath.Join(curr, ".tlc.yaml")
@@ -142,6 +221,10 @@ func findAllConfigs(startDir string) []string {
 		tlcDirConfig := filepath.Join(curr, ".tlc", "config.yaml")
 		if _, err := os.Stat(tlcDirConfig); err == nil {
 			configs = append(configs, tlcDirConfig)
+		}
+
+		if stopDir != "" && curr == stopDir {
+			break
 		}
 
 		// Move up
