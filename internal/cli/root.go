@@ -71,16 +71,15 @@ func initConfig() {
 			log.Warn("Failed to read config file", "path", cfgFile, "error", err)
 		}
 	} else {
-		// 1. Load global/system fallbacks first
-		viper.AddConfigPath("/etc/tlc")
-		home, err := os.UserHomeDir()
-		if err == nil {
-			viper.AddConfigPath(filepath.Join(home, ".config", "tlc"))
+		// Prefer user config over system config when picking a base file.
+		if userConfigDir, err := config.UserConfigDir(); err == nil {
+			viper.AddConfigPath(userConfigDir)
 		}
+		viper.AddConfigPath(config.SystemConfigDir())
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
 
-		// Read base config if exists (e.g. ~/.config/tlc/config.yaml)
+		// Read base config if it exists.
 		if err := viper.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 				log.Warn("Error reading base config", "error", err)
@@ -130,11 +129,12 @@ func initConfig() {
 }
 
 func userGlobalConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
+	path, err := config.UserConfigPath()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("resolve user config path: %w", err)
 	}
-	return filepath.Join(home, ".config", "tlc", "config.yaml"), nil
+
+	return path, nil
 }
 
 func normalizeConfigPath(path string) string {

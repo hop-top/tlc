@@ -21,7 +21,7 @@ paths.
    - `/Users/jadb/projects/team/.tlc/config.yaml` (parent)
    - `/Users/jadb/projects/.tlc/config.yaml` (grandparent)
    - `/Users/jadb/.tlc/config.yaml` (common-ancestor boundary, if present)
-   - `/Users/jadb/.config/tlc/config.yaml` (global user config)
+   - OS user config dir + `/tlc/config.yaml`
    - System defaults
 
 2. **Given** TLC is starting from nested project `/Users/jadb/org/backend/api/v2`, **When** config is loaded, **Then** system checks all `.tlc/config.yaml` files in hierarchy and merges them with current directory taking highest precedence
@@ -42,8 +42,8 @@ paths.
    - Project configs: `.tlc/config.yaml` in each directory
 
 8. **Given** TLC is running on Linux/macOS, **When** config is loaded, **Then** system uses Unix-appropriate paths:
-   - User config: `~/.config/tlc/config.yaml` (or `~/.tlc/config.yaml` as fallback)
-   - Traversal stops at the common ancestor of `cwd` and `~/.config/tlc`
+   - User config: OS user config dir + `/tlc/config.yaml`
+   - Traversal stops at the common ancestor of `cwd` and the resolved user config dir
    - Project configs: `.tlc/config.yaml` in each directory
 
 9. **Given** no `.tlc` directories exist between `cwd` and the computed boundary,
@@ -69,8 +69,8 @@ paths.
 - Task metadata: merge (child inherits from parent unless overridden)
 
 **Platform Support:**
-- macOS: $HOME = `/Users/username`, XDG config at `~/.config/tlc/config.yaml`
-- Linux: $HOME = `/home/username`, XDG config at `~/.config/tlc/config.yaml`
+- macOS: `~/Library/Application Support/tlc/config.yaml`
+- Linux: `~/.config/tlc/config.yaml`
 - Windows: $USERPROFILE = `C:\Users\username`, APPDATA = `%APPDATA%\tlc\config.yaml`
 
 **Performance Considerations:**
@@ -79,7 +79,7 @@ paths.
 - Early exit when the computed boundary is reached
 
 **What's Currently Implemented:**
-- ✅ User config: `~/.config/tlc/config.yaml` (hardcoded for Unix)
+- ✅ User config: OS user config dir + `/tlc/config.yaml`
 - ✅ Project config: `.tlc/config.yaml` (single level only)
 - ✅ Config merging logic exists in `internal/config/loader.go`
 

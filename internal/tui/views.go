@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 )
@@ -90,6 +91,9 @@ func (m Model) getTagStyle(tag string) lipgloss.Style {
 		// Save to config for future consistency
 		colors[tag] = color
 		viper.Set("ui.tag_colors", colors)
+		if _, err := config.PrepareViperForWrite(viper.GetViper()); err != nil {
+			return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+		}
 		if err := viper.WriteConfig(); err != nil {
 			return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 		}
