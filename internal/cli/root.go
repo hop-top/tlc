@@ -42,7 +42,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
-	rootCmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls)")
+	rootCmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls, summary)")
 	rootCmd.PersistentFlags().Bool("no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose logging")
 	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")

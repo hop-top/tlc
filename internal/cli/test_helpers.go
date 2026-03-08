@@ -102,7 +102,7 @@ func newTestCmd() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file")
-	cmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls)")
+	cmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls, summary)")
 	cmd.PersistentFlags().Bool("no-color", false, "disable colored output")
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "verbose logging")
 	cmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
