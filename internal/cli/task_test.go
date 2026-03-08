@@ -1477,6 +1477,90 @@ func TestTaskAddTag(t *testing.T) {
 	}
 }
 
+// Test Unassign Task.
+func TestTaskUnassign(t *testing.T) {
+	defer resetTestDB(t)()
+
+	// Create task with assignee via CLI (ensures project_id matches)
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(taskCmd)
+	buf1 := new(bytes.Buffer)
+	cmd1.SetOut(buf1)
+	cmd1.SetErr(buf1)
+	cmd1.SetArgs([]string{"task", "create", "Task to unassign",
+		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS"})
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+
+	// Unassign the task
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(taskCmd)
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"task", "unassign", "T-0001"})
+
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("task unassign failed: %v", err)
+	}
+
+	output := buf2.String()
+	if !contains(output, "Unassigned task T-0001") {
+		t.Errorf("expected confirmation message, got: %s", output)
+	}
+
+	// Verify task state
+	ctx := context.Background()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after unassign")
+	}
+	if updatedTask.AssignedTo != nil {
+		t.Errorf("expected assignee nil, got %s", *updatedTask.AssignedTo)
+	}
+	// Status should NOT change (unlike unclaim)
+	if updatedTask.Status != core.StatusInProgress {
+		t.Errorf("expected status IN_PROGRESS (unchanged), got %s",
+			updatedTask.Status)
+	}
+
+	// Verify log entry
+	logs, _ := s.GetLogs(ctx, "T-0001", "desc")
+	if len(logs) == 0 {
+		t.Fatal("expected at least one log entry")
+	}
+	found := false
+	for _, l := range logs {
+		if l.Action == core.ActionReassigned && l.Note == "Unassigned" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected REASSIGNED log entry with note 'Unassigned'")
+	}
+}
+
+// Test Unassign Task not found.
+func TestTaskUnassignNotFound(t *testing.T) {
+	defer resetTestDB(t)()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "unassign", "T-9999"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for non-existent task")
+	}
+}
+
 // Test Remove Tag.
 func TestTaskRemoveTag(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
