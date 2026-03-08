@@ -393,10 +393,6 @@ func TestUserConfigPath_UsesOSConfigDir(t *testing.T) {
 }
 
 func TestUserConfigPath_RespectsXDGConfigHome(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("XDG_CONFIG_HOME not used on Windows")
-	}
-
 	tmpDir, err := os.MkdirTemp("", "tlc-config-xdg-*")
 	if err != nil {
 		t.Fatal(err)
@@ -407,12 +403,6 @@ func TestUserConfigPath_RespectsXDGConfigHome(t *testing.T) {
 	oldXDG := os.Getenv("XDG_CONFIG_HOME")
 	defer func() { _ = os.Setenv("XDG_CONFIG_HOME", oldXDG) }()
 
-	// On macOS, os.UserConfigDir() ignores XDG_CONFIG_HOME and
-	// always returns ~/Library/Application Support. This test only
-	// validates XDG behaviour on Linux.
-	if runtime.GOOS != "linux" {
-		t.Skip("XDG_CONFIG_HOME only affects os.UserConfigDir on Linux")
-	}
 	_ = os.Setenv("XDG_CONFIG_HOME", customConfig)
 
 	got, err := UserConfigPath()
@@ -423,6 +413,44 @@ func TestUserConfigPath_RespectsXDGConfigHome(t *testing.T) {
 	want := filepath.Join(customConfig, "tlc", "config.yaml")
 	if got != want {
 		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestUserConfigDir_XDGOverrideAndFallback(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-config-xdgdir-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() { _ = os.Setenv("XDG_CONFIG_HOME", oldXDG) }()
+
+	// With XDG_CONFIG_HOME set, should use it.
+	xdgDir := filepath.Join(tmpDir, "xdg-conf")
+	_ = os.Setenv("XDG_CONFIG_HOME", xdgDir)
+
+	got, err := UserConfigDir()
+	if err != nil {
+		t.Fatalf("UserConfigDir() with XDG set: %v", err)
+	}
+	want := filepath.Join(xdgDir, "tlc")
+	if got != want {
+		t.Fatalf("UserConfigDir() = %q, want %q", got, want)
+	}
+
+	// With XDG_CONFIG_HOME unset, should fall back to OS default.
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
+
+	got, err = UserConfigDir()
+	if err != nil {
+		t.Fatalf("UserConfigDir() without XDG: %v", err)
+	}
+	if got == want {
+		t.Fatalf("UserConfigDir() should not return XDG path when unset")
+	}
+	if !strings.HasSuffix(got, "tlc") {
+		t.Fatalf("UserConfigDir() = %q, expected suffix 'tlc'", got)
 	}
 }
 

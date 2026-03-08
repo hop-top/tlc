@@ -11,6 +11,10 @@ import (
 const systemConfigDir = "/etc/tlc"
 
 func UserConfigDir() (string, error) {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "tlc"), nil
+	}
+
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user config directory: %w", err)
