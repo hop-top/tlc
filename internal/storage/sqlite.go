@@ -152,6 +152,52 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	return &task, nil
 }
 
+func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID string) (*core.Task, error) {
+	row := s.db.QueryRowContext(
+		ctx,
+		"SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id FROM tasks WHERE id = ? AND project_id = ?",
+		id, projectID,
+	)
+
+	var task core.Task
+	var createdAtStr, updatedAtStr string
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr sql.NullString
+
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan task row: %w", err)
+	}
+
+	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+
+	if metaStr.Valid {
+		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+		}
+	}
+	if tagsStr.Valid {
+		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
+		}
+	}
+	if originSystemStr.Valid {
+		task.OriginSystem = &originSystemStr.String
+	}
+	if lastSyncAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		task.LastSyncAt = &t
+	}
+	if projectIDStr.Valid {
+		task.ProjectID = &projectIDStr.String
+	}
+
+	return &task, nil
+}
+
 func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		metaJSON, _ := json.Marshal(task.Meta)

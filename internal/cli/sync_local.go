@@ -137,20 +137,33 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 			continue
 		}
 
-		// Assign current project ID so GetTask (project-scoped) finds
-		// the right record and CreateTask inserts under the correct project.
-		if projectID != "" {
-			task.ProjectID = &projectID
+		lineProjectID := ""
+		if task.ProjectID != nil {
+			lineProjectID = *task.ProjectID
 		}
 
-		existing, _ := s.GetTask(ctx, task.ID)
-		if existing == nil {
-			// In a project-scoped repo, the shared global TODO file should only
-			// refresh tasks that already belong to the current project. Otherwise
-			// tasks from other projects get cloned into the current project.
-			if projectID != "" {
+		// In project context, only accept lines that explicitly belong to the
+		// current project. Shared global TODO lines from other projects must not
+		// update same-ID tasks in the current project.
+		if projectID != "" {
+			if lineProjectID == "" {
 				continue
 			}
+			if lineProjectID != projectID {
+				continue
+			}
+		} else if lineProjectID == "" {
+			// Outside project context, nil project IDs map to the default bucket.
+			task.ProjectID = nil
+		}
+
+		lookupProjectID := ""
+		if task.ProjectID != nil {
+			lookupProjectID = *task.ProjectID
+		}
+
+		existing, _ := s.GetTaskInProject(ctx, task.ID, lookupProjectID)
+		if existing == nil {
 			if task.CreatedAt.IsZero() {
 				task.CreatedAt = time.Now()
 			}
@@ -254,6 +267,8 @@ func parseTLS(line string) (*core.Task, error) {
 			kv := strings.SplitN(token, "=", 2)
 			key, val := kv[0], kv[1]
 			switch key {
+			case "project_id":
+				task.ProjectID = &val
 			case "created_at":
 				if t, err := time.Parse(time.RFC3339, val); err == nil {
 					task.CreatedAt = t
