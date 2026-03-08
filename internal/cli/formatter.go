@@ -163,6 +163,53 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 	_, _ = fmt.Fprintln(w, tbl.View())
 }
 
+// renderWorkspaceTable renders a task table with an additional Project column.
+func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
+	columns := []table.Column{
+		{Title: "Project", Width: 15},
+		{Title: "ID", Width: 10},
+		{Title: "Title", Width: 35},
+		{Title: "Status", Width: 15},
+		{Title: "Assigned", Width: 15},
+	}
+
+	rows := make([]table.Row, 0, len(tasks))
+	for _, t := range tasks {
+		assignee := "-"
+		if t.AssignedTo != nil {
+			assignee = *t.AssignedTo
+		}
+		proj := "-"
+		if t.ProjectID != nil && *t.ProjectID != "" {
+			proj = projectLabel(*t.ProjectID)
+		}
+
+		rows = append(rows, table.Row{
+			proj,
+			t.ID,
+			t.Title,
+			formatStatus(t.Status),
+			assignee,
+		})
+	}
+	tbl := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(false),
+		table.WithHeight(len(rows)+1),
+	)
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	tbl.SetStyles(s)
+
+	_, _ = fmt.Fprintln(w, tbl.View())
+}
+
 func formatStatus(status core.TaskStatus) string {
 	wm := core.DefaultWorkflow()
 	def, err := wm.GetStatusDef(status)
