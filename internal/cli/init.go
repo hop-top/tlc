@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -17,22 +16,6 @@ import (
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
-
-func getDataHome() string {
-	dataHome := os.Getenv("XDG_DATA_HOME")
-	if dataHome == "" {
-		home, _ := os.UserHomeDir()
-		switch runtime.GOOS {
-		case "darwin":
-			dataHome = filepath.Join(home, "Library", "Application Support")
-		case "windows":
-			dataHome = filepath.Join(home, "AppData", "Local")
-		default:
-			dataHome = filepath.Join(home, ".local", "share")
-		}
-	}
-	return dataHome
-}
 
 func shouldTrackTLC(cmd *cobra.Command) (bool, error) {
 	// Check CLI flags first (highest priority)

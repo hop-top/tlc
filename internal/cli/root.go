@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -275,23 +274,10 @@ func setDefaults() {
 	viper.SetDefault("output.verbose", false)
 	viper.SetDefault("output.quiet", false)
 
-	// Determine XDG_DATA_HOME
-	dataHome := os.Getenv("XDG_DATA_HOME")
-	if dataHome == "" {
-		home, _ := os.UserHomeDir()
-		switch runtime.GOOS {
-		case "darwin":
-			dataHome = filepath.Join(home, "Library", "Application Support")
-		case "windows":
-			dataHome = filepath.Join(home, "AppData", "Local")
-		default:
-			dataHome = filepath.Join(home, ".local", "share")
-		}
-	}
-
-	viper.SetDefault("task.todo_file", filepath.Join(dataHome, "tlc", "todo.txt"))
-	viper.SetDefault("output.log_file", filepath.Join(dataHome, "tlc", "tlc.log"))
-	viper.SetDefault("storage.db_path", filepath.Join(dataHome, "tlc", "db.sqlite"))
+	dataDir := config.UserDataDir()
+	viper.SetDefault("task.todo_file", filepath.Join(dataDir, "todo.txt"))
+	viper.SetDefault("output.log_file", filepath.Join(dataDir, "tlc.log"))
+	viper.SetDefault("storage.db_path", filepath.Join(dataDir, "db.sqlite"))
 
 	viper.SetDefault("task.default_status", "TODO")
 	viper.SetDefault("task.id_format", "T-{seq:04d}")
@@ -348,12 +334,7 @@ func getStorageRaw() (*storage.SQLiteStorage, error) {
 
 	dbPath := viper.GetString("storage.db_path")
 	if dbPath == "" {
-		dataHome := os.Getenv("XDG_DATA_HOME")
-		if dataHome == "" {
-			home, _ := os.UserHomeDir()
-			dataHome = filepath.Join(home, ".local", "share")
-		}
-		dbPath = filepath.Join(dataHome, "tlc", "db.sqlite")
+		dbPath = filepath.Join(config.UserDataDir(), "db.sqlite")
 	}
 
 	// Ensure directory exists
