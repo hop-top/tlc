@@ -29,6 +29,52 @@ func UserDataDir() string {
 	return filepath.Join(dataHome, "tlc")
 }
 
+// UserCacheDir returns the user-level cache directory for tlc.
+// It checks $XDG_CACHE_HOME first; if unset, falls back to OS-native paths:
+//   - macOS:   ~/Library/Caches/tlc
+//   - Windows: %LocalAppData%/tlc/cache
+//   - Linux:   ~/.cache/tlc
+func UserCacheDir() (string, error) {
+	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
+		return filepath.Join(xdg, "tlc"), nil
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		return filepath.Join(home, "Library", "Caches", "tlc"), nil
+	case "windows":
+		local := os.Getenv("LocalAppData")
+		if local == "" {
+			return "", fmt.Errorf("%%LocalAppData%% is not set")
+		}
+		return filepath.Join(local, "tlc", "cache"), nil
+	default: // linux and other unix
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		return filepath.Join(home, ".cache", "tlc"), nil
+	}
+}
+
+// EnsureCacheDir returns the cache directory path, creating it if needed.
+func EnsureCacheDir() (string, error) {
+	dir, err := UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return "", fmt.Errorf("create cache directory: %w", err)
+	}
+
+	return dir, nil
+}
+
 func UserConfigDir() (string, error) {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "tlc"), nil

@@ -454,6 +454,118 @@ func TestUserConfigDir_XDGOverrideAndFallback(t *testing.T) {
 	}
 }
 
+func TestUserCacheDir_WithXDGCacheHome(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-cache-xdg-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldXDG := os.Getenv("XDG_CACHE_HOME")
+	defer func() {
+		if oldXDG == "" {
+			_ = os.Unsetenv("XDG_CACHE_HOME")
+		} else {
+			_ = os.Setenv("XDG_CACHE_HOME", oldXDG)
+		}
+	}()
+
+	customCache := filepath.Join(tmpDir, "custom-cache")
+	_ = os.Setenv("XDG_CACHE_HOME", customCache)
+
+	got, err := UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(customCache, "tlc")
+	if got != want {
+		t.Fatalf("UserCacheDir() = %q, want %q", got, want)
+	}
+}
+
+func TestUserCacheDir_WithoutEnvVar(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-cache-native-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	homeDir := filepath.Join(tmpDir, "home")
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CACHE_HOME")
+	defer func() {
+		_ = os.Setenv("HOME", oldHome)
+		if oldXDG == "" {
+			_ = os.Unsetenv("XDG_CACHE_HOME")
+		} else {
+			_ = os.Setenv("XDG_CACHE_HOME", oldXDG)
+		}
+	}()
+	_ = os.Setenv("HOME", homeDir)
+	_ = os.Unsetenv("XDG_CACHE_HOME")
+
+	got, err := UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		want := filepath.Join(homeDir, "Library", "Caches", "tlc")
+		if got != want {
+			t.Fatalf("macOS: UserCacheDir() = %q, want %q", got, want)
+		}
+	case "linux":
+		want := filepath.Join(homeDir, ".cache", "tlc")
+		if got != want {
+			t.Fatalf("linux: UserCacheDir() = %q, want %q", got, want)
+		}
+	default:
+		if !strings.Contains(got, "tlc") {
+			t.Fatalf("UserCacheDir() = %q, expected it to contain 'tlc'", got)
+		}
+	}
+}
+
+func TestEnsureCacheDir_CreatesDirectory(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-cache-ensure-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldXDG := os.Getenv("XDG_CACHE_HOME")
+	defer func() {
+		if oldXDG == "" {
+			_ = os.Unsetenv("XDG_CACHE_HOME")
+		} else {
+			_ = os.Setenv("XDG_CACHE_HOME", oldXDG)
+		}
+	}()
+
+	customCache := filepath.Join(tmpDir, "new-cache")
+	_ = os.Setenv("XDG_CACHE_HOME", customCache)
+
+	got, err := EnsureCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(customCache, "tlc")
+	if got != want {
+		t.Fatalf("EnsureCacheDir() = %q, want %q", got, want)
+	}
+
+	info, err := os.Stat(got)
+	if err != nil {
+		t.Fatalf("expected cache dir to exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected %q to be a directory", got)
+	}
+}
+
 func TestWritableConfigPath_ReturnsExplicitNonSystemPath(t *testing.T) {
 	explicit := "/tmp/my-project/.tlc/config.yaml"
 	got, err := WritableConfigPath(explicit)
