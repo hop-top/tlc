@@ -14,7 +14,8 @@ This guide walks you through TLC concepts progressively, from basic task managem
   - [Stage 7: Advanced Flows](#stage-7-advanced-flows-30-minutes)
   - [Stage 8: Interactive TUI](#stage-8-interactive-tui-10-minutes)
   - [Stage 9: Git Conventions](#stage-9-git-conventions-optional-15-minutes)
-  - [Stage 10: Custom Plugins](#stage-10-custom-plugins-advanced)
+  - [Stage 10: Workspace Queries](#stage-10-workspace-queries-10-minutes)
+  - [Stage 11: Custom Plugins](#stage-11-custom-plugins-advanced)
 - [🎓 Learning Checkpoints](#-learning-checkpoints)
 - [🚫 Common Mistakes to Avoid](#-common-mistakes-to-avoid)
 - [🎯 Quick Reference by Role](#-quick-reference-by-role)
@@ -199,7 +200,40 @@ tlc tui
 
 ---
 
-### Stage 10: Custom Plugins (Advanced)
+### Stage 10: Workspace Queries (10 minutes)
+**Goal**: Query tasks across multiple projects
+
+**Concepts**: Workspaces, spaces, cross-project queries
+**Docs**: [Workspace Model Design](plans/2026-03-08-workspace-model-design.md)
+
+Configure workspaces in your global config:
+```yaml
+# $XDG_CONFIG_HOME/tlc/config.yaml
+workspaces:
+  - name: default
+    spaces:
+      - uri: "~/.w/ideacrafterslabs"
+        label: ideacrafterslabs
+    default: true
+```
+
+**Try**:
+```bash
+# List registered workspaces and their projects
+tlc workspace list
+
+# Query tasks across all projects in a workspace
+tlc task list --workspace default
+
+# Filter to a specific space within the workspace
+tlc task list --workspace default --space ideacrafterslabs
+```
+
+**When to move on**: You can query tasks across projects in a workspace.
+
+---
+
+### Stage 11: Custom Plugins (Advanced)
 **Goal**: Extend TLC with custom integrations
 
 **Concepts**: Plugin types, gRPC interface

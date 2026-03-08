@@ -2,11 +2,102 @@
 
 ## Overview
 
-TLC uses a **custom directory traversal** (`findAllConfigs()`) to discover project
-configuration files, rather than relying on Viper's static path search. The walk-up is
-bounded by the common ancestor of the current working directory and the user-global
-config directory, which keeps inheritance local to the user's workspace while still
-supporting nested projects and worktrees.
+TLC uses a **custom directory traversal** (`findAllConfigsForMode()`) to discover
+project configuration files, rather than relying on Viper's static path search.
+The walk-up is bounded by the common ancestor of the current working directory
+and the user-global config directory, which keeps inheritance local to the
+user's workspace while still supporting nested projects and worktrees.
+
+Two additional layers influence discovery:
+
+1. **XDG environment variables** -- override OS-native defaults for user-level
+   config, data, cache, and state directories.
+2. **Entry point detection** -- the binary's invocation mode (standalone vs hop)
+   determines which filenames and directory prefixes the walk-up searches for.
+
+## XDG Environment Variables
+
+**File**: `internal/config/paths.go`
+
+TLC honours the [XDG Base Directory Specification](
+https://specifications.freedesktop.org/basedir-spec/latest/) on all
+platforms. When an XDG variable is set it takes precedence over the
+OS-native default; when unset, the platform convention applies.
+
+**`XDG_CONFIG_HOME`** -- `$XDG_CONFIG_HOME/tlc/`
+- macOS: `~/Library/Application Support/tlc/`
+- Linux: `~/.config/tlc/`
+
+**`XDG_DATA_HOME`** -- `$XDG_DATA_HOME/tlc/`
+- macOS: `~/Library/Application Support/tlc/`
+- Linux: `~/.local/share/tlc/`
+
+**`XDG_CACHE_HOME`** -- `$XDG_CACHE_HOME/tlc/`
+- macOS: `~/Library/Caches/tlc/`
+- Linux: `~/.cache/tlc/`
+
+**`XDG_STATE_HOME`** -- `$XDG_STATE_HOME/tlc/`
+- macOS: `~/Library/Application Support/tlc/state/`
+- Linux: `~/.local/state/tlc/`
+
+Resolution logic (pseudocode, same pattern for each directory kind):
+
+```
+if $XDG_<KIND>_HOME is set:
+    return $XDG_<KIND>_HOME/tlc/
+else:
+    return <os-native-default>/tlc/
+```
+
+The user-global config file used by Viper at Stage 1 lives at
+`UserConfigDir()/config.yaml`. Setting `XDG_CONFIG_HOME` therefore
+moves this file, which in turn shifts the **walk-up boundary**
+computed by `resolveProjectConfigBoundary()`.
+
+---
+
+## Entry Point Detection (Mode)
+
+**File**: `internal/config/mode.go`
+
+Before the walk-up begins, `initConfig()` calls `config.DetectMode()`
+to decide whether TLC is running **standalone** or as a **hop**
+integration. The mode controls which filenames the walk-up probes
+at each directory level.
+
+### Detection Algorithm
+
+```
+1. If $TLC_MODE is set:
+     "hop"        -> ModeHop
+     "standalone" -> ModeStandalone
+
+2. If cwd path contains a ".hop" segment -> ModeHop
+
+3. Walk up from cwd; if any ancestor has a .hop/ child dir -> ModeHop
+
+4. Otherwise -> ModeStandalone
+```
+
+### Mode-Specific Config Filenames
+
+| Mode | Flat File | Directory Config |
+|---|---|---|
+| **Standalone** | `.tlc.yaml` | `.tlc/config.yaml` |
+| **Hop** | `.hop/tlc.yaml` | `.hop/tlc/config.yaml` |
+
+These are returned by `LocalConfigFile(mode)` and
+`LocalConfigDir(mode)` respectively, and fed directly into
+`findAllConfigsForMode()`.
+
+### Validation
+
+After mode detection, `ValidateLocalConfig(mode, cwd)` walks up
+from cwd to confirm at least one matching config exists. In hop
+mode, a missing config produces a warning; in standalone mode it
+is silently accepted (user/system config may still apply).
+
+---
 
 ## Problem with Viper Native Search
 
@@ -38,106 +129,113 @@ viper.SetConfigName("config")                       // Looks for "config.yaml"
 
 ### Location
 
-**File**: `internal/cli/root.go:131-155`
+**File**: `internal/cli/root.go`
 
-### Function Signature
+### Function Signatures
 
 ```go
-func findAllConfigs(startDir string) []string
+// Legacy convenience wrapper; delegates to findAllConfigsForMode
+// using the auto-detected mode.
+func findAllConfigs(startDir, stopDir string) []string
+
+// Mode-aware walk-up (the real implementation).
+func findAllConfigsForMode(
+    startDir, stopDir string, mode config.EntryMode,
+) []string
 ```
 
 ### Algorithm
 
-The function implements a **bounded bottom-up directory traversal**:
+The function implements a **bounded, mode-aware bottom-up traversal**.
+The filenames probed at each level depend on the active `EntryMode`:
 
-```go
-func findAllConfigs(startDir, stopDir string) []string {
-    var configs []string
-    curr := startDir
-    
-    for {
-        // 1. Check for .tlc.yaml in current directory
-        tlcYaml := filepath.Join(curr, ".tlc.yaml")
-        if _, err := os.Stat(tlcYaml); err == nil {
-            configs = append(configs, tlcYaml)
-        }
-        
-        // 2. Check for .tlc/config.yaml in current directory
-        tlcDirConfig := filepath.Join(curr, ".tlc", "config.yaml")
-        if _, err := os.Stat(tlcDirConfig); err == nil {
-            configs = append(configs, tlcDirConfig)
-        }
-        
-        if stopDir != "" && curr == stopDir {
-            break
-        }
+```
+findAllConfigsForMode(startDir, stopDir, mode):
+    flatFile  = LocalConfigFile(mode)   // e.g. .tlc.yaml | .hop/tlc.yaml
+    dirConfig = LocalConfigDir(mode) + "/config.yaml"
+                                        // e.g. .tlc/config.yaml
+                                        //    | .hop/tlc/config.yaml
+    curr = normalize(startDir)
 
-        // 3. Move up to parent directory
-        parent := filepath.Dir(curr)
-        if parent == curr {  // Reached filesystem root
-            break
-        }
+    loop:
+        stat(curr / flatFile)    -> append if exists
+        stat(curr / dirConfig)   -> append if exists
+
+        if curr == stopDir -> break
+        parent = filepath.Dir(curr)
+        if parent == curr  -> break   // filesystem root
         curr = parent
-    }
-    
+
     return configs
-}
 ```
 
 ### Key Characteristics
 
-1. **Dynamic Starting Point**: Begins from current working directory (`os.Getwd()`)
+1. **Dynamic Starting Point**: Begins from current working directory
+   (`os.Getwd()`)
 2. **Hierarchical Traversal**: Moves up one directory at a time
-3. **Multiple Config Formats**: Supports both `.tlc.yaml` and `.tlc/config.yaml`
-4. **Termination Condition**: Stops when the walk reaches the computed boundary
-   directory, or filesystem root if the common ancestor is `/`
-5. **Return Order**: Configs collected from root-most to closest, later reversed
+3. **Mode-Dependent Filenames**: Probes standalone or hop paths based
+   on the detected `EntryMode`
+4. **Multiple Config Formats**: Flat file and directory config checked
+   at every level
+5. **Termination Condition**: Stops at the computed boundary directory,
+   or filesystem root if the common ancestor is `/`
+6. **Return Order**: Configs collected from CWD outward; the merge loop
+   iterates in reverse so root-most is loaded first, closest wins
 
 ## How TLC Uses the Walk-Up
 
 ### Config Loading Flow
 
-**File**: `internal/cli/root.go:53-91`
+**File**: `internal/cli/root.go`
 
-```go
-func initConfig() {
+```
+initConfig():
     setDefaults()
-    
-    // Stage 1: Load global/system configs
+
+    // Stage 1 -- global/system configs
+    viper.AddConfigPath(UserConfigDir())   // XDG or OS default
     viper.AddConfigPath("/etc/tlc")
-    viper.AddConfigPath(filepath.Join(home, ".config", "tlc"))
     viper.SetConfigName("config")
     viper.ReadInConfig()
-    
-    // Stage 2: Walk up from current directory up to the common ancestor
-    // of cwd and the user-global config directory
-    curr, _ := os.Getwd()
-    configs := findAllConfigs(curr, resolveProjectConfigBoundary(curr))
-    
-    // Merge them from root-most to closest
-    // so that closer files overwrite further ones
-    for i := len(configs) - 1; i >= 0; i-- {
-        viper.SetConfigFile(configs[i])
-        viper.MergeInConfig()
-    }
-    
-    // Stage 3: Environment variables override all
+
+    // Stage 2 -- detect mode, then walk up with mode-specific names
+    mode = config.DetectMode()
+    config.ValidateLocalConfig(mode, cwd)
+
+    configs = findAllConfigsForMode(
+        cwd,
+        resolveProjectConfigBoundary(cwd),
+        mode,
+    )
+
+    // Merge root-most first so closest wins
+    for i = len(configs)-1 .. 0:
+        viper.MergeInConfig(configs[i])
+
+    // Stage 3 -- env vars override everything
     viper.SetEnvPrefix("TLC")
     viper.AutomaticEnv()
-}
 ```
 
-### Merge Order
+### Config Cascade with Mode Awareness
 
-Configs are merged in this order (later configs override earlier ones):
+Configs merge in this order (later overrides earlier). File paths
+shown use **standalone** names; substitute `.hop/tlc.yaml` and
+`.hop/tlc/config.yaml` when mode is **hop**.
 
 1. `/etc/tlc/config.yaml` (system)
-2. `<os user config dir>/tlc/config.yaml` (user home)
-3. `{boundary}/.tlc/config.yaml` (if present at the common-ancestor boundary)
-4. `/repo/.tlc/config.yaml` (root-most found below the boundary)
-5. `/repo/subproject/.tlc/config.yaml` (closer found by walk-up)
-6. `/repo/subproject/feature/.tlc/config.yaml` (closest - CWD)
+2. `<UserConfigDir>/config.yaml` (user -- XDG or OS default)
+3. `{boundary}/.tlc/config.yaml` (common-ancestor boundary)
+4. `/repo/.tlc.yaml` or `/repo/.tlc/config.yaml` (root-most match)
+5. `/repo/sub/.tlc.yaml` or `/repo/sub/.tlc/config.yaml` (closer)
+6. `/repo/sub/cwd/.tlc.yaml` or `/repo/sub/cwd/.tlc/config.yaml`
+   (closest -- CWD)
 7. Environment variables (`TLC_*`)
+
+In **hop** mode the same cascade applies but every probe uses
+`.hop/tlc.yaml` and `.hop/tlc/config.yaml` instead of the `.tlc`
+variants.
 
 ## Example Scenarios
 
@@ -299,7 +397,8 @@ Configs are merged in this order (later configs override earlier ones):
     InProject: true,   // ← STILL considers us in a project!
 }`
 
-**Result**: Clone B automatically uses the same project as Clone A without creating `.tlc/config.yaml`
+**Result**: Clone B automatically uses the same project as Clone A
+without creating `.tlc/config.yaml`
 
 ---
 
@@ -397,8 +496,7 @@ This is intentional: Missing config files are normal, not errors.
 ### Alternative Approaches (Not Used)
 
 1. **Viper search paths**: `viper.AddConfigPath(".")` doesn't walk up
-2. **Environment paths**: `XDG_CONFIG_DIRS` - complex cross-platform handling
-3. **Custom Viper provider**: Write a Viper provider that implements walk-up
+2. **Custom Viper provider**: Write a provider that implements walk-up
    - Pros: Cleaner Viper integration
    - Cons: More complex, loses explicit control
 
@@ -408,7 +506,8 @@ Current approach chosen for: **Simplicity, explicit control, easy to debug**
 
 ## References
 
-- **Implementation**: `internal/cli/root.go`
-- **Usage**: `internal/cli/root.go:78-90` (merge loop)
-- **Related**: `internal/core/project.go` (uses merged config)
+- **Walk-up & merge loop**: `internal/cli/root.go`
+- **XDG / path resolution**: `internal/config/paths.go`
+- **Entry mode detection**: `internal/config/mode.go`
+- **Project detection**: `internal/core/project.go`
 - **Git Remote Fallback**: `docs/IMPLEMENTATION_PLAN_remote_fallback_and_duplicate_handling.md`

@@ -165,6 +165,14 @@ Rules:
 - If task is DONE or SKIPPED, updates MUST be rejected (except COMMENT logs)
 - Update MUST emit UPDATED log entry describing changed fields
 
+Note on assignment commands:
+- `tlc task assign <id> <assignee>` is the canonical way to assign a task.
+  It sets `assigned_to` without changing status and emits a REASSIGNED log.
+- `tlc task unassign <id>` clears `assigned_to` without changing status.
+- These are distinct from `tlc task update <id> --assigned-to <assignee>`,
+  which can be combined with other field changes (e.g. status transitions)
+  in a single mutation.
+
 ### TransitionStatus
 
 Rules:

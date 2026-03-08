@@ -48,7 +48,8 @@ TLC_OUTPUT_FORMAT=table
 
 ### File Location
 
-**User config** (resolved via `os.UserConfigDir()`):
+**User config** (resolved via XDG then OS-native fallback;
+see [XDG Base Directory Support](#xdg-base-directory-support)):
 - Linux: `~/.config/tlc/config.yaml`
 - macOS: `~/Library/Application Support/tlc/config.yaml`
 - Windows: `%APPDATA%\tlc\config.yaml`
@@ -61,6 +62,11 @@ TLC_OUTPUT_FORMAT=table
 YAML format with nested keys:
 
 ```yaml
+# Project settings
+project:
+  id: my-app
+  workspace: personal
+
 # General settings
 output:
   format: table
@@ -142,6 +148,30 @@ output:
   format: json
   color: false
   verbose: true
+```
+
+---
+
+### `project` — Project Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `id` | string | - | Unique project identifier |
+| `fallback_mode` | enum | `auto` | Fallback behavior: `auto`, `detected`, `prompt` |
+| `duplicate_id_strategy` | enum | `share` | Duplicate ID handling: `share`, `unique`, `prompt` |
+| `workspace` | string | - | Workspace name (must match a `workspaces[].name`) |
+
+The `workspace` field is optional. When set, TLC resolves the
+named workspace from the `workspaces` list in user config and
+uses its spaces for storage and sync operations.
+
+**Example**:
+```yaml
+project:
+  id: my-app
+  fallback_mode: auto
+  duplicate_id_strategy: share
+  workspace: personal
 ```
 
 ---
@@ -530,6 +560,135 @@ ui:
 
 ---
 
+### `workspaces` — Workspace Definitions
+
+A workspace groups one or more **spaces** (storage locations).
+Defined in user config; referenced by project config via
+`project.workspace`.
+
+#### `WorkspaceConfig` Fields
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `name` | string | yes | Unique workspace identifier |
+| `wsm_id` | string | no | External workspace-manager ID |
+| `spaces` | SpaceConfig[] | yes | List of space definitions |
+| `default` | bool | no | Mark as default workspace (at most one) |
+
+#### `SpaceConfig` Fields
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `uri` | string | yes | Space location (path or URI) |
+| `adapter` | string | no | Storage adapter name; inferred from URI when omitted |
+| `label` | string | no | Human-readable label |
+| `options` | map[string]string | no | Adapter-specific key-value options |
+
+**Adapter inference** (`InferAdapterFromURI`):
+
+| URI pattern | Inferred adapter |
+|-------------|-----------------|
+| Bare path (`/home/user/data`) | `filesystem` |
+| `file://` scheme | `filesystem` |
+| Unknown/other scheme | *(empty -- must be set explicitly)* |
+
+Known adapters: `filesystem`. Unknown adapter names produce a
+warning at load time but do not fail validation.
+
+**Validation rules**:
+- Workspace `name` must not be empty or whitespace-only
+- Space `uri` must not be empty or whitespace-only
+- Workspace names must be unique across the list
+- At most one workspace may have `default: true`
+- When no workspace is marked default, the first entry is used
+
+**Example -- single workspace**:
+```yaml
+workspaces:
+  - name: personal
+    default: true
+    spaces:
+      - uri: ~/Documents/tlc-data
+        label: local docs
+      - uri: file:///mnt/backup/tlc
+        label: backup
+        options:
+          read_only: "true"
+```
+
+**Example -- multi-workspace**:
+```yaml
+workspaces:
+  - name: work
+    wsm_id: ws_abc123
+    default: true
+    spaces:
+      - uri: ~/work/tasks
+        adapter: filesystem
+        label: primary
+      - uri: /shared/team/tasks
+        label: team shared
+
+  - name: personal
+    spaces:
+      - uri: ~/personal/tasks
+        label: home projects
+```
+
+Bind a project to a workspace in `.tlc/config.yaml`:
+```yaml
+project:
+  workspace: work
+```
+
+---
+
+## XDG Base Directory Support
+
+TLC honours XDG Base Directory environment variables with
+OS-native fallbacks when unset. Each directory function checks
+the corresponding XDG variable first; if empty, it falls back
+to platform-conventional paths.
+
+### Directory Resolution
+
+| Purpose | XDG variable | macOS fallback | Linux fallback |
+|---------|-------------|----------------|----------------|
+| Config | `XDG_CONFIG_HOME` | `~/Library/Application Support/tlc` | `~/.config/tlc` |
+| Data | `XDG_DATA_HOME` | `~/Library/Application Support/tlc` | `~/.local/share/tlc` |
+| Cache | `XDG_CACHE_HOME` | `~/Library/Caches/tlc` | `~/.cache/tlc` |
+| State | `XDG_STATE_HOME` | `~/Library/Application Support/tlc/state` | `~/.local/state/tlc` |
+
+**Windows fallbacks** (when XDG variable unset):
+
+| Purpose | Windows path |
+|---------|-------------|
+| Config | `%APPDATA%\tlc` |
+| Data | `%LOCALAPPDATA%\tlc` |
+| Cache | `%LOCALAPPDATA%\tlc\cache` |
+| State | `%LOCALAPPDATA%\tlc\state` |
+
+When an XDG variable **is** set, TLC appends `/tlc` to its
+value regardless of OS. For example:
+
+```bash
+export XDG_CONFIG_HOME=$HOME/.myconfig
+# Config dir becomes: $HOME/.myconfig/tlc
+# Config file:        $HOME/.myconfig/tlc/config.yaml
+```
+
+### Directory Purposes
+
+- **Config** -- configuration files (`config.yaml`)
+- **Data** -- persistent application data
+- **Cache** -- regenerable cached data (created on demand
+  with `0750` permissions)
+- **State** -- runtime state that persists across restarts
+  but is not configuration (created on demand with `0750`
+  permissions)
+
+---
+
 ## Environment Variables
 
 Environment variables override all config file settings.
@@ -912,5 +1071,5 @@ plugins:
 ---
 
 **Version**: 0.1
-**Last Updated**: 2025-01-16
+**Last Updated**: 2026-03-08
 **Status**: Normative

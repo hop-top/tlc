@@ -117,6 +117,105 @@ Determines how to handle duplicate project IDs when running `tlc init` in a clon
 
 See [Multi-Clone Setup](multi-clone-setup.md) for more details.
 
+## Entry Point Detection
+
+TLC operates in two modes depending on how it was invoked: **standalone**
+or **hop**. Mode determines config directory layout and validation.
+
+### Detection Order
+
+`DetectMode()` in `internal/config/mode.go` resolves mode as follows:
+
+1. **`TLC_MODE` env var** -- if set to `hop` or `standalone`, returns
+   immediately (case-insensitive)
+2. **CWD path contains `.hop/` segment** -- any path component literally
+   named `.hop` triggers hop mode
+3. **Ancestor directory has `.hop/` child** -- walks from cwd to
+   filesystem root; if any ancestor contains a `.hop/` directory,
+   returns hop mode
+4. **Default** -- standalone
+
+### Config Paths per Mode
+
+| Mode         | `LocalConfigDir` | `LocalConfigFile` |
+|:-------------|:-----------------|:------------------|
+| `standalone` | `.tlc`           | `.tlc.yaml`       |
+| `hop`        | `.hop/tlc`       | `.hop/tlc.yaml`   |
+
+### `ValidateLocalConfig` Behavior
+
+Walks from `startDir` (or cwd) upward, checking each ancestor for:
+- the mode's config directory (`LocalConfigDir`), OR
+- the mode's flat config file (`LocalConfigFile`)
+
+If neither is found:
+- **Hop mode** -- returns an error (`"hop mode detected but no
+  .hop/tlc or .hop/tlc.yaml found..."`)
+- **Standalone mode** -- returns `nil` (user/system config may still
+  apply)
+
+## Project Reconnection on Init
+
+When `tlc init` runs, it registers or reconnects the project in the
+global `projects` table. See `internal/cli/init.go`.
+
+### Flow
+
+1. Detect project ID from git remote (`core.DetectProjectID()`)
+2. Open global storage backend
+3. Look up `finalProjectID` via `s.LookupProject()`
+4. **Existing project found** -- reconnect: call
+   `s.UpdateProjectPath()` to update `db_path` to the current clone's
+   local DB path. Logs `"Reconnected to existing project"` with
+   original `registered_at` date.
+5. **No existing project** -- register: call `s.RegisterProject()`
+   with inferred `space_uri`, `label`, and local `db_path`. Logs
+   `"Registered new project"`.
+
+### Inferred Fields
+
+- **`db_path`** -- `<cwd>/<LocalConfigDir(mode)>/db.sqlite`
+- **`space_uri`** -- if cwd is under `$HOME/.w/<org>/`, returns that
+  org path (e.g. `~/.w/ideacrafterslabs`); empty otherwise
+- **`label`** -- last path segment of the project ID (e.g.
+  `org/repo` yields `repo`)
+
+## Global Projects Table
+
+Added in schema migration v2 (`internal/storage/migrations.go`).
+Tracks all known projects across clones/worktrees.
+
+### Schema
+
+```sql
+CREATE TABLE projects (
+    project_id    TEXT PRIMARY KEY,
+    db_path       TEXT NOT NULL,
+    space_uri     TEXT,
+    label         TEXT,
+    registered_at TEXT NOT NULL,
+    last_seen_at  TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'active'
+);
+```
+
+### Columns
+
+| Column          | Description                                      |
+|:----------------|:-------------------------------------------------|
+| `project_id`    | Unique project identifier (from git remote)      |
+| `db_path`       | Absolute path to project's local SQLite DB       |
+| `space_uri`     | Workspace org path (inferred from `$HOME/.w/`)   |
+| `label`         | Short name (last segment of project ID)          |
+| `registered_at` | Timestamp of first registration                  |
+| `last_seen_at`  | Timestamp of last access/update                  |
+| `status`        | Project state; default `active`                  |
+
+### Indexes
+
+- `idx_projects_space_uri` -- on `space_uri`
+- `idx_projects_status` -- on `status`
+
 ## Common Scenarios
 
 ### Working in a Clone Without Config

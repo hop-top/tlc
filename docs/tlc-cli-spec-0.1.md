@@ -44,6 +44,7 @@ tlc <command> <subcommand> [arguments] [flags]
 **Top-level commands**:
 - `init` — Initialize TLC in current directory
 - `task` — Task operations (CRUD)
+- `workspace` — Workspace management
 - `workflow` — Workflow status and rule inspection
 - `flow` — Flow execution and management
 - `log` — Query audit logs
@@ -108,10 +109,12 @@ Manage tasks (create, read, update, delete).
 - `show` — Show task details
 - `update` — Update task fields
 - `delete` — Delete task
-- `assign` — Assign task to user
+- `assign` — Assign task to someone
+- `unassign` — Remove assignee from task
 - `comment` — Add comment to task
 - `claim` — Claim task for work
 - `unclaim` — Release claimed task
+- `complete` — Mark task as done
 
 ---
 
@@ -219,6 +222,10 @@ tlc task list [query] [flags]
 | `--mine` | | bool | Shortcut for current user's tasks |
 | `--blocked` | | bool | Show only blocked tasks |
 | `--urgent` | | bool | Show only high-priority tasks |
+| `--summary` | | bool | Show grouped status counts instead of task list |
+| `--all-projects` | | bool | Show tasks from all projects |
+| `--workspace` | | string | Query across workspace projects |
+| `--space` | | string | Filter to specific space within workspace |
 
 #### Query Syntax
 
@@ -257,6 +264,17 @@ tlc task list "#auth meta.priority=high"
 # JSON output for scripting
 tlc task list --format json --status TODO | jq '.[] | .id'
 
+# Summary view (grouped counts by status)
+tlc task list --summary
+# or
+tlc task list -f summary
+
+# Cross-workspace query (adds "Project" column to output)
+tlc task list --workspace myws
+
+# Filter to specific space within workspace
+tlc task list --workspace myws --space labs
+
 # Table output (default)
 ┌──────────┬─────────────────────────┬──────────────┬────────────┐
 │ ID       │ Title                   │ Status       │ Assigned   │
@@ -265,6 +283,14 @@ tlc task list --format json --status TODO | jq '.[] | .id'
 │ T-0041   │ Fix session timeout     │ TODO         │ -          │
 │ T-0040   │ Add OAuth support       │ TODO         │ agent      │
 └──────────┴─────────────────────────┴──────────────┴────────────┘
+
+# Workspace table output (includes Project column)
+┌──────────┬──────────┬─────────────────────┬──────────────┬──────────┐
+│ Project  │ ID       │ Title               │ Status       │ Assigned │
+├──────────┼──────────┼─────────────────────┼──────────────┼──────────┤
+│ tlc      │ T-0042   │ Add API rate limit  │ IN_PROGRESS  │ codex    │
+│ rux      │ T-0010   │ Fix PTY hang        │ TODO         │ -        │
+└──────────┴──────────┴─────────────────────┴──────────────┴──────────┘
 ```
 
 ---
@@ -401,7 +427,7 @@ tlc task delete T-0042 --force --yes
 
 ### `tlc task assign`
 
-Assign task to user.
+Assign a task to someone without changing its status.
 
 #### Synopsis
 
@@ -409,14 +435,53 @@ Assign task to user.
 tlc task assign <task-id> <assignee> [flags]
 ```
 
+#### Flags
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--note` | `-n` | string | Assignment note |
+
+#### Behavior
+
+1. Sets `assigned_to` to `<assignee>`
+2. Updates `updated_at` timestamp
+3. Writes REASSIGNED log entry
+4. Does **not** change task status
+
 #### Examples
 
 ```bash
 # Assign to user
 tlc task assign T-0042 codex
 
-# Unassign
-tlc task assign T-0042 null
+# Assign with note
+tlc task assign T-0042 codex --note "Handoff for review"
+```
+
+---
+
+### `tlc task unassign`
+
+Remove the assignee from a task without changing its status.
+
+#### Synopsis
+
+```bash
+tlc task unassign <task-id>
+```
+
+#### Behavior
+
+1. Clears `assigned_to` (sets to nil)
+2. Updates `updated_at` timestamp
+3. Writes REASSIGNED log entry with note "Unassigned"
+4. Does **not** change task status
+
+#### Examples
+
+```bash
+# Remove assignee
+tlc task unassign T-0042
 ```
 
 ---
@@ -516,6 +581,105 @@ tlc task unclaim T-0042
 
 # Release with note
 tlc task unclaim T-0042 --note "Need more context, releasing for others"
+```
+
+---
+
+### `tlc task complete`
+
+Mark a task as done.
+
+#### Synopsis
+
+```bash
+tlc task complete <task-id> [flags]
+```
+
+#### Flags
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--note` | `-n` | string | Completion note |
+| `--no-verify` | | bool | Skip state machine validation |
+
+#### Behavior
+
+1. Transitions task to the workflow's `completed` status (DONE)
+2. If task has no assignee, auto-assigns current user
+3. Validates transition via workflow state machine
+   (unless `--no-verify`)
+4. Updates `updated_at` timestamp
+5. Writes STATUS_CHANGED log entry
+
+#### Examples
+
+```bash
+# Mark task done
+tlc task complete T-0042
+
+# Complete with note
+tlc task complete T-0042 --note "All tests passing"
+
+# Force complete (skip workflow validation)
+tlc task complete T-0042 --no-verify
+```
+
+---
+
+## `tlc workspace` — Workspace Management
+
+Manage configured workspaces and registered projects.
+
+**Alias**: `tlc ws`
+
+### Subcommands
+
+- `list` — List workspaces and their projects
+
+---
+
+### `tlc workspace list`
+
+List configured workspaces, their spaces, and registered projects.
+
+#### Synopsis
+
+```bash
+tlc workspace list [flags]
+# or
+tlc ws list [flags]
+```
+
+#### Flags
+
+Supports global `--format` flag. When `--format json` is used, outputs
+a JSON array of workspace objects with nested spaces and projects.
+
+#### Behavior
+
+1. Reads workspace config from `workspaces` key in config
+2. For each workspace, discovers registered projects per space
+3. Displays workspace name, default marker, optional wsm_id
+4. Shows each space's URI, label, adapter, and project list
+5. Projects include project ID, DB path, status, and last seen date
+
+#### Examples
+
+```bash
+# List all workspaces (table output)
+tlc workspace list
+
+# Output
+Workspace: myws *
+  wsm_id: abc123
+
+  Space: Labs (/path/to/labs)
+    hop-top/tlc  /path/to/db.sqlite  active  2026-03-01
+    hop-top/rux  /path/to/db.sqlite  active  2026-02-28
+
+# JSON output
+tlc workspace list --format json
+tlc ws list -f json
 ```
 
 ---
@@ -1298,7 +1462,13 @@ See `task-line-spec-0.1.md` for full TLS specification.
 ### Summary Format
 
 Groups tasks by project, shows status counts and assignee breakdown.
-Useful for cross-project overviews.
+Useful for dashboards and cross-project overviews.
+
+Accessible via `--summary` flag on `tlc task list`, or globally via
+`-f summary`. Combinable with all list filters (`--status`,
+`--assigned-to`, `--tag`, `--all-projects`, `--workspace`, `--space`).
+
+**Single-project summary** (`tlc task list --summary`):
 
 ```
 proj/alpha (4)
@@ -1314,8 +1484,30 @@ Total
   Done         1
 ```
 
-Accessible via `--summary` flag or `-f summary`. Combinable with all
-filters (`--status`, `--assigned-to`, `--tag`, `--all-projects`).
+**Workspace summary** (`tlc task list --workspace myws --summary`):
+
+```
+tlc (6)
+  To Do        3
+  In Progress  2
+  Done         1
+  assignees: codex:4  agent:2
+
+rux (2)
+  To Do        1
+  In Progress  1
+  assignees: codex:2
+
+Total
+  8 tasks across 2 projects
+  To Do        4
+  In Progress  3
+  Done         1
+```
+
+The summary format renders the same structure whether querying a
+single project or across a workspace. When used with `--workspace`,
+tasks are grouped by their `project_id`.
 
 ---
 
@@ -1711,5 +1903,5 @@ func Execute() error {
 ---
 
 **Version**: 0.1
-**Last Updated**: 2025-01-16
+**Last Updated**: 2026-03-08
 **Status**: Normative
