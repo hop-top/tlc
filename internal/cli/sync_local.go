@@ -250,10 +250,36 @@ func parseTLS(line string) (*core.Task, error) {
 		}
 	}
 
-	// Title and Metadata
-	var titleParts []string
-	for i := 1; i < len(tokens); i++ {
-		token := tokens[i]
+	// Extract title and metadata tokens.
+	// After the ID, the title may be quoted (e.g. "Set HOP_ENTRY=1 ...").
+	// Quoted titles are consumed as-is; unquoted titles are built from
+	// tokens that don't match any metadata prefix.
+	afterID := strings.TrimSpace(remaining[len(id):])
+	var metaTokens []string
+
+	if strings.HasPrefix(afterID, "\"") {
+		// Quoted title: find closing quote, respecting backslash escapes.
+		title, rest, err := parseQuotedString(afterID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TLS format: %w", err)
+		}
+		task.Title = title
+		metaTokens = strings.Fields(rest)
+	} else {
+		// Unquoted (legacy): split into title vs metadata by token prefix.
+		var titleParts []string
+		for _, token := range tokens[1:] {
+			if isMetaToken(token) {
+				metaTokens = append(metaTokens, token)
+			} else {
+				titleParts = append(titleParts, token)
+			}
+		}
+		task.Title = strings.Join(titleParts, " ")
+	}
+
+	// Parse metadata tokens.
+	for _, token := range metaTokens {
 		if strings.HasPrefix(token, "@") {
 			assignee := strings.TrimPrefix(token, "@")
 			task.AssignedTo = &assignee
@@ -282,11 +308,58 @@ func parseTLS(line string) (*core.Task, error) {
 			}
 		} else if strings.HasPrefix(token, "ref:") {
 			task.Reference = strings.TrimPrefix(token, "ref:")
-		} else {
-			titleParts = append(titleParts, token)
 		}
 	}
-	task.Title = strings.Join(titleParts, " ")
 
 	return task, nil
+}
+
+// parseQuotedString extracts a Go-style double-quoted string from the
+// beginning of s. Returns the unquoted content and the remainder of s
+// after the closing quote (trimmed).
+func parseQuotedString(s string) (string, string, error) {
+	if len(s) < 2 || s[0] != '"' {
+		return "", s, fmt.Errorf("expected opening quote")
+	}
+
+	var buf strings.Builder
+	i := 1
+	for i < len(s) {
+		ch := s[i]
+		if ch == '\\' && i+1 < len(s) {
+			next := s[i+1]
+			switch next {
+			case '"', '\\':
+				buf.WriteByte(next)
+			case 'n':
+				buf.WriteByte('\n')
+			case 't':
+				buf.WriteByte('\t')
+			default:
+				buf.WriteByte('\\')
+				buf.WriteByte(next)
+			}
+			i += 2
+			continue
+		}
+		if ch == '"' {
+			return buf.String(), strings.TrimSpace(s[i+1:]), nil
+		}
+		buf.WriteByte(ch)
+		i++
+	}
+	return "", s, fmt.Errorf("unterminated quoted string")
+}
+
+// isMetaToken returns true if the token looks like a TLS metadata
+// marker (@assignee, #tag, key:value, key=value, ref:...).
+func isMetaToken(token string) bool {
+	if strings.HasPrefix(token, "@") ||
+		strings.HasPrefix(token, "#") ||
+		strings.HasPrefix(token, "prio:") ||
+		strings.HasPrefix(token, "domain:") ||
+		strings.HasPrefix(token, "ref:") {
+		return true
+	}
+	return strings.Contains(token, "=")
 }

@@ -264,6 +264,130 @@ func TestIngestTODOWith_ProjectContextIgnoresForeignSameID(t *testing.T) {
 	}
 }
 
+func TestParseTLS_QuotedTitlePreservesSpecialChars(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		wantTitle string
+		wantMeta  map[string]interface{}
+	}{
+		{
+			name:      "quoted title with equals sign",
+			line:      `[ ] T-0001 "Set HOP_ENTRY=1 for delegated calls"`,
+			wantTitle: "Set HOP_ENTRY=1 for delegated calls",
+			wantMeta:  map[string]interface{}{},
+		},
+		{
+			name:      "quoted title with at-sign",
+			line:      `[ ] T-0002 "Deploy @staging environment"`,
+			wantTitle: "Deploy @staging environment",
+			wantMeta:  map[string]interface{}{},
+		},
+		{
+			name:      "quoted title with hash",
+			line:      `[ ] T-0003 "Fix issue #42 in parser"`,
+			wantTitle: "Fix issue #42 in parser",
+			wantMeta:  map[string]interface{}{},
+		},
+		{
+			name:      "quoted title with meta after",
+			line:      `[ ] T-0004 "Set X=1" @alice #feat`,
+			wantTitle: "Set X=1",
+			wantMeta:  map[string]interface{}{},
+		},
+		{
+			name:      "unquoted title without special chars",
+			line:      `[ ] T-0005 Simple task title`,
+			wantTitle: "Simple task title",
+			wantMeta:  map[string]interface{}{},
+		},
+		{
+			name:      "unquoted title with kv (legacy compat)",
+			line:      `[ ] T-0006 Simple title FOO=bar`,
+			wantTitle: "Simple title",
+			wantMeta:  map[string]interface{}{"FOO": "bar"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task, err := parseTLS(tt.line)
+			if err != nil {
+				t.Fatalf("parseTLS failed: %v", err)
+			}
+			if task.Title != tt.wantTitle {
+				t.Errorf("title = %q, want %q", task.Title, tt.wantTitle)
+			}
+			for k, v := range tt.wantMeta {
+				got, ok := task.Meta[k]
+				if !ok {
+					t.Errorf("missing meta key %q", k)
+				} else if got != v {
+					t.Errorf("meta[%q] = %v, want %v", k, got, v)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatTLS_QuotesTitleForRoundtrip(t *testing.T) {
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Set HOP_ENTRY=1 for delegated calls",
+		Status: core.StatusTodo,
+		Meta:   map[string]interface{}{},
+	}
+
+	line := formatTLS(task)
+	if !strings.Contains(line, `"Set HOP_ENTRY=1 for delegated calls"`) {
+		t.Fatalf("expected quoted title in TLS, got: %s", line)
+	}
+
+	// Roundtrip: parse the formatted line back.
+	parsed, err := parseTLS(line)
+	if err != nil {
+		t.Fatalf("parseTLS roundtrip failed: %v", err)
+	}
+	if parsed.Title != task.Title {
+		t.Fatalf("roundtrip title = %q, want %q", parsed.Title, task.Title)
+	}
+	if _, hasKey := parsed.Meta["HOP_ENTRY"]; hasKey {
+		t.Fatal("HOP_ENTRY should not be extracted into meta on roundtrip")
+	}
+}
+
+func TestParseQuotedString(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantStr   string
+		wantRest  string
+		wantErr   bool
+	}{
+		{`"hello world" rest`, "hello world", "rest", false},
+		{`"escaped \"quote\"" rest`, `escaped "quote"`, "rest", false},
+		{`"newline\\n" rest`, `newline\n`, "rest", false},
+		{`"unterminated`, "", "", true},
+		{`not quoted`, "", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, rest, err := parseQuotedString(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil {
+				if got != tt.wantStr {
+					t.Errorf("string = %q, want %q", got, tt.wantStr)
+				}
+				if rest != tt.wantRest {
+					t.Errorf("rest = %q, want %q", rest, tt.wantRest)
+				}
+			}
+		})
+	}
+}
+
 func TestInitDoesNotTriggerGlobalIngestion(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-init-noingest-*")
 	if err != nil {
