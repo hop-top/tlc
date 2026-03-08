@@ -66,6 +66,9 @@ var configSetCmd = &cobra.Command{
 		value := args[1]
 
 		viper.Set(key, value)
+		if _, err := config.PrepareViperForWrite(viper.GetViper()); err != nil {
+			return fmt.Errorf("failed to prepare config file: %w", err)
+		}
 
 		if err := viper.WriteConfig(); err != nil {
 			if err := viper.SafeWriteConfig(); err != nil {

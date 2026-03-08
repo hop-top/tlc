@@ -59,14 +59,21 @@ func DefaultConfig() *Config {
 func LoadConfig(projectRoot string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	// 1. User config
-	home, _ := os.UserHomeDir()
-	userConfigPath := filepath.Join(home, ".config", "tlc", "config.yaml")
+	// 1. System config
+	if err := mergeFile(cfg, SystemConfigPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to load system config: %w", err)
+	}
+
+	// 2. User config
+	userConfigPath, err := UserConfigPath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve user config path: %w", err)
+	}
 	if err := mergeFile(cfg, userConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("failed to load user config: %w", err)
 	}
 
-	// 2. Project config
+	// 3. Project config
 	if projectRoot != "" {
 		projectConfigPath := filepath.Join(projectRoot, ".tlc", "config.yaml")
 		if err := mergeFile(cfg, projectConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -74,10 +81,10 @@ func LoadConfig(projectRoot string) (*Config, error) {
 		}
 	}
 
-	// 3. Environment variables (simplistic implementation for now)
+	// 4. Environment variables (simplistic implementation for now)
 	applyEnvOverrides(cfg)
 
-	// 4. Validate
+	// 5. Validate
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}

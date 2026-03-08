@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/tui/styles"
 	"hop.top/tlc/pkg/themepicker"
 )
@@ -341,7 +342,9 @@ func handleThemePickerUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 		styles.ApplyTheme(themeToApply)
 		viper.Set("ui.theme", themeToApply.Name)
-		if err := viper.WriteConfig(); err != nil {
+		if _, err := config.PrepareViperForWrite(viper.GetViper()); err != nil {
+			log.Warn("Failed to prepare config file for theme preference", "error", err)
+		} else if err := viper.WriteConfig(); err != nil {
 			log.Warn("Failed to save theme preference", "error", err)
 		}
 

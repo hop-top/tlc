@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	cfgpkg "hop.top/tlc/internal/config"
 )
 
 // TestInitConfig tests configuration loading from file
@@ -57,20 +58,33 @@ func TestFindAllConfigs(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	homeDir := filepath.Join(tmpDir, "home")
-	globalDir := filepath.Join(homeDir, ".config", "tlc")
 	subDir := filepath.Join(homeDir, "a", "b", "c")
 	os.MkdirAll(subDir, 0o755)
-	os.MkdirAll(globalDir, 0o755)
 
 	// Create configs at different levels
 	os.WriteFile(filepath.Join(tmpDir, ".tlc.yaml"), []byte(""), 0o644)
 	os.WriteFile(filepath.Join(homeDir, ".tlc.yaml"), []byte(""), 0o644)
 	os.WriteFile(filepath.Join(homeDir, "a", "b", ".tlc.yaml"), []byte(""), 0o644)
-	os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(""), 0o644)
 
 	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
 	defer func() { _ = os.Setenv("HOME", oldHome) }()
+	defer func() { _ = os.Setenv("XDG_CONFIG_HOME", oldXDG) }()
 	if err := os.Setenv("HOME", homeDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Unsetenv("XDG_CONFIG_HOME"); err != nil {
+		t.Fatal(err)
+	}
+
+	globalConfigPath, err := cfgpkg.UserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(globalConfigPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(globalConfigPath, []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,12 +121,8 @@ func TestInitConfig_BoundedWalkUpIgnoresAboveBoundary(t *testing.T) {
 
 	homeDir := filepath.Join(tmpDir, "home")
 	projectDir := filepath.Join(homeDir, "workspace", "project")
-	globalDir := filepath.Join(homeDir, ".config", "tlc")
 
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(globalDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +136,6 @@ func TestInitConfig_BoundedWalkUpIgnoresAboveBoundary(t *testing.T) {
 		}
 	}
 
-	writeFile(filepath.Join(globalDir, "config.yaml"), "output:\n  color: false\n")
 	writeFile(filepath.Join(tmpDir, ".tlc.yaml"), "output:\n  format: tls\n")
 	writeFile(filepath.Join(homeDir, ".tlc.yaml"), "output:\n  verbose: true\n")
 	writeFile(filepath.Join(homeDir, "workspace", ".tlc.yaml"), "storage:\n  db_path: ./workspace.sqlite\n")
@@ -134,10 +143,12 @@ func TestInitConfig_BoundedWalkUpIgnoresAboveBoundary(t *testing.T) {
 
 	oldWd, _ := os.Getwd()
 	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
 	oldCfgFile := cfgFile
 	defer func() {
 		_ = os.Chdir(oldWd)
 		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("XDG_CONFIG_HOME", oldXDG)
 		cfgFile = oldCfgFile
 	}()
 
@@ -147,6 +158,14 @@ func TestInitConfig_BoundedWalkUpIgnoresAboveBoundary(t *testing.T) {
 	if err := os.Setenv("HOME", homeDir); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Unsetenv("XDG_CONFIG_HOME"); err != nil {
+		t.Fatal(err)
+	}
+	globalConfigPath, err := cfgpkg.UserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(globalConfigPath, "output:\n  color: false\n")
 
 	cfgFile = ""
 	viper.Reset()
@@ -166,5 +185,60 @@ func TestInitConfig_BoundedWalkUpIgnoresAboveBoundary(t *testing.T) {
 	}
 	if got := viper.ConfigFileUsed(); normalizeConfigPath(got) != normalizeConfigPath(filepath.Join(projectDir, ".tlc.yaml")) {
 		t.Fatalf("ConfigFileUsed() = %q, want %q", got, filepath.Join(projectDir, ".tlc.yaml"))
+	}
+}
+
+func TestInitConfig_UsesOSUserConfigBeforeSystem(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-user-config-root-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	projectDir := filepath.Join(tmpDir, "project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldWd, _ := os.Getwd()
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	oldCfgFile := cfgFile
+	defer func() {
+		_ = os.Chdir(oldWd)
+		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("XDG_CONFIG_HOME", oldXDG)
+		cfgFile = oldCfgFile
+	}()
+
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("HOME", filepath.Join(tmpDir, "home")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Unsetenv("XDG_CONFIG_HOME"); err != nil {
+		t.Fatal(err)
+	}
+	userConfigPath, err := cfgpkg.UserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(userConfigPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userConfigPath, []byte("output:\n  format: yaml\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile = ""
+	viper.Reset()
+	initConfig()
+
+	if got := viper.GetString("output.format"); got != "yaml" {
+		t.Fatalf("output.format = %q, want %q", got, "yaml")
+	}
+	if got := normalizeConfigPath(viper.ConfigFileUsed()); got != normalizeConfigPath(userConfigPath) {
+		t.Fatalf("ConfigFileUsed() = %q, want %q", got, userConfigPath)
 	}
 }

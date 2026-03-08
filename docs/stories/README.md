@@ -26,10 +26,13 @@ User stories organized by feature area, persona, and priority. Each story define
 - [042 - CLI Command Integration](042-cli-command-integration.md) (planned)
 
 #### System Validation (060-069)
-- [060 - Configuration Validation](060-configuration-validation.md) — Config file validation
-- [061 - Environment Setup Verification](061-environment-setup-verification.md) — Environment variable and dependency checks
+- [060 - Configuration Validation](060-configuration-validation.md) (in progress) —
+  Config file validation
+- [061 - Environment Setup Verification](061-environment-setup-verification.md)
+  (in progress) — Environment variable and dependency checks
 - [062 - Storage Location Validation](062-storage-location-validation.md) — Storage directory accessibility
-- [063 - Hierarchical Config Discovery](063-hierarchical-config-discovery.md) — Nested project config and task merging
+- [063 - Hierarchical Config Discovery](063-hierarchical-config-discovery.md)
+  (in progress) — Nested project config and task merging
 
 #### Specialized Topics
 - [user-stories-taskflow-0.1.md](user-stories-taskflow-0.1.md) — Flow execution semantics and edge cases
@@ -73,10 +76,12 @@ User stories organized by feature area, persona, and priority. Each story define
 - [001 - Task Creation](001-task-creation.md) (validates task storage before creation)
 - [002 - Task Listing](002-task-listing.md) (validates task data location readability)
 - [010 - GitHub Sync](010-github-sync.md) (validates external system connectivity)
-- [060 - Configuration Validation](060-configuration-validation.md) (planned)
-- [061 - Environment Setup Verification](061-environment-setup-verification.md) (planned)
+- [060 - Configuration Validation](060-configuration-validation.md) (in progress)
+- [061 - Environment Setup Verification](061-environment-setup-verification.md)
+  (in progress)
 - [062 - Storage Location Validation](062-storage-location-validation.md) (planned)
-- [063 - Hierarchical Config Discovery](063-hierarchical-config-discovery.md) (planned)
+- [063 - Hierarchical Config Discovery](063-hierarchical-config-discovery.md)
+  (in progress)
 
 ### By Priority
 

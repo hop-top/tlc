@@ -2,7 +2,12 @@
 
 **Description**
 
-A system or framework-level persona that validates TLC configuration expectations and runtime requirements. This persona ensures that config paths are valid, tasks storage locations are accessible, environment variables are set correctly, and system invariants are maintained at startup and during runtime. They care about configuration validation, resource availability checks, and ensuring that system can operate correctly with expected environment.
+A system or framework-level persona that validates TLC configuration expectations and
+runtime requirements. This persona ensures that config paths are valid, tasks storage
+locations are accessible, environment variables are set correctly, and system
+invariants are maintained at startup and during runtime. They care about OS-native
+config discovery, safe write targets for user config, resource availability checks,
+and ensuring that system can operate correctly with expected environment.
 
 ## Primary Stories
 

@@ -354,8 +354,14 @@ Example:
 TLC follows a hierarchical configuration:
 1. Environment variables (`TLC_*`)
 2. Local config (`.tlc/config.yaml` or custom `--config`)
-3. User config (`$XDG_CONFIG_HOME/tlc/config.yaml`)
-4. System defaults
+3. User config (`<os user config dir>/tlc/config.yaml`)
+4. System config (`/etc/tlc/config.yaml`)
+5. Built-in defaults
+
+Write behavior:
+- `tlc config set` writes to the active local or explicit `--config` file.
+- If only system config is loaded, or no config file exists yet, TLC writes the new value to the
+  OS user config path instead of `/etc/tlc/config.yaml`.
 
 Defaults:
 - **Todo file**: `$XDG_DATA_HOME/tlc/todo.txt`
