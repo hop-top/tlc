@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/plugin"
+	"hop.top/tlc/internal/workspace"
 )
 
 var (
@@ -55,6 +58,9 @@ var (
 	taskCompleteNoVerify bool
 	taskUpdateForce      bool
 	taskListSummary      bool
+
+	taskListWorkspace string
+	taskListSpace     string
 )
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
@@ -593,12 +599,6 @@ var taskListCmd = &cobra.Command{
 	Use:   "list [query]",
 	Short: "List tasks with filters",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		s, err := getStorage()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
 		query := core.Query{
 			Limit:           taskListLimit,
@@ -627,6 +627,18 @@ var taskListCmd = &cobra.Command{
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "tags", Operator: core.OpContains, Value: tag})
 		}
 
+		// Workspace mode: query across workspace projects.
+		if cmd.Flags().Changed("workspace") {
+			return runTaskListWorkspace(cmd, ctx, query)
+		}
+
+		// Default: single-project query.
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
 		tasks, err := s.ListTasks(ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to list tasks: %w", err)
@@ -639,6 +651,108 @@ var taskListCmd = &cobra.Command{
 		formatTasks(cmd, tasks, format)
 		return nil
 	},
+}
+
+// filesystemOpener implements workspace.SourceOpener for local SQLite DBs.
+type filesystemOpener struct{}
+
+func (f *filesystemOpener) Open(project core.RegisteredProject) (workspace.ProjectSource, error) {
+	return workspace.NewFilesystemSource(project.DBPath), nil
+}
+
+// runTaskListWorkspace queries tasks across all projects in a workspace.
+func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Query) error {
+	var workspaces []config.WorkspaceConfig
+	if err := viper.UnmarshalKey("workspaces", &workspaces); err != nil {
+		return fmt.Errorf("failed to read workspace config: %w", err)
+	}
+
+	cfg := &config.Config{Workspaces: workspaces}
+
+	var ws *config.WorkspaceConfig
+	if taskListWorkspace == "" {
+		ws = cfg.DefaultWorkspace()
+	} else {
+		ws = cfg.FindWorkspace(taskListWorkspace)
+	}
+	if ws == nil {
+		return fmt.Errorf("workspace not found: %q", taskListWorkspace)
+	}
+
+	store, err := getStorageRaw()
+	if err != nil {
+		return fmt.Errorf("failed to open storage: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	reg := workspace.NewRegistry()
+	reg.Register(workspace.NewFilesystemAdapter(store))
+
+	projects, err := workspace.ListProjects(*ws, reg)
+	if err != nil {
+		log.Warn("Some spaces had errors", "error", err)
+	}
+
+	// Filter by --space if set.
+	if taskListSpace != "" {
+		var filtered []core.RegisteredProject
+		for _, p := range projects {
+			if p.SpaceURI == taskListSpace {
+				filtered = append(filtered, p)
+			}
+		}
+		projects = filtered
+	}
+
+	if len(projects) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No projects found in workspace")
+		return nil
+	}
+
+	tasks, err := workspace.QueryAcross(ctx, projects, query, &filesystemOpener{})
+	if err != nil {
+		return fmt.Errorf("workspace query failed: %w", err)
+	}
+
+	format := viper.GetString("output.format")
+	if taskListSummary {
+		format = formatSummary
+	}
+	formatWorkspaceTasks(cmd, tasks, format)
+	return nil
+}
+
+// projectLabel returns a short label from a project ID.
+// e.g. "hop-top/tlc" -> "tlc", "my-project" -> "my-project"
+func projectLabel(projectID string) string {
+	return path.Base(projectID)
+}
+
+// formatWorkspaceTasks renders tasks with project context.
+func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
+	out := cmd.OutOrStdout()
+	switch format {
+	case formatJSON:
+		formatTasks(cmd, tasks, format)
+	case formatYAML:
+		formatTasks(cmd, tasks, format)
+	case "tls":
+		for _, t := range tasks {
+			label := ""
+			if t.ProjectID != nil && *t.ProjectID != "" {
+				label = projectLabel(*t.ProjectID)
+			}
+			if label != "" {
+				_, _ = fmt.Fprintf(out, "[%s] %s\n", label, formatTLS(t))
+			} else {
+				_, _ = fmt.Fprintln(out, formatTLS(t))
+			}
+		}
+	case formatSummary:
+		renderSummary(out, tasks)
+	default:
+		renderWorkspaceTable(out, tasks)
+	}
 }
 
 var taskShowCmd = &cobra.Command{
@@ -853,6 +967,8 @@ func init() {
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
 	taskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
 	taskListCmd.Flags().BoolVar(&taskListSummary, "summary", false, "Show status summary instead of task list")
+	taskListCmd.Flags().StringVar(&taskListWorkspace, "workspace", "", "Query across workspace projects")
+	taskListCmd.Flags().StringVar(&taskListSpace, "space", "", "Filter to specific space within workspace")
 
 	taskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
 	taskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
