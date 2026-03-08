@@ -662,6 +662,89 @@ func checkProjectTodoSynced(fix bool) checkResult {
 	}
 }
 
+const projectInactiveThreshold = 30 * 24 * time.Hour
+
+func checkRegisteredProjects(_ bool) checkResult {
+	s, err := getStorageRaw()
+	if err != nil {
+		return checkResult{
+			name:     "registered projects",
+			category: "Projects",
+			status:   "warn",
+			message:  fmt.Sprintf("cannot open db: %v", err),
+		}
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	projects, err := s.ListAllProjects(ctx)
+	if err != nil {
+		return checkResult{
+			name:     "registered projects",
+			category: "Projects",
+			status:   "warn",
+			message:  fmt.Sprintf("query failed: %v", err),
+		}
+	}
+
+	if len(projects) == 0 {
+		return checkResult{
+			name:     "registered projects",
+			category: "Projects",
+			status:   "pass",
+			message:  "no projects registered",
+		}
+	}
+
+	var stale, inactive int
+	var staleDetails, inactiveDetails []string
+	now := time.Now()
+
+	for _, p := range projects {
+		if _, err := os.Stat(p.DBPath); err != nil {
+			stale++
+			staleDetails = append(staleDetails,
+				fmt.Sprintf("%s (path missing: %s)", p.ProjectID, p.DBPath))
+			continue
+		}
+		if !p.LastSeenAt.IsZero() && now.Sub(p.LastSeenAt) > projectInactiveThreshold {
+			inactive++
+			inactiveDetails = append(inactiveDetails,
+				fmt.Sprintf("%s (last seen: %s)", p.ProjectID,
+					p.LastSeenAt.Format("2006-01-02")))
+		}
+	}
+
+	active := len(projects) - stale - inactive
+	summary := fmt.Sprintf("%d registered, %d active", len(projects), active)
+	if stale > 0 {
+		summary += fmt.Sprintf(", %d stale", stale)
+	}
+	if inactive > 0 {
+		summary += fmt.Sprintf(", %d inactive", inactive)
+	}
+
+	status := "pass"
+	if stale > 0 {
+		status = "warn"
+	}
+
+	msg := summary
+	if len(staleDetails) > 0 {
+		msg += "; stale: " + strings.Join(staleDetails, ", ")
+	}
+	if len(inactiveDetails) > 0 {
+		msg += "; inactive: " + strings.Join(inactiveDetails, ", ")
+	}
+
+	return checkResult{
+		name:     "registered projects",
+		category: "Projects",
+		status:   status,
+		message:  msg,
+	}
+}
+
 func allChecks() []doctorCheck {
 	return []doctorCheck{
 		checkGitInstalled,
@@ -677,6 +760,7 @@ func allChecks() []doctorCheck {
 		checkSchemaVersion,
 		checkGitignoreHasTlc,
 		checkProjectTodoSynced,
+		checkRegisteredProjects,
 	}
 }
 

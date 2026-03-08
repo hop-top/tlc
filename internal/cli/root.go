@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
+	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
 
@@ -367,6 +368,22 @@ func getStorageRaw() (*storage.SQLiteStorage, error) {
 	return s, nil
 }
 
+// touchProjectIfNeeded bumps last_seen_at for the current project.
+// Fire-and-forget: logs on error but never fails the caller.
+var touchOnce sync.Once
+
+func touchProjectIfNeeded(s *storage.SQLiteStorage) {
+	touchOnce.Do(func() {
+		det := core.DetectProject()
+		if det == nil || !det.InProject || det.ProjectID == "" {
+			return
+		}
+		if err := s.TouchProject(context.Background(), det.ProjectID); err != nil {
+			log.Warn("Failed to touch project", "project", det.ProjectID, "error", err)
+		}
+	})
+}
+
 // getStorage opens the SQLite database and ensures TODO ingestion and
 // auto-archive have run (once per process).
 func getStorage() (*storage.SQLiteStorage, error) {
@@ -376,5 +393,6 @@ func getStorage() (*storage.SQLiteStorage, error) {
 	}
 
 	ensureDBSynced(s)
+	touchProjectIfNeeded(s)
 	return s, nil
 }
