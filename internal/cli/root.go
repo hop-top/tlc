@@ -85,11 +85,21 @@ func initConfig() {
 			}
 		}
 
-		// 2. Cascade project-specific configs from current dir up to the
-		// common ancestor of cwd and the user-global config directory.
+		// 2. Detect entry mode and cascade project-specific configs from
+		// current dir up to the common ancestor of cwd and the
+		// user-global config directory.
 		curr, err := os.Getwd()
 		if err == nil {
-			configs := findAllConfigs(curr, resolveProjectConfigBoundary(curr))
+			mode := config.DetectMode()
+
+			// Validate that expected local config exists for this mode.
+			if valErr := config.ValidateLocalConfig(mode, curr); valErr != nil {
+				log.Warn("Local config validation failed", "error", valErr)
+			}
+
+			configs := findAllConfigsForMode(
+				curr, resolveProjectConfigBoundary(curr), mode,
+			)
 			// Merge them in order from root-most to closest
 			// so that closer files overwrite further ones.
 			for i := len(configs) - 1; i >= 0; i-- {
@@ -203,23 +213,31 @@ func resolveProjectConfigBoundary(startDir string) string {
 }
 
 func findAllConfigs(startDir, stopDir string) []string {
+	return findAllConfigsForMode(startDir, stopDir, config.DetectMode())
+}
+
+func findAllConfigsForMode(startDir, stopDir string, mode config.EntryMode) []string {
 	var configs []string
 	curr := normalizeConfigPath(startDir)
 	stopDir = normalizeConfigPath(stopDir)
 	if curr == "" {
 		return configs
 	}
+
+	flatFile := config.LocalConfigFile(mode)
+	dirConfig := filepath.Join(config.LocalConfigDir(mode), "config.yaml")
+
 	for {
-		// Check for .tlc.yaml
-		tlcYaml := filepath.Join(curr, ".tlc.yaml")
-		if _, err := os.Stat(tlcYaml); err == nil {
-			configs = append(configs, tlcYaml)
+		// Check for flat config (e.g. .tlc.yaml or .hop/tlc.yaml)
+		flat := filepath.Join(curr, flatFile)
+		if _, err := os.Stat(flat); err == nil {
+			configs = append(configs, flat)
 		}
 
-		// Check for .tlc/config.yaml
-		tlcDirConfig := filepath.Join(curr, ".tlc", "config.yaml")
-		if _, err := os.Stat(tlcDirConfig); err == nil {
-			configs = append(configs, tlcDirConfig)
+		// Check for dir config (e.g. .tlc/config.yaml or .hop/tlc/config.yaml)
+		dir := filepath.Join(curr, dirConfig)
+		if _, err := os.Stat(dir); err == nil {
+			configs = append(configs, dir)
 		}
 
 		if stopDir != "" && curr == stopDir {
