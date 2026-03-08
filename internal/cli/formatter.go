@@ -80,7 +80,8 @@ func formatTLS(t *core.Task) string {
 	}
 	status := fmt.Sprintf("[%s]", marker)
 
-	parts := []string{status, t.ID, t.Title}
+	quotedTitle := fmt.Sprintf("%q", t.Title)
+	parts := []string{status, t.ID, quotedTitle}
 
 	if t.AssignedTo != nil && *t.AssignedTo != "" {
 		parts = append(parts, "@"+*t.AssignedTo)
