@@ -20,7 +20,7 @@ Configuration is loaded and merged in this order (later overrides earlier):
 
 1. **System defaults** (built-in)
 2. **System config** (`/etc/tlc/config.yaml`)
-3. **User config** (`~/.config/tlc/config.yaml`)
+3. **User config** (`<os user config dir>/tlc/config.yaml`)
 4. **Project config** (`.tlc/config.yaml`)
 5. **Environment variables** (`TLC_*`)
 
@@ -30,7 +30,7 @@ Configuration is loaded and merged in this order (later overrides earlier):
 # System default
 output.format: table
 
-# User config (~/.config/tlc/config.yaml)
+# User config (<os user config dir>/tlc/config.yaml)
 output.format: json
 
 # Project config (.tlc/config.yaml)
@@ -48,8 +48,9 @@ TLC_OUTPUT_FORMAT=table
 
 ### File Location
 
-**User config**:
-- Linux/macOS: `~/.config/tlc/config.yaml`
+**User config** (resolved via `os.UserConfigDir()`):
+- Linux: `~/.config/tlc/config.yaml`
+- macOS: `~/Library/Application Support/tlc/config.yaml`
 - Windows: `%APPDATA%\tlc\config.yaml`
 
 **Project config**:
