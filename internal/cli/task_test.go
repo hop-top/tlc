@@ -1478,6 +1478,83 @@ func TestTaskAddTag(t *testing.T) {
 }
 
 // Test Unassign Task.
+func TestTaskUnassignRequiresNote(t *testing.T) {
+	defer resetTestDB(t)()
+
+	// Create task with assignee
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(taskCmd)
+	buf1 := new(bytes.Buffer)
+	cmd1.SetOut(buf1)
+	cmd1.SetErr(buf1)
+	cmd1.SetArgs([]string{"task", "create", "Task to unassign",
+		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS"})
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+
+	// Unassign WITHOUT --note should fail
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(taskCmd)
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"task", "unassign", "T-0001"})
+
+	err := cmd2.Execute()
+	if err == nil {
+		t.Fatal("expected error when unassign called without --note")
+	}
+	if !contains(err.Error(), "note") {
+		t.Errorf("error should mention --note, got: %v", err)
+	}
+}
+
+func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
+	defer resetTestDB(t)()
+
+	// Create task with description and assignee
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(taskCmd)
+	buf1 := new(bytes.Buffer)
+	cmd1.SetOut(buf1)
+	cmd1.SetErr(buf1)
+	cmd1.SetArgs([]string{"task", "create", "Task to unassign",
+		"--description", "Original description",
+		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS"})
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+
+	// Unassign WITH --note
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(taskCmd)
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"task", "unassign", "T-0001", "--note", "Blocked on dependency"})
+
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("task unassign failed: %v", err)
+	}
+
+	// Verify note was appended to description
+	ctx := context.Background()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	task, _ := s.GetTask(ctx, "T-0001")
+	if task == nil {
+		t.Fatal("task not found after unassign")
+	}
+	if !contains(task.Description, "Original description") {
+		t.Errorf("expected original description preserved, got: %s", task.Description)
+	}
+	if !contains(task.Description, "Blocked on dependency") {
+		t.Errorf("expected note appended to description, got: %s", task.Description)
+	}
+}
+
 func TestTaskUnassign(t *testing.T) {
 	defer resetTestDB(t)()
 
@@ -1493,13 +1570,13 @@ func TestTaskUnassign(t *testing.T) {
 		t.Fatalf("task create failed: %v", err)
 	}
 
-	// Unassign the task
+	// Unassign the task (with required note)
 	cmd2 := newTestCmd()
 	cmd2.AddCommand(taskCmd)
 	buf2 := new(bytes.Buffer)
 	cmd2.SetOut(buf2)
 	cmd2.SetErr(buf2)
-	cmd2.SetArgs([]string{"task", "unassign", "T-0001"})
+	cmd2.SetArgs([]string{"task", "unassign", "T-0001", "--note", "No longer needed"})
 
 	if err := cmd2.Execute(); err != nil {
 		t.Fatalf("task unassign failed: %v", err)
@@ -1535,13 +1612,13 @@ func TestTaskUnassign(t *testing.T) {
 	}
 	found := false
 	for _, l := range logs {
-		if l.Action == core.ActionReassigned && l.Note == "Unassigned" {
+		if l.Action == core.ActionReassigned && contains(l.Note, "No longer needed") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected REASSIGNED log entry with note 'Unassigned'")
+		t.Error("expected REASSIGNED log entry with note containing 'No longer needed'")
 	}
 }
 
@@ -1801,5 +1878,90 @@ func TestTaskListFormatSummary(t *testing.T) {
 	}
 	if !contains(output, "Total") {
 		t.Errorf("expected 'Total' in output, got: %s", output)
+	}
+}
+
+func createAndCompleteTask(t *testing.T, title, description string) {
+	t.Helper()
+
+	// Create task
+	args := []string{"task", "create", title, "--status", "IN_PROGRESS"}
+	if description != "" {
+		args = append(args, "--description", description)
+	}
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(taskCmd)
+	buf1 := new(bytes.Buffer)
+	cmd1.SetOut(buf1)
+	cmd1.SetErr(buf1)
+	cmd1.SetArgs(args)
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+
+	// Complete
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(taskCmd)
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"task", "complete", "T-0001"})
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("task complete failed: %v", err)
+	}
+}
+
+func TestTaskReopenRequiresNote(t *testing.T) {
+	defer resetTestDB(t)()
+
+	createAndCompleteTask(t, "Task to reopen", "")
+
+	// Reopen WITHOUT --note should fail
+	cmd3 := newTestCmd()
+	cmd3.AddCommand(taskCmd)
+	buf3 := new(bytes.Buffer)
+	cmd3.SetOut(buf3)
+	cmd3.SetErr(buf3)
+	cmd3.SetArgs([]string{"task", "reopen", "T-0001"})
+
+	err := cmd3.Execute()
+	if err == nil {
+		t.Fatal("expected error when reopen called without --note")
+	}
+	if !contains(err.Error(), "note") {
+		t.Errorf("error should mention --note, got: %v", err)
+	}
+}
+
+func TestTaskReopenAppendsNoteToDescription(t *testing.T) {
+	defer resetTestDB(t)()
+
+	createAndCompleteTask(t, "Task to reopen", "Initial work done")
+
+	// Reopen WITH --note
+	cmd3 := newTestCmd()
+	cmd3.AddCommand(taskCmd)
+	buf3 := new(bytes.Buffer)
+	cmd3.SetOut(buf3)
+	cmd3.SetErr(buf3)
+	cmd3.SetArgs([]string{"task", "reopen", "T-0001", "--note", "Tests failing after merge"})
+	if err := cmd3.Execute(); err != nil {
+		t.Fatalf("task reopen failed: %v", err)
+	}
+
+	// Verify note appended to description
+	ctx := context.Background()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	task, _ := s.GetTask(ctx, "T-0001")
+	if task == nil {
+		t.Fatal("task not found after reopen")
+	}
+	if !contains(task.Description, "Initial work done") {
+		t.Errorf("expected original description preserved, got: %s", task.Description)
+	}
+	if !contains(task.Description, "Tests failing after merge") {
+		t.Errorf("expected note appended to description, got: %s", task.Description)
 	}
 }

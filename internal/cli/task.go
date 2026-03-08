@@ -58,6 +58,7 @@ var (
 	taskCompleteNote     string
 	taskCompleteNoVerify bool
 	taskReopenNote       string
+	taskUnassignNote     string
 	taskUpdateForce      bool
 	taskListSummary      bool
 
@@ -66,6 +67,18 @@ var (
 	taskListProfile   string
 	taskListSquad     string
 )
+
+// appendNote appends a note to the task's description, separated by a newline.
+func appendNote(task *core.Task, note string) {
+	if note == "" {
+		return
+	}
+	if task.Description == "" {
+		task.Description = note
+	} else {
+		task.Description = task.Description + "\n\n" + note
+	}
+}
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
 	core.Repository
@@ -318,6 +331,10 @@ var taskUnassignCmd = &cobra.Command{
 	Short: "Remove assignee from a task",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if taskUnassignNote == "" {
+			return fmt.Errorf("--note is required when unassigning a task")
+		}
+
 		id := args[0]
 		s, err := getStorage()
 		if err != nil {
@@ -336,13 +353,14 @@ var taskUnassignCmd = &cobra.Command{
 
 		task.AssignedTo = nil
 		task.UpdatedAt = time.Now().UTC()
+		appendNote(task, taskUnassignNote)
 
 		logEntry := &core.LogEntry{
 			TaskID:    task.ID,
 			Timestamp: task.UpdatedAt,
 			By:        core.GetCurrentUser(),
 			Action:    core.ActionReassigned,
-			Note:      "Unassigned",
+			Note:      taskUnassignNote,
 		}
 
 		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
@@ -406,6 +424,10 @@ var taskReopenCmd = &cobra.Command{
 	Short: "Reopen a completed or skipped task",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if taskReopenNote == "" {
+			return fmt.Errorf("--note is required when reopening a task")
+		}
+
 		id := args[0]
 		s, err := getStorage()
 		if err != nil {
@@ -431,6 +453,8 @@ var taskReopenCmd = &cobra.Command{
 		if wmErr != nil {
 			return fmt.Errorf("workflow has no initial status: %w", wmErr)
 		}
+
+		appendNote(task, taskReopenNote)
 
 		user := core.GetCurrentUser()
 		logEntry, err := task.TransitionWithWorkflow(
@@ -1085,6 +1109,8 @@ func init() {
 	taskCmd.AddCommand(taskUnclaimCmd)
 
 	taskCmd.AddCommand(taskAssignCmd)
+
+	taskUnassignCmd.Flags().StringVarP(&taskUnassignNote, "note", "n", "", "Reason for unassigning (required)")
 
 	taskCmd.AddCommand(taskUnassignCmd)
 
