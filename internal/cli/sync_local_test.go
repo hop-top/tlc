@@ -14,7 +14,7 @@ import (
 	"hop.top/tlc/internal/storage"
 )
 
-func TestIngestTODOWith_AssignsCurrentProjectID(t *testing.T) {
+func TestIngestTODOWith_ProjectContextSkipsUnknownGlobalTasks(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-ingest-test-*")
 	if err != nil {
 		t.Fatal(err)
@@ -62,25 +62,17 @@ func TestIngestTODOWith_AssignsCurrentProjectID(t *testing.T) {
 		t.Fatalf("ingestTODOWith failed: %v", err)
 	}
 
-	// Verify tasks were created with the current project ID
 	ctx := context.Background()
 	task1, err := s.GetTask(ctx, "T-0001")
 	if err != nil {
 		t.Fatalf("GetTask T-0001 error: %v", err)
 	}
-	if task1 == nil {
-		t.Fatal("T-0001 not found in database")
-	}
-	if task1.ProjectID == nil || *task1.ProjectID != "my-project" {
-		got := "<nil>"
-		if task1.ProjectID != nil {
-			got = *task1.ProjectID
-		}
-		t.Errorf("T-0001 project_id = %q, want %q", got, "my-project")
+	if task1 != nil {
+		t.Fatalf("T-0001 should not be created from shared global TODO in project context")
 	}
 }
 
-func TestIngestTODOWith_NoConflictWithOtherProjects(t *testing.T) {
+func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-ingest-conflict-*")
 	if err != nil {
 		t.Fatal(err)
@@ -116,9 +108,10 @@ func TestIngestTODOWith_NoConflictWithOtherProjects(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Pre-populate DB with a task under "project-a"
+	// Pre-populate DB with one task under project-a and one under project-b.
 	ctx := context.Background()
 	projectA := "project-a"
+	projectB := "project-b"
 	existingTask := &core.Task{
 		ID:        "T-0001",
 		Title:     "Existing task in project-a",
@@ -132,27 +125,42 @@ func TestIngestTODOWith_NoConflictWithOtherProjects(t *testing.T) {
 		t.Fatalf("failed to seed task: %v", err)
 	}
 
-	// Write global todo.txt that includes the same task ID
+	projectTask := &core.Task{
+		ID:        "T-0002",
+		Title:     "Existing task in project-b",
+		Status:    core.StatusTodo,
+		ProjectID: &projectB,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Meta:      map[string]interface{}{},
+	}
+	if err := s.CreateTask(ctx, projectTask); err != nil {
+		t.Fatalf("failed to seed project task: %v", err)
+	}
+
+	// Shared global TODO contains a task from another project and an update
+	// for the current project's existing task.
 	todoFile := filepath.Join(tmpDir, "global-todo.txt")
 	os.WriteFile(todoFile, []byte(
-		"[ ] T-0001 Same ID different project created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
+		"[ ] T-0001 Same ID different project created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n"+
+			"[~] T-0002 Updated task title created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
 	), 0o600)
 	viper.Set("task.todo_file", todoFile)
 
-	// This should NOT produce UNIQUE constraint errors.
-	// It should create T-0001 under project-b (the current project).
 	err = ingestTODOWith(s)
 	if err != nil {
 		t.Fatalf("ingestTODOWith returned error: %v", err)
 	}
 
-	// Verify: T-0001 should exist under both project-a and project-b
+	// Verify: T-0001 should still exist only under project-a and T-0002 should
+	// be updated in project-b.
 	allTasks, err := s.ListTasks(ctx, core.Query{AllProjects: true})
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
 
 	projectCounts := make(map[string]int)
+	var updatedTask *core.Task
 	for _, task := range allTasks {
 		if task.ID == "T-0001" {
 			pid := ""
@@ -161,13 +169,25 @@ func TestIngestTODOWith_NoConflictWithOtherProjects(t *testing.T) {
 			}
 			projectCounts[pid]++
 		}
+		if task.ID == "T-0002" && task.ProjectID != nil && *task.ProjectID == "project-b" {
+			updatedTask = task
+		}
 	}
 
 	if projectCounts["project-a"] != 1 {
 		t.Errorf("expected 1 T-0001 under project-a, got %d", projectCounts["project-a"])
 	}
-	if projectCounts["project-b"] != 1 {
-		t.Errorf("expected 1 T-0001 under project-b, got %d", projectCounts["project-b"])
+	if projectCounts["project-b"] != 0 {
+		t.Errorf("expected no T-0001 cloned into project-b, got %d", projectCounts["project-b"])
+	}
+	if updatedTask == nil {
+		t.Fatal("expected T-0002 to remain in project-b")
+	}
+	if updatedTask.Title != "Updated task title" {
+		t.Errorf("expected T-0002 title to be updated, got %q", updatedTask.Title)
+	}
+	if updatedTask.Status != core.StatusInProgress {
+		t.Errorf("expected T-0002 status to be updated, got %q", updatedTask.Status)
 	}
 }
 

@@ -145,6 +145,12 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 
 		existing, _ := s.GetTask(ctx, task.ID)
 		if existing == nil {
+			// In a project-scoped repo, the shared global TODO file should only
+			// refresh tasks that already belong to the current project. Otherwise
+			// tasks from other projects get cloned into the current project.
+			if projectID != "" {
+				continue
+			}
 			if task.CreatedAt.IsZero() {
 				task.CreatedAt = time.Now()
 			}
