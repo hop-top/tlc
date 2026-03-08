@@ -30,6 +30,16 @@ type Task struct {
 	Meta         map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
 }
 
+type RegisteredProject struct {
+	ProjectID    string    `json:"project_id"`
+	DBPath       string    `json:"db_path"`
+	SpaceURI     string    `json:"space_uri,omitempty"`
+	Label        string    `json:"label,omitempty"`
+	RegisteredAt time.Time `json:"registered_at"`
+	LastSeenAt   time.Time `json:"last_seen_at"`
+	Status       string    `json:"status"`
+}
+
 type LogEntry struct {
 	ID        int64                  `json:"id,omitempty" yaml:"id,omitempty"`
 	TaskID    string                 `json:"task_id" yaml:"task_id"`

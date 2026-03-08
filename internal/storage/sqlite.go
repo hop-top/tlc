@@ -836,6 +836,132 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	return &task, nil
 }
 
+func (s *SQLiteStorage) RegisterProject(ctx context.Context, projectID, dbPath, spaceURI, label string) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, err := tx.ExecContext(ctx, `
+			INSERT OR REPLACE INTO projects (project_id, db_path, space_uri, label, registered_at, last_seen_at, status)
+			VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+			projectID, dbPath, spaceURI, label, now, now,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to register project: %w", err)
+		}
+		return nil
+	})
+}
+
+func (s *SQLiteStorage) LookupProject(ctx context.Context, projectID string) (*core.RegisteredProject, error) {
+	row := s.db.QueryRowContext(ctx,
+		"SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status FROM projects WHERE project_id = ?",
+		projectID,
+	)
+
+	var p core.RegisteredProject
+	var registeredAtStr, lastSeenAtStr string
+	var spaceURI, label sql.NullString
+
+	err := row.Scan(&p.ProjectID, &p.DBPath, &spaceURI, &label, &registeredAtStr, &lastSeenAtStr, &p.Status)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan project row: %w", err)
+	}
+
+	p.RegisteredAt, _ = time.Parse(time.RFC3339, registeredAtStr)
+	p.LastSeenAt, _ = time.Parse(time.RFC3339, lastSeenAtStr)
+	if spaceURI.Valid {
+		p.SpaceURI = spaceURI.String
+	}
+	if label.Valid {
+		p.Label = label.String
+	}
+
+	return &p, nil
+}
+
+func (s *SQLiteStorage) ListProjectsBySpace(ctx context.Context, spaceURI string) ([]core.RegisteredProject, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status FROM projects WHERE space_uri = ? AND status = 'active'",
+		spaceURI,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query projects by space: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanProjects(rows)
+}
+
+func (s *SQLiteStorage) ListAllProjects(ctx context.Context) ([]core.RegisteredProject, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status FROM projects",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all projects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanProjects(rows)
+}
+
+func (s *SQLiteStorage) UpdateProjectPath(ctx context.Context, projectID, newDBPath string) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, err := tx.ExecContext(ctx,
+			"UPDATE projects SET db_path = ?, last_seen_at = ? WHERE project_id = ?",
+			newDBPath, now, projectID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update project path: %w", err)
+		}
+		return nil
+	})
+}
+
+func (s *SQLiteStorage) TouchProject(ctx context.Context, projectID string) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, err := tx.ExecContext(ctx,
+			"UPDATE projects SET last_seen_at = ? WHERE project_id = ?",
+			now, projectID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to touch project: %w", err)
+		}
+		return nil
+	})
+}
+
+func scanProjects(rows *sql.Rows) ([]core.RegisteredProject, error) {
+	var projects []core.RegisteredProject
+	for rows.Next() {
+		var p core.RegisteredProject
+		var registeredAtStr, lastSeenAtStr string
+		var spaceURI, label sql.NullString
+
+		if err := rows.Scan(&p.ProjectID, &p.DBPath, &spaceURI, &label, &registeredAtStr, &lastSeenAtStr, &p.Status); err != nil {
+			return nil, fmt.Errorf("failed to scan project row: %w", err)
+		}
+
+		p.RegisteredAt, _ = time.Parse(time.RFC3339, registeredAtStr)
+		p.LastSeenAt, _ = time.Parse(time.RFC3339, lastSeenAtStr)
+		if spaceURI.Valid {
+			p.SpaceURI = spaceURI.String
+		}
+		if label.Valid {
+			p.Label = label.String
+		}
+
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate project rows: %w", err)
+	}
+	return projects, nil
+}
+
 func (s *SQLiteStorage) Close() error {
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("failed to close database: %w", err)
