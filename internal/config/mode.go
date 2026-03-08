@@ -150,6 +150,23 @@ func ValidateLocalConfig(mode EntryMode, startDir string) error {
 	}
 
 	if mode == ModeHop {
+		// Before warning, check if standalone config exists -- the project
+		// may have been initialized with `tlc init` (standalone) in a repo
+		// that happens to contain a .hop/ directory.
+		standaloneDir := filepath.Clean(startDir)
+		for {
+			if info, err := os.Stat(filepath.Join(standaloneDir, LocalConfigDir(ModeStandalone))); err == nil && info.IsDir() {
+				return nil
+			}
+			if _, err := os.Stat(filepath.Join(standaloneDir, LocalConfigFile(ModeStandalone))); err == nil {
+				return nil
+			}
+			parent := filepath.Dir(standaloneDir)
+			if parent == standaloneDir {
+				break
+			}
+			standaloneDir = parent
+		}
 		return fmt.Errorf(
 			"hop mode detected but no %s or %s found at or above %s",
 			LocalConfigDir(mode), LocalConfigFile(mode), startDir,

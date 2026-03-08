@@ -36,6 +36,9 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 - **Configurable Workflows**: Define custom task statuses, state
   machine transitions, and per-tag workflow overrides via config.
   Semantic roles drive claim/unclaim/complete behavior.
+- **Workspace Model**: Organize multiple projects into workspaces
+  and spaces. Query tasks across projects with `--workspace` and
+  `--space` flags, or get a summary view with `--summary`.
 - **Modern TUI & CLI**: A keyboard-driven Terminal User Interface
   built with Bubble Tea, featuring a Kanban board, dashboard, and
   real-time flow monitoring.
@@ -162,6 +165,8 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Create: `tlc task create "Task title" --assigned-to @me --tag feature`
 - List: `tlc task list --status TODO --mine`
 - Update: `tlc task update T-0042 --status IN_PROGRESS`
+- Complete: `tlc task complete T-0042`
+- Assign: `tlc task assign T-0042 codex`
 - Claim: `tlc task claim T-0042`
 - View logs: `tlc log T-0042`
 
@@ -202,6 +207,17 @@ Release a claimed task:
 ./bin/tlc task unclaim T-0042
 ```
 
+Complete a task:
+```bash
+./bin/tlc task complete T-0042
+```
+
+Assign or unassign a task:
+```bash
+./bin/tlc task assign T-0042 codex
+./bin/tlc task unassign T-0042
+```
+
 Create a new task:
 ```bash
 ./bin/tlc task create "Design API schema" --assigned-to engineer-1 --tag infra
@@ -210,6 +226,24 @@ Create a new task:
 Update a task status:
 ```bash
 ./bin/tlc task update T-0042 --status DONE
+```
+
+### Workspaces
+
+Organize projects into workspaces for cross-project task management:
+
+```bash
+# List workspaces and their projects
+tlc workspace list
+
+# Query tasks across a workspace
+tlc task list --workspace myws
+
+# Filter to a specific space
+tlc task list --workspace myws --space labs
+
+# Summary view (grouped counts by status)
+tlc task list --summary
 ```
 
 ### Flows & Assignees
@@ -389,6 +423,9 @@ Detailed specifications can be found in the `docs/` directory:
 - [Sync Architecture](docs/sync-architecture-0.1.md)
 - [CLI Spec](docs/tlc-cli-spec-0.1.md)
 - [TUI Spec](docs/tlc-tui-spec-0.1.md)
+- [Config Spec](docs/tlc-config-spec-0.1.md)
+- [Config Discovery](docs/config-discovery.md)
+- [Project Detection](docs/project-detection.md)
 
 ## Contributing
 

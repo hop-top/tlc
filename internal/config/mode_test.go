@@ -135,6 +135,22 @@ func TestValidateLocalConfig_HopFlatFilePresent(t *testing.T) {
 	}
 }
 
+func TestValidateLocalConfig_HopWithStandaloneFallback(t *testing.T) {
+	tmp := t.TempDir()
+	// Create .hop/ (triggers hop mode detection) but no .hop/tlc/.
+	if err := os.MkdirAll(filepath.Join(tmp, ".hop"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create .tlc/ (standalone config) — should suppress the warning.
+	if err := os.MkdirAll(filepath.Join(tmp, ".tlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ValidateLocalConfig(ModeHop, tmp); err != nil {
+		t.Errorf("ValidateLocalConfig(hop) = %v, want nil when .tlc/ exists", err)
+	}
+}
+
 func TestContainsHopSegment(t *testing.T) {
 	tests := []struct {
 		path string
