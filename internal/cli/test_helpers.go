@@ -79,6 +79,7 @@ func resetTaskFlags() {
 	taskDeleteYes = false
 	taskClaimNote = ""
 	taskUnclaimNote = ""
+	taskAssignNote = ""
 	taskCompleteNote = ""
 	taskUpdateForce = false
 
@@ -86,7 +87,7 @@ func resetTaskFlags() {
 	for _, cmd := range []*cobra.Command{
 		taskCreateCmd, taskListCmd, taskShowCmd,
 		taskUpdateCmd, taskDeleteCmd, taskClaimCmd,
-		taskUnclaimCmd, taskCompleteCmd,
+		taskUnclaimCmd, taskAssignCmd, taskCompleteCmd,
 	} {
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
 			f.Changed = false
