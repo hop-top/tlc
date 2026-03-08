@@ -44,6 +44,8 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 		for _, t := range tasks {
 			_, _ = fmt.Fprintln(out, formatTLS(t))
 		}
+	case formatSummary:
+		renderSummary(out, tasks)
 	default: // table
 		renderTable(out, tasks)
 	}

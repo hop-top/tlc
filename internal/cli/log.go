@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	formatJSON  = "json"
-	formatYAML  = "yaml"
-	formatTable = "table"
-	sortDesc    = "desc"
+	formatJSON    = "json"
+	formatYAML    = "yaml"
+	formatTable   = "table"
+	formatSummary = "summary"
+	sortDesc      = "desc"
 )
 
 var (

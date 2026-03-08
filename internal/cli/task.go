@@ -54,6 +54,7 @@ var (
 	taskCompleteNote     string
 	taskCompleteNoVerify bool
 	taskUpdateForce      bool
+	taskListSummary      bool
 )
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
@@ -632,6 +633,9 @@ var taskListCmd = &cobra.Command{
 		}
 
 		format := viper.GetString("output.format")
+		if taskListSummary {
+			format = formatSummary
+		}
 		formatTasks(cmd, tasks, format)
 		return nil
 	},
@@ -848,6 +852,7 @@ func init() {
 	taskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
 	taskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
+	taskListCmd.Flags().BoolVar(&taskListSummary, "summary", false, "Show status summary instead of task list")
 
 	taskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
 	taskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
