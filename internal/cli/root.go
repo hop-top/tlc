@@ -93,6 +93,11 @@ func initConfig() {
 		if err == nil {
 			mode := config.DetectMode()
 
+			// Check for ambiguous config (both .tlc/ and .hop/tlc/).
+			if conflictErr := config.CheckConfigConflict(curr); conflictErr != nil {
+				log.Warn("Config conflict detected", "error", conflictErr)
+			}
+
 			// Validate that expected local config exists for this mode.
 			if valErr := config.ValidateLocalConfig(mode, curr); valErr != nil {
 				log.Warn("Local config validation failed", "error", valErr)

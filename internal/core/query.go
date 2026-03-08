@@ -14,6 +14,7 @@ const (
 	OpNotCont  Operator = "!~"
 	OpStart    Operator = "^"
 	OpEnd      Operator = "$"
+	OpIn       Operator = "IN"
 )
 
 type FieldFilter struct {

@@ -329,6 +329,15 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 			case core.OpEnd:
 				op = sqlOpLike
 				f.Value = "%" + fmt.Sprintf("%v", f.Value)
+			case core.OpIn:
+				vals := strings.Split(fmt.Sprintf("%v", f.Value), ",")
+				placeholders := make([]string, len(vals))
+				for i, v := range vals {
+					placeholders[i] = "?"
+					args = append(args, strings.TrimSpace(v))
+				}
+				groupClauses = append(groupClauses, fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
+				continue
 			}
 
 			if field == "assigned_to" && f.Value == nil {
@@ -1017,6 +1026,15 @@ func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, 
 			case core.OpEnd:
 				op = sqlOpLike
 				f.Value = "%" + fmt.Sprintf("%v", f.Value)
+			case core.OpIn:
+				vals := strings.Split(fmt.Sprintf("%v", f.Value), ",")
+				placeholders := make([]string, len(vals))
+				for i, v := range vals {
+					placeholders[i] = "?"
+					args = append(args, strings.TrimSpace(v))
+				}
+				groupClauses = append(groupClauses, fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
+				continue
 			}
 
 			if field == "assigned_to" && f.Value == nil {

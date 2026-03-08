@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -148,6 +149,89 @@ func TestValidateLocalConfig_HopWithStandaloneFallback(t *testing.T) {
 
 	if err := ValidateLocalConfig(ModeHop, tmp); err != nil {
 		t.Errorf("ValidateLocalConfig(hop) = %v, want nil when .tlc/ exists", err)
+	}
+}
+
+func TestCheckConfigConflict_BothExist(t *testing.T) {
+	tmp := t.TempDir()
+	// Create both .tlc/ and .hop/tlc/ at the same level.
+	if err := os.MkdirAll(filepath.Join(tmp, ".tlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, ".hop", "tlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := CheckConfigConflict(tmp)
+	if err == nil {
+		t.Fatal("CheckConfigConflict() = nil, want error when both .tlc/ and .hop/tlc/ exist")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("error should mention ambiguous, got: %v", err)
+	}
+}
+
+func TestCheckConfigConflict_OnlyStandalone(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, ".tlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := CheckConfigConflict(tmp); err != nil {
+		t.Errorf("CheckConfigConflict() = %v, want nil with only .tlc/", err)
+	}
+}
+
+func TestCheckConfigConflict_OnlyHop(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, ".hop", "tlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := CheckConfigConflict(tmp); err != nil {
+		t.Errorf("CheckConfigConflict() = %v, want nil with only .hop/tlc/", err)
+	}
+}
+
+func TestCheckConfigConflict_Neither(t *testing.T) {
+	tmp := t.TempDir()
+	if err := CheckConfigConflict(tmp); err != nil {
+		t.Errorf("CheckConfigConflict() = %v, want nil with neither", err)
+	}
+}
+
+func TestCheckConfigConflict_HopDirWithoutTLC(t *testing.T) {
+	tmp := t.TempDir()
+	// .hop/ exists but no .hop/tlc/ — no conflict with .tlc/
+	if err := os.MkdirAll(filepath.Join(tmp, ".hop"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, ".tlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := CheckConfigConflict(tmp); err != nil {
+		t.Errorf("CheckConfigConflict() = %v, want nil when .hop/ exists without .hop/tlc/", err)
+	}
+}
+
+func TestCheckConfigConflict_FlatFiles(t *testing.T) {
+	tmp := t.TempDir()
+	// Both flat config files exist.
+	if err := os.WriteFile(filepath.Join(tmp, ".tlc.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hopDir := filepath.Join(tmp, ".hop")
+	if err := os.MkdirAll(hopDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hopDir, "tlc.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := CheckConfigConflict(tmp)
+	if err == nil {
+		t.Fatal("CheckConfigConflict() = nil, want error when both .tlc.yaml and .hop/tlc.yaml exist")
 	}
 }
 

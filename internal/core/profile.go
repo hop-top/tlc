@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"sync"
@@ -105,12 +106,54 @@ func (r *ProfileResolver) ListProfiles() []string {
 	return result
 }
 
-// getGlobalResolver returns a process-lifetime cached ProfileResolver.
-func getGlobalResolver() *ProfileResolver {
+// GetGlobalResolver returns a process-lifetime cached ProfileResolver.
+func GetGlobalResolver() *ProfileResolver {
 	globalResolverOnce.Do(func() {
 		globalResolver = NewProfileResolver()
 	})
 	return globalResolver
+}
+
+// ResolveSquadMembers returns the profile IDs of all members in an aps squad.
+func ResolveSquadMembers(squadID string) ([]string, error) {
+	return resolveSquadMembersWith(squadID, defaultRunner)
+}
+
+// resolveSquadMembersWith is the testable core.
+func resolveSquadMembersWith(squadID string, run commandRunner) ([]string, error) {
+	if _, err := exec.LookPath("aps"); err != nil {
+		return nil, fmt.Errorf("aps not found: %w", err)
+	}
+	out, err := run("aps", "squad", "show", squadID)
+	if err != nil {
+		return nil, fmt.Errorf("aps squad show %s: %w", squadID, err)
+	}
+	return parseSquadMembers(string(out)), nil
+}
+
+// parseSquadMembers extracts member profile IDs from `aps squad show` output.
+// Expects lines under a "members:" key, each prefixed with "- ".
+func parseSquadMembers(output string) []string {
+	var members []string
+	inMembers := false
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "members:" {
+			inMembers = true
+			continue
+		}
+		if inMembers {
+			if strings.HasPrefix(trimmed, "- ") {
+				member := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+				if member != "" {
+					members = append(members, member)
+				}
+			} else if trimmed != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+				break // new top-level key
+			}
+		}
+	}
+	return members
 }
 
 // parseProfileIDs extracts profile IDs from `aps profile list` output.

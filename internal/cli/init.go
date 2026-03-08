@@ -118,12 +118,24 @@ func inferLabel(projectID string) string {
 }
 
 func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *bool, fallbackMode *string, duplicateIDStrategy *string) error {
-	if _, err := os.Stat(".tlc"); err == nil && !*force {
-		return fmt.Errorf(".tlc directory already exists. Use --force to overwrite")
+	mode := config.DetectMode()
+	configDir := config.LocalConfigDir(mode)
+
+	// Refuse to init if the other mode's config already exists.
+	cwd, _ := os.Getwd()
+	if cwd == "" {
+		cwd = "."
+	}
+	if conflictErr := config.CheckConfigConflict(cwd); conflictErr != nil && !*force {
+		return conflictErr
 	}
 
-	if err := os.MkdirAll(".tlc", 0o750); err != nil {
-		return fmt.Errorf("failed to create .tlc directory: %w", err)
+	if _, err := os.Stat(configDir); err == nil && !*force {
+		return fmt.Errorf("%s directory already exists. Use --force to overwrite", configDir)
+	}
+
+	if err := os.MkdirAll(configDir, 0o750); err != nil {
+		return fmt.Errorf("failed to create %s directory: %w", configDir, err)
 	}
 
 	config := make(map[string]interface{})
@@ -245,10 +257,12 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(".tlc/config.yaml", data, 0o600); err != nil {
+	configFilePath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configFilePath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config.yaml: %w", err)
 	}
 
+	gitignoreEntry := configDir + "/"
 	if _, err := os.Stat(".git"); err == nil {
 		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {
@@ -256,15 +270,15 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 			content, _ := os.ReadFile(".gitignore")
 			contentStr := string(content)
 
-			if track && !strings.Contains(contentStr, ".tlc/") {
-				if _, err := f.WriteString(".tlc/\n"); err != nil {
+			if track && !strings.Contains(contentStr, gitignoreEntry) {
+				if _, err := f.WriteString(gitignoreEntry + "\n"); err != nil {
 					log.Warn("Failed to update .gitignore", "error", err)
 				}
 			}
 		}
 	}
 
-	log.Info("Initialized TLC", "directory", filepath.Base(os.Getenv("PWD")), "project_id", finalProjectID)
+	log.Info("Initialized TLC", "directory", filepath.Base(os.Getenv("PWD")), "project_id", finalProjectID, "mode", mode)
 	return nil
 }
 

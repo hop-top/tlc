@@ -51,6 +51,7 @@ tlc <command> <subcommand> [arguments] [flags]
 - `sync` — External system synchronization
 - `label` — Label management
 - `config` — Configuration management
+- `project` — Project export and import
 - `auth` — Authentication with external systems
 - `version` — Show version information
 
@@ -227,6 +228,8 @@ tlc task list [query] [flags]
 | `--all-projects` | | bool | Show tasks from all projects |
 | `--workspace` | | string | Query across workspace projects |
 | `--space` | | string | Filter to specific space within workspace |
+| `--profile` | | string | Filter by aps profile (resolves to assigned_to) |
+| `--squad` | | string | Filter by aps squad members |
 
 #### Query Syntax
 
@@ -1248,6 +1251,93 @@ Available templates:
   - react-frontend
   - microservices
   - generic
+```
+
+---
+
+## `tlc project` — Project Management
+
+Manage project-level operations including export and import.
+
+### Subcommands
+
+- `export` — Export tasks and logs to file
+- `import` — Import tasks and logs from file
+
+---
+
+### `tlc project export`
+
+Export all project tasks and logs to YAML or JSON.
+
+#### Synopsis
+
+```bash
+tlc project export [file] [flags]
+```
+
+#### Flags
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--format` | `-f` | string | Output format: yaml (default) or json |
+
+#### Behavior
+
+1. Reads all tasks (including archived) from current project
+2. Collects all log entries for each task
+3. Writes to file or stdout if no file specified
+4. Includes project ID, version marker
+
+#### Examples
+
+```bash
+# Export to YAML file
+tlc project export backup.yaml
+
+# Export to JSON
+tlc project export backup.json -f json
+
+# Export to stdout (pipe-friendly)
+tlc project export | yq .
+```
+
+---
+
+### `tlc project import`
+
+Import tasks and logs from a YAML or JSON export file.
+
+#### Synopsis
+
+```bash
+tlc project import <file> [flags]
+```
+
+#### Flags
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--force` | | bool | Overwrite existing tasks on ID conflict |
+
+#### Behavior
+
+1. Parses export file (auto-detects YAML or JSON)
+2. For each task:
+   - If task ID exists and `--force` not set: skip
+   - If task ID exists and `--force` set: overwrite
+   - If task ID is new: create
+3. Imports all log entries
+4. Syncs todo.txt after import
+
+#### Examples
+
+```bash
+# Import (skip existing tasks)
+tlc project import backup.yaml
+
+# Import and overwrite conflicts
+tlc project import backup.yaml --force
 ```
 
 ---

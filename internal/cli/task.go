@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -62,6 +63,8 @@ var (
 
 	taskListWorkspace string
 	taskListSpace     string
+	taskListProfile   string
+	taskListSquad     string
 )
 
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
@@ -666,6 +669,28 @@ var taskListCmd = &cobra.Command{
 			taskListAssignedTo = core.GetCurrentUser()
 		}
 
+		// --profile: resolve aps profile ID and filter by assignee.
+		if taskListProfile != "" {
+			resolved := core.GetGlobalResolver().Resolve(taskListProfile)
+			taskListAssignedTo = resolved
+		}
+
+		// --squad: resolve squad members and filter by any of them.
+		if taskListSquad != "" {
+			members, err := core.ResolveSquadMembers(taskListSquad)
+			if err != nil {
+				return fmt.Errorf("failed to resolve squad %q: %w", taskListSquad, err)
+			}
+			if len(members) == 0 {
+				return fmt.Errorf("squad %q has no members", taskListSquad)
+			}
+			query.Filters = append(query.Filters, core.FieldFilter{
+				Field:    "assigned_to",
+				Operator: core.OpIn,
+				Value:    strings.Join(members, ","),
+			})
+		}
+
 		for _, st := range taskListStatus {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
 		}
@@ -1018,6 +1043,8 @@ func init() {
 	taskListCmd.Flags().BoolVar(&taskListSummary, "summary", false, "Show status summary instead of task list")
 	taskListCmd.Flags().StringVar(&taskListWorkspace, "workspace", "", "Query across workspace projects")
 	taskListCmd.Flags().StringVar(&taskListSpace, "space", "", "Filter to specific space within workspace")
+	taskListCmd.Flags().StringVar(&taskListProfile, "profile", "", "Filter by aps profile")
+	taskListCmd.Flags().StringVar(&taskListSquad, "squad", "", "Filter by aps squad members")
 
 	taskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
 	taskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")

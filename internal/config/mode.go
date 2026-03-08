@@ -117,6 +117,38 @@ func LocalConfigFile(mode EntryMode) string {
 	}
 }
 
+// CheckConfigConflict returns an error when both standalone (.tlc/ or
+// .tlc.yaml) and hop (.hop/tlc/ or .hop/tlc.yaml) configs exist at
+// the given directory. Having both is ambiguous and must be resolved
+// by the user.
+func CheckConfigConflict(dir string) error {
+	standaloneDir := filepath.Join(dir, ".tlc")
+	standaloneFlat := filepath.Join(dir, ".tlc.yaml")
+	hopDir := filepath.Join(dir, ".hop", "tlc")
+	hopFlat := filepath.Join(dir, ".hop", "tlc.yaml")
+
+	hasStandalone := isDir(standaloneDir) || isFile(standaloneFlat)
+	hasHop := isDir(hopDir) || isFile(hopFlat)
+
+	if hasStandalone && hasHop {
+		return fmt.Errorf(
+			"ambiguous config at %s: both standalone (.tlc) and hop (.hop/tlc) configs exist; remove one to resolve",
+			dir,
+		)
+	}
+	return nil
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 // ValidateLocalConfig checks that the expected local config directory
 // exists at or above startDir. Returns an error when the mode is
 // detected (especially hop) but the expected directory is missing.

@@ -14,6 +14,8 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+
+	"hop.top/tlc/internal/config"
 )
 
 const (
@@ -180,12 +182,15 @@ func handleFallbackMode() *ProjectDetection {
 		return &ProjectDetection{InProject: false}
 	}
 
+	entryMode := config.DetectMode()
+	configPath := filepath.Join(config.LocalConfigDir(entryMode), "config.yaml")
+
 	switch mode {
 	case fallbackModeAuto:
 		if err := CreateConfigWithInferredID(inferredID); err == nil {
 			return &ProjectDetection{
 				ProjectID:  inferredID,
-				ConfigPath: ".tlc/config.yaml",
+				ConfigPath: configPath,
 				InProject:  true,
 			}
 		}
@@ -208,7 +213,7 @@ func handleFallbackMode() *ProjectDetection {
 			if createErr := CreateConfigWithInferredID(inferredID); createErr == nil {
 				return &ProjectDetection{
 					ProjectID:  inferredID,
-					ConfigPath: ".tlc/config.yaml",
+					ConfigPath: configPath,
 					InProject:  true,
 				}
 			}
@@ -225,7 +230,9 @@ func handleFallbackMode() *ProjectDetection {
 }
 
 func CreateConfigWithInferredID(projectID string) error {
-	configPath := ".tlc/config.yaml"
+	mode := config.DetectMode()
+	configDir := config.LocalConfigDir(mode)
+	configPath := filepath.Join(configDir, "config.yaml")
 
 	// Skip rewrite if config already exists with the same project ID
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -244,27 +251,27 @@ func CreateConfigWithInferredID(projectID string) error {
 		}
 	}
 
-	if err := os.MkdirAll(".tlc", 0o750); err != nil {
-		return fmt.Errorf("failed to create .tlc directory: %w", err)
+	if err := os.MkdirAll(configDir, 0o750); err != nil {
+		return fmt.Errorf("failed to create %s directory: %w", configDir, err)
 	}
 
-	config := map[string]interface{}{
+	cfg := map[string]interface{}{
 		"version": 0.1,
 		"project": map[string]interface{}{
 			"id": projectID,
 		},
 	}
 
-	data, err := yaml.Marshal(config)
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(".tlc/config.yaml", data, 0o600); err != nil {
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
-	log.Info("Detected project from git remote, created .tlc/config.yaml", "project_id", projectID)
+	log.Info("Detected project, created config", "path", configPath, "project_id", projectID)
 	return nil
 }
 
