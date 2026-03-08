@@ -302,6 +302,47 @@ var taskAssignCmd = &cobra.Command{
 	},
 }
 
+var taskUnassignCmd = &cobra.Command{
+	Use:   "unassign <task-id>",
+	Short: "Remove assignee from a task",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
+		ctx := context.Background()
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get task: %w", err)
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", id)
+		}
+
+		task.AssignedTo = nil
+		task.UpdatedAt = time.Now().UTC()
+
+		logEntry := &core.LogEntry{
+			TaskID:    task.ID,
+			Timestamp: task.UpdatedAt,
+			By:        core.GetCurrentUser(),
+			Action:    core.ActionReassigned,
+			Note:      "Unassigned",
+		}
+
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+			return err
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", id)
+		return syncTODOAll()
+	},
+}
+
 var taskCompleteCmd = &cobra.Command{
 	Use:   "complete <task-id>",
 	Short: "Mark a task as done",
@@ -845,6 +886,8 @@ func init() {
 	taskCmd.AddCommand(taskUnclaimCmd)
 
 	taskCmd.AddCommand(taskAssignCmd)
+
+	taskCmd.AddCommand(taskUnassignCmd)
 
 	taskCmd.AddCommand(taskCompleteCmd)
 
