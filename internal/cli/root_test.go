@@ -242,3 +242,98 @@ func TestInitConfig_UsesOSUserConfigBeforeSystem(t *testing.T) {
 		t.Fatalf("ConfigFileUsed() = %q, want %q", got, userConfigPath)
 	}
 }
+
+// TestFindAllConfigsForMode_Standalone verifies standalone mode uses .tlc paths.
+func TestFindAllConfigsForMode_Standalone(t *testing.T) {
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create .tlc.yaml in root
+	if err := os.WriteFile(filepath.Join(tmp, ".tlc.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Create .tlc/config.yaml in sub
+	tlcDir := filepath.Join(sub, ".tlc")
+	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tlcDir, "config.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	configs := findAllConfigsForMode(sub, "", cfgpkg.ModeStandalone)
+	if len(configs) != 2 {
+		t.Fatalf("expected 2 configs, got %d: %v", len(configs), configs)
+	}
+}
+
+// TestFindAllConfigsForMode_Hop verifies hop mode uses .hop/tlc paths.
+func TestFindAllConfigsForMode_Hop(t *testing.T) {
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "a")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create .hop/tlc.yaml (flat) in root
+	hopDir := filepath.Join(tmp, ".hop")
+	if err := os.MkdirAll(hopDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hopDir, "tlc.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create .hop/tlc/config.yaml (dir) in sub
+	hopTLCDir := filepath.Join(sub, ".hop", "tlc")
+	if err := os.MkdirAll(hopTLCDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hopTLCDir, "config.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	configs := findAllConfigsForMode(sub, "", cfgpkg.ModeHop)
+	if len(configs) != 2 {
+		t.Fatalf("expected 2 configs, got %d: %v", len(configs), configs)
+	}
+
+	// Verify .tlc.yaml is NOT picked up
+	tlcFile := filepath.Join(tmp, ".tlc.yaml")
+	if err := os.WriteFile(tlcFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	configs2 := findAllConfigsForMode(sub, "", cfgpkg.ModeHop)
+	for _, c := range configs2 {
+		if filepath.Base(c) == ".tlc.yaml" {
+			t.Fatalf("hop mode should not pick up .tlc.yaml: %s", c)
+		}
+	}
+}
+
+// TestFindAllConfigsForMode_HopIgnoresStandalone verifies hop mode
+// does not pick up standalone config paths.
+func TestFindAllConfigsForMode_HopIgnoresStandalone(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Only standalone config exists
+	if err := os.WriteFile(filepath.Join(tmp, ".tlc.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tlcDir := filepath.Join(tmp, ".tlc")
+	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tlcDir, "config.yaml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	configs := findAllConfigsForMode(tmp, "", cfgpkg.ModeHop)
+	if len(configs) != 0 {
+		t.Fatalf("hop mode should find 0 standalone configs, got %d: %v",
+			len(configs), configs)
+	}
+}
