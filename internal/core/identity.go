@@ -20,3 +20,10 @@ func GetCurrentUser() string {
 	}
 	return os.Getenv("USER")
 }
+
+// ResolveAssignee normalizes an assignee string using the global
+// ProfileResolver. Returns the canonical aps profile ID if matched,
+// or the input unchanged otherwise.
+func ResolveAssignee(input string) string {
+	return getGlobalResolver().Resolve(input)
+}
