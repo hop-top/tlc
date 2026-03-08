@@ -1514,3 +1514,132 @@ func TestTaskRemoveTag(t *testing.T) {
 		t.Errorf("expected 'bug' tag, got '%s'", updatedTask.Tags[0])
 	}
 }
+
+// TestTaskAssign tests the assign subcommand.
+func TestTaskAssign(t *testing.T) {
+	t.Run("AssignTask", func(t *testing.T) {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		// Create task via CLI (ensures DB is properly initialized)
+		createCmd := newTestCmd()
+		createCmd.AddCommand(taskCmd)
+		createBuf := new(bytes.Buffer)
+		createCmd.SetOut(createBuf)
+		createCmd.SetErr(createBuf)
+		createCmd.SetArgs([]string{"task", "create", "Assign test task"})
+		if err := createCmd.Execute(); err != nil {
+			t.Fatalf("task create failed: %v", err)
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "assign", "T-0001", testEngineer1})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task assign failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "Assigned task T-0001 to engineer-1") {
+			t.Errorf("unexpected output: %s", output)
+		}
+
+		s, _ := getStorageRaw()
+		defer s.Close()
+		ctx := context.Background()
+
+		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		if updatedTask == nil {
+			t.Fatal("task not found after assign")
+		}
+		if updatedTask.AssignedTo == nil {
+			t.Fatal("assignee is nil after assign")
+		}
+		if *updatedTask.AssignedTo != testEngineer1 {
+			t.Errorf("assignee is %s, expected %s", *updatedTask.AssignedTo, testEngineer1)
+		}
+		// Status should NOT change (unlike claim)
+		if updatedTask.Status != core.StatusTodo {
+			t.Errorf("expected status TODO (unchanged), got %s", updatedTask.Status)
+		}
+	})
+
+	t.Run("AssignTaskWithNote", func(t *testing.T) {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		// Create task via CLI
+		createCmd := newTestCmd()
+		createCmd.AddCommand(taskCmd)
+		createBuf := new(bytes.Buffer)
+		createCmd.SetOut(createBuf)
+		createCmd.SetErr(createBuf)
+		createCmd.SetArgs([]string{"task", "create", "Assign note test"})
+		if err := createCmd.Execute(); err != nil {
+			t.Fatalf("task create failed: %v", err)
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "assign", "T-0001", testEngineer2, "--note", "Reassigning for review"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task assign with note failed: %v", err)
+		}
+
+		s, _ := getStorageRaw()
+		defer s.Close()
+		ctx := context.Background()
+
+		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		if updatedTask == nil {
+			t.Fatal("task not found after assign")
+		}
+		if *updatedTask.AssignedTo != testEngineer2 {
+			t.Errorf("assignee is %s, expected %s", *updatedTask.AssignedTo, testEngineer2)
+		}
+		// Status should remain TODO (no transition)
+		if updatedTask.Status != core.StatusTodo {
+			t.Errorf("expected status TODO (unchanged), got %s", updatedTask.Status)
+		}
+
+		// Verify REASSIGNED log entry exists
+		logs, _ := s.GetLogs(ctx, "T-0001", "desc")
+		if len(logs) == 0 {
+			t.Fatal("expected at least one log entry")
+		}
+		found := false
+		for _, l := range logs {
+			if l.Action == core.ActionReassigned {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected REASSIGNED log entry")
+		}
+	})
+
+	t.Run("AssignTaskNotFound", func(t *testing.T) {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(taskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "assign", "T-9999", testEngineer1})
+
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("expected error for non-existent task")
+		}
+	})
+}

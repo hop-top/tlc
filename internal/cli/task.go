@@ -50,6 +50,7 @@ var (
 
 	taskClaimNote    string
 	taskUnclaimNote  string
+	taskAssignNote   string
 	taskCompleteNote     string
 	taskCompleteNoVerify bool
 	taskUpdateForce      bool
@@ -255,6 +256,48 @@ var taskUnclaimCmd = &cobra.Command{
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
+		return syncTODOAll()
+	},
+}
+
+var taskAssignCmd = &cobra.Command{
+	Use:   "assign <task-id> <assignee>",
+	Short: "Assign a task to someone",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		assignee := args[1]
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
+		ctx := context.Background()
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get task: %w", err)
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", id)
+		}
+
+		task.AssignedTo = &assignee
+		task.UpdatedAt = time.Now().UTC()
+
+		logEntry := &core.LogEntry{
+			TaskID:    task.ID,
+			Timestamp: task.UpdatedAt,
+			By:        core.GetCurrentUser(),
+			Action:    core.ActionReassigned,
+			Note:      taskAssignNote,
+		}
+
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+			return err
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", id, assignee)
 		return syncTODOAll()
 	},
 }
@@ -782,6 +825,8 @@ func init() {
 
 	taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
 
+	taskAssignCmd.Flags().StringVarP(&taskAssignNote, "note", "n", "", "Assignment note")
+
 	taskCompleteCmd.Flags().StringVarP(&taskCompleteNote, "note", "n", "", "Completion note")
 	taskCompleteCmd.Flags().BoolVar(&taskCompleteNoVerify, "no-verify", false, "Skip state machine validation")
 
@@ -798,6 +843,8 @@ func init() {
 	taskCmd.AddCommand(taskClaimCmd)
 
 	taskCmd.AddCommand(taskUnclaimCmd)
+
+	taskCmd.AddCommand(taskAssignCmd)
 
 	taskCmd.AddCommand(taskCompleteCmd)
 
