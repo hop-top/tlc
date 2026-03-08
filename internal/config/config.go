@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"log"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -10,17 +13,35 @@ type ProjectConfig struct {
 	ID                  string `yaml:"id"`
 	FallbackMode        string `yaml:"fallback_mode"`
 	DuplicateIDStrategy string `yaml:"duplicate_id_strategy"`
+	Workspace           string `yaml:"workspace,omitempty"`
+}
+
+// WorkspaceConfig contains workspace configuration.
+type WorkspaceConfig struct {
+	Name    string        `yaml:"name"`
+	WsmID   string        `yaml:"wsm_id,omitempty"`
+	Spaces  []SpaceConfig `yaml:"spaces"`
+	Default bool          `yaml:"default,omitempty"`
+}
+
+// SpaceConfig contains configuration for a single space within a workspace.
+type SpaceConfig struct {
+	URI     string            `yaml:"uri"`
+	Adapter string            `yaml:"adapter,omitempty"`
+	Label   string            `yaml:"label,omitempty"`
+	Options map[string]string `yaml:"options,omitempty"`
 }
 
 type Config struct {
-	Version string        `yaml:"version"`
-	Project ProjectConfig `yaml:"project"`
-	Output  OutputConfig  `yaml:"output"`
-	Task    TaskConfig    `yaml:"task"`
-	Git     GitConfig     `yaml:"git"`
-	Sync    SyncConfig    `yaml:"sync"`
-	Storage StorageConfig `yaml:"storage"`
-	UI      UIConfig      `yaml:"ui"`
+	Version    string            `yaml:"version"`
+	Project    ProjectConfig     `yaml:"project"`
+	Output     OutputConfig      `yaml:"output"`
+	Task       TaskConfig        `yaml:"task"`
+	Git        GitConfig         `yaml:"git"`
+	Sync       SyncConfig        `yaml:"sync"`
+	Storage    StorageConfig     `yaml:"storage"`
+	UI         UIConfig          `yaml:"ui"`
+	Workspaces []WorkspaceConfig `yaml:"workspaces,omitempty"`
 }
 
 // Validate validates the project configuration.
@@ -55,7 +76,99 @@ func (c *Config) Validate() error {
 	if err := c.Storage.Validate(); err != nil {
 		return err
 	}
+	if err := c.ValidateWorkspaces(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// knownAdapters lists recognized space adapter names.
+var knownAdapters = map[string]bool{
+	"filesystem": true,
+}
+
+// ValidateWorkspaces validates all workspace configurations.
+func (c *Config) ValidateWorkspaces() error {
+	names := make(map[string]bool, len(c.Workspaces))
+	defaultCount := 0
+
+	for i, ws := range c.Workspaces {
+		if err := ws.Validate(); err != nil {
+			return fmt.Errorf("workspaces[%d]: %w", i, err)
+		}
+		if names[ws.Name] {
+			return fmt.Errorf("duplicate workspace name: %s", ws.Name)
+		}
+		names[ws.Name] = true
+		if ws.Default {
+			defaultCount++
+		}
+	}
+
+	if defaultCount > 1 {
+		return fmt.Errorf("at most one workspace can be default, found %d", defaultCount)
+	}
+
+	return nil
+}
+
+// Validate validates a single workspace configuration.
+func (w *WorkspaceConfig) Validate() error {
+	if strings.TrimSpace(w.Name) == "" {
+		return fmt.Errorf("workspace name must not be empty")
+	}
+	for j, sp := range w.Spaces {
+		if strings.TrimSpace(sp.URI) == "" {
+			return fmt.Errorf("space[%d]: URI must not be empty", j)
+		}
+		if sp.Adapter != "" && !knownAdapters[sp.Adapter] {
+			log.Printf("WARNING: workspace %q space[%d]: unknown adapter %q", w.Name, j, sp.Adapter)
+		}
+	}
+	return nil
+}
+
+// DefaultWorkspace returns the workspace marked as default, or the first one,
+// or nil if no workspaces are configured.
+func (c *Config) DefaultWorkspace() *WorkspaceConfig {
+	if len(c.Workspaces) == 0 {
+		return nil
+	}
+	for i := range c.Workspaces {
+		if c.Workspaces[i].Default {
+			return &c.Workspaces[i]
+		}
+	}
+	return &c.Workspaces[0]
+}
+
+// FindWorkspace returns the workspace with the given name, or nil.
+func (c *Config) FindWorkspace(name string) *WorkspaceConfig {
+	for i := range c.Workspaces {
+		if c.Workspaces[i].Name == name {
+			return &c.Workspaces[i]
+		}
+	}
+	return nil
+}
+
+// InferAdapterFromURI returns the adapter name inferred from a URI.
+// Returns "filesystem" for bare paths and file:// URIs, empty string for
+// unknown schemes.
+func InferAdapterFromURI(uri string) string {
+	if uri == "" {
+		return ""
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return ""
+	}
+	switch parsed.Scheme {
+	case "", "file":
+		return "filesystem"
+	default:
+		return ""
+	}
 }
 
 // OutputConfig contains output-related configuration.
