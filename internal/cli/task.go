@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	texttemplate "text/template"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -77,6 +78,82 @@ func appendNote(task *core.Task, note string) {
 		task.Description = note
 	} else {
 		task.Description = task.Description + "\n\n" + note
+	}
+}
+
+// auditLogData holds the template context for an audit log entry.
+type auditLogData struct {
+	Timestamp string
+	Author    string
+	Action    string
+	Details   string
+	Note      string
+}
+
+const defaultAuditTemplate = "{{.Timestamp}} · @{{.Author}} · {{.Action}} {{.Details}}{{if .Note}}\n{{.Note}}{{end}}"
+const defaultTimestampFormat = "2006-01-02 15:04"
+const defaultAuditSeparator = "---"
+
+// appendAuditLog appends a structured audit log entry to the task description.
+// The first entry is always preceded by "---" (description/audit boundary).
+// Subsequent entries are separated by the configured separator (default "---").
+func appendAuditLog(task *core.Task, author, action, details, note string, ts time.Time) {
+	tmplStr := viper.GetString("audit_log.template")
+	if tmplStr == "" {
+		tmplStr = defaultAuditTemplate
+	}
+
+	tsFmt := viper.GetString("audit_log.timestamp_format")
+	if tsFmt == "" {
+		tsFmt = defaultTimestampFormat
+	}
+
+	separator := defaultAuditSeparator
+	if viper.IsSet("audit_log.separator") {
+		separator = viper.GetString("audit_log.separator")
+	}
+
+	data := auditLogData{
+		Timestamp: ts.Format(tsFmt),
+		Author:    author,
+		Action:    action,
+		Details:   details,
+		Note:      note,
+	}
+
+	tmpl, err := texttemplate.New("audit").Parse(tmplStr)
+	if err != nil {
+		// Fallback to default if custom template is invalid.
+		tmpl, _ = texttemplate.New("audit").Parse(defaultAuditTemplate)
+	}
+
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
+		// Fallback: plain format.
+		buf.Reset()
+		buf.WriteString(fmt.Sprintf("%s · @%s · %s %s", data.Timestamp, author, action, details))
+		if note != "" {
+			buf.WriteString("\n" + note)
+		}
+	}
+	entry := buf.String()
+
+	// Check if description already has audit entries (contains "---").
+	hasAuditBlock := strings.Contains(task.Description, "\n---\n") || strings.HasPrefix(task.Description, "---")
+
+	if task.Description == "" {
+		// No description at all — start with boundary + entry.
+		task.Description = "---\n" + entry
+	} else if hasAuditBlock {
+		// Already has audit entries — use configured separator between entries.
+		if separator == "" {
+			task.Description = task.Description + "\n" + entry
+		} else {
+			task.Description = task.Description + "\n\n" + separator + "\n" + entry
+		}
+	} else {
+		// Has description but no audit block yet — add boundary.
+		task.Description = task.Description + "\n\n---\n" + entry
 	}
 }
 
@@ -217,6 +294,7 @@ var taskClaimCmd = &cobra.Command{
 		}
 
 		user := core.GetCurrentUser()
+		prevStatus := task.Status
 		task.AssignedTo = &user
 
 		wm := core.DefaultWorkflow()
@@ -227,6 +305,10 @@ var taskClaimCmd = &cobra.Command{
 		log, err := task.TransitionWithWorkflow(
 			activeStatus, user, taskClaimNote, wm, false,
 		)
+		if err == nil {
+			details := fmt.Sprintf("(%s → %s, assigned to @%s)", prevStatus, activeStatus, user)
+			appendAuditLog(task, user, "CLAIMED", details, taskClaimNote, task.UpdatedAt)
+		}
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
@@ -261,6 +343,8 @@ var taskUnclaimCmd = &cobra.Command{
 			return fmt.Errorf("task not found: %s", id)
 		}
 
+		user := core.GetCurrentUser()
+		prevStatus := task.Status
 		task.AssignedTo = nil
 
 		wm := core.DefaultWorkflow()
@@ -269,8 +353,12 @@ var taskUnclaimCmd = &cobra.Command{
 			return fmt.Errorf("workflow has no initial status: %w", wmErr)
 		}
 		log, err := task.TransitionWithWorkflow(
-			initialStatus, core.GetCurrentUser(), taskUnclaimNote, wm, false,
+			initialStatus, user, taskUnclaimNote, wm, false,
 		)
+		if err == nil {
+			details := fmt.Sprintf("(%s → %s, unassigned)", prevStatus, initialStatus)
+			appendAuditLog(task, user, "UNCLAIMED", details, taskUnclaimNote, task.UpdatedAt)
+		}
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
@@ -306,13 +394,25 @@ var taskAssignCmd = &cobra.Command{
 			return fmt.Errorf("task not found: %s", id)
 		}
 
+		user := core.GetCurrentUser()
+		prevAssignee := ""
+		if task.AssignedTo != nil {
+			prevAssignee = *task.AssignedTo
+		}
+
 		task.AssignedTo = &assignee
 		task.UpdatedAt = time.Now().UTC()
+
+		details := fmt.Sprintf("(assigned to @%s)", assignee)
+		if prevAssignee != "" {
+			details = fmt.Sprintf("(reassigned from @%s to @%s)", prevAssignee, assignee)
+		}
+		appendAuditLog(task, user, "ASSIGNED", details, taskAssignNote, task.UpdatedAt)
 
 		logEntry := &core.LogEntry{
 			TaskID:    task.ID,
 			Timestamp: task.UpdatedAt,
-			By:        core.GetCurrentUser(),
+			By:        user,
 			Action:    core.ActionReassigned,
 			Note:      taskAssignNote,
 		}
@@ -351,14 +451,25 @@ var taskUnassignCmd = &cobra.Command{
 			return fmt.Errorf("task not found: %s", id)
 		}
 
+		prevAssignee := ""
+		if task.AssignedTo != nil {
+			prevAssignee = *task.AssignedTo
+		}
+
+		user := core.GetCurrentUser()
 		task.AssignedTo = nil
 		task.UpdatedAt = time.Now().UTC()
-		appendNote(task, taskUnassignNote)
+
+		details := "(unassigned)"
+		if prevAssignee != "" {
+			details = fmt.Sprintf("(unassigned from @%s)", prevAssignee)
+		}
+		appendAuditLog(task, user, "UNASSIGNED", details, taskUnassignNote, task.UpdatedAt)
 
 		logEntry := &core.LogEntry{
 			TaskID:    task.ID,
 			Timestamp: task.UpdatedAt,
-			By:        core.GetCurrentUser(),
+			By:        user,
 			Action:    core.ActionReassigned,
 			Note:      taskUnassignNote,
 		}
@@ -398,6 +509,7 @@ var taskCompleteCmd = &cobra.Command{
 			task.AssignedTo = &user
 		}
 
+		prevStatus := task.Status
 		wm := core.DefaultWorkflow()
 		completedStatus, wmErr := wm.StatusForRole("completed")
 		if wmErr != nil {
@@ -406,6 +518,10 @@ var taskCompleteCmd = &cobra.Command{
 		logEntry, err := task.TransitionWithWorkflow(
 			completedStatus, user, taskCompleteNote, wm, taskCompleteNoVerify,
 		)
+		if err == nil {
+			details := fmt.Sprintf("(%s → %s)", prevStatus, completedStatus)
+			appendAuditLog(task, user, "COMPLETED", details, taskCompleteNote, task.UpdatedAt)
+		}
 		if err != nil {
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
@@ -454,9 +570,9 @@ var taskReopenCmd = &cobra.Command{
 			return fmt.Errorf("workflow has no initial status: %w", wmErr)
 		}
 
-		appendNote(task, taskReopenNote)
-
 		user := core.GetCurrentUser()
+		details := fmt.Sprintf("(%s → %s)", task.Status, initialStatus)
+		appendAuditLog(task, user, "REOPENED", details, taskReopenNote, time.Now().UTC())
 		logEntry, err := task.TransitionWithWorkflow(
 			initialStatus, user, taskReopenNote, wm, true,
 		)
