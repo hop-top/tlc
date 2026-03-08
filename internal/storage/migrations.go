@@ -74,10 +74,27 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_flow_runs_status ON flow_runs(status);
 		`,
 	},
+	{
+		version: 2,
+		query: `
+		CREATE TABLE IF NOT EXISTS projects (
+			project_id    TEXT PRIMARY KEY,
+			db_path       TEXT NOT NULL,
+			space_uri     TEXT,
+			label         TEXT,
+			registered_at TEXT NOT NULL,
+			last_seen_at  TEXT NOT NULL,
+			status        TEXT NOT NULL DEFAULT 'active'
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_projects_space_uri ON projects(space_uri);
+		CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 1
+const LatestMigrationVersion = 2
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
