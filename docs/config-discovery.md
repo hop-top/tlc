@@ -17,12 +17,12 @@ Viper provides a static configuration path search:
 ```go
 // Viper only checks these exact paths:
 viper.AddConfigPath("/etc/tlc")                    // System-wide
-viper.AddConfigPath("$HOME/.config/tlc")          // User home
+viper.AddConfigPath("$HOME/.config/tlc")          // User home (Linux)
 viper.SetConfigName("config")                       // Looks for "config.yaml"
 
 // When you call viper.ReadInConfig(), it only checks:
 // /etc/tlc/config.yaml
-// /home/user/.config/tlc/config.yaml
+// <os user config dir>/tlc/config.yaml
 ```
 
 ### Limitations
@@ -132,7 +132,7 @@ func initConfig() {
 Configs are merged in this order (later configs override earlier ones):
 
 1. `/etc/tlc/config.yaml` (system)
-2. `~/.config/tlc/config.yaml` (user home)
+2. `<os user config dir>/tlc/config.yaml` (user home)
 3. `{boundary}/.tlc/config.yaml` (if present at the common-ancestor boundary)
 4. `/repo/.tlc/config.yaml` (root-most found below the boundary)
 5. `/repo/subproject/.tlc/config.yaml` (closer found by walk-up)

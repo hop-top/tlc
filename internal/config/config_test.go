@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -345,5 +347,117 @@ func TestTaskConfig_EmptyStatusesPopulatedWithDefaults(t *testing.T) {
 	}
 	if cfg.Task.StateMachine == nil {
 		t.Error("expected state machine to be populated with defaults")
+	}
+}
+
+func TestUserConfigPath_UsesOSConfigDir(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-config-ospath-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	homeDir := filepath.Join(tmpDir, "home")
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() {
+		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("XDG_CONFIG_HOME", oldXDG)
+	}()
+	_ = os.Setenv("HOME", homeDir)
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
+
+	got, err := UserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		want := filepath.Join(
+			homeDir, "Library", "Application Support", "tlc", "config.yaml",
+		)
+		if got != want {
+			t.Fatalf("macOS: UserConfigPath() = %q, want %q", got, want)
+		}
+	case "linux":
+		want := filepath.Join(homeDir, ".config", "tlc", "config.yaml")
+		if got != want {
+			t.Fatalf("linux: UserConfigPath() = %q, want %q", got, want)
+		}
+	default:
+		if !strings.Contains(got, "tlc") {
+			t.Fatalf("UserConfigPath() = %q, expected it to contain 'tlc'", got)
+		}
+	}
+}
+
+func TestUserConfigPath_RespectsXDGConfigHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("XDG_CONFIG_HOME not used on Windows")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "tlc-config-xdg-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	customConfig := filepath.Join(tmpDir, "custom-config")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() { _ = os.Setenv("XDG_CONFIG_HOME", oldXDG) }()
+
+	// On macOS, os.UserConfigDir() ignores XDG_CONFIG_HOME and
+	// always returns ~/Library/Application Support. This test only
+	// validates XDG behaviour on Linux.
+	if runtime.GOOS != "linux" {
+		t.Skip("XDG_CONFIG_HOME only affects os.UserConfigDir on Linux")
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", customConfig)
+
+	got, err := UserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(customConfig, "tlc", "config.yaml")
+	if got != want {
+		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestWritableConfigPath_ReturnsExplicitNonSystemPath(t *testing.T) {
+	explicit := "/tmp/my-project/.tlc/config.yaml"
+	got, err := WritableConfigPath(explicit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != explicit {
+		t.Fatalf("WritableConfigPath(%q) = %q, want same", explicit, got)
+	}
+}
+
+func TestWritableConfigPath_FallsBackFromSystemToUser(t *testing.T) {
+	got, err := WritableConfigPath(SystemConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == SystemConfigPath() {
+		t.Fatalf("WritableConfigPath(system) should not return system path, got %q", got)
+	}
+	want, _ := UserConfigPath()
+	if got != want {
+		t.Fatalf("WritableConfigPath(system) = %q, want %q", got, want)
+	}
+}
+
+func TestWritableConfigPath_EmptyCurrentFallsBackToUser(t *testing.T) {
+	got, err := WritableConfigPath("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := UserConfigPath()
+	if got != want {
+		t.Fatalf("WritableConfigPath('') = %q, want %q", got, want)
 	}
 }
