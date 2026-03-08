@@ -1765,3 +1765,41 @@ func TestTaskListSummaryFormat(t *testing.T) {
 		t.Errorf("expected 'Total' in summary output, got: %s", output)
 	}
 }
+
+// TestTaskListFormatSummary tests -f summary as a format value.
+func TestTaskListFormatSummary(t *testing.T) {
+	defer resetTestDB(t)()
+	ctx := context.Background()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	proj := "fmt-project"
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task A", Status: core.StatusTodo, ProjectID: &proj})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Task B", Status: core.StatusInProgress, ProjectID: &proj})
+
+	viper.Set("output.format", "summary")
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list -f summary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Project: fmt-project") {
+		t.Errorf("expected 'Project: fmt-project' in output, got: %s", output)
+	}
+	if !contains(output, "TODO") {
+		t.Errorf("expected 'TODO' in output, got: %s", output)
+	}
+	if !contains(output, "IN_PROGRESS") {
+		t.Errorf("expected 'IN_PROGRESS' in output, got: %s", output)
+	}
+	if !contains(output, "Total") {
+		t.Errorf("expected 'Total' in output, got: %s", output)
+	}
+}
