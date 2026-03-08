@@ -320,7 +320,7 @@ func checkProjectIDSet(fix bool) checkResult {
 func checkDBPathWritable(fix bool) checkResult {
 	dbPath := viper.GetString("storage.db_path")
 	if dbPath == "" {
-		dbPath = filepath.Join(getDataHome(), "tlc", "db.sqlite")
+		dbPath = filepath.Join(config.UserDataDir(), "db.sqlite")
 	}
 	dir := filepath.Dir(dbPath)
 	if _, err := os.Stat(dir); err == nil {

@@ -461,3 +461,59 @@ func TestWritableConfigPath_EmptyCurrentFallsBackToUser(t *testing.T) {
 		t.Fatalf("WritableConfigPath('') = %q, want %q", got, want)
 	}
 }
+
+func TestUserDataDir_RespectsXDGDataHome(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-data-xdg-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldXDG := os.Getenv("XDG_DATA_HOME")
+	defer func() { _ = os.Setenv("XDG_DATA_HOME", oldXDG) }()
+
+	_ = os.Setenv("XDG_DATA_HOME", tmpDir)
+	got := UserDataDir()
+	want := filepath.Join(tmpDir, "tlc")
+	if got != want {
+		t.Fatalf("UserDataDir() = %q, want %q", got, want)
+	}
+}
+
+func TestUserDataDir_FallsBackToOSNative(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-data-native-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	homeDir := filepath.Join(tmpDir, "home")
+
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_DATA_HOME")
+	defer func() {
+		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("XDG_DATA_HOME", oldXDG)
+	}()
+	_ = os.Setenv("HOME", homeDir)
+	_ = os.Unsetenv("XDG_DATA_HOME")
+
+	got := UserDataDir()
+
+	switch runtime.GOOS {
+	case "darwin":
+		want := filepath.Join(homeDir, "Library", "Application Support", "tlc")
+		if got != want {
+			t.Fatalf("macOS: UserDataDir() = %q, want %q", got, want)
+		}
+	case "linux":
+		want := filepath.Join(homeDir, ".local", "share", "tlc")
+		if got != want {
+			t.Fatalf("linux: UserDataDir() = %q, want %q", got, want)
+		}
+	default:
+		if !strings.Contains(got, "tlc") {
+			t.Fatalf("UserDataDir() = %q, expected it to contain 'tlc'", got)
+		}
+	}
+}

@@ -4,11 +4,30 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/viper"
 )
 
 const systemConfigDir = "/etc/tlc"
+
+// UserDataDir returns the TLC data directory under $XDG_DATA_HOME/tlc.
+// Falls back to OS-native data directory when XDG_DATA_HOME is unset.
+func UserDataDir() string {
+	dataHome := os.Getenv("XDG_DATA_HOME")
+	if dataHome == "" {
+		home, _ := os.UserHomeDir()
+		switch runtime.GOOS {
+		case "darwin":
+			dataHome = filepath.Join(home, "Library", "Application Support")
+		case "windows":
+			dataHome = filepath.Join(home, "AppData", "Local")
+		default:
+			dataHome = filepath.Join(home, ".local", "share")
+		}
+	}
+	return filepath.Join(dataHome, "tlc")
+}
 
 func UserConfigDir() (string, error) {
 	dir, err := os.UserConfigDir()
