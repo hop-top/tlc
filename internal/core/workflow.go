@@ -114,8 +114,11 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 		return nil
 	}
 
-	// Terminal statuses cannot transition to anything
+	// Terminal statuses cannot transition unless forced.
 	if wm.IsTerminal(current) {
+		if force {
+			return nil
+		}
 		return ErrInvalidTransition{From: current, To: next, Msg: "terminal states are immutable"}
 	}
 

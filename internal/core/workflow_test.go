@@ -94,6 +94,19 @@ func TestValidateTransition_ForceBypassesRules(t *testing.T) {
 	}
 }
 
+func TestValidateTransition_ForceBypassesTerminal(t *testing.T) {
+	wm, err := NewWorkflowManager(defaultTestConfig())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// DONE -> TODO is normally blocked (terminal), but force=true bypasses
+	err = wm.ValidateTransition(StatusDone, StatusTodo, true)
+	if err != nil {
+		t.Errorf("expected force=true to bypass terminal immutability, got error: %v", err)
+	}
+}
+
 func TestValidateTransition_ForceRejectsUnknownStatuses(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {

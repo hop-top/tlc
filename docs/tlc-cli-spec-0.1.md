@@ -115,6 +115,7 @@ Manage tasks (create, read, update, delete).
 - `claim` — Claim task for work
 - `unclaim` — Release claimed task
 - `complete` — Mark task as done
+- `reopen` — Reopen a completed or skipped task
 
 ---
 
@@ -622,6 +623,42 @@ tlc task complete T-0042 --note "All tests passing"
 
 # Force complete (skip workflow validation)
 tlc task complete T-0042 --no-verify
+```
+
+---
+
+### `tlc task reopen`
+
+Reopen a completed or skipped task, returning it to TODO.
+
+#### Synopsis
+
+```bash
+tlc task reopen <task-id> [flags]
+```
+
+#### Flags
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--note` | `-n` | string | Reopen note |
+
+#### Behavior
+
+1. Validates task is in a terminal state (DONE or SKIPPED)
+2. Transitions task to the workflow's `initial` status (TODO)
+3. Uses forced transition to bypass terminal immutability
+4. Updates `updated_at` timestamp
+5. Writes STATUS_CHANGED log entry
+
+#### Examples
+
+```bash
+# Reopen a completed task
+tlc task reopen T-0042
+
+# Reopen with note
+tlc task reopen T-0042 --note "Needs rework after review"
 ```
 
 ---

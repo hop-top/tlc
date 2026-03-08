@@ -56,6 +56,7 @@ var (
 	taskAssignNote   string
 	taskCompleteNote     string
 	taskCompleteNoVerify bool
+	taskReopenNote       string
 	taskUpdateForce      bool
 	taskListSummary      bool
 
@@ -393,6 +394,54 @@ var taskCompleteCmd = &cobra.Command{
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", id)
+		return syncTODOAll()
+	},
+}
+
+var taskReopenCmd = &cobra.Command{
+	Use:   "reopen <task-id>",
+	Short: "Reopen a completed or skipped task",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
+		ctx := context.Background()
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get task: %w", err)
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", id)
+		}
+
+		wm := core.DefaultWorkflow()
+		if !wm.IsTerminal(task.Status) {
+			return fmt.Errorf("task %s is not in a terminal state (status: %s)", id, task.Status)
+		}
+
+		initialStatus, wmErr := wm.StatusForRole("initial")
+		if wmErr != nil {
+			return fmt.Errorf("workflow has no initial status: %w", wmErr)
+		}
+
+		user := core.GetCurrentUser()
+		logEntry, err := task.TransitionWithWorkflow(
+			initialStatus, user, taskReopenNote, wm, true,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to reopen task: %w", err)
+		}
+
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+			return err
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", id)
 		return syncTODOAll()
 	},
 }
@@ -992,6 +1041,8 @@ func init() {
 	taskCompleteCmd.Flags().StringVarP(&taskCompleteNote, "note", "n", "", "Completion note")
 	taskCompleteCmd.Flags().BoolVar(&taskCompleteNoVerify, "no-verify", false, "Skip state machine validation")
 
+	taskReopenCmd.Flags().StringVarP(&taskReopenNote, "note", "n", "", "Reopen note")
+
 	taskCmd.AddCommand(taskCreateCmd)
 
 	taskCmd.AddCommand(taskListCmd)
@@ -1011,6 +1062,8 @@ func init() {
 	taskCmd.AddCommand(taskUnassignCmd)
 
 	taskCmd.AddCommand(taskCompleteCmd)
+
+	taskCmd.AddCommand(taskReopenCmd)
 
 	rootCmd.AddCommand(taskCmd)
 }
