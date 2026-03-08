@@ -32,7 +32,7 @@ As a System, I want to validate TLC configuration at startup, so that invalid co
 **What's Currently Implemented:**
 - Config file locations checked: `-c` flag, OS user config dir + `/tlc/config.yaml`,
   `/etc/tlc/config.yaml`, `.tlc/config.yaml`, `.tlc.yaml` (merged cascade)
-- Validation implemented: `output.format` (table, json, yaml, tls), `storage.backend` (sqlite, local, postgres), `project.fallback_mode` (auto, detected, prompt), `project.duplicate_id_strategy` (share, unique, prompt), `sync.github.repo` (required when enabled)
+- Validation implemented: `output.format` (table, json, yaml, tls, summary), `storage.backend` (sqlite, local, postgres), `project.fallback_mode` (auto, detected, prompt), `project.duplicate_id_strategy` (share, unique, prompt), `sync.github.repo` (required when enabled)
 - Environment variable override: `TLC_*` prefix with dot-to-underscore replacement (e.g., `TLC_OUTPUT_FORMAT`)
 - Config CLI commands: `config validate`, `config list`, `config get`, `config set`
 

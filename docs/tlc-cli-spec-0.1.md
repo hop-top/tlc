@@ -21,7 +21,7 @@ Available on all commands:
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
 | `--config` | `-c` | path | Config file path (default: auto-detect) |
-| `--format` | `-f` | enum | Output format: `table`, `json`, `yaml`, `tls` |
+| `--format` | `-f` | enum | Output format: `table`, `json`, `yaml`, `tls`, `summary` |
 | `--no-color` | | bool | Disable colored output |
 | `--verbose` | `-v` | bool | Verbose logging |
 | `--quiet` | `-q` | bool | Suppress non-essential output |
@@ -1294,6 +1294,28 @@ tlc version --short
 ```
 
 See `task-line-spec-0.1.md` for full TLS specification.
+
+### Summary Format
+
+Groups tasks by project, shows status counts and assignee breakdown.
+Useful for cross-project overviews.
+
+```
+proj/alpha (4)
+  To Do        2
+  In Progress  1
+  Done         1
+  assignees: alice:2  bob:1
+
+Total
+  4 tasks across 1 project
+  To Do        2
+  In Progress  1
+  Done         1
+```
+
+Accessible via `--summary` flag or `-f summary`. Combinable with all
+filters (`--status`, `--assigned-to`, `--tag`, `--all-projects`).
 
 ---
 

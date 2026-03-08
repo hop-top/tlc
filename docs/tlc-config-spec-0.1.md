@@ -131,7 +131,7 @@ ui:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `format` | enum | `table` (TTY), `json` (pipe) | Output format: `table`, `json`, `yaml`, `tls` |
+| `format` | enum | `table` (TTY), `json` (pipe) | Output format: `table`, `json`, `yaml`, `tls`, `summary` |
 | `color` | bool | `true` (TTY), `false` (pipe) | Enable colored output |
 | `verbose` | bool | `false` | Verbose logging |
 | `quiet` | bool | `false` | Suppress non-essential output |
@@ -676,7 +676,7 @@ TLC validates config on load:
 ```yaml
 # Invalid: bad enum value
 output:
-  format: xml  # Error: format must be table|json|yaml|tls
+  format: xml  # Error: format must be table|json|yaml|tls|summary
 
 # Invalid: bad type
 sync:

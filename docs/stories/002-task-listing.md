@@ -79,7 +79,7 @@ As a Solo Developer, I want to query and list tasks with flexible filtering so t
 - [ ] **HIGH PRIORITY**: Add assignee filter test to `internal/cli/task_test.go` (verify `--assigned-to engineer-1` filters correctly)
 - [ ] **HIGH PRIORITY**: Add `--assigned-to me` resolution test (verify it resolves to current user from `GetCurrentUser()`)
 - [ ] **HIGH PRIORITY**: Add status filter test to `internal/cli/task_test.go` (verify `--status TODO` filters correctly)
-- [ ] Add format validation tests (JSON, YAML, TLS, table) to CLI tests
+- [ ] Add format validation tests (JSON, YAML, TLS, table, summary) to CLI tests
 - [ ] Verify table column ordering (ID, Title, Status, Assigned)
 - [ ] Validate JSON output structure for scripting compatibility
 - [ ] Validate YAML output structure
