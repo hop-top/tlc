@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
@@ -71,6 +72,50 @@ var (
 const (
 	strategyShare = "share"
 )
+
+// localProjectDBPath returns the absolute path to the project's local
+// SQLite database, respecting the current entry mode.
+func localProjectDBPath() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	mode := config.DetectMode()
+	return filepath.Join(cwd, config.LocalConfigDir(mode), "db.sqlite")
+}
+
+// inferSpaceURI detects the workspace space URI from the directory
+// structure. If cwd is under $HOME/.w/<org>/, returns that path.
+func inferSpaceURI() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	wDir := filepath.Join(home, ".w")
+	rel, err := filepath.Rel(wDir, cwd)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	// rel is like "org/repo/..." — extract the first segment
+	parts := strings.SplitN(rel, string(filepath.Separator), 2)
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+	return filepath.Join(wDir, parts[0])
+}
+
+// inferLabel returns the last path segment of a project ID as label.
+func inferLabel(projectID string) string {
+	parts := strings.Split(projectID, "/")
+	if len(parts) == 0 {
+		return projectID
+	}
+	return parts[len(parts)-1]
+}
 
 func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *bool, fallbackMode *string, duplicateIDStrategy *string) error {
 	if _, err := os.Stat(".tlc"); err == nil && !*force {
@@ -133,6 +178,30 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 						log.Warn("Sharing existing project", "project_id", detectedID, "task_count", len(existingTasks))
 					}
 				}
+			}
+		}
+
+		// Register or reconnect the project in the global projects table.
+		projDBPath := localProjectDBPath()
+		spaceURI := inferSpaceURI()
+		label := inferLabel(finalProjectID)
+
+		existing, lookupErr := s.LookupProject(ctx, finalProjectID)
+		if lookupErr == nil && existing != nil {
+			// Reconnect: update the stored db_path
+			if updateErr := s.UpdateProjectPath(ctx, finalProjectID, projDBPath); updateErr != nil {
+				log.Warn("Failed to update project path", "error", updateErr)
+			} else {
+				log.Info("Reconnected to existing project",
+					"project_id", finalProjectID,
+					"registered", existing.RegisteredAt.Format("2006-01-02"))
+			}
+		} else {
+			// New project: register it
+			if regErr := s.RegisterProject(ctx, finalProjectID, projDBPath, spaceURI, label); regErr != nil {
+				log.Warn("Failed to register project", "error", regErr)
+			} else {
+				log.Info("Registered new project", "project_id", finalProjectID)
 			}
 		}
 	}

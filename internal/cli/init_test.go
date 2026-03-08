@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 // TestInitCmd tests tlc init command functionality
@@ -671,5 +675,188 @@ func TestInitCmd_ConfigStructureWithProject(t *testing.T) {
 		}
 	} else {
 		t.Error("project config section not found")
+	}
+}
+
+func TestInferLabel(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"hop-top/tlc", "tlc"},
+		{"org/sub/repo", "repo"},
+		{"simple", "simple"},
+		{"a/b", "b"},
+	}
+	for _, tt := range tests {
+		if got := inferLabel(tt.input); got != tt.want {
+			t.Errorf("inferLabel(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestInferSpaceURI(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home dir")
+	}
+
+	// Create a temp dir under $HOME/.w/testorg
+	wDir := filepath.Join(home, ".w", "testorg-init-reconnect")
+	projDir := filepath.Join(wDir, "myrepo")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("failed to create test dir: %v", err)
+	}
+	defer os.RemoveAll(wDir)
+
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+
+	os.Chdir(projDir)
+	got := inferSpaceURI()
+	if got != wDir {
+		t.Errorf("inferSpaceURI() = %q, want %q", got, wDir)
+	}
+
+	// Outside of .w/ should return empty
+	os.Chdir(origDir)
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	if got := inferSpaceURI(); got != "" {
+		t.Errorf("inferSpaceURI() outside .w = %q, want empty", got)
+	}
+}
+
+// TestInitCmd_RegistersNewProject verifies that init registers a new
+// project in the global projects table when no prior registration exists.
+func TestInitCmd_RegistersNewProject(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-init-register-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	viper.Reset()
+	core.ResetDetectionCache()
+	dbSyncOnce = sync.Once{}
+
+	dbFile := filepath.Join(tmpDir, "test-global.sqlite")
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbFile)
+
+	cmd := newTestCmd()
+	initCmd := newTestInitCmd()
+	cmd.AddCommand(initCmd)
+
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"init"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	// Read back the project ID from generated config
+	data, err := os.ReadFile(filepath.Join(".tlc", "config.yaml"))
+	if err != nil {
+		t.Fatalf("failed to read config: %v", err)
+	}
+	var cfg map[string]interface{}
+	yaml.Unmarshal(data, &cfg)
+	projCfg := cfg["project"].(map[string]interface{})
+	projectID := projCfg["id"].(string)
+
+	// Verify the project was registered in the global DB
+	s, err := storage.NewSQLiteStorage(dbFile)
+	if err != nil {
+		t.Fatalf("failed to open storage: %v", err)
+	}
+	defer s.Close()
+
+	proj, err := s.LookupProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("LookupProject() failed: %v", err)
+	}
+	if proj == nil {
+		t.Fatal("expected project to be registered, got nil")
+	}
+	if proj.ProjectID != projectID {
+		t.Errorf("project_id = %q, want %q", proj.ProjectID, projectID)
+	}
+	if proj.Label == "" {
+		t.Error("expected non-empty label")
+	}
+}
+
+// TestInitCmd_ReconnectsExistingProject verifies that running init
+// a second time reconnects to an already-registered project.
+func TestInitCmd_ReconnectsExistingProject(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-init-reconnect-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	dbFile := filepath.Join(tmpDir, "test-global.sqlite")
+
+	// Pre-register a project with an old db_path
+	s, err := storage.NewSQLiteStorage(dbFile)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	ctx := context.Background()
+	projectID := "unknown" // DetectProjectID returns "unknown" in temp dirs
+	oldPath := "/old/path/db.sqlite"
+	if err := s.RegisterProject(ctx, projectID, oldPath, "", "unknown"); err != nil {
+		t.Fatalf("RegisterProject() failed: %v", err)
+	}
+	s.Close()
+
+	// Run init
+	viper.Reset()
+	core.ResetDetectionCache()
+	dbSyncOnce = sync.Once{}
+
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbFile)
+
+	cmd := newTestCmd()
+	initCmd := newTestInitCmd()
+	cmd.AddCommand(initCmd)
+
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"init"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	// Verify the path was updated (not the old path)
+	s2, err := storage.NewSQLiteStorage(dbFile)
+	if err != nil {
+		t.Fatalf("failed to open storage: %v", err)
+	}
+	defer s2.Close()
+
+	proj, err := s2.LookupProject(ctx, projectID)
+	if err != nil {
+		t.Fatalf("LookupProject() failed: %v", err)
+	}
+	if proj.DBPath == oldPath {
+		t.Errorf("db_path was not updated, still %q", oldPath)
+	}
+	if !strings.Contains(proj.DBPath, "db.sqlite") {
+		t.Errorf("expected db_path to contain db.sqlite, got %q", proj.DBPath)
 	}
 }
