@@ -13,6 +13,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Compile-time check: SQLiteStorage implements core.TaskReader.
+var _ core.TaskReader = (*SQLiteStorage)(nil)
+
 const (
 	sqlOpLike    = "LIKE"
 	sqlOrderASC  = "ASC"
@@ -841,4 +844,96 @@ func (s *SQLiteStorage) Close() error {
 		return fmt.Errorf("failed to close database: %w", err)
 	}
 	return nil
+}
+
+// GetTaskLogs returns log entries for a task, sorted newest-first.
+// Satisfies core.TaskReader.
+func (s *SQLiteStorage) GetTaskLogs(ctx context.Context, taskID string) ([]*core.LogEntry, error) {
+	return s.GetLogs(ctx, taskID, "desc")
+}
+
+// CountTasks returns the number of tasks matching the query.
+// Satisfies core.TaskReader.
+func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, error) {
+	sqlQuery := "SELECT COUNT(*) FROM tasks"
+	var args []interface{}
+
+	// Group filters by field to implement OR logic for same field
+	fieldGroups := make(map[string][]core.FieldFilter)
+	for _, f := range query.Filters {
+		fieldGroups[f.Field] = append(fieldGroups[f.Field], f)
+	}
+
+	whereClauses := []string{}
+	for field, filters := range fieldGroups {
+		groupClauses := []string{}
+		for _, f := range filters {
+			op := "="
+			switch f.Operator {
+			case core.OpEq, core.OpEqual:
+				op = "="
+			case core.OpNotEq:
+				op = "!="
+			case core.OpGt:
+				op = ">"
+			case core.OpGte:
+				op = ">="
+			case core.OpLt:
+				op = "<"
+			case core.OpLte:
+				op = "<="
+			case core.OpContains:
+				op = sqlOpLike
+				f.Value = "%" + fmt.Sprintf("%v", f.Value) + "%"
+			case core.OpStart:
+				op = sqlOpLike
+				f.Value = fmt.Sprintf("%v", f.Value) + "%"
+			case core.OpEnd:
+				op = sqlOpLike
+				f.Value = "%" + fmt.Sprintf("%v", f.Value)
+			}
+
+			if field == "assigned_to" && f.Value == nil {
+				if op == "=" {
+					groupClauses = append(groupClauses, "assigned_to IS NULL")
+				} else {
+					groupClauses = append(groupClauses, "assigned_to IS NOT NULL")
+				}
+			} else {
+				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))
+				args = append(args, f.Value)
+			}
+		}
+		if len(groupClauses) > 0 {
+			whereClauses = append(whereClauses, "("+strings.Join(groupClauses, " OR ")+")")
+		}
+	}
+
+	if query.Search != "" {
+		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
+		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
+	}
+
+	// Auto-filter by project if in a project context and not explicitly requesting all projects
+	if !query.AllProjects {
+		if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
+			whereClauses = append(whereClauses, "project_id = ?")
+			args = append(args, proj.ProjectID)
+		}
+	}
+
+	if !query.IncludeArchived {
+		whereClauses = append(whereClauses, "archived = 0")
+	}
+
+	if len(whereClauses) > 0 {
+		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var count int
+	err := s.db.QueryRowContext(ctx, sqlQuery, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count tasks: %w", err)
+	}
+	return count, nil
 }

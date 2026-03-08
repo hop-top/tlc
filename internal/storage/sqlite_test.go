@@ -311,3 +311,103 @@ func TestSQLiteStorage_ChangeTracking(t *testing.T) {
 		t.Errorf("expected T-3 and T-4 to need push, got %v", found)
 	}
 }
+
+// TestSQLiteStorage_CountTasks tests counting tasks with filters.
+func TestSQLiteStorage_CountTasks(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "test_count.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	tasks := []core.Task{
+		{ID: "T-1", Title: "Alpha", Status: core.StatusTodo, Reference: "ref", CreatedAt: now, UpdatedAt: now},
+		{ID: "T-2", Title: "Beta", Status: core.StatusTodo, Reference: "ref", CreatedAt: now, UpdatedAt: now},
+		{ID: "T-3", Title: "Gamma", Status: core.StatusInProgress, Reference: "ref", CreatedAt: now, UpdatedAt: now},
+		{ID: "T-4", Title: "Delta", Status: core.StatusDone, Reference: "ref", CreatedAt: now, UpdatedAt: now},
+	}
+	for i := range tasks {
+		if err := s.CreateTask(ctx, &tasks[i]); err != nil {
+			t.Fatalf("failed to create task: %v", err)
+		}
+	}
+
+	// Count all non-archived tasks
+	count, err := s.CountTasks(ctx, core.Query{})
+	if err != nil {
+		t.Fatalf("CountTasks failed: %v", err)
+	}
+	if count != 4 {
+		t.Errorf("expected 4, got %d", count)
+	}
+
+	// Count with status filter
+	count, err = s.CountTasks(ctx, core.Query{
+		Filters: []core.FieldFilter{
+			{Field: "status", Operator: core.OpEq, Value: core.StatusTodo},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CountTasks with filter failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 TODO tasks, got %d", count)
+	}
+
+	// Count with search
+	count, err = s.CountTasks(ctx, core.Query{Search: "Alpha"})
+	if err != nil {
+		t.Fatalf("CountTasks with search failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 matching task, got %d", count)
+	}
+}
+
+// TestSQLiteStorage_GetTaskLogs tests the GetTaskLogs wrapper.
+func TestSQLiteStorage_GetTaskLogs(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "test_gettasklogs.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	task := &core.Task{
+		ID: "T-1", Title: "Test", Status: core.StatusTodo,
+		Reference: "ref", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	s.AddLog(ctx, &core.LogEntry{TaskID: "T-1", Action: "CREATED", By: "user", Timestamp: now})
+	s.AddLog(ctx, &core.LogEntry{TaskID: "T-1", Action: "CLAIMED", By: "user", Timestamp: now.Add(time.Second)})
+
+	logs, err := s.GetTaskLogs(ctx, "T-1")
+	if err != nil {
+		t.Fatalf("GetTaskLogs failed: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Errorf("expected 2 logs, got %d", len(logs))
+	}
+}
