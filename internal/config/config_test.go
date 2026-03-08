@@ -566,6 +566,118 @@ func TestEnsureCacheDir_CreatesDirectory(t *testing.T) {
 	}
 }
 
+func TestUserStateDir_WithXDGStateHome(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-state-xdg-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldXDG := os.Getenv("XDG_STATE_HOME")
+	defer func() {
+		if oldXDG == "" {
+			_ = os.Unsetenv("XDG_STATE_HOME")
+		} else {
+			_ = os.Setenv("XDG_STATE_HOME", oldXDG)
+		}
+	}()
+
+	customState := filepath.Join(tmpDir, "custom-state")
+	_ = os.Setenv("XDG_STATE_HOME", customState)
+
+	got, err := UserStateDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(customState, "tlc")
+	if got != want {
+		t.Fatalf("UserStateDir() = %q, want %q", got, want)
+	}
+}
+
+func TestUserStateDir_WithoutEnvVar(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-state-native-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	homeDir := filepath.Join(tmpDir, "home")
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_STATE_HOME")
+	defer func() {
+		_ = os.Setenv("HOME", oldHome)
+		if oldXDG == "" {
+			_ = os.Unsetenv("XDG_STATE_HOME")
+		} else {
+			_ = os.Setenv("XDG_STATE_HOME", oldXDG)
+		}
+	}()
+	_ = os.Setenv("HOME", homeDir)
+	_ = os.Unsetenv("XDG_STATE_HOME")
+
+	got, err := UserStateDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		want := filepath.Join(homeDir, "Library", "Application Support", "tlc", "state")
+		if got != want {
+			t.Fatalf("macOS: UserStateDir() = %q, want %q", got, want)
+		}
+	case "linux":
+		want := filepath.Join(homeDir, ".local", "state", "tlc")
+		if got != want {
+			t.Fatalf("linux: UserStateDir() = %q, want %q", got, want)
+		}
+	default:
+		if !strings.Contains(got, "tlc") {
+			t.Fatalf("UserStateDir() = %q, expected it to contain 'tlc'", got)
+		}
+	}
+}
+
+func TestEnsureStateDir_CreatesDirectory(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-state-ensure-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldXDG := os.Getenv("XDG_STATE_HOME")
+	defer func() {
+		if oldXDG == "" {
+			_ = os.Unsetenv("XDG_STATE_HOME")
+		} else {
+			_ = os.Setenv("XDG_STATE_HOME", oldXDG)
+		}
+	}()
+
+	customState := filepath.Join(tmpDir, "new-state")
+	_ = os.Setenv("XDG_STATE_HOME", customState)
+
+	got, err := EnsureStateDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(customState, "tlc")
+	if got != want {
+		t.Fatalf("EnsureStateDir() = %q, want %q", got, want)
+	}
+
+	info, err := os.Stat(got)
+	if err != nil {
+		t.Fatalf("expected state dir to exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected %q to be a directory", got)
+	}
+}
+
 func TestWritableConfigPath_ReturnsExplicitNonSystemPath(t *testing.T) {
 	explicit := "/tmp/my-project/.tlc/config.yaml"
 	got, err := WritableConfigPath(explicit)

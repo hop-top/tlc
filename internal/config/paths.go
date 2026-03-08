@@ -75,6 +75,52 @@ func EnsureCacheDir() (string, error) {
 	return dir, nil
 }
 
+// UserStateDir returns the user-level state directory for tlc.
+// It checks $XDG_STATE_HOME first; if unset, falls back to OS-native paths:
+//   - macOS:   ~/Library/Application Support/tlc/state
+//   - Windows: %LocalAppData%/tlc/state
+//   - Linux:   ~/.local/state/tlc
+func UserStateDir() (string, error) {
+	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
+		return filepath.Join(xdg, "tlc"), nil
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		return filepath.Join(home, "Library", "Application Support", "tlc", "state"), nil
+	case "windows":
+		local := os.Getenv("LocalAppData")
+		if local == "" {
+			return "", fmt.Errorf("%%LocalAppData%% is not set")
+		}
+		return filepath.Join(local, "tlc", "state"), nil
+	default: // linux and other unix
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		return filepath.Join(home, ".local", "state", "tlc"), nil
+	}
+}
+
+// EnsureStateDir returns the state directory path, creating it if needed.
+func EnsureStateDir() (string, error) {
+	dir, err := UserStateDir()
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return "", fmt.Errorf("create state directory: %w", err)
+	}
+
+	return dir, nil
+}
+
 func UserConfigDir() (string, error) {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "tlc"), nil
