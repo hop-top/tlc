@@ -1727,3 +1727,41 @@ func TestTaskAssign(t *testing.T) {
 		}
 	})
 }
+
+// TestTaskListSummaryFormat tests the --summary flag on task list.
+func TestTaskListSummaryFormat(t *testing.T) {
+	defer resetTestDB(t)()
+	ctx := context.Background()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	proj := "test-project"
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task 1", Status: core.StatusTodo, ProjectID: &proj})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Task 2", Status: core.StatusInProgress, ProjectID: &proj})
+	s.CreateTask(ctx, &core.Task{ID: "T-0003", Title: "Task 3", Status: core.StatusTodo, ProjectID: &proj})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(taskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--summary"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --summary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Project:") {
+		t.Errorf("expected 'Project:' header in summary output, got: %s", output)
+	}
+	if !contains(output, "TODO") {
+		t.Errorf("expected 'TODO' status in summary output, got: %s", output)
+	}
+	if !contains(output, "IN_PROGRESS") {
+		t.Errorf("expected 'IN_PROGRESS' status in summary output, got: %s", output)
+	}
+	if !contains(output, "Total") {
+		t.Errorf("expected 'Total' in summary output, got: %s", output)
+	}
+}

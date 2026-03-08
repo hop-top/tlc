@@ -76,6 +76,7 @@ func resetTaskFlags() {
 	taskUpdateAddTags = nil
 	taskUpdateRemoveTags = nil
 
+	taskListSummary = false
 	taskDeleteYes = false
 	taskClaimNote = ""
 	taskUnclaimNote = ""
