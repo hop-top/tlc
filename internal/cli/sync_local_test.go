@@ -142,8 +142,8 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 	// for the current project's existing task.
 	todoFile := filepath.Join(tmpDir, "global-todo.txt")
 	os.WriteFile(todoFile, []byte(
-		"[ ] T-0001 Same ID different project created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n"+
-			"[~] T-0002 Updated task title created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
+		"[ ] T-0001 Same ID different project project_id=project-a created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n"+
+			"[~] T-0002 Updated task title project_id=project-b created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
 	), 0o600)
 	viper.Set("task.todo_file", todoFile)
 
@@ -188,6 +188,79 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 	}
 	if updatedTask.Status != core.StatusInProgress {
 		t.Errorf("expected T-0002 status to be updated, got %q", updatedTask.Status)
+	}
+}
+
+func TestIngestTODOWith_ProjectContextIgnoresForeignSameID(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-ingest-sameid-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpDir, _ = filepath.EvalSymlinks(tmpDir)
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	os.Mkdir(".git", 0o750)
+	os.MkdirAll(".tlc", 0o750)
+	os.WriteFile(".tlc/config.yaml", []byte("version: 0.1\nproject:\n  id: project-b\n"), 0o600)
+
+	viper.Reset()
+	core.ResetDetectionCache()
+	dbSyncOnce = sync.Once{}
+
+	dbPath := filepath.Join(tmpDir, "test.sqlite")
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbPath)
+	viper.SetConfigFile(filepath.Join(tmpDir, ".tlc", "config.yaml"))
+	viper.SetConfigType("yaml")
+	viper.MergeInConfig()
+
+	s, err := storage.NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	projectB := "project-b"
+	task := &core.Task{
+		ID:        "T-0001",
+		Title:     "APS task to preserve",
+		Status:    core.StatusTodo,
+		ProjectID: &projectB,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Meta:      map[string]interface{}{},
+	}
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("failed to seed project task: %v", err)
+	}
+
+	todoFile := filepath.Join(tmpDir, "global-todo.txt")
+	os.WriteFile(todoFile, []byte(
+		"[~] T-0001 TLC task with same ID project_id=project-a created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
+	), 0o600)
+	viper.Set("task.todo_file", todoFile)
+
+	if err := ingestTODOWith(s); err != nil {
+		t.Fatalf("ingestTODOWith returned error: %v", err)
+	}
+
+	retrieved, err := s.GetTaskInProject(ctx, "T-0001", "project-b")
+	if err != nil {
+		t.Fatalf("GetTaskInProject failed: %v", err)
+	}
+	if retrieved == nil {
+		t.Fatal("expected project-b task to remain")
+	}
+	if retrieved.Title != "APS task to preserve" {
+		t.Fatalf("expected foreign same-ID line to be ignored, got %q", retrieved.Title)
+	}
+	if retrieved.Status != core.StatusTodo {
+		t.Fatalf("expected status TODO to remain, got %q", retrieved.Status)
 	}
 }
 

@@ -93,6 +93,9 @@ func formatTLS(t *core.Task) string {
 	if t.Reference != "" && t.Reference != "task://"+t.ID {
 		parts = append(parts, "ref:"+t.Reference)
 	}
+	if t.ProjectID != nil && *t.ProjectID != "" {
+		parts = append(parts, "project_id="+*t.ProjectID)
+	}
 
 	if !t.CreatedAt.IsZero() {
 		parts = append(parts, "created_at="+t.CreatedAt.Format(time.RFC3339))
