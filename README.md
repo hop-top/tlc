@@ -163,7 +163,7 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 
 **Common commands:**
 - Create: `tlc task create "Task title" --assigned-to @me --tag feature`
-- List: `tlc task list --status TODO --mine`
+- List: `tlc task list --mine` (shows IN_PROGRESS first, then TODO by default)
 - Update: `tlc task update T-0042 --status IN_PROGRESS`
 - Complete: `tlc task complete T-0042`
 - Assign: `tlc task assign T-0042 codex`
@@ -187,7 +187,7 @@ Tool definition: `tlc help llm` (or `--format openai` for OpenAI platforms)
 ```
 
 ### Managing Tasks
-List all tasks:
+List active tasks (IN_PROGRESS first, then TODO):
 ```bash
 ./bin/tlc task list
 ```

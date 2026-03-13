@@ -199,7 +199,7 @@ tlc task list --archived
 
 ### `tlc task list`
 
-List tasks with filtering and sorting.
+List tasks with filtering and sorting. By default, shows `IN_PROGRESS` tasks first, followed by `TODO` tasks. Use `--status` to override.
 
 #### Synopsis
 
@@ -211,7 +211,7 @@ tlc task list [query] [flags]
 
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
-| `--status` | `-s` | enum[] | Filter by status (repeatable) |
+| `--status` | `-s` | enum[] | Filter by status (repeatable; default: `IN_PROGRESS`, `TODO`) |
 | `--assigned-to` | `-a` | string | Filter by assignee |
 | `--tag` | | string[] | Filter by tag (repeatable) |
 | `--reference` | `-r` | string | Filter by reference pattern |
@@ -251,10 +251,13 @@ See `tlc-query-spec-0.1.md` for full syntax.
 #### Examples
 
 ```bash
-# All tasks
+# Active tasks (IN_PROGRESS first, then TODO) — default
 tlc task list
 
-# In-progress tasks
+# All tasks regardless of status
+tlc task list --status TODO --status IN_PROGRESS --status DONE
+
+# In-progress tasks only
 tlc task list --status IN_PROGRESS
 
 # My tasks

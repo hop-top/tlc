@@ -12,7 +12,7 @@ As a Solo Developer, I want to query and list tasks with flexible filtering so t
 
 ## Acceptance Scenarios
 
-1. **Given** multiple tasks exist in TLC, **When** I run `tlc task list`, **Then** all tasks are displayed in a table with columns: ID, Title, Status, Assignee.
+1. **Given** multiple tasks exist in TLC, **When** I run `tlc task list`, **Then** active tasks (`IN_PROGRESS` and `TODO`) are displayed in a table with columns: ID, Title, Status, Assignee, with `IN_PROGRESS` tasks shown first.
 
 2. **Given** tasks with mixed statuses, **When** I run `tlc task list --status TODO`, **Then** only tasks with status `TODO` are displayed.
 

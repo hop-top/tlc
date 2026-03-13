@@ -7,9 +7,9 @@ exclusively.
 
 ```bash
 tlc task create "title" --tag feat       # create task (tlc assigns ID)
-tlc task list                            # list tasks (default limit 10)
+tlc task list                            # list tasks: IN_PROGRESS first, then TODO (default)
 tlc task list --limit 30                 # increase result limit
-tlc task list --status TODO              # filter by status
+tlc task list --status DONE              # filter by a specific status
 tlc task show <id>                       # task details
 tlc task claim <id>                      # claim for work
 tlc task update <id> --status done       # mark complete

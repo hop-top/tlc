@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- `tlc task list` now defaults to showing `IN_PROGRESS` and `TODO` tasks only (instead of all statuses), with `IN_PROGRESS` tasks sorted first. Use `--status` to override.
+
 ### Fixed
 
 - config discovery now uses the OS user config directory for user config lookup
