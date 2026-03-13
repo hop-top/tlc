@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	texttemplate "text/template"
 	"time"
@@ -831,7 +832,11 @@ var taskListCmd = &cobra.Command{
 			})
 		}
 
-		for _, st := range taskListStatus {
+		statusFlags := taskListStatus
+		if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
+			statusFlags = []string{"IN_PROGRESS", "TODO"}
+		}
+		for _, st := range statusFlags {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
 		}
 		if taskListAssignedTo != "" {
@@ -856,6 +861,14 @@ var taskListCmd = &cobra.Command{
 		tasks, err := s.ListTasks(ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to list tasks: %w", err)
+		}
+
+		if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
+			sort.SliceStable(tasks, func(i, j int) bool {
+				iIP := tasks[i].Status == "IN_PROGRESS"
+				jIP := tasks[j].Status == "IN_PROGRESS"
+				return iIP && !jIP
+			})
 		}
 
 		format := viper.GetString("output.format")
@@ -926,6 +939,14 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	tasks, err := workspace.QueryAcross(ctx, projects, query, &filesystemOpener{})
 	if err != nil {
 		return fmt.Errorf("workspace query failed: %w", err)
+	}
+
+	if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
+		sort.SliceStable(tasks, func(i, j int) bool {
+			iIP := tasks[i].Status == "IN_PROGRESS"
+			jIP := tasks[j].Status == "IN_PROGRESS"
+			return iIP && !jIP
+		})
 	}
 
 	format := viper.GetString("output.format")
