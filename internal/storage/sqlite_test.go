@@ -200,6 +200,47 @@ func TestStorage_QueryORLogic(t *testing.T) {
 	}
 }
 
+// TestStorage_TagFiltering tests that --tag filtering uses exact tag matching,
+// not substring matching (e.g. tag "fix" must not match task tagged "prefix").
+func TestStorage_TagFiltering(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "test_tag_filter.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	s.CreateTask(ctx, &core.Task{ID: "T-1", Title: "Has fix tag", Status: core.StatusTodo, Tags: []string{"fix", "alpha"}, Reference: "ref"})
+	s.CreateTask(ctx, &core.Task{ID: "T-2", Title: "Has prefix tag", Status: core.StatusTodo, Tags: []string{"prefix"}, Reference: "ref"})
+	s.CreateTask(ctx, &core.Task{ID: "T-3", Title: "No tags", Status: core.StatusTodo, Reference: "ref"})
+	s.CreateTask(ctx, &core.Task{ID: "T-4", Title: "Has fixing tag", Status: core.StatusTodo, Tags: []string{"fixing"}, Reference: "ref"})
+
+	// Filtering by "fix" should return exactly T-1, not T-2 (prefix) or T-4 (fixing)
+	q := core.Query{
+		Filters: []core.FieldFilter{
+			{Field: "tags", Operator: core.OpContains, Value: "fix"},
+		},
+	}
+	got, err := s.ListTasks(ctx, q)
+	if err != nil {
+		t.Fatalf("ListTasks failed: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("expected 1 task with tag 'fix', got %d", len(got))
+	}
+	if len(got) > 0 && got[0].ID != "T-1" {
+		t.Errorf("expected T-1, got %s", got[0].ID)
+	}
+}
+
 // TestSQLiteStorage_FlowRuns tests flow run CRUD operations
 // Verifies flow run lifecycle: create, retrieve, update with status changes.
 func TestSQLiteStorage_FlowRuns(t *testing.T) {

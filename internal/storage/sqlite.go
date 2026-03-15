@@ -306,6 +306,13 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 	for field, filters := range fieldGroups {
 		groupClauses := []string{}
 		for _, f := range filters {
+			// Tags are stored as JSON arrays; use json_each for exact element matching.
+			if field == "tags" && f.Operator == core.OpContains {
+				groupClauses = append(groupClauses, "EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
+				args = append(args, f.Value)
+				continue
+			}
+
 			op := "="
 			switch f.Operator {
 			case core.OpEq, core.OpEqual:
@@ -1003,6 +1010,13 @@ func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, 
 	for field, filters := range fieldGroups {
 		groupClauses := []string{}
 		for _, f := range filters {
+			// Tags are stored as JSON arrays; use json_each for exact element matching.
+			if field == "tags" && f.Operator == core.OpContains {
+				groupClauses = append(groupClauses, "EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
+				args = append(args, f.Value)
+				continue
+			}
+
 			op := "="
 			switch f.Operator {
 			case core.OpEq, core.OpEqual:
