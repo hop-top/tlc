@@ -24,7 +24,6 @@ import (
 
 var (
 	taskID          string
-	taskTitle       string
 	taskDescription string
 	taskStatus      string
 	taskAssignedTo  string
@@ -602,17 +601,13 @@ var TaskCreateCmd = &cobra.Command{
 	Short: "Create new task",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		title := taskTitle
+		var title string
 		if len(args) > 0 {
 			title = args[0]
 		}
 
-		if taskInteractive || (title == "" && !cmd.Flags().Changed("title")) {
+		if taskInteractive || title == "" {
 			return createTaskInteractive(title)
-		}
-
-		if title == "" {
-			return fmt.Errorf("title is required")
 		}
 
 		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskTags, taskReference, make(map[string]interface{}))
@@ -1193,7 +1188,6 @@ var TaskDeleteCmd = &cobra.Command{
 
 func init() {
 	TaskCreateCmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
-	TaskCreateCmd.Flags().StringVarP(&taskTitle, "title", "t", "", "Task title")
 	TaskCreateCmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
 	TaskCreateCmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
 	TaskCreateCmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")

@@ -73,7 +73,6 @@ func withTestLock(fn func()) {
 // resetTaskFlags clears CLI flag state between tests
 func resetTaskFlags() {
 	taskID = ""
-	taskTitle = ""
 	taskDescription = ""
 	taskStatus = "TODO"
 	taskAssignedTo = ""

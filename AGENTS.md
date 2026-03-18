@@ -31,11 +31,26 @@ tlc task list                            # list tasks: IN_PROGRESS first, then T
 tlc task list --limit 30                 # increase result limit
 tlc task list --status DONE              # filter by a specific status
 tlc task show <id>                       # task details
-tlc task claim <id>                      # claim for work
-tlc task update <id> --status done       # mark complete
-tlc task unclaim <id>                    # release task
+tlc task claim <id>                      # claim + transitions status → IN_PROGRESS
+tlc task complete <id>                   # mark done (transitions status → DONE)
+tlc task complete <id> --note "..."      # mark done with note
+tlc task unclaim <id>                    # release + transitions status → TODO
+tlc task reopen <id> --note "..."        # reopen terminal task (--note required)
+tlc task assign <id> <assignee>          # assign to someone else
+tlc task unassign <id> --note "..."      # remove assignee (--note required)
+tlc task update <id> --title "..."       # update title
+tlc task update <id> -d "..."            # replace description (reads first; -d overwrites)
+tlc task update <id> --assigned-to -     # clear assignee (use "-" or "null")
+tlc task update <id> --status IN_PROGRESS --force  # force status (bypass state machine)
 tlc task delete <id>                     # delete task
 ```
+
+Valid statuses (uppercase): `TODO` · `IN_PROGRESS` · `DONE` · `SKIPPED`
+
+State machine (default):
+- `TODO` → `IN_PROGRESS`, `SKIPPED`
+- `IN_PROGRESS` → `DONE`, `TODO`, `SKIPPED`
+- `DONE` / `SKIPPED` → terminal (immutable unless `--force`)
 
 Conventions:
 - NEVER prefix titles with "Task N:" — tlc auto-assigns IDs.
@@ -44,9 +59,12 @@ Conventions:
 - Run one `tlc` command at a time; avoid long `&&` chains
   (verbose logging can cause runaway output).
 - NEVER make changes (plan, code, docs) without a claimed task.
-  Claim before starting; mark DONE when finished.
-- On task completion, append session log to task description:
-  `tlc task update <id> -d "... \n\nSessions:\n- <session-id> (<agent>)"`
+  Claim before starting; complete when finished.
+- `update -d` REPLACES description — read current value first, then rewrite.
+- On task completion, append session log then complete:
+  1. `tlc task show <id>` — read current description
+  2. `tlc task update <id> -d "<existing>\n\nSessions:\n- <session-id> (<agent>)"`
+  3. `tlc task complete <id>`
 
 ### `git hop` — Worktree Management
 
