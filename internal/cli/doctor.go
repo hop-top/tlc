@@ -851,5 +851,5 @@ var doctorCmd = &cobra.Command{
 
 func init() {
 	doctorCmd.Flags().Bool("fix", false, "attempt to fix issues")
-	rootCmd.AddCommand(doctorCmd)
+	RootCmd.AddCommand(doctorCmd)
 }

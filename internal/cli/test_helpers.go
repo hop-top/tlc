@@ -12,52 +12,78 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// resetTestDB creates a fresh temporary DB for test isolation.
-// It resets viper, the detection cache, and the dbSyncOnce guard so
-// each test gets a clean slate. Changes CWD to the temp dir so
-// DetectProject() doesn't pick up the real git repo.
-// Returns a cleanup function that restores the original CWD.
-func resetTestDB(t *testing.T) func() {
+// resetTestDB creates a fresh isolated database for testing.
+// Resets viper, sync guards, detection cache, and task flags.
+// Changes CWD to tmpDir (restored via t.Cleanup) to prevent git repo detection.
+// Writes a minimal config file and sets cfgFile so initConfig reads it
+// instead of the real user config, keeping our db_path intact across Execute().
+// Returns the db path.
+func resetTestDB(t *testing.T) string {
 	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
+	dbPath := filepath.Join(tmpDir, "test.sqlite")
 
 	origDir, _ := os.Getwd()
-	_ = os.Chdir(tmpDir)
-
-	viper.Reset()
-	viper.Set("storage.backend", "sqlite")
-	viper.Set("storage.db_path", filepath.Join(tmpDir, "test.sqlite"))
-	viper.Set("task.todo_file", filepath.Join(tmpDir, "TODO"))
-	core.ResetDetectionCache()
-	dbSyncOnce = sync.Once{}
-	resetTaskFlags()
-
-	return func() {
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		cfgFile = ""
 		_ = os.Chdir(origDir)
 		core.ResetDetectionCache()
 		_ = os.RemoveAll(tmpDir)
+	})
+
+	// Write a minimal config so initConfig reads this instead of ~/.config/tlc/config.yaml.
+	// Include task.todo_file pointing to a non-existent path so ingestTODOWith
+	// returns early and does not read the real user todo.txt into the test DB.
+	cfgPath := filepath.Join(tmpDir, ".tlc.yaml")
+	todoPath := filepath.Join(tmpDir, "todo.txt") // does not exist; ingestTODOWith returns early
+	cfgContent := "storage:\n  backend: sqlite\n  db_path: " + dbPath + "\ntask:\n  todo_file: " + todoPath + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
 	}
+	cfgFile = cfgPath
+
+	viper.Reset()
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("task.todo_file", todoPath)
+	viper.Set("storage.db_path", dbPath)
+	dbSyncOnce = sync.Once{}
+	touchOnce = sync.Once{}
+	core.ResetDetectionCache()
+	resetTaskFlags()
+	return dbPath
 }
 
-// resetTaskFlags resets all global flag variables and Cobra's internal
-// flag state so that values don't carry between test executions.
+var (
+	testMu sync.Mutex
+)
+
+// withTestLock prevents parallel CLI tests from clobbering global state
+func withTestLock(fn func()) {
+	testMu.Lock()
+	defer testMu.Unlock()
+	fn()
+}
+
+// resetTaskFlags clears CLI flag state between tests
 func resetTaskFlags() {
-	// Reset all globals to their init() defaults
 	taskID = ""
 	taskTitle = ""
 	taskDescription = ""
 	taskStatus = "TODO"
 	taskAssignedTo = ""
-	taskTags = nil
+	taskTags = []string{}
 	taskReference = ""
 	taskInteractive = false
 
-	taskListStatus = nil
+	taskListStatus = []string{}
 	taskListAssignedTo = ""
-	taskListTag = nil
+	taskListTag = []string{}
 	taskListMine = false
 	taskListArchived = false
 	taskListAllProjects = false
@@ -65,6 +91,11 @@ func resetTaskFlags() {
 	taskListSortDirection = "desc"
 	taskListLimit = 100
 	taskListOffset = 0
+	taskListSummary = false
+	taskListWorkspace = ""
+	taskListSpace = ""
+	taskListProfile = ""
+	taskListSquad = ""
 
 	taskShowLogs = false
 	taskShowLogSortDirection = ""
@@ -73,10 +104,9 @@ func resetTaskFlags() {
 	taskUpdateDescription = ""
 	taskUpdateStatus = ""
 	taskUpdateAssignedTo = ""
-	taskUpdateAddTags = nil
-	taskUpdateRemoveTags = nil
+	taskUpdateAddTags = []string{}
+	taskUpdateRemoveTags = []string{}
 
-	taskListSummary = false
 	taskDeleteYes = false
 	taskClaimNote = ""
 	taskUnclaimNote = ""
@@ -86,13 +116,16 @@ func resetTaskFlags() {
 
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
-		taskCreateCmd, taskListCmd, taskShowCmd,
-		taskUpdateCmd, taskDeleteCmd, taskClaimCmd,
-		taskUnclaimCmd, taskAssignCmd, taskCompleteCmd,
+		TaskCreateCmd, TaskListCmd, TaskShowCmd,
+		TaskUpdateCmd, TaskDeleteCmd, TaskClaimCmd,
+		TaskUnclaimCmd, TaskAssignCmd, TaskCompleteCmd,
+		SyncCmd, SyncPullCmd, SyncPushCmd, SyncConfigCmd, SyncStatusCmd,
 	} {
-		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			f.Changed = false
-		})
+		if cmd != nil {
+			cmd.Flags().VisitAll(func(f *pflag.Flag) {
+				f.Changed = false
+			})
+		}
 	}
 }
 
@@ -117,11 +150,13 @@ func newTestCmd() *cobra.Command {
 }
 
 func newTestInitCmd() *cobra.Command {
-	storageBackend := backendSQLite
-	dbPath := ""
-	force := false
-	fallbackMode := ""
-	duplicateIDStrategy := ""
+	var (
+		storageBackend      string
+		dbPath              string
+		force               bool
+		fallbackMode        string
+		duplicateIDStrategy string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "init",
@@ -131,7 +166,7 @@ func newTestInitCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&storageBackend, "storage", backendSQLite, "Storage backend: local, sqlite")
+	cmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
 	cmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
 	cmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")

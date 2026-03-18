@@ -25,7 +25,7 @@ func TestSyncCommands(t *testing.T) {
 		viper.Set("sync.github.direction", "bidirectional")
 
 		cmd := newTestCmd()
-		cmd.AddCommand(syncCmd)
+		cmd.AddCommand(SyncCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"sync", "config", "github", "--force"})

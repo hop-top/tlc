@@ -76,5 +76,5 @@ func init() {
 	labelCmd.AddCommand(labelInitCmd)
 	labelCmd.AddCommand(labelListCmd)
 	labelCmd.AddCommand(labelTemplatesCmd)
-	rootCmd.AddCommand(labelCmd)
+	RootCmd.AddCommand(labelCmd)
 }

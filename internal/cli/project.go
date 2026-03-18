@@ -16,12 +16,12 @@ var (
 	projectImportForce  bool
 )
 
-var projectCmd = &cobra.Command{
+var ProjectCmd = &cobra.Command{
 	Use:   "project",
 	Short: "Project management",
 }
 
-var projectExportCmd = &cobra.Command{
+var ProjectExportCmd = &cobra.Command{
 	Use:   "export [file]",
 	Short: "Export project tasks and logs",
 	Long:  "Export all tasks and logs to a YAML or JSON file. Writes to stdout if no file is specified.",
@@ -92,7 +92,7 @@ var projectExportCmd = &cobra.Command{
 	},
 }
 
-var projectImportCmd = &cobra.Command{
+var ProjectImportCmd = &cobra.Command{
 	Use:   "import <file>",
 	Short: "Import tasks and logs from an export file",
 	Long:  "Import tasks and logs from a YAML or JSON export. Skips existing task IDs unless --force is set.",
@@ -163,10 +163,10 @@ var projectImportCmd = &cobra.Command{
 }
 
 func init() {
-	projectExportCmd.Flags().StringVarP(&projectExportFormat, "format", "f", "yaml", "Output format (yaml, json)")
-	projectImportCmd.Flags().BoolVar(&projectImportForce, "force", false, "Overwrite existing tasks on conflict")
+	ProjectExportCmd.Flags().StringVarP(&projectExportFormat, "format", "f", "yaml", "Output format (yaml, json)")
+	ProjectImportCmd.Flags().BoolVar(&projectImportForce, "force", false, "Overwrite existing tasks on conflict")
 
-	projectCmd.AddCommand(projectExportCmd)
-	projectCmd.AddCommand(projectImportCmd)
-	rootCmd.AddCommand(projectCmd)
+	ProjectCmd.AddCommand(ProjectExportCmd)
+	ProjectCmd.AddCommand(ProjectImportCmd)
+	RootCmd.AddCommand(ProjectCmd)
 }

@@ -440,8 +440,7 @@ func TestInitDoesNotTriggerGlobalIngestion(t *testing.T) {
 
 	// Run init — should NOT produce UNIQUE constraint errors
 	cmd := newTestCmd()
-	initCmd := newTestInitCmd()
-	cmd.AddCommand(initCmd)
+	cmd.AddCommand(newTestInitCmd())
 
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)

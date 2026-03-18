@@ -129,5 +129,5 @@ func init() {
 	workflowCmd.AddCommand(workflowStatusesCmd)
 	workflowCmd.AddCommand(workflowRulesCmd)
 	workflowCmd.AddCommand(workflowValidateCmd)
-	rootCmd.AddCommand(workflowCmd)
+	RootCmd.AddCommand(workflowCmd)
 }

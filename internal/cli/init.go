@@ -332,7 +332,7 @@ func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) 
 	return choice, fmt.Errorf("failed to run form: %w", err)
 }
 
-var initCmd = &cobra.Command{
+var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize TLC in current directory",
 	Long:  "Create .tlc directory and default configuration file.",
@@ -342,13 +342,13 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
-	initCmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
-	initCmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
-	initCmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
-	initCmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")
-	initCmd.Flags().Bool("no-track", false, "Do not add .tlc/ to .gitignore")
-	initCmd.Flags().StringVar(&fallbackMode, "fallback-mode", "", "Project fallback mode: auto, detected, prompt (default: auto)")
-	initCmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: "+strategyShare+")")
+	InitCmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
+	InitCmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
+	InitCmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
+	InitCmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")
+	InitCmd.Flags().Bool("no-track", false, "Do not add .tlc/ to .gitignore")
+	InitCmd.Flags().StringVar(&fallbackMode, "fallback-mode", "", "Project fallback mode: auto, detected, prompt (default: auto)")
+	InitCmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: "+strategyShare+")")
 
-	rootCmd.AddCommand(initCmd)
+	RootCmd.AddCommand(InitCmd)
 }

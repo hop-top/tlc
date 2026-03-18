@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -22,13 +24,13 @@ const (
 // TestTaskCommands tests task CRUD operations through CLI
 // Tests create, list, update, show, and delete task commands.
 func TestTaskCommands(t *testing.T) {
-	defer resetTestDB(t)()
+	viper.Set("storage.db_path", resetTestDB(t))
 
 	ctx := context.Background()
 
 	t.Run("CreateTask", func(t *testing.T) {
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -52,7 +54,7 @@ func TestTaskCommands(t *testing.T) {
 
 	t.Run("ListTasks", func(t *testing.T) {
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -71,7 +73,7 @@ func TestTaskCommands(t *testing.T) {
 
 	t.Run("UpdateTask", func(t *testing.T) {
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -84,7 +86,7 @@ func TestTaskCommands(t *testing.T) {
 
 	t.Run("ShowTask", func(t *testing.T) {
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -106,7 +108,7 @@ func TestTaskCommands(t *testing.T) {
 
 	t.Run("DeleteTask", func(t *testing.T) {
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -125,9 +127,9 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithAssignee", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -151,9 +153,9 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithTags", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -191,7 +193,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByTag", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -211,7 +213,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -231,7 +233,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByAssignee", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -253,7 +255,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -273,7 +275,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByStatus", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -291,7 +293,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -311,7 +313,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("UpdateAssignee", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -325,7 +327,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -344,7 +346,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ClearAssigneeWithNull", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -358,7 +360,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -375,7 +377,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ClearAssigneeWithDash", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -389,7 +391,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -406,7 +408,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("AddTagToTask", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -419,7 +421,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -453,7 +455,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("RemoveTagFromTask", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -466,7 +468,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -486,7 +488,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("FilterTasksByAssigneeMe", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -513,7 +515,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -541,7 +543,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksTLSFormat", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -557,7 +559,7 @@ func TestTaskCommands(t *testing.T) {
 
 		viper.Set("output.format", "tls")
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -580,7 +582,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ShowTaskWithLogs", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -605,7 +607,7 @@ func TestTaskCommands(t *testing.T) {
 
 		viper.Set("output.format", "json")
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -625,7 +627,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("DeleteTaskInteractiveConfirmation", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -637,7 +639,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -649,7 +651,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksPagination", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -663,7 +665,7 @@ func TestTaskCommands(t *testing.T) {
 		}
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -686,7 +688,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksSort", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -706,7 +708,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -728,7 +730,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksFullTextSearch", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -746,7 +748,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -766,7 +768,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksAllProjects", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -788,7 +790,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -808,7 +810,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ListTasksArchived", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -828,7 +830,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task2)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -848,12 +850,12 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithCustomID", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -873,13 +875,13 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("CreateTaskWithReference", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
 		refURL := "https://github.com/repo/issues/42"
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -899,7 +901,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("ClaimTaskWithNote", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -911,7 +913,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -931,7 +933,7 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("UnclaimTaskWithNote", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
@@ -945,7 +947,7 @@ func TestTaskCommands(t *testing.T) {
 		s.CreateTask(ctx, task)
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -976,12 +978,12 @@ func TestTaskCommands(t *testing.T) {
 	})
 
 	t.Run("VerifyIDSequencing", func(t *testing.T) {
-		defer resetTestDB(t)()
+		viper.Set("storage.db_path", resetTestDB(t))
 		s, _ := getStorageRaw()
 		defer s.Close()
 
 		cmd1 := newTestCmd()
-		cmd1.AddCommand(taskCmd)
+		cmd1.AddCommand(TaskCmd)
 		buf1 := new(bytes.Buffer)
 		cmd1.SetOut(buf1)
 		cmd1.SetErr(buf1)
@@ -992,7 +994,7 @@ func TestTaskCommands(t *testing.T) {
 		}
 
 		cmd2 := newTestCmd()
-		cmd2.AddCommand(taskCmd)
+		cmd2.AddCommand(TaskCmd)
 		buf2 := new(bytes.Buffer)
 		cmd2.SetOut(buf2)
 		cmd2.SetErr(buf2)
@@ -1024,15 +1026,16 @@ func contains(s, substr string) bool {
 
 func setupTestDir(t *testing.T) (ctx context.Context, cleanup func()) {
 	t.Helper()
-	cleanup = resetTestDB(t)
+	dbPath := resetTestDB(t)
+	viper.Set("storage.db_path", dbPath)
 	ctx = context.Background()
-	return
+	return ctx, func() { os.RemoveAll(filepath.Dir(dbPath)) }
 }
 
 func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle string) {
 	t.Helper()
-	defer resetTestDB(t)()
-	ctx := context.Background()
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
 	s, _ := getStorageRaw()
 	defer s.Close()
 
@@ -1045,7 +1048,7 @@ func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle
 
 	viper.Set("output.format", format)
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1066,8 +1069,8 @@ func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle
 
 func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
 	t.Helper()
-	defer resetTestDB(t)()
-	ctx := context.Background()
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
 	s, _ := getStorageRaw()
 	defer s.Close()
 
@@ -1080,7 +1083,7 @@ func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
 
 	viper.Set("output.format", format)
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1115,7 +1118,7 @@ func testClearAssignee(t *testing.T, clearValue string) {
 	s.CreateTask(ctx, task)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1141,7 +1144,7 @@ func TestTaskCreateWithAssignee(t *testing.T) {
 	defer cleanup()
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1169,7 +1172,7 @@ func TestTaskCreateWithTags(t *testing.T) {
 	defer cleanup()
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1228,7 +1231,7 @@ func TestTaskFilterByTag(t *testing.T) {
 	s.CreateTask(ctx, task2)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1271,7 +1274,7 @@ func TestTaskFilterByAssignee(t *testing.T) {
 	s.CreateTask(ctx, task2)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1310,7 +1313,7 @@ func TestTaskFilterByStatus(t *testing.T) {
 	s.CreateTask(ctx, task2)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1358,7 +1361,7 @@ func TestTaskFilterByAssigneeMe(t *testing.T) {
 	s.CreateTask(ctx, task2)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1393,7 +1396,7 @@ func TestTaskUpdateAssignee(t *testing.T) {
 	s.CreateTask(ctx, task)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1426,11 +1429,12 @@ func TestTaskClearAssigneeDash(t *testing.T) {
 }
 
 // Test Add Tag.
-func TestTaskAddTag(t *testing.T) {
+func TestTaskUpdate(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
-
 	s, _ := getStorageRaw()
+	defer s.Close()
+
 	task := &core.Task{
 		ID:     "T-0001",
 		Title:  "Task without urgent tag",
@@ -1440,7 +1444,7 @@ func TestTaskAddTag(t *testing.T) {
 	s.CreateTask(ctx, task)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1480,11 +1484,10 @@ func TestTaskAddTag(t *testing.T) {
 
 // Test Unassign Task.
 func TestTaskUnassignRequiresNote(t *testing.T) {
-	defer resetTestDB(t)()
-
-	// Create task with assignee
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
 	cmd1 := newTestCmd()
-	cmd1.AddCommand(taskCmd)
+	cmd1.AddCommand(TaskCmd)
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
@@ -1496,7 +1499,7 @@ func TestTaskUnassignRequiresNote(t *testing.T) {
 
 	// Unassign WITHOUT --note should fail
 	cmd2 := newTestCmd()
-	cmd2.AddCommand(taskCmd)
+	cmd2.AddCommand(TaskCmd)
 	buf2 := new(bytes.Buffer)
 	cmd2.SetOut(buf2)
 	cmd2.SetErr(buf2)
@@ -1512,11 +1515,10 @@ func TestTaskUnassignRequiresNote(t *testing.T) {
 }
 
 func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
-	defer resetTestDB(t)()
-
-	// Create task with description and assignee
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
 	cmd1 := newTestCmd()
-	cmd1.AddCommand(taskCmd)
+	cmd1.AddCommand(TaskCmd)
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
@@ -1529,7 +1531,7 @@ func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
 
 	// Unassign WITH --note
 	cmd2 := newTestCmd()
-	cmd2.AddCommand(taskCmd)
+	cmd2.AddCommand(TaskCmd)
 	buf2 := new(bytes.Buffer)
 	cmd2.SetOut(buf2)
 	cmd2.SetErr(buf2)
@@ -1540,11 +1542,17 @@ func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
 	}
 
 	// Verify note was appended to description
-	ctx := context.Background()
-	s, _ := getStorageRaw()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("failed to get storage: %v", err)
+	}
 	defer s.Close()
 
-	task, _ := s.GetTask(ctx, "T-0001")
+	task, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
 	if task == nil {
 		t.Fatal("task not found after unassign")
 	}
@@ -1557,11 +1565,10 @@ func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
 }
 
 func TestTaskUnassign(t *testing.T) {
-	defer resetTestDB(t)()
-
-	// Create task with assignee via CLI (ensures project_id matches)
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
 	cmd1 := newTestCmd()
-	cmd1.AddCommand(taskCmd)
+	cmd1.AddCommand(TaskCmd)
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
@@ -1573,7 +1580,7 @@ func TestTaskUnassign(t *testing.T) {
 
 	// Unassign the task (with required note)
 	cmd2 := newTestCmd()
-	cmd2.AddCommand(taskCmd)
+	cmd2.AddCommand(TaskCmd)
 	buf2 := new(bytes.Buffer)
 	cmd2.SetOut(buf2)
 	cmd2.SetErr(buf2)
@@ -1589,11 +1596,17 @@ func TestTaskUnassign(t *testing.T) {
 	}
 
 	// Verify task state
-	ctx := context.Background()
-	s, _ := getStorageRaw()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("failed to get storage: %v", err)
+	}
 	defer s.Close()
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
 	if updatedTask == nil {
 		t.Fatal("task not found after unassign")
 	}
@@ -1625,10 +1638,10 @@ func TestTaskUnassign(t *testing.T) {
 
 // Test Unassign Task not found.
 func TestTaskUnassignNotFound(t *testing.T) {
-	defer resetTestDB(t)()
-
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1654,7 +1667,7 @@ func TestTaskRemoveTag(t *testing.T) {
 	s.CreateTask(ctx, task)
 
 	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
+	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -1680,12 +1693,14 @@ func TestTaskRemoveTag(t *testing.T) {
 // TestTaskAssign tests the assign subcommand.
 func TestTaskAssign(t *testing.T) {
 	t.Run("AssignTask", func(t *testing.T) {
-		_, cleanup := setupTestDir(t)
+		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
 
 		// Create task via CLI (ensures DB is properly initialized)
 		createCmd := newTestCmd()
-		createCmd.AddCommand(taskCmd)
+		createCmd.AddCommand(TaskCmd)
 		createBuf := new(bytes.Buffer)
 		createCmd.SetOut(createBuf)
 		createCmd.SetErr(createBuf)
@@ -1695,7 +1710,7 @@ func TestTaskAssign(t *testing.T) {
 		}
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -1710,11 +1725,16 @@ func TestTaskAssign(t *testing.T) {
 			t.Errorf("unexpected output: %s", output)
 		}
 
-		s, _ := getStorageRaw()
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("failed to get storage: %v", err)
+		}
 		defer s.Close()
-		ctx := context.Background()
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask, err := s.GetTask(ctx, "T-0001")
+		if err != nil {
+			t.Fatalf("failed to get task: %v", err)
+		}
 		if updatedTask == nil {
 			t.Fatal("task not found after assign")
 		}
@@ -1731,12 +1751,14 @@ func TestTaskAssign(t *testing.T) {
 	})
 
 	t.Run("AssignTaskWithNote", func(t *testing.T) {
-		_, cleanup := setupTestDir(t)
+		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
 
 		// Create task via CLI
 		createCmd := newTestCmd()
-		createCmd.AddCommand(taskCmd)
+		createCmd.AddCommand(TaskCmd)
 		createBuf := new(bytes.Buffer)
 		createCmd.SetOut(createBuf)
 		createCmd.SetErr(createBuf)
@@ -1746,7 +1768,7 @@ func TestTaskAssign(t *testing.T) {
 		}
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -1756,11 +1778,16 @@ func TestTaskAssign(t *testing.T) {
 			t.Fatalf("task assign with note failed: %v", err)
 		}
 
-		s, _ := getStorageRaw()
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("failed to get storage: %v", err)
+		}
 		defer s.Close()
-		ctx := context.Background()
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask, err := s.GetTask(ctx, "T-0001")
+		if err != nil {
+			t.Fatalf("failed to get task: %v", err)
+		}
 		if updatedTask == nil {
 			t.Fatal("task not found after assign")
 		}
@@ -1794,7 +1821,7 @@ func TestTaskAssign(t *testing.T) {
 		defer cleanup()
 
 		cmd := newTestCmd()
-		cmd.AddCommand(taskCmd)
+		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -1806,80 +1833,84 @@ func TestTaskAssign(t *testing.T) {
 	})
 }
 
-// TestTaskListSummaryFormat tests the --summary flag on task list.
-func TestTaskListSummaryFormat(t *testing.T) {
-	defer resetTestDB(t)()
-	ctx := context.Background()
-	s, _ := getStorageRaw()
-	defer s.Close()
+// TestTaskListSummary tests the summary output of task list.
+func TestTaskListSummary(t *testing.T) {
+	t.Run("TaskListSummaryFormat", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
 
-	proj := "test-project"
-	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task 1", Status: core.StatusTodo, ProjectID: &proj})
-	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Task 2", Status: core.StatusInProgress, ProjectID: &proj})
-	s.CreateTask(ctx, &core.Task{ID: "T-0003", Title: "Task 3", Status: core.StatusTodo, ProjectID: &proj})
+		proj := "test-project"
+		s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task 1", Status: core.StatusTodo, ProjectID: &proj})
+		s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Task 2", Status: core.StatusInProgress, ProjectID: &proj})
+		s.CreateTask(ctx, &core.Task{ID: "T-0003", Title: "Task 3", Status: core.StatusTodo, ProjectID: &proj})
 
-	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "list", "--summary"})
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--summary"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("task list --summary failed: %v", err)
-	}
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list --summary failed: %v", err)
+		}
 
-	output := buf.String()
-	if !contains(output, "Project:") {
-		t.Errorf("expected 'Project:' header in summary output, got: %s", output)
-	}
-	if !contains(output, "TODO") {
-		t.Errorf("expected 'TODO' status in summary output, got: %s", output)
-	}
-	if !contains(output, "IN_PROGRESS") {
-		t.Errorf("expected 'IN_PROGRESS' status in summary output, got: %s", output)
-	}
-	if !contains(output, "Total") {
-		t.Errorf("expected 'Total' in summary output, got: %s", output)
-	}
+		output := buf.String()
+		if !contains(output, "Project:") {
+			t.Errorf("expected 'Project:' header in summary output, got: %s", output)
+		}
+		if !contains(output, "TODO") {
+			t.Errorf("expected 'TODO' status in summary output, got: %s", output)
+		}
+		if !contains(output, "IN_PROGRESS") {
+			t.Errorf("expected 'IN_PROGRESS' status in summary output, got: %s", output)
+		}
+		if !contains(output, "Total") {
+			t.Errorf("expected 'Total' in summary output, got: %s", output)
+		}
+	})
 }
 
-// TestTaskListFormatSummary tests -f summary as a format value.
-func TestTaskListFormatSummary(t *testing.T) {
-	defer resetTestDB(t)()
-	ctx := context.Background()
-	s, _ := getStorageRaw()
-	defer s.Close()
+// TestTaskListFormat tests the format flag on task list.
+func TestTaskListFormat(t *testing.T) {
+	t.Run("TaskListFormatSummary", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
 
-	proj := "fmt-project"
-	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task A", Status: core.StatusTodo, ProjectID: &proj})
-	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Task B", Status: core.StatusInProgress, ProjectID: &proj})
+		proj := "fmt-project"
+		s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task A", Status: core.StatusTodo, ProjectID: &proj})
+		s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Task B", Status: core.StatusInProgress, ProjectID: &proj})
 
-	viper.Set("output.format", "summary")
-	cmd := newTestCmd()
-	cmd.AddCommand(taskCmd)
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "list"})
+		viper.Set("output.format", "summary")
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("task list -f summary failed: %v", err)
-	}
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task list -f summary failed: %v", err)
+		}
 
-	output := buf.String()
-	if !contains(output, "Project: fmt-project") {
-		t.Errorf("expected 'Project: fmt-project' in output, got: %s", output)
-	}
-	if !contains(output, "TODO") {
-		t.Errorf("expected 'TODO' in output, got: %s", output)
-	}
-	if !contains(output, "IN_PROGRESS") {
-		t.Errorf("expected 'IN_PROGRESS' in output, got: %s", output)
-	}
-	if !contains(output, "Total") {
-		t.Errorf("expected 'Total' in output, got: %s", output)
-	}
+		output := buf.String()
+		if !contains(output, "Project: fmt-project") {
+			t.Errorf("expected 'Project: fmt-project' in output, got: %s", output)
+		}
+		if !contains(output, "TODO") {
+			t.Errorf("expected 'TODO' in output, got: %s", output)
+		}
+		if !contains(output, "IN_PROGRESS") {
+			t.Errorf("expected 'IN_PROGRESS' in output, got: %s", output)
+		}
+		if !contains(output, "Total") {
+			t.Errorf("expected 'Total' in output, got: %s", output)
+		}
+	})
 }
 
 func createAndCompleteTask(t *testing.T, title, description string) {
@@ -1891,7 +1922,7 @@ func createAndCompleteTask(t *testing.T, title, description string) {
 		args = append(args, "--description", description)
 	}
 	cmd1 := newTestCmd()
-	cmd1.AddCommand(taskCmd)
+	cmd1.AddCommand(TaskCmd)
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
@@ -1902,7 +1933,7 @@ func createAndCompleteTask(t *testing.T, title, description string) {
 
 	// Complete
 	cmd2 := newTestCmd()
-	cmd2.AddCommand(taskCmd)
+	cmd2.AddCommand(TaskCmd)
 	buf2 := new(bytes.Buffer)
 	cmd2.SetOut(buf2)
 	cmd2.SetErr(buf2)
@@ -1913,13 +1944,12 @@ func createAndCompleteTask(t *testing.T, title, description string) {
 }
 
 func TestTaskReopenRequiresNote(t *testing.T) {
-	defer resetTestDB(t)()
-
-	createAndCompleteTask(t, "Task to reopen", "")
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
 
 	// Reopen WITHOUT --note should fail
 	cmd3 := newTestCmd()
-	cmd3.AddCommand(taskCmd)
+	cmd3.AddCommand(TaskCmd)
 	buf3 := new(bytes.Buffer)
 	cmd3.SetOut(buf3)
 	cmd3.SetErr(buf3)
@@ -1935,13 +1965,14 @@ func TestTaskReopenRequiresNote(t *testing.T) {
 }
 
 func TestTaskReopenAppendsNoteToDescription(t *testing.T) {
-	defer resetTestDB(t)()
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
 
-	createAndCompleteTask(t, "Task to reopen", "Initial work done")
+	createAndCompleteTask(t, "Reopen test task", "Initial work done")
 
 	// Reopen WITH --note
 	cmd3 := newTestCmd()
-	cmd3.AddCommand(taskCmd)
+	cmd3.AddCommand(TaskCmd)
 	buf3 := new(bytes.Buffer)
 	cmd3.SetOut(buf3)
 	cmd3.SetErr(buf3)
@@ -1950,12 +1981,18 @@ func TestTaskReopenAppendsNoteToDescription(t *testing.T) {
 		t.Fatalf("task reopen failed: %v", err)
 	}
 
-	// Verify note appended to description
-	ctx := context.Background()
-	s, _ := getStorageRaw()
+	// Verify note was appended to description
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("failed to get storage: %v", err)
+	}
 	defer s.Close()
 
-	task, _ := s.GetTask(ctx, "T-0001")
+	task, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
 	if task == nil {
 		t.Fatal("task not found after reopen")
 	}

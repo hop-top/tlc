@@ -981,6 +981,31 @@ func scanProjects(rows *sql.Rows) ([]core.RegisteredProject, error) {
 	return projects, nil
 }
 
+func (s *SQLiteStorage) ListAllTags(ctx context.Context) ([]string, error) {
+	// SQLite 3.38+ supports JSON_EACH.
+	// If older, we'd need to fetch all and parse in Go.
+	query := `
+		SELECT DISTINCT value
+		FROM tasks, json_each(tasks.tags)
+		WHERE tasks.archived = 0
+	`
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tags: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tags []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+	return tags, nil
+}
+
 func (s *SQLiteStorage) Close() error {
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("failed to close database: %w", err)

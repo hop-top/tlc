@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(newAssigneeCmd())
+	RootCmd.AddCommand(newAssigneeCmd())
 }
 
 func newAssigneeCmd() *cobra.Command {

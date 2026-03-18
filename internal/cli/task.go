@@ -18,6 +18,7 @@ import (
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/plugin"
+	"hop.top/tlc/internal/uri"
 	"hop.top/tlc/internal/workspace"
 )
 
@@ -268,12 +269,12 @@ func deleteSyncedTask(_ context.Context, task *core.Task, _ core.Repository) err
 	return nil
 }
 
-var taskCmd = &cobra.Command{
+var TaskCmd = &cobra.Command{
 	Use:   "task",
 	Short: "Task operations",
 }
 
-var taskClaimCmd = &cobra.Command{
+var TaskClaimCmd = &cobra.Command{
 	Use:   "claim <task-id>",
 	Short: "Claim a task for work",
 	Args:  cobra.ExactArgs(1),
@@ -286,12 +287,13 @@ var taskClaimCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		user := core.GetCurrentUser()
@@ -314,16 +316,16 @@ var taskClaimCmd = &cobra.Command{
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
-		if err := saveTaskWithLog(ctx, cmd, task, log, s); err != nil {
+		if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
-var taskUnclaimCmd = &cobra.Command{
+var TaskUnclaimCmd = &cobra.Command{
 	Use:   "unclaim <task-id>",
 	Short: "Release a claimed task",
 	Args:  cobra.ExactArgs(1),
@@ -336,12 +338,13 @@ var taskUnclaimCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		user := core.GetCurrentUser()
@@ -364,16 +367,16 @@ var taskUnclaimCmd = &cobra.Command{
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
-		if err := saveTaskWithLog(ctx, cmd, task, log, s); err != nil {
+		if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
-var taskAssignCmd = &cobra.Command{
+var TaskAssignCmd = &cobra.Command{
 	Use:   "assign <task-id> <assignee>",
 	Short: "Assign a task to someone",
 	Args:  cobra.ExactArgs(2),
@@ -387,12 +390,13 @@ var taskAssignCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		user := core.GetCurrentUser()
@@ -418,16 +422,16 @@ var taskAssignCmd = &cobra.Command{
 			Note:      taskAssignNote,
 		}
 
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", id, assignee)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", task.ID, assignee)
 		return syncTODOAll()
 	},
 }
 
-var taskUnassignCmd = &cobra.Command{
+var TaskUnassignCmd = &cobra.Command{
 	Use:   "unassign <task-id>",
 	Short: "Remove assignee from a task",
 	Args:  cobra.ExactArgs(1),
@@ -444,12 +448,13 @@ var taskUnassignCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		prevAssignee := ""
@@ -475,16 +480,16 @@ var taskUnassignCmd = &cobra.Command{
 			Note:      taskUnassignNote,
 		}
 
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
-var taskCompleteCmd = &cobra.Command{
+var TaskCompleteCmd = &cobra.Command{
 	Use:   "complete <task-id>",
 	Short: "Mark a task as done",
 	Args:  cobra.ExactArgs(1),
@@ -497,12 +502,13 @@ var taskCompleteCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		user := core.GetCurrentUser()
@@ -527,16 +533,16 @@ var taskCompleteCmd = &cobra.Command{
 			return fmt.Errorf("failed to transition task: %w", err)
 		}
 
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
-var taskReopenCmd = &cobra.Command{
+var TaskReopenCmd = &cobra.Command{
 	Use:   "reopen <task-id>",
 	Short: "Reopen a completed or skipped task",
 	Args:  cobra.ExactArgs(1),
@@ -553,17 +559,18 @@ var taskReopenCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		wm := core.DefaultWorkflow()
 		if !wm.IsTerminal(task.Status) {
-			return fmt.Errorf("task %s is not in a terminal state (status: %s)", id, task.Status)
+			return fmt.Errorf("task %s is not in a terminal state (status: %s)", task.ID, task.Status)
 		}
 
 		initialStatus, wmErr := wm.StatusForRole("initial")
@@ -581,16 +588,16 @@ var taskReopenCmd = &cobra.Command{
 			return fmt.Errorf("failed to reopen task: %w", err)
 		}
 
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, s); err != nil {
+		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
-var taskCreateCmd = &cobra.Command{
+var TaskCreateCmd = &cobra.Command{
 	Use:   "create [title]",
 	Short: "Create new task",
 	Args:  cobra.MaximumNArgs(1),
@@ -788,7 +795,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo string, ta
 	return nil
 }
 
-var taskListCmd = &cobra.Command{
+var TaskListCmd = &cobra.Command{
 	Use:   "list [query]",
 	Short: "List tasks with filters",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -990,7 +997,7 @@ func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string)
 	}
 }
 
-var taskShowCmd = &cobra.Command{
+var TaskShowCmd = &cobra.Command{
 	Use:   "show <task-id>",
 	Short: "Show task details",
 	Args:  cobra.ExactArgs(1),
@@ -1003,12 +1010,13 @@ var taskShowCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		var logs []*core.LogEntry
@@ -1020,7 +1028,7 @@ var taskShowCmd = &cobra.Command{
 			if direction == "" {
 				direction = "desc"
 			}
-			logs, err = s.GetLogs(ctx, id, direction)
+			logs, err = res.Storage.GetLogs(ctx, task.ID, direction)
 			if err != nil {
 				return fmt.Errorf("failed to get logs: %w", err)
 			}
@@ -1032,7 +1040,7 @@ var taskShowCmd = &cobra.Command{
 	},
 }
 
-var taskUpdateCmd = &cobra.Command{
+var TaskUpdateCmd = &cobra.Command{
 	Use:   "update <task-id>",
 	Short: "Update task fields",
 	Args:  cobra.ExactArgs(1),
@@ -1045,12 +1053,13 @@ var taskUpdateCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		changed := false
@@ -1082,7 +1091,7 @@ var taskUpdateCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to transition task: %w", err)
 			}
-			if err := s.AddLog(ctx, log); err != nil {
+			if err := res.Storage.AddLog(ctx, log); err != nil {
 				fmt.Printf("Warning: failed to write log: %v\n", err)
 			}
 			changed = true
@@ -1111,11 +1120,11 @@ var taskUpdateCmd = &cobra.Command{
 			task.UpdatedAt = now
 
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
-				if err := updateSyncedTask(ctx, task, s); err != nil {
+				if err := updateSyncedTask(ctx, task, res.Storage); err != nil {
 					return err
 				}
 			} else {
-				if err := s.UpdateTask(ctx, task); err != nil {
+				if err := res.Storage.UpdateTask(ctx, task); err != nil {
 					return fmt.Errorf("failed to update task: %w", err)
 				}
 				fmt.Printf("Updated task %s\n", task.ID)
@@ -1129,7 +1138,7 @@ var taskUpdateCmd = &cobra.Command{
 	},
 }
 
-var taskDeleteCmd = &cobra.Command{
+var TaskDeleteCmd = &cobra.Command{
 	Use:   "delete <task-id>",
 	Short: "Delete a task",
 	Args:  cobra.ExactArgs(1),
@@ -1142,12 +1151,13 @@ var taskDeleteCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		task, err := s.GetTask(ctx, id)
+		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
 		if err != nil {
-			return fmt.Errorf("failed to get task: %w", err)
+			return err
 		}
-		if task == nil {
-			return fmt.Errorf("task not found: %s", id)
+		task := res.Task
+		if res.Storage != s {
+			defer func() { _ = res.Storage.Close() }()
 		}
 
 		if !taskDeleteYes {
@@ -1167,93 +1177,84 @@ var taskDeleteCmd = &cobra.Command{
 		}
 
 		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := deleteSyncedTask(ctx, task, s); err != nil {
+			if err := deleteSyncedTask(ctx, task, res.Storage); err != nil {
 				return err
 			}
 		}
 
-		if err := s.DeleteTask(ctx, id); err != nil {
+		if err := res.Storage.DeleteTask(ctx, task.ID); err != nil {
 			return fmt.Errorf("failed to delete task: %w", err)
 		}
 
-		fmt.Printf("Deleted task %s\n", id)
+		fmt.Printf("Deleted task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
 func init() {
-	taskCreateCmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
-	taskCreateCmd.Flags().StringVarP(&taskTitle, "title", "t", "", "Task title")
-	taskCreateCmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
-	taskCreateCmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
-	taskCreateCmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
-	taskCreateCmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
-	taskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
-	taskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
+	TaskCreateCmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
+	TaskCreateCmd.Flags().StringVarP(&taskTitle, "title", "t", "", "Task title")
+	TaskCreateCmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
+	TaskCreateCmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
+	TaskCreateCmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
+	TaskCreateCmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
+	TaskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
+	TaskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
 
-	taskListCmd.Flags().StringSliceVarP(&taskListStatus, "status", "s", []string{}, "Filter by status")
-	taskListCmd.Flags().StringVarP(&taskListAssignedTo, "assigned-to", "a", "", "Filter by assignee")
-	taskListCmd.Flags().StringSliceVar(&taskListTag, "tag", []string{}, "Filter by tag")
-	taskListCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
-	taskListCmd.Flags().BoolVar(&taskListArchived, "archived", false, "Show archived tasks")
-	taskListCmd.Flags().BoolVar(&taskListAllProjects, "all-projects", false, "Show tasks from all projects")
-	taskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
-	taskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
-	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
-	taskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
-	taskListCmd.Flags().BoolVar(&taskListSummary, "summary", false, "Show status summary instead of task list")
-	taskListCmd.Flags().StringVar(&taskListWorkspace, "workspace", "", "Query across workspace projects")
-	taskListCmd.Flags().StringVar(&taskListSpace, "space", "", "Filter to specific space within workspace")
-	taskListCmd.Flags().StringVar(&taskListProfile, "profile", "", "Filter by aps profile")
-	taskListCmd.Flags().StringVar(&taskListSquad, "squad", "", "Filter by aps squad members")
+	TaskListCmd.Flags().StringSliceVarP(&taskListStatus, "status", "s", []string{}, "Filter by status")
+	TaskListCmd.Flags().StringVarP(&taskListAssignedTo, "assigned-to", "a", "", "Filter by assignee")
+	TaskListCmd.Flags().StringSliceVar(&taskListTag, "tag", []string{}, "Filter by tag")
+	TaskListCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
+	TaskListCmd.Flags().BoolVar(&taskListArchived, "archived", false, "Show archived tasks")
+	TaskListCmd.Flags().BoolVar(&taskListAllProjects, "all-projects", false, "Show tasks from all projects")
+	TaskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
+	TaskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
+	TaskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
+	TaskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
+	TaskListCmd.Flags().BoolVar(&taskListSummary, "summary", false, "Show status summary instead of task list")
+	TaskListCmd.Flags().StringVar(&taskListWorkspace, "workspace", "", "Query across workspace projects")
+	TaskListCmd.Flags().StringVar(&taskListSpace, "space", "", "Filter to specific space within workspace")
+	TaskListCmd.Flags().StringVar(&taskListProfile, "profile", "", "Filter by aps profile")
+	TaskListCmd.Flags().StringVar(&taskListSquad, "squad", "", "Filter by aps squad members")
 
-	taskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
-	taskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
+	TaskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
+	TaskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
 
-	taskUpdateCmd.Flags().StringVarP(&taskUpdateTitle, "title", "t", "", "New title")
-	taskUpdateCmd.Flags().StringVarP(&taskUpdateDescription, "description", "d", "", "New description")
-	taskUpdateCmd.Flags().StringVarP(&taskUpdateStatus, "status", "s", "", "New status")
-	taskUpdateCmd.Flags().StringVarP(&taskUpdateAssignedTo, "assigned-to", "a", "", "New assignee")
-	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
-	taskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
-	taskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateTitle, "title", "t", "", "New title")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateDescription, "description", "d", "", "New description")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateStatus, "status", "s", "", "New status")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateAssignedTo, "assigned-to", "a", "", "New assignee")
+	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
+	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
+	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
 
-	taskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
+	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 
-	taskClaimCmd.Flags().StringVarP(&taskClaimNote, "note", "n", "", "Claim note")
+	TaskClaimCmd.Flags().StringVarP(&taskClaimNote, "note", "n", "", "Claim note")
 
-	taskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
+	TaskUnclaimCmd.Flags().StringVarP(&taskUnclaimNote, "note", "n", "", "Unclaim note")
 
-	taskAssignCmd.Flags().StringVarP(&taskAssignNote, "note", "n", "", "Assignment note")
+	TaskAssignCmd.Flags().StringVarP(&taskAssignNote, "note", "n", "", "Assignment note")
 
-	taskCompleteCmd.Flags().StringVarP(&taskCompleteNote, "note", "n", "", "Completion note")
-	taskCompleteCmd.Flags().BoolVar(&taskCompleteNoVerify, "no-verify", false, "Skip state machine validation")
+	TaskCompleteCmd.Flags().StringVarP(&taskCompleteNote, "note", "n", "", "Completion note")
+	TaskCompleteCmd.Flags().BoolVar(&taskCompleteNoVerify, "no-verify", false, "Skip state machine validation")
 
-	taskReopenCmd.Flags().StringVarP(&taskReopenNote, "note", "n", "", "Reopen note")
+	TaskReopenCmd.Flags().StringVarP(&taskReopenNote, "note", "n", "", "Reopen note")
 
-	taskCmd.AddCommand(taskCreateCmd)
+	TaskCmd.AddCommand(TaskCreateCmd)
+	TaskCmd.AddCommand(TaskListCmd)
+	TaskCmd.AddCommand(TaskShowCmd)
+	TaskCmd.AddCommand(TaskUpdateCmd)
+	TaskCmd.AddCommand(TaskDeleteCmd)
+	TaskCmd.AddCommand(TaskClaimCmd)
+	TaskCmd.AddCommand(TaskUnclaimCmd)
+	TaskCmd.AddCommand(TaskAssignCmd)
 
-	taskCmd.AddCommand(taskListCmd)
+	TaskUnassignCmd.Flags().StringVarP(&taskUnassignNote, "note", "n", "", "Reason for unassigning (required)")
+	TaskCmd.AddCommand(TaskUnassignCmd)
 
-	taskCmd.AddCommand(taskShowCmd)
+	TaskCmd.AddCommand(TaskCompleteCmd)
+	TaskCmd.AddCommand(TaskReopenCmd)
 
-	taskCmd.AddCommand(taskUpdateCmd)
-
-	taskCmd.AddCommand(taskDeleteCmd)
-
-	taskCmd.AddCommand(taskClaimCmd)
-
-	taskCmd.AddCommand(taskUnclaimCmd)
-
-	taskCmd.AddCommand(taskAssignCmd)
-
-	taskUnassignCmd.Flags().StringVarP(&taskUnassignNote, "note", "n", "", "Reason for unassigning (required)")
-
-	taskCmd.AddCommand(taskUnassignCmd)
-
-	taskCmd.AddCommand(taskCompleteCmd)
-
-	taskCmd.AddCommand(taskReopenCmd)
-
-	rootCmd.AddCommand(taskCmd)
+	RootCmd.AddCommand(TaskCmd)
 }

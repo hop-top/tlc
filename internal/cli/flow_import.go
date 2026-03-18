@@ -78,5 +78,5 @@ Examples:
 
 func init() {
 	flowImportCmd.Flags().StringP("output", "o", "", "Output file path (default: print to stdout)")
-	flowCmd.AddCommand(flowImportCmd)
+	FlowCmd.AddCommand(flowImportCmd)
 }

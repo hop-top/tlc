@@ -57,7 +57,7 @@ func TestConfigSet_WritesUserConfigWhenSystemConfigLoaded(t *testing.T) {
 	viper.Reset()
 	viper.SetConfigFile(cfgpkg.SystemConfigPath())
 
-	if err := configSetCmd.RunE(configSetCmd, []string{"output.format", "json"}); err != nil {
+	if err := ConfigSetCmd.RunE(ConfigSetCmd, []string{"output.format", "json"}); err != nil {
 		t.Fatalf("config set failed: %v", err)
 	}
 
@@ -114,7 +114,7 @@ func TestConfigSet_NoConfigFile_CreatesUserConfig(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		if err := configSetCmd.RunE(configSetCmd, []string{
+		if err := ConfigSetCmd.RunE(ConfigSetCmd, []string{
 			"output.format", "table",
 		}); err != nil {
 			t.Fatalf("config set failed: %v", err)
@@ -168,7 +168,7 @@ func TestConfigSet_OutputIncludesWrittenPath(t *testing.T) {
 	viper.Reset()
 
 	out := captureStdout(t, func() {
-		if err := configSetCmd.RunE(configSetCmd, []string{
+		if err := ConfigSetCmd.RunE(ConfigSetCmd, []string{
 			"ui.theme", "dark",
 		}); err != nil {
 			t.Fatalf("config set failed: %v", err)

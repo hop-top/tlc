@@ -188,8 +188,7 @@ func TestInitCmd(t *testing.T) {
 			}
 
 			cmd := newTestCmd()
-			initCmd := newTestInitCmd()
-			cmd.AddCommand(initCmd)
+			cmd.AddCommand(newTestInitCmd())
 
 			buf := new(strings.Builder)
 			cmd.SetOut(buf)
@@ -283,8 +282,7 @@ func TestInitCmd_ExistingTLC(t *testing.T) {
 			}
 
 			cmd := newTestCmd()
-			initCmd := newTestInitCmd()
-			cmd.AddCommand(initCmd)
+			cmd.AddCommand(newTestInitCmd())
 
 			buf := new(strings.Builder)
 			cmd.SetOut(buf)
@@ -389,8 +387,7 @@ git:
 			initConfig()
 
 			cmd := newTestCmd()
-			initCmd := newTestInitCmd()
-			cmd.AddCommand(initCmd)
+			cmd.AddCommand(newTestInitCmd())
 
 			buf := new(strings.Builder)
 			cmd.SetOut(buf)
@@ -446,8 +443,7 @@ func TestInitCmd_ConfigStructure(t *testing.T) {
 	viper.Reset()
 
 	cmd := newTestCmd()
-	initCmd := newTestInitCmd()
-	cmd.AddCommand(initCmd)
+	cmd.AddCommand(newTestInitCmd())
 
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)
@@ -513,8 +509,7 @@ func runInitConfigTest(t *testing.T, args []string, wantFallback, wantDupStrateg
 	viper.Reset()
 
 	cmd := newTestCmd()
-	initCmd := newTestInitCmd()
-	cmd.AddCommand(initCmd)
+	cmd.AddCommand(newTestInitCmd())
 
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)
@@ -633,8 +628,7 @@ func TestInitCmd_ConfigStructureWithProject(t *testing.T) {
 	viper.Reset()
 
 	cmd := newTestCmd()
-	initCmd := newTestInitCmd()
-	cmd.AddCommand(initCmd)
+	cmd.AddCommand(newTestInitCmd())
 
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)
@@ -749,8 +743,7 @@ func TestInitCmd_RegistersNewProject(t *testing.T) {
 	viper.Set("storage.db_path", dbFile)
 
 	cmd := newTestCmd()
-	initCmd := newTestInitCmd()
-	cmd.AddCommand(initCmd)
+	cmd.AddCommand(newTestInitCmd())
 
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)
@@ -830,8 +823,7 @@ func TestInitCmd_ReconnectsExistingProject(t *testing.T) {
 	viper.Set("storage.db_path", dbFile)
 
 	cmd := newTestCmd()
-	initCmd := newTestInitCmd()
-	cmd.AddCommand(initCmd)
+	cmd.AddCommand(newTestInitCmd())
 
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)

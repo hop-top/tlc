@@ -43,7 +43,7 @@ This command outputs a JSON schema that describes how to call TLC commands progr
 }
 
 func init() {
-	rootCmd.SetHelpCommand(helpCmd)
+	RootCmd.SetHelpCommand(helpCmd)
 	helpCmd.AddCommand(helpLLMCmd)
 
 	helpLLMCmd.Flags().StringVar(&helpLLMFormat, "format", "json", "Output format (json, mcp, openai, anthropic)")

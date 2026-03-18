@@ -9,12 +9,12 @@ import (
 	"hop.top/tlc/internal/config"
 )
 
-var configCmd = &cobra.Command{
+var ConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configuration management",
 }
 
-var configValidateCmd = &cobra.Command{
+var ConfigValidateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate configuration",
 	RunE: func(_ *cobra.Command, _ []string) error {
@@ -30,7 +30,7 @@ var configValidateCmd = &cobra.Command{
 	},
 }
 
-var configListCmd = &cobra.Command{
+var ConfigListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configuration",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -43,7 +43,7 @@ var configListCmd = &cobra.Command{
 	},
 }
 
-var configGetCmd = &cobra.Command{
+var ConfigGetCmd = &cobra.Command{
 	Use:   "get <key>",
 	Short: "Get config value",
 	Args:  cobra.ExactArgs(1),
@@ -57,7 +57,7 @@ var configGetCmd = &cobra.Command{
 	},
 }
 
-var configSetCmd = &cobra.Command{
+var ConfigSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Set config value",
 	Args:  cobra.ExactArgs(2),
@@ -83,9 +83,9 @@ var configSetCmd = &cobra.Command{
 }
 
 func init() {
-	configCmd.AddCommand(configValidateCmd)
-	configCmd.AddCommand(configListCmd)
-	configCmd.AddCommand(configGetCmd)
-	configCmd.AddCommand(configSetCmd)
-	rootCmd.AddCommand(configCmd)
+	ConfigCmd.AddCommand(ConfigValidateCmd)
+	ConfigCmd.AddCommand(ConfigListCmd)
+	ConfigCmd.AddCommand(ConfigGetCmd)
+	ConfigCmd.AddCommand(ConfigSetCmd)
+	RootCmd.AddCommand(ConfigCmd)
 }

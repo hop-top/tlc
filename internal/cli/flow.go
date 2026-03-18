@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -14,6 +13,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/uri"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 	flowStatusAll bool
 )
 
-var flowCmd = &cobra.Command{
+var FlowCmd = &cobra.Command{
 	Use:   "flow",
 	Short: "Flow execution and management",
 	Long: `Execute and manage task flows.
@@ -30,7 +30,7 @@ Flows are declarative workflows that orchestrate task execution with
 control flow semantics like parallel, sequential, branching, and retry.`,
 }
 
-var flowRunCmd = &cobra.Command{
+var FlowRunCmd = &cobra.Command{
 	Use:   "run <flow-file>",
 	Short: "Execute a flow definition",
 	Long: `Execute a flow definition from a YAML or JSON file.
@@ -59,22 +59,11 @@ Example flow file (flow.yaml):
 
 Usage:
   tlc flow run flow.yaml
-  tlc flow run tests/fixtures/parallel-flow.yaml
-  tlc flow run deployment-flow.json`,
+  tlc flow run tlc://hop-top/tlc/flow:example:1.0
+  tlc flow run tests/fixtures/parallel-flow.yaml`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		flowFile := args[0]
-
-		f, err := os.Open(flowFile)
-		if err != nil {
-			return fmt.Errorf("failed to open flow file: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-
-		flow, err := core.ParseFlow(f, flowFile)
-		if err != nil {
-			return fmt.Errorf("failed to parse flow: %w", err)
-		}
+		flowRef := args[0]
 
 		s, err := getStorage()
 		if err != nil {
@@ -83,6 +72,11 @@ Usage:
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
+		res, err := uri.NewResolver(s).ResolveFlow(ctx, flowRef)
+		if err != nil {
+			return err
+		}
+		flow := res.Flow
 
 		executor := core.NewFlowExecutor(s, s)
 
@@ -111,7 +105,7 @@ Usage:
 	},
 }
 
-var flowStatusCmd = &cobra.Command{
+var FlowStatusCmd = &cobra.Command{
 	Use:   "status [run-id]",
 	Short: "View flow run status",
 	Long: `View the status of a flow run or list all flow runs.
@@ -165,7 +159,7 @@ Output formats:
 	},
 }
 
-var flowListCmd = &cobra.Command{
+var FlowListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all flow runs",
 	Long:  `List all flow execution runs with their status.`,
@@ -297,7 +291,7 @@ func formatFlowStatus(status core.FlowStatus) string {
 	}
 }
 
-var flowInvokeCmd = &cobra.Command{
+var FlowInvokeCmd = &cobra.Command{
 	Use:   "invoke <flow-file>",
 	Short: "Invoke a flow to generate and assign tasks",
 	Long: `Invoke a flow definition that uses task templates to generate tasks.
@@ -306,21 +300,11 @@ The flow extracts tasks from step templates and auto-assigns them to
 assignees based on capability matching.
 
 Example:
-  tlc flow invoke examples/flows/brainstorming.yaml`,
+  tlc flow invoke examples/flows/brainstorming.yaml
+  tlc flow invoke tlc://hop-top/tlc/flow:brainstorming:1.0`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		flowFile := args[0]
-
-		f, err := os.Open(flowFile)
-		if err != nil {
-			return fmt.Errorf("failed to open flow file: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-
-		flow, err := core.ParseFlow(f, flowFile)
-		if err != nil {
-			return fmt.Errorf("failed to parse flow: %w", err)
-		}
+		flowRef := args[0]
 
 		s, err := getStorage()
 		if err != nil {
@@ -329,6 +313,11 @@ Example:
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
+		res, err := uri.NewResolver(s).ResolveFlow(ctx, flowRef)
+		if err != nil {
+			return err
+		}
+		flow := res.Flow
 
 		executor := core.NewFlowExecutor(s, s)
 
@@ -393,14 +382,14 @@ func generateID() string {
 }
 
 func init() {
-	flowRunCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor executing the flow (default: current user)")
-	flowInvokeCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor invoking the flow (default: current user)")
+	FlowRunCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor executing the flow (default: current user)")
+	FlowInvokeCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor invoking the flow (default: current user)")
 
-	flowStatusCmd.Flags().BoolVar(&flowStatusAll, "all", false, "List all flow runs")
+	FlowStatusCmd.Flags().BoolVar(&flowStatusAll, "all", false, "List all flow runs")
 
-	flowCmd.AddCommand(flowRunCmd)
-	flowCmd.AddCommand(flowInvokeCmd)
-	flowCmd.AddCommand(flowStatusCmd)
-	flowCmd.AddCommand(flowListCmd)
-	rootCmd.AddCommand(flowCmd)
+	FlowCmd.AddCommand(FlowRunCmd)
+	FlowCmd.AddCommand(FlowInvokeCmd)
+	FlowCmd.AddCommand(FlowStatusCmd)
+	FlowCmd.AddCommand(FlowListCmd)
+	RootCmd.AddCommand(FlowCmd)
 }

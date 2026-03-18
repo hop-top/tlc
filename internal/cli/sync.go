@@ -32,7 +32,7 @@ var (
 	syncConfigForce  bool
 )
 
-var syncCmd = &cobra.Command{
+var SyncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Synchronize tasks with external systems",
 }
@@ -366,7 +366,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	return syncTODOAll()
 }
 
-var syncPullCmd = &cobra.Command{
+var SyncPullCmd = &cobra.Command{
 	Use:   "pull <system>",
 	Short: "Pull updates from an external system",
 	Args:  cobra.ExactArgs(1),
@@ -375,7 +375,7 @@ var syncPullCmd = &cobra.Command{
 	},
 }
 
-var syncPushCmd = &cobra.Command{
+var SyncPushCmd = &cobra.Command{
 	Use:   "push <system>",
 	Short: "Push local changes to an external system",
 	Args:  cobra.ExactArgs(1),
@@ -527,7 +527,7 @@ var syncPushCmd = &cobra.Command{
 	},
 }
 
-var syncConfigCmd = &cobra.Command{
+var SyncConfigCmd = &cobra.Command{
 	Use:   "config <system>",
 	Short: "Configure sync settings for a system",
 	Args:  cobra.ExactArgs(1),
@@ -567,7 +567,7 @@ var syncConfigCmd = &cobra.Command{
 	},
 }
 
-var syncStatusCmd = &cobra.Command{
+var SyncStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show sync status and push queue",
 	RunE: func(_ *cobra.Command, _ []string) error {
@@ -668,16 +668,16 @@ func resolveConflictInteractive(conflict *sync.Conflict) (*core.Task, bool) {
 }
 
 func init() {
-	syncPullCmd.Flags().StringVar(&syncPullStrategy, "strategy", "remote-wins", "Conflict resolution strategy (remote-wins, local-wins, last-write-wins)")
+	SyncPullCmd.Flags().StringVar(&syncPullStrategy, "strategy", "remote-wins", "Conflict resolution strategy (remote-wins, local-wins, last-write-wins)")
 
-	syncPushCmd.Flags().BoolVar(&syncPushDryRun, "dry-run", false, "Preview changes without pushing")
-	syncPushCmd.Flags().BoolVar(&syncPushForce, "force", false, "Push all tasks even if not modified locally")
+	SyncPushCmd.Flags().BoolVar(&syncPushDryRun, "dry-run", false, "Preview changes without pushing")
+	SyncPushCmd.Flags().BoolVar(&syncPushForce, "force", false, "Push all tasks even if not modified locally")
 
-	syncConfigCmd.Flags().BoolVar(&syncConfigForce, "force", false, "Overwrite existing configuration")
+	SyncConfigCmd.Flags().BoolVar(&syncConfigForce, "force", false, "Overwrite existing configuration")
 
-	syncCmd.AddCommand(syncPullCmd)
-	syncCmd.AddCommand(syncPushCmd)
-	syncCmd.AddCommand(syncConfigCmd)
-	syncCmd.AddCommand(syncStatusCmd)
-	rootCmd.AddCommand(syncCmd)
+	SyncCmd.AddCommand(SyncPullCmd)
+	SyncCmd.AddCommand(SyncPushCmd)
+	SyncCmd.AddCommand(SyncConfigCmd)
+	SyncCmd.AddCommand(SyncStatusCmd)
+	RootCmd.AddCommand(SyncCmd)
 }

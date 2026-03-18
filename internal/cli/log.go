@@ -213,5 +213,5 @@ func init() {
 	logCmd.Flags().StringVar(&logSortDirection, "sort", sortDesc, "Sort direction: asc or desc")
 	logCmd.Flags().BoolVar(&logAll, "all", false, "Show logs from all tasks")
 
-	rootCmd.AddCommand(logCmd)
+	RootCmd.AddCommand(logCmd)
 }

@@ -12,13 +12,13 @@ import (
 	"hop.top/tlc/internal/workspace"
 )
 
-var workspaceCmd = &cobra.Command{
+var WorkspaceCmd = &cobra.Command{
 	Use:     "workspace",
 	Short:   "Manage workspaces",
 	Aliases: []string{"ws"},
 }
 
-var workspaceListCmd = &cobra.Command{
+var WorkspaceListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured workspaces and their projects",
 	RunE:  runWorkspaceList,
@@ -170,6 +170,6 @@ func printWorkspaceListTable(cmd *cobra.Command, data []workspaceListData) {
 }
 
 func init() {
-	workspaceCmd.AddCommand(workspaceListCmd)
-	rootCmd.AddCommand(workspaceCmd)
+	WorkspaceCmd.AddCommand(WorkspaceListCmd)
+	RootCmd.AddCommand(WorkspaceCmd)
 }

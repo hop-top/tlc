@@ -19,13 +19,33 @@ import (
 
 const backendSQLite = "sqlite"
 
-var cfgFile string
+var (
+	cfgFile    string
+	tlcVersion = "dev" // overridden at build time via -ldflags
+)
 
-var rootCmd = &cobra.Command{
+// SetVersion sets the version string injected at build time.
+func SetVersion(v string) { tlcVersion = v }
+
+var RootCmd = &cobra.Command{
 	Use:   "tlc",
 	Short: "Task Line CLI - Multi-agent task orchestration",
 	Long:  "TLC provides commands for task management, flow execution, and collaboration.",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Initialize storage early to enable completion and other features
+		s, err := getStorage()
+		if err != nil {
+			// Don't fail if we can't open storage (e.g. for 'init' or 'help' commands)
+			// but we can't setup completion without it.
+			return nil
+		}
+		return setupURICompletion(s)
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if ok, _ := cmd.Flags().GetBool("version"); ok {
+			fmt.Fprintf(cmd.OutOrStdout(), "tlc version %s\n", tlcVersion)
+			return nil
+		}
 		// If no command is specified, run the TUI
 		return tuiCmd.RunE(cmd, args)
 	},
@@ -33,7 +53,7 @@ var rootCmd = &cobra.Command{
 
 // Execute runs the root command and handles any errors.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -42,22 +62,23 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
-	rootCmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls, summary)")
-	rootCmd.PersistentFlags().Bool("no-color", false, "disable colored output")
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose logging")
-	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
+	RootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
+	RootCmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls, summary)")
+	RootCmd.PersistentFlags().Bool("no-color", false, "disable colored output")
+	RootCmd.PersistentFlags().BoolP("verbose", "V", false, "verbose logging")
+	RootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
+	RootCmd.Flags().Bool("version", false, "print version and exit")
 
-	if err := viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("format")); err != nil {
+	if err := viper.BindPFlag("output.format", RootCmd.PersistentFlags().Lookup("format")); err != nil {
 		log.Warn("Failed to bind format flag", "error", err)
 	}
-	if err := viper.BindPFlag("output.color", rootCmd.PersistentFlags().Lookup("no-color")); err != nil {
+	if err := viper.BindPFlag("output.color", RootCmd.PersistentFlags().Lookup("no-color")); err != nil {
 		log.Warn("Failed to bind color flag", "error", err)
 	}
-	if err := viper.BindPFlag("output.verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
+	if err := viper.BindPFlag("output.verbose", RootCmd.PersistentFlags().Lookup("verbose")); err != nil {
 		log.Warn("Failed to bind verbose flag", "error", err)
 	}
-	if err := viper.BindPFlag("output.quiet", rootCmd.PersistentFlags().Lookup("quiet")); err != nil {
+	if err := viper.BindPFlag("output.quiet", RootCmd.PersistentFlags().Lookup("quiet")); err != nil {
 		log.Warn("Failed to bind quiet flag", "error", err)
 	}
 }
@@ -360,7 +381,6 @@ func getStorageRaw() (*storage.SQLiteStorage, error) {
 	if dbPath == "" {
 		dbPath = filepath.Join(config.UserDataDir(), "db.sqlite")
 	}
-
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil { //nolint:gosec // G703: dbPath from config or standard data dir
 		return nil, fmt.Errorf("failed to create database directory: %w", err)

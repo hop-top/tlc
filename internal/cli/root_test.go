@@ -46,8 +46,8 @@ func TestInitConfig(t *testing.T) {
 func TestRootCmdDefault(t *testing.T) {
 	// We can't easily test TUI launch in a unit test without it hanging or failing on no TTY.
 	// But we can verify RunE is set.
-	if rootCmd.RunE == nil {
-		t.Error("expected rootCmd.RunE to be set")
+	if RootCmd.RunE == nil {
+		t.Error("expected RootCmd.RunE to be set")
 	}
 }
 

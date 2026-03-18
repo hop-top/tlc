@@ -1,3 +1,23 @@
+## gstack
+
+- Use `/browse` skill from gstack for ALL web browsing
+- NEVER use `mcp__claude-in-chrome__*` tools directly
+
+Available gstack skills:
+- `/plan-ceo-review` — CEO-perspective plan review
+- `/plan-eng-review` — engineering plan review
+- `/plan-design-review` — design plan review
+- `/design-consultation` — design consultation
+- `/review` — general review
+- `/ship` — ship/deploy workflow
+- `/browse` — web browsing (use this instead of direct browser tools)
+- `/qa` — QA workflow
+- `/qa-only` — QA without design review
+- `/qa-design-review` — QA + design review
+- `/setup-browser-cookies` — configure browser session cookies
+- `/retro` — retrospective
+- `/document-release` — release documentation
+
 ## Required Tools
 
 ### `tlc` — Task Management
@@ -63,7 +83,7 @@ Read `.xray` files when present in directories for cached context.
 
 ## Project Goals
 
-1. Build `rux` as a deterministic orchestration engine for interactive
+1. Build `tlc` as a deterministic task management system for interactive
    terminal applications (PTY/tmux abstraction).
 2. CLI-first; SDK layer for programmatic Go integration.
 3. Story-driven delivery via `docs/stories/` and `docs/personas/`.
@@ -76,7 +96,7 @@ Read `.xray` files when present in directories for cached context.
 
 ## Coding Expectations
 
-1. Go 1.24.x; module path `github.com/hop-top/rux`.
+1. Go 1.24.x; module path `github.com/hop-top/tlc`.
 2. Keep files <500 LOC; split/refactor as needed.
 3. DRY; design patterns; avoid cyclomatic complexity.
 4. Deterministic tests; explicit exit-code assertions for CLI.
