@@ -67,7 +67,7 @@ func init() {
 	RootCmd.PersistentFlags().Bool("no-color", false, "disable colored output")
 	RootCmd.PersistentFlags().BoolP("verbose", "V", false, "verbose logging")
 	RootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
-	RootCmd.Flags().Bool("version", false, "print version and exit")
+	RootCmd.Flags().BoolP("version", "v", false, "print version and exit")
 
 	if err := viper.BindPFlag("output.format", RootCmd.PersistentFlags().Lookup("format")); err != nil {
 		log.Warn("Failed to bind format flag", "error", err)
