@@ -148,7 +148,7 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if viper.ConfigFileUsed() != "" && viper.GetBool("output.verbose") {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		log.Debug("Using config file", "path", viper.ConfigFileUsed())
 	}
 
 	// Validate merged configuration
