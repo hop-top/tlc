@@ -15,6 +15,7 @@ import (
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
+	"hop.top/upgrade"
 )
 
 const backendSQLite = "sqlite"
@@ -32,6 +33,9 @@ var RootCmd = &cobra.Command{
 	Short: "Task Line CLI - Multi-agent task orchestration",
 	Long:  "TLC provides commands for task management, flow execution, and collaboration.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() != "upgrade" {
+			upgrade.NotifyIfAvailable(cmd.Context(), newChecker(), os.Stderr)
+		}
 		// Initialize storage early to enable completion and other features
 		s, err := getStorage()
 		if err != nil {
