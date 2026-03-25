@@ -113,7 +113,10 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
 		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
 	} else {
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id FROM tasks WHERE id = ?", id)
+		// Prefer the global bucket (project_id='') over project-scoped rows so that
+		// tasks created outside any project context are consistently resolved even
+		// when sync has duplicated them into project-specific rows.
+		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
 	}
 
 	var task core.Task
@@ -212,26 +215,34 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 			lastSyncAt = &s
 		}
 
-		var err error
+		projectID := ""
 		if task.ProjectID != nil {
-			_, err = tx.ExecContext(ctx, `
-				UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
-				WHERE id = ? AND project_id = ?`,
-				task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-				task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-				task.OriginSystem, lastSyncAt, task.Archived, task.ID, task.ProjectID,
-			)
-		} else {
-			_, err = tx.ExecContext(ctx, `
-				UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
-				WHERE id = ? AND project_id IS NULL`,
-				task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-				task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-				task.OriginSystem, lastSyncAt, task.Archived, task.ID,
-			)
+			projectID = *task.ProjectID
 		}
+		res, err := tx.ExecContext(ctx, `
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
+			WHERE id = ? AND project_id = ?`,
+			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
+			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
+			task.OriginSystem, lastSyncAt, task.Archived, task.ID, projectID,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if n == 0 {
+			var exists int
+			err = tx.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`, task.ID, projectID).Scan(&exists)
+			if err == sql.ErrNoRows {
+				return fmt.Errorf("task %s not found (project_id=%q)", task.ID, projectID)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to verify task existence: %w", err)
+			}
+			// row exists, values were unchanged — not an error
 		}
 		return nil
 	})
@@ -248,37 +259,38 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			lastSyncAt = &s
 		}
 
-		var err error
+		projectID := ""
 		if task.ProjectID != nil {
-			_, err = tx.ExecContext(ctx, `
-				UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
-				WHERE id = ? AND project_id = ?`,
-				task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-				task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-				task.OriginSystem, lastSyncAt, task.Archived, task.ID, task.ProjectID,
-			)
-		} else {
-			_, err = tx.ExecContext(ctx, `
-				UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
-				WHERE id = ? AND project_id IS NULL`,
-				task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-				task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-				task.OriginSystem, lastSyncAt, task.Archived, task.ID,
-			)
+			projectID = *task.ProjectID
 		}
+		res, err := tx.ExecContext(ctx, `
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?
+			WHERE id = ? AND project_id = ?`,
+			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
+			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
+			task.OriginSystem, lastSyncAt, task.Archived, task.ID, projectID,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if n == 0 {
+			var exists int
+			err = tx.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`, task.ID, projectID).Scan(&exists)
+			if err == sql.ErrNoRows {
+				return fmt.Errorf("task %s not found (project_id=%q)", task.ID, projectID)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to verify task existence: %w", err)
+			}
+			// row exists, values were unchanged — not an error
 		}
 
 		// Add Log
 		logMetaJSON, _ := json.Marshal(entry.Meta)
-
-		// Get project_id from task
-		var projectID sql.NullString
-		projectID = sql.NullString{String: *task.ProjectID, Valid: task.ProjectID != nil}
-		if task.ProjectID == nil {
-			projectID = sql.NullString{String: "default", Valid: true}
-		}
 
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO task_logs (project_id, task_id, timestamp, by, action, note, meta)

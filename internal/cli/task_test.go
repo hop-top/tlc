@@ -2133,3 +2133,105 @@ func TestAppendAuditLog_CustomTemplate(t *testing.T) {
 		t.Errorf("expected custom template output, got: %s", task.Description)
 	}
 }
+
+// TestClaimComplete_TaskDuplicatedAcrossProjectBuckets is a regression test for
+// the bug where claim/complete silently updated the wrong row when the same task
+// ID existed in multiple project_id buckets ('' global + project-scoped sync rows).
+//
+// Repro sequence:
+//  1. Task created outside project context → project_id=''
+//  2. Sync duplicates it into a project-scoped row (project_id='proj-a')
+//  3. claim runs → GetTask without filter returns project-scoped row first (by rowid)
+//     → UpdateTask updates that row → '' row stays TODO
+//  4. complete reads '' row (still TODO) → "invalid transition from TODO to DONE"
+//
+// Fix: GetTask (no-project path) now orders by CASE WHEN project_id='' THEN 0 ELSE 1
+// so the global row is preferred, and UpdateTask uses WHERE project_id=? (not IS NULL).
+func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
+	withTestLock(func() {
+		dbPath := resetTestDB(t)
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+
+		// Step 1: insert project-scoped duplicate FIRST so it gets a lower rowid.
+		// An unordered SELECT WHERE id=? would return this row first, proving the fix
+		// is needed to prefer the global (project_id='') row.
+		projID := "proj-a"
+		_ = s.CreateTask(ctx, &core.Task{
+			ID:        "T-0001",
+			Title:     "Global task",
+			ProjectID: &projID,
+			Status:    core.StatusTodo,
+			Reference: "ref",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		})
+
+		// Step 2: create global task (project_id='') second — higher rowid.
+		// Without the fix an unordered SELECT would miss this row.
+		_ = s.CreateTask(ctx, &core.Task{
+			ID:        "T-0001",
+			Title:     "Global task",
+			Status:    core.StatusTodo,
+			Reference: "ref",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		})
+
+		viper.Set("storage.db_path", dbPath)
+
+		// Step 3: claim — must update the '' row, not the project-scoped one
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "claim", "T-0001"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("claim failed: %v", err)
+		}
+
+		// '' row must be IN_PROGRESS
+		global, err := s.GetTaskInProject(ctx, "T-0001", "")
+		if err != nil || global == nil {
+			t.Fatalf("GetTaskInProject('') after claim: %v", err)
+		}
+		if global.Status != core.StatusInProgress {
+			t.Errorf("global '' row: expected IN_PROGRESS after claim, got %s", global.Status)
+		}
+
+		// project-scoped row must be untouched
+		scoped, err := s.GetTaskInProject(ctx, "T-0001", projID)
+		if err != nil || scoped == nil {
+			t.Fatalf("GetTaskInProject(projID) after claim: %v", err)
+		}
+		if scoped.Status != core.StatusTodo {
+			t.Errorf("scoped row: expected TODO (unaffected), got %s", scoped.Status)
+		}
+
+		// Step 4: complete — must not fail with "invalid transition from TODO to DONE"
+		resetTaskFlags()
+		cmd2 := newTestCmd()
+		cmd2.AddCommand(TaskCmd)
+		buf2 := new(bytes.Buffer)
+		cmd2.SetOut(buf2)
+		cmd2.SetErr(buf2)
+		cmd2.SetArgs([]string{"task", "complete", "T-0001"})
+		if err := cmd2.Execute(); err != nil {
+			t.Fatalf("complete failed (regression: reads stale '' row as TODO): %v", err)
+		}
+
+		global2, err := s.GetTaskInProject(ctx, "T-0001", "")
+		if err != nil || global2 == nil {
+			t.Fatalf("GetTaskInProject('') after complete: %v", err)
+		}
+		if global2.Status != core.StatusDone {
+			t.Errorf("global '' row: expected DONE after complete, got %s", global2.Status)
+		}
+	})
+}
