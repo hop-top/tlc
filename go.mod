@@ -22,8 +22,7 @@ require (
 	golang.org/x/oauth2 v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7
-	hop.top/uri v0.0.0
-	hop.top/uri/completions v0.0.0
+	hop.top/uri v0.0.0-20260315135125-fc061a7b6a61
 	modernc.org/sqlite v1.44.1
 )
 
@@ -90,12 +89,8 @@ require (
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
+	hop.top/uri/completions v0.0.0-20260315135125-fc061a7b6a61 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-)
-
-replace (
-	hop.top/uri => /Users/jadb/.w/ideacrafterslabs/uri/hops/main
-	hop.top/uri/completions => /Users/jadb/.w/ideacrafterslabs/uri/hops/main/completions
 )
