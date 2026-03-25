@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -11,6 +12,12 @@ import (
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/workspace"
 )
+
+// wsmDetected reports whether the wsm binary is available on PATH.
+func wsmDetected() bool {
+	_, err := exec.LookPath("wsm")
+	return err == nil
+}
 
 var WorkspaceCmd = &cobra.Command{
 	Use:     "workspace",
@@ -171,5 +178,9 @@ func printWorkspaceListTable(cmd *cobra.Command, data []workspaceListData) {
 
 func init() {
 	WorkspaceCmd.AddCommand(WorkspaceListCmd)
+	if !wsmDetected() {
+		WorkspaceCmd.Short = "Manage workspaces (requires wsm — not found in PATH)"
+		WorkspaceCmd.Hidden = true
+	}
 	RootCmd.AddCommand(WorkspaceCmd)
 }
