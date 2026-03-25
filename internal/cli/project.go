@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"hop.top/tlc/internal/core"
 )
@@ -14,6 +17,7 @@ import (
 var (
 	projectExportFormat string
 	projectImportForce  bool
+	projectListFormat   string
 )
 
 var ProjectCmd = &cobra.Command{
@@ -162,11 +166,104 @@ var ProjectImportCmd = &cobra.Command{
 	},
 }
 
+var ProjectListCmd = &cobra.Command{
+	Use:     "list",
+	Short:   "List all registered projects",
+	Aliases: []string{"ls"},
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := context.Background()
+		s, err := getStorageRaw()
+		if err != nil {
+			return fmt.Errorf("failed to open storage: %w", err)
+		}
+		defer func() { _ = s.Close() }()
+
+		projects, err := s.ListAllProjects(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list projects: %w", err)
+		}
+
+		format := projectListFormat
+		if format == "" {
+			format = viper.GetString("output.format")
+		}
+		if format == "" {
+			format = formatTable
+		}
+
+		switch format {
+		case formatJSON:
+			data, err := json.MarshalIndent(projects, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal JSON: %w", err)
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		case formatYAML:
+			data, err := yaml.Marshal(projects)
+			if err != nil {
+				return fmt.Errorf("failed to marshal YAML: %w", err)
+			}
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), string(data))
+		default:
+			renderProjectTable(cmd, projects)
+		}
+		return nil
+	},
+}
+
+func renderProjectTable(cmd *cobra.Command, projects []core.RegisteredProject) {
+	w := cmd.OutOrStdout()
+
+	if len(projects) == 0 {
+		dimStyle := lipgloss.NewStyle().Foreground(mutedColor)
+		_, _ = fmt.Fprintln(w, dimStyle.Render("No projects registered."))
+		return
+	}
+
+	columns := []table.Column{
+		{Title: "ID", Width: 20},
+		{Title: "Label", Width: 20},
+		{Title: "DB Path", Width: 40},
+		{Title: "Space URI", Width: 30},
+		{Title: "Status", Width: 8},
+	}
+
+	rows := make([]table.Row, 0, len(projects))
+	for _, p := range projects {
+		rows = append(rows, table.Row{
+			p.ProjectID,
+			p.Label,
+			p.DBPath,
+			p.SpaceURI,
+			p.Status,
+		})
+	}
+
+	tbl := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(false),
+		table.WithHeight(len(rows)+1),
+	)
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	tbl.SetStyles(s)
+
+	_, _ = fmt.Fprintln(w, tbl.View())
+}
+
 func init() {
 	ProjectExportCmd.Flags().StringVarP(&projectExportFormat, "format", "f", "yaml", "Output format (yaml, json)")
 	ProjectImportCmd.Flags().BoolVar(&projectImportForce, "force", false, "Overwrite existing tasks on conflict")
+	ProjectListCmd.Flags().StringVarP(&projectListFormat, "format", "f", "", "Output format (table, json, yaml)")
 
 	ProjectCmd.AddCommand(ProjectExportCmd)
 	ProjectCmd.AddCommand(ProjectImportCmd)
+	ProjectCmd.AddCommand(ProjectListCmd)
 	RootCmd.AddCommand(ProjectCmd)
 }
