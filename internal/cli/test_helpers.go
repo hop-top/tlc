@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +13,168 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 )
+
+const (
+	testEngineer1 = "engineer-1"
+	testEngineer2 = "engineer-2"
+	testTagBug    = "bug"
+	testUser      = "testuser"
+)
+
+func contains(s, substr string) bool {
+	return bytes.Contains([]byte(s), []byte(substr))
+}
+
+func setupTestDir(t *testing.T) (ctx context.Context, cleanup func()) {
+	t.Helper()
+	dbPath := resetTestDB(t)
+	viper.Set("storage.db_path", dbPath)
+	ctx = context.Background()
+	// Cleanup is a no-op: resetTestDB's t.Cleanup already removes tmpDir and
+	// restores CWD. Calling os.RemoveAll here races with that cleanup and can
+	// fail if the process CWD is still inside the directory.
+	return ctx, func() {}
+}
+
+func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle string) {
+	t.Helper()
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  titleSuffix + " test task",
+		Status: core.StatusTodo,
+	}
+	s.CreateTask(ctx, task)
+
+	viper.Set("output.format", format)
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with %s format failed: %v", format, err)
+	}
+
+	output := buf.String()
+	if !contains(output, expectID) {
+		t.Errorf("expected output with '%s' field", expectID)
+	}
+	if !contains(output, expectTitle) {
+		t.Errorf("expected output with '%s' field", expectTitle)
+	}
+}
+
+func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
+	t.Helper()
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Show " + format + " test",
+		Status: core.StatusTodo,
+	}
+	s.CreateTask(ctx, task)
+
+	viper.Set("output.format", format)
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "show", "T-0001"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task show with %s format failed: %v", format, err)
+	}
+
+	output := buf.String()
+	if !contains(output, expectID) {
+		t.Errorf("expected output with '%s' field", expectID)
+	}
+	if !contains(output, expectTitle) {
+		t.Errorf("expected output with '%s' field", expectTitle)
+	}
+}
+
+func testClearAssignee(t *testing.T, clearValue string) {
+	t.Helper()
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+	assignee1 := testEngineer1
+	task := &core.Task{
+		ID:         "T-0001",
+		Title:      "Task with assignee",
+		Status:     core.StatusTodo,
+		AssignedTo: &assignee1,
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--assigned-to", clearValue})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update to clear assignee with %s failed: %v", clearValue, err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	if updatedTask.AssignedTo != nil {
+		t.Errorf("assignee field is %s, expected nil (cleared)", *updatedTask.AssignedTo)
+	}
+}
+
+func createAndCompleteTask(t *testing.T, title, description string) {
+	t.Helper()
+
+	// Create task
+	args := []string{"task", "create", title, "--status", "IN_PROGRESS"}
+	if description != "" {
+		args = append(args, "--description", description)
+	}
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(TaskCmd)
+	buf1 := new(bytes.Buffer)
+	cmd1.SetOut(buf1)
+	cmd1.SetErr(buf1)
+	cmd1.SetArgs(args)
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+
+	// Complete
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(TaskCmd)
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"task", "complete", "T-0001"})
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("task complete failed: %v", err)
+	}
+}
 
 // resetTestDB creates a fresh isolated database for testing.
 // Resets viper, sync guards, detection cache, and task flags.
