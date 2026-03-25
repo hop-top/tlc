@@ -314,6 +314,59 @@ func TestFindAllConfigsForMode_Hop(t *testing.T) {
 	}
 }
 
+// TestInitConfig_DirectoryFlagResolvesToTLCConfigYAML verifies that passing a
+// directory to -c resolves to <dir>/.tlc/config.yaml.
+func TestInitConfig_DirectoryFlagResolvesToTLCConfigYAML(t *testing.T) {
+	dir := t.TempDir()
+	tlcDir := filepath.Join(dir, ".tlc")
+	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(tlcDir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("output:\n  format: tls\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCfgFile := cfgFile
+	defer func() { cfgFile = oldCfgFile }()
+
+	cfgFile = dir
+	viper.Reset()
+	initConfig()
+
+	if got := viper.GetString("output.format"); got != "tls" {
+		t.Fatalf("output.format = %q, want \"tls\"", got)
+	}
+	got := viper.ConfigFileUsed()
+	if got != cfgPath {
+		t.Fatalf("ConfigFileUsed() = %q, want %q", got, cfgPath)
+	}
+}
+
+// TestInitConfig_FileFlagUnchanged verifies that passing an explicit file path
+// to -c does not alter it.
+func TestInitConfig_FileFlagUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "myconfig.yaml")
+	if err := os.WriteFile(cfgPath, []byte("output:\n  format: json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCfgFile := cfgFile
+	defer func() { cfgFile = oldCfgFile }()
+
+	cfgFile = cfgPath
+	viper.Reset()
+	initConfig()
+
+	if got := viper.GetString("output.format"); got != "json" {
+		t.Fatalf("output.format = %q, want \"json\"", got)
+	}
+	if got := normalizeConfigPath(viper.ConfigFileUsed()); got != normalizeConfigPath(cfgPath) {
+		t.Fatalf("ConfigFileUsed() = %q, want %q", got, cfgPath)
+	}
+}
+
 // TestFindAllConfigsForMode_HopIgnoresStandalone verifies hop mode
 // does not pick up standalone config paths.
 func TestFindAllConfigsForMode_HopIgnoresStandalone(t *testing.T) {

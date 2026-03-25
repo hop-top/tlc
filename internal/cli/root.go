@@ -91,6 +91,10 @@ func initConfig() {
 	setDefaults()
 
 	if cfgFile != "" {
+		// If cfgFile is a directory, resolve to <dir>/<localConfigDir>/config.yaml.
+		if info, err := os.Stat(cfgFile); err == nil && info.IsDir() {
+			cfgFile = filepath.Join(cfgFile, config.LocalConfigDir(config.DetectMode()), "config.yaml")
+		}
 		viper.SetConfigFile(cfgFile)
 		if err := viper.ReadInConfig(); err != nil {
 			log.Warn("Failed to read config file", "path", cfgFile, "error", err)
