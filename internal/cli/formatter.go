@@ -93,6 +93,10 @@ func formatTLS(t *core.Task) string {
 		parts = append(parts, "#"+tag)
 	}
 
+	if t.Effort != "" {
+		parts = append(parts, "effort:"+string(t.Effort))
+	}
+
 	if t.Reference != "" && t.Reference != "task://"+t.ID {
 		parts = append(parts, "ref:"+t.Reference)
 	}
@@ -249,6 +253,9 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		assignee = *t.AssignedTo
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Assigned:"), assignee)
+	if t.Effort != "" {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Effort:"), string(t.Effort))
+	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), t.Reference)
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))

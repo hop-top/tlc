@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestSQLiteStorage_MigrationV2 verifies schema version is 2 after migration.
+// TestSQLiteStorage_MigrationV2 verifies schema version is at the latest version after migration.
 func TestSQLiteStorage_MigrationV2(t *testing.T) {
 	s, err := NewSQLiteStorage(":memory:")
 	if err != nil {
@@ -16,7 +16,7 @@ func TestSQLiteStorage_MigrationV2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion failed: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("expected schema version 2, got %d", version)
+	if version != LatestMigrationVersion {
+		t.Errorf("expected schema version %d, got %d", LatestMigrationVersion, version)
 	}
 }

@@ -285,6 +285,8 @@ func parseTLS(line string) (*core.Task, error) {
 			task.AssignedTo = &assignee
 		} else if strings.HasPrefix(token, "#") {
 			task.Tags = append(task.Tags, strings.TrimPrefix(token, "#"))
+		} else if strings.HasPrefix(token, "effort:") {
+			task.Effort = core.Effort(strings.TrimPrefix(token, "effort:"))
 		} else if strings.HasPrefix(token, "prio:") {
 			task.Meta["prio"] = strings.TrimPrefix(token, "prio:")
 		} else if strings.HasPrefix(token, "domain:") {
@@ -378,6 +380,7 @@ func trimMatchingQuotes(s string) string {
 func isMetaToken(token string) bool {
 	if strings.HasPrefix(token, "@") ||
 		strings.HasPrefix(token, "#") ||
+		strings.HasPrefix(token, "effort:") ||
 		strings.HasPrefix(token, "prio:") ||
 		strings.HasPrefix(token, "domain:") ||
 		strings.HasPrefix(token, "ref:") {

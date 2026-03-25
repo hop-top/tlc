@@ -357,3 +357,80 @@ func TestTaskRemoveTag(t *testing.T) {
 		t.Errorf("expected 'bug' tag, got '%s'", updatedTask.Tags[0])
 	}
 }
+
+// TestTaskUpdateEffort tests setting effort on a task via update.
+func TestTaskUpdateEffort(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", "M"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --effort failed: %v", err)
+	}
+
+	updated, _ := s.GetTask(ctx, "T-0001")
+	if updated == nil {
+		t.Fatal("task not found after update")
+	}
+	if updated.Effort != core.EffortM {
+		t.Errorf("expected effort M, got %q", updated.Effort)
+	}
+}
+
+// TestTaskUpdateEffortInvalid tests that an invalid effort value is rejected.
+func TestTaskUpdateEffortInvalid(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", "HUGE"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for invalid effort, got nil")
+	}
+}
+
+// TestTaskCreateWithEffort tests creating a task with --effort flag.
+func TestTaskCreateWithEffort(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Effort Task", "--effort", "L"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create --effort failed: %v", err)
+	}
+
+	tasks, _ := s.ListTasks(ctx, core.Query{})
+	if len(tasks) == 0 {
+		t.Fatal("no tasks found after create")
+	}
+	if tasks[0].Effort != core.EffortL {
+		t.Errorf("expected effort L, got %q", tasks[0].Effort)
+	}
+}

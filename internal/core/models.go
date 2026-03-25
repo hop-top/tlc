@@ -13,6 +13,26 @@ const (
 	StatusSkipped    TaskStatus = "SKIPPED"
 )
 
+// Effort represents task size estimate: XS, S, M, L, XL.
+type Effort string
+
+const (
+	EffortXS Effort = "XS"
+	EffortS  Effort = "S"
+	EffortM  Effort = "M"
+	EffortL  Effort = "L"
+	EffortXL Effort = "XL"
+)
+
+// ValidEffort returns true if e is a recognised effort value (or empty).
+func ValidEffort(e Effort) bool {
+	switch e {
+	case "", EffortXS, EffortS, EffortM, EffortL, EffortXL:
+		return true
+	}
+	return false
+}
+
 type Task struct {
 	ID           string                 `json:"id" yaml:"id"`
 	Title        string                 `json:"title" yaml:"title"`
@@ -21,6 +41,7 @@ type Task struct {
 	AssignedTo   *string                `json:"assigned_to" yaml:"assigned_to"`
 	Tags         []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Reference    string                 `json:"reference" yaml:"reference"`
+	Effort       Effort                 `json:"effort,omitempty" yaml:"effort,omitempty"`
 	CreatedAt    time.Time              `json:"created_at" yaml:"created_at"`
 	UpdatedAt    time.Time              `json:"updated_at" yaml:"updated_at"`
 	OriginSystem *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`

@@ -91,10 +91,14 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
 		`,
 	},
+	{
+		version: 3,
+		query:   `ALTER TABLE tasks ADD COLUMN effort TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 2
+const LatestMigrationVersion = 3
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

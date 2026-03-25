@@ -68,6 +68,14 @@ var TaskUpdateCmd = &cobra.Command{
 			changed = true
 		}
 
+		if cmd.Flags().Changed("effort") {
+			if !core.ValidEffort(core.Effort(taskUpdateEffort)) {
+				return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
+			}
+			task.Effort = core.Effort(taskUpdateEffort)
+			changed = true
+		}
+
 		if len(taskUpdateAddTags) > 0 || len(taskUpdateRemoveTags) > 0 {
 			tagMap := make(map[string]bool)
 			for _, t := range task.Tags {
@@ -166,6 +174,7 @@ func init() {
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateDescription, "description", "d", "", "New description")
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateStatus, "status", "s", "", "New status")
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateAssignedTo, "assigned-to", "a", "", "New assignee")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
