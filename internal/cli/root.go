@@ -90,16 +90,19 @@ func init() {
 func initConfig() {
 	setDefaults()
 
+	// normalizedCfgFile holds the resolved explicit config path (if any).
+	// We always run the normal cascade first so that system/user/project
+	// defaults are present; then we merge the explicit file on top.
+	normalizedCfgFile := ""
 	if cfgFile != "" {
 		// If cfgFile is a directory, resolve to <dir>/<localConfigDir>/config.yaml.
 		if info, err := os.Stat(cfgFile); err == nil && info.IsDir() {
 			cfgFile = filepath.Join(cfgFile, config.LocalConfigDir(config.DetectMode()), "config.yaml")
 		}
-		viper.SetConfigFile(cfgFile)
-		if err := viper.ReadInConfig(); err != nil {
-			log.Warn("Failed to read config file", "path", cfgFile, "error", err)
-		}
-	} else {
+		normalizedCfgFile = cfgFile
+	}
+
+	{
 		// Prefer user config over system config when picking a base file.
 		if userConfigDir, err := config.UserConfigDir(); err == nil {
 			viper.AddConfigPath(userConfigDir)
@@ -148,6 +151,15 @@ func initConfig() {
 			if len(configs) > 0 {
 				viper.SetConfigFile(configs[0])
 			}
+		}
+	}
+
+	// Merge the explicit --config file on top of the cascade so its keys
+	// override anything loaded from system/user/project configs.
+	if normalizedCfgFile != "" {
+		viper.SetConfigFile(normalizedCfgFile)
+		if err := viper.MergeInConfig(); err != nil {
+			log.Warn("Failed to read config file", "path", normalizedCfgFile, "error", err)
 		}
 	}
 

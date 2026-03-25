@@ -367,6 +367,77 @@ func TestInitConfig_FileFlagUnchanged(t *testing.T) {
 	}
 }
 
+// TestInitConfig_ExplicitConfigOverridesMergesWithCascade proves the fix for
+// T-0049: --config must merge/override the default cascade, not replace it.
+// Keys present only in the cascade survive; keys in the explicit file win.
+func TestInitConfig_ExplicitConfigOverridesMergesWithCascade(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Set up isolated HOME so we control the user-config cascade.
+	homeDir := filepath.Join(tmpDir, "home")
+	projectDir := filepath.Join(homeDir, "workspace", "project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldWd, _ := os.Getwd()
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	oldCfgFile := cfgFile
+	defer func() {
+		_ = os.Chdir(oldWd)
+		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("XDG_CONFIG_HOME", oldXDG)
+		cfgFile = oldCfgFile
+	}()
+
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("HOME", homeDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Unsetenv("XDG_CONFIG_HOME"); err != nil {
+		t.Fatal(err)
+	}
+
+	// User-global config sets output.verbose = true and storage.db_path.
+	userConfigPath, err := cfgpkg.UserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(userConfigPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userConfigPath,
+		[]byte("output:\n  verbose: true\nstorage:\n  db_path: ./cascade.sqlite\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Explicit --config file only overrides output.format; leaves other keys untouched.
+	explicitCfg := filepath.Join(tmpDir, "override.yaml")
+	if err := os.WriteFile(explicitCfg, []byte("output:\n  format: json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile = explicitCfg
+	viper.Reset()
+	initConfig()
+
+	// Key from explicit file wins.
+	if got := viper.GetString("output.format"); got != "json" {
+		t.Fatalf("output.format = %q, want \"json\" (from explicit --config)", got)
+	}
+	// Key from cascade survives (not erased by explicit file).
+	if got := viper.GetString("storage.db_path"); got != "./cascade.sqlite" {
+		t.Fatalf("storage.db_path = %q, want \"./cascade.sqlite\" (from cascade); explicit file must not erase cascade keys", got)
+	}
+	// Another key from cascade survives.
+	if got := viper.GetBool("output.verbose"); !got {
+		t.Fatalf("output.verbose = false, want true (from cascade)")
+	}
+}
+
 // TestFindAllConfigsForMode_HopIgnoresStandalone verifies hop mode
 // does not pick up standalone config paths.
 func TestFindAllConfigsForMode_HopIgnoresStandalone(t *testing.T) {
