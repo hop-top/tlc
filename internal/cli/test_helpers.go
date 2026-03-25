@@ -277,12 +277,15 @@ func resetTaskFlags() {
 	taskCompleteNote = ""
 	taskUpdateForce = false
 
+	tagFilterAllStatuses = false
+
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
 		TaskCreateCmd, TaskListCmd, TaskShowCmd,
 		TaskUpdateCmd, TaskDeleteCmd, TaskClaimCmd,
 		TaskUnclaimCmd, TaskAssignCmd, TaskCompleteCmd,
 		SyncCmd, SyncPullCmd, SyncPushCmd, SyncConfigCmd, SyncStatusCmd,
+		TagCmd, TagListCmd,
 	} {
 		if cmd != nil {
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {
