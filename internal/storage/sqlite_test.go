@@ -690,3 +690,138 @@ func TestSQLiteStorage_MigrationV2(t *testing.T) {
 		t.Errorf("expected schema version 2, got %d", version)
 	}
 }
+
+// TestUpdateTaskWithLog_GlobalTask verifies UpdateTaskWithLog persists status
+// changes for tasks with project_id='' (created outside project context).
+//
+// Regression: logs wrote to project-scoped project_id but task row WHERE clause
+// used project_id IS NULL — which never matched the '' sentinel stored in the
+// NOT NULL column, leaving status unchanged while returning nil error.
+func TestUpdateTaskWithLog_GlobalTask(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldCwd) }()
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "global_task.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Create task without project context (ProjectID = nil → stored as project_id='')
+	task := &core.Task{
+		ID:        "T-0001",
+		Title:     "Global task",
+		Status:    core.StatusTodo,
+		Reference: "ref",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask failed: %v", err)
+	}
+
+	// Read back to get the stored form (ProjectID = &"")
+	stored, err := s.GetTask(ctx, "T-0001")
+	if err != nil || stored == nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if stored.ProjectID == nil || *stored.ProjectID != "" {
+		t.Fatalf("expected ProjectID='', got %v", stored.ProjectID)
+	}
+
+	// Simulate claim: transition to IN_PROGRESS via UpdateTaskWithLog
+	stored.Status = core.StatusInProgress
+	stored.UpdatedAt = time.Now().UTC()
+	logEntry := &core.LogEntry{
+		TaskID:    "T-0001",
+		Timestamp: stored.UpdatedAt,
+		By:        "testuser",
+		Action:    "CLAIMED",
+		Note:      "",
+	}
+	if err := s.UpdateTaskWithLog(ctx, stored, logEntry); err != nil {
+		t.Fatalf("UpdateTaskWithLog failed: %v", err)
+	}
+
+	// Verify status persisted (not silently dropped)
+	after, err := s.GetTask(ctx, "T-0001")
+	if err != nil || after == nil {
+		t.Fatalf("GetTask after update failed: %v", err)
+	}
+	if after.Status != core.StatusInProgress {
+		t.Errorf("expected status IN_PROGRESS after claim, got %s — update was a no-op", after.Status)
+	}
+}
+
+// TestUpdateTask_GlobalTask verifies UpdateTask (used by saveTaskWithLog) persists
+// changes for tasks with project_id='' under an active project context.
+//
+// Regression: when claim runs in project context X, GetTask returns the project-X
+// row. That row's UpdateTask call should succeed even if a project_id='' row also
+// exists for the same task ID.
+func TestUpdateTask_GlobalTask(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldCwd) }()
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "multi_project.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Simulate: task created globally (project_id='') then also exists in a project
+	projectID := "hop-top/aps"
+	s.CreateTask(ctx, &core.Task{
+		ID: "T-0001", Title: "Task", Status: core.StatusTodo,
+		Reference: "ref", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	})
+	s.CreateTask(ctx, &core.Task{
+		ID: "T-0001", Title: "Task", Status: core.StatusTodo, ProjectID: &projectID,
+		Reference: "ref", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	})
+
+	// Read the project-scoped row (simulates GetTask in project context)
+	projTask, err := s.GetTaskInProject(ctx, "T-0001", projectID)
+	if err != nil || projTask == nil {
+		t.Fatalf("GetTaskInProject failed: %v", err)
+	}
+
+	// Claim: update the project-scoped row
+	projTask.Status = core.StatusInProgress
+	projTask.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateTask(ctx, projTask); err != nil {
+		t.Fatalf("UpdateTask failed: %v", err)
+	}
+
+	// Project row should be IN_PROGRESS
+	after, err := s.GetTaskInProject(ctx, "T-0001", projectID)
+	if err != nil || after == nil {
+		t.Fatalf("GetTaskInProject after update failed: %v", err)
+	}
+	if after.Status != core.StatusInProgress {
+		t.Errorf("expected status IN_PROGRESS, got %s — UpdateTask was a no-op", after.Status)
+	}
+
+	// Global '' row should be unaffected
+	global, err := s.GetTaskInProject(ctx, "T-0001", "")
+	if err != nil || global == nil {
+		t.Fatalf("GetTaskInProject(global) failed: %v", err)
+	}
+	if global.Status != core.StatusTodo {
+		t.Errorf("expected global row status TODO (unaffected), got %s", global.Status)
+	}
+}
