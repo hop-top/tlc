@@ -29,7 +29,9 @@ type ResolvedTask struct {
 }
 
 // ResolveTask resolves a task ID or tlc:// URI into a Task object.
+// Flexible ID forms are normalised first; see NormalizeTaskID.
 func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask, error) {
+	input = NormalizeTaskID(input)
 	u, err := uri.Parse(input)
 	if err != nil {
 		return nil, err
