@@ -275,7 +275,7 @@ func parseTLS(line string) (*core.Task, error) {
 				titleParts = append(titleParts, token)
 			}
 		}
-		task.Title = strings.Join(titleParts, " ")
+		task.Title = trimMatchingQuotes(strings.Join(titleParts, " "))
 	}
 
 	// Parse metadata tokens.
@@ -349,6 +349,28 @@ func parseQuotedString(s string) (string, string, error) {
 		i++
 	}
 	return "", s, fmt.Errorf("unterminated quoted string")
+}
+
+// trimMatchingQuotes strips a single pair of matching surrounding quotes from s.
+// Only strips when len(s) >= 2, s[0] == s[len(s)-1], and the quote char is " or '.
+// "foo"  → foo
+// 'bar'  → bar
+// "mis'  → "mis'  (unchanged)
+// foo    → foo    (unchanged)
+// ""     → ""     (unchanged — empty result after strip is not useful)
+func trimMatchingQuotes(s string) string {
+	if len(s) < 2 {
+		return s
+	}
+	q := s[0]
+	if (q == '"' || q == '\'') && s[len(s)-1] == q {
+		inner := s[1 : len(s)-1]
+		if inner == "" {
+			return s
+		}
+		return inner
+	}
+	return s
 }
 
 // isMetaToken returns true if the token looks like a TLS metadata

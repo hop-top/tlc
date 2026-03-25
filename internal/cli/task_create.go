@@ -20,7 +20,7 @@ var TaskCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var title string
 		if len(args) > 0 {
-			title = args[0]
+			title = trimMatchingQuotes(args[0])
 		}
 
 		if taskInteractive || title == "" {
