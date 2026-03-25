@@ -388,6 +388,32 @@ func TestParseQuotedString(t *testing.T) {
 	}
 }
 
+func TestTrimMatchingQuotes(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{`"foo"`, "foo"},
+		{`'bar'`, "bar"},
+		{`"mismatched'`, `"mismatched'`},
+		{`foo`, "foo"},
+		{`""`, `""`},
+		{`''`, `''`},
+		{`"hello world"`, "hello world"},
+		{`'it works'`, "it works"},
+		{`"only open`, `"only open`},
+		{`only close"`, `only close"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := trimMatchingQuotes(tt.input)
+			if got != tt.want {
+				t.Errorf("trimMatchingQuotes(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestInitDoesNotTriggerGlobalIngestion(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-init-noingest-*")
 	if err != nil {
