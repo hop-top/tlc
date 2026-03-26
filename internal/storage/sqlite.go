@@ -94,12 +94,12 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 		}
 
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
 			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
-			string(task.Effort),
+			string(task.Effort), string(task.Priority),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert task: %w", err)
@@ -112,19 +112,19 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	proj := core.DetectProject()
 	var row *sql.Row
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
+		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
 	} else {
 		// Prefer the global bucket (project_id='') over project-scoped rows so that
 		// tasks created outside any project context are consistently resolved even
 		// when sync has duplicated them into project-specific rows.
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
+		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
 	}
 
 	var task core.Task
 	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr sql.NullString
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -157,6 +157,9 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	}
 	if effortStr.Valid {
 		task.Effort = core.Effort(effortStr.String)
+	}
+	if priorityStr.Valid {
+		task.Priority = core.Priority(priorityStr.String)
 	}
 
 	return &task, nil
@@ -165,15 +168,15 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID string) (*core.Task, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		"SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort FROM tasks WHERE id = ? AND project_id = ?",
+		"SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks WHERE id = ? AND project_id = ?",
 		id, projectID,
 	)
 
 	var task core.Task
 	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr sql.NullString
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -206,6 +209,9 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 	}
 	if effortStr.Valid {
 		task.Effort = core.Effort(effortStr.String)
+	}
+	if priorityStr.Valid {
+		task.Priority = core.Priority(priorityStr.String)
 	}
 
 	return &task, nil
@@ -227,11 +233,11 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 			projectID = *task.ProjectID
 		}
 		res, err := tx.ExecContext(ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), task.ID, projectID,
+			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority), task.ID, projectID,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
@@ -271,11 +277,11 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			projectID = *task.ProjectID
 		}
 		res, err := tx.ExecContext(ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), task.ID, projectID,
+			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority), task.ID, projectID,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
@@ -312,7 +318,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort FROM tasks"
+	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks"
 	var args []interface{}
 
 	// Group filters by field to implement OR logic for same field
@@ -538,7 +544,7 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 
 func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID string) (*core.Task, error) {
 	sqlQuery := `
-		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort
+		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority
 		FROM tasks
 		WHERE origin_system = ? AND json_extract(meta, '$.origin_id') = ?
 		LIMIT 1
@@ -547,9 +553,9 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 
 	var task core.Task
 	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr sql.NullString
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -583,6 +589,9 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 	if effortStr.Valid {
 		task.Effort = core.Effort(effortStr.String)
 	}
+	if priorityStr.Valid {
+		task.Priority = core.Priority(priorityStr.String)
+	}
 
 	return &task, nil
 }
@@ -614,7 +623,7 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 	// A task needs push if it has an origin system AND (it has never been synced OR updated_at > last_sync_at)
 	// AND it is NOT archived.
 	sqlQuery := `
-		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort
+		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority
 		FROM tasks
 		WHERE origin_system IS NOT NULL AND origin_system != ''
 		AND (last_sync_at IS NULL OR updated_at > last_sync_at)
@@ -848,8 +857,8 @@ func (s *SQLiteStorage) GetNextSequenceID(ctx context.Context, projectID string)
 func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	var task core.Task
 	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr sql.NullString
-	if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr); err != nil {
+	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
+	if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr); err != nil {
 		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
@@ -876,6 +885,9 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	}
 	if effortStr.Valid {
 		task.Effort = core.Effort(effortStr.String)
+	}
+	if priorityStr.Valid {
+		task.Priority = core.Priority(priorityStr.String)
 	}
 	return &task, nil
 }

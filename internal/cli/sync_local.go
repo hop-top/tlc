@@ -288,7 +288,7 @@ func parseTLS(line string) (*core.Task, error) {
 		} else if strings.HasPrefix(token, "effort:") {
 			task.Effort = core.Effort(strings.TrimPrefix(token, "effort:"))
 		} else if strings.HasPrefix(token, "prio:") {
-			task.Meta["prio"] = strings.TrimPrefix(token, "prio:")
+			task.Priority = core.Priority(strings.TrimPrefix(token, "prio:"))
 		} else if strings.HasPrefix(token, "domain:") {
 			task.Meta["domain"] = strings.TrimPrefix(token, "domain:")
 		} else if strings.Contains(token, "=") {

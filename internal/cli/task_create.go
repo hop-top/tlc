@@ -27,7 +27,7 @@ var TaskCreateCmd = &cobra.Command{
 			return createTaskInteractive(title)
 		}
 
-		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskTags, taskReference, make(map[string]interface{}))
+		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, make(map[string]interface{}))
 		if err != nil {
 			return err
 		}
@@ -122,24 +122,24 @@ func createTaskInteractive(initialTitle string) error {
 	}
 
 	meta := make(map[string]interface{})
-	if prio != "" {
-		meta["prio"] = prio
-	}
 	if domain != "" {
 		meta["domain"] = domain
 	}
 
-	err := saveTask(os.Stdout, "", title, description, status, assignee, "", tags, "", meta)
+	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta)
 	if err != nil {
 		return err
 	}
 	return syncToTODO()
 }
 
-func saveTask(w io.Writer, id, title, description, status, assignedTo, effort string, tags []string, reference string, meta map[string]interface{}) error {
+func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}) error {
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 	if !core.ValidEffort(core.Effort(effort)) {
 		return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", effort)
+	}
+	if !core.ValidPriority(core.Priority(priority)) {
+		return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", priority)
 	}
 	s, err := getStorage()
 	if err != nil {
@@ -176,6 +176,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort st
 		Status:      core.TaskStatus(status),
 		AssignedTo:  assigneePtr,
 		Effort:      core.Effort(effort),
+		Priority:    core.Priority(priority),
 		Tags:        tags,
 		Reference:   reference,
 		CreatedAt:   now,
@@ -217,6 +218,7 @@ func init() {
 	TaskCreateCmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
 	TaskCreateCmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
 	TaskCreateCmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
+	TaskCreateCmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority (P0, P1, P2, P3)")
 	TaskCreateCmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
 	TaskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
 	TaskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")

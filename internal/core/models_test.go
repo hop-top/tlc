@@ -16,3 +16,18 @@ func TestValidEffort(t *testing.T) {
 		}
 	}
 }
+
+func TestValidPriority(t *testing.T) {
+	valid := []Priority{"", PriorityP0, PriorityP1, PriorityP2, PriorityP3}
+	for _, p := range valid {
+		if !ValidPriority(p) {
+			t.Errorf("expected %q to be valid", p)
+		}
+	}
+	invalid := []Priority{"HIGH", "p0", "critical", "1", "A"}
+	for _, p := range invalid {
+		if ValidPriority(p) {
+			t.Errorf("expected %q to be invalid", p)
+		}
+	}
+}

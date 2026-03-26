@@ -252,6 +252,51 @@ func TestTaskUpdateAssignee(t *testing.T) {
 	}
 }
 
+// TestTaskCreateWithPriority tests creating a task with --priority flag.
+func TestTaskCreateWithPriority(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Priority Task", "--priority", "P0"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create --priority failed: %v", err)
+	}
+
+	tasks, _ := s.ListTasks(ctx, core.Query{})
+	if len(tasks) == 0 {
+		t.Fatal("no tasks found after create")
+	}
+	if tasks[0].Priority != core.PriorityP0 {
+		t.Errorf("expected priority P0, got %q", tasks[0].Priority)
+	}
+}
+
+// TestTaskCreateWithPriorityInvalid tests that an invalid priority value is rejected.
+func TestTaskCreateWithPriorityInvalid(t *testing.T) {
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
+	t.Cleanup(func() { taskPriority = "" })
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Bad Priority Task", "--priority", "HIGH"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for invalid priority, got nil")
+	}
+}
+
 // TestTaskClearAssigneeNull tests clearing assignee with "null".
 func TestTaskClearAssigneeNull(t *testing.T) {
 	testClearAssignee(t, "null")
@@ -405,6 +450,57 @@ func TestTaskUpdateEffortInvalid(t *testing.T) {
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected error for invalid effort, got nil")
+	}
+}
+
+// TestTaskUpdatePriority tests setting priority on a task via update.
+func TestTaskUpdatePriority(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", "P1"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --priority failed: %v", err)
+	}
+
+	updated, _ := s.GetTask(ctx, "T-0001")
+	if updated == nil {
+		t.Fatal("task not found after update")
+	}
+	if updated.Priority != core.PriorityP1 {
+		t.Errorf("expected priority P1, got %q", updated.Priority)
+	}
+}
+
+// TestTaskUpdatePriorityInvalid tests that an invalid priority value is rejected.
+func TestTaskUpdatePriorityInvalid(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	t.Cleanup(func() { taskUpdatePriority = "" })
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", "CRITICAL"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for invalid priority, got nil")
 	}
 }
 

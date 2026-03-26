@@ -33,6 +33,25 @@ func ValidEffort(e Effort) bool {
 	return false
 }
 
+// Priority represents task urgency level: P0 (critical) through P3 (low).
+type Priority string
+
+const (
+	PriorityP0 Priority = "P0"
+	PriorityP1 Priority = "P1"
+	PriorityP2 Priority = "P2"
+	PriorityP3 Priority = "P3"
+)
+
+// ValidPriority returns true if p is a recognised priority value (or empty).
+func ValidPriority(p Priority) bool {
+	switch p {
+	case "", PriorityP0, PriorityP1, PriorityP2, PriorityP3:
+		return true
+	}
+	return false
+}
+
 type Task struct {
 	ID           string                 `json:"id" yaml:"id"`
 	Title        string                 `json:"title" yaml:"title"`
@@ -42,6 +61,7 @@ type Task struct {
 	Tags         []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Reference    string                 `json:"reference" yaml:"reference"`
 	Effort       Effort                 `json:"effort,omitempty" yaml:"effort,omitempty"`
+	Priority     Priority               `json:"priority,omitempty" yaml:"priority,omitempty"`
 	CreatedAt    time.Time              `json:"created_at" yaml:"created_at"`
 	UpdatedAt    time.Time              `json:"updated_at" yaml:"updated_at"`
 	OriginSystem *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`

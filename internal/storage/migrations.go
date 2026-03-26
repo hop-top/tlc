@@ -95,10 +95,14 @@ var migrations = []migration{
 		version: 3,
 		query:   `ALTER TABLE tasks ADD COLUMN effort TEXT NOT NULL DEFAULT '';`,
 	},
+	{
+		version: 4,
+		query:   `ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 3
+const LatestMigrationVersion = 4
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

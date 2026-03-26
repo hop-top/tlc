@@ -19,6 +19,7 @@ var (
 	taskStatus      string
 	taskAssignedTo  string
 	taskEffort      string
+	taskPriority    string
 	taskTags        []string
 	taskReference   string
 	taskInteractive bool
@@ -42,6 +43,7 @@ var (
 	taskUpdateStatus      string
 	taskUpdateAssignedTo  string
 	taskUpdateEffort      string
+	taskUpdatePriority    string
 	taskUpdateAddTags     []string
 	taskUpdateRemoveTags  []string
 

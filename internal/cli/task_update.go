@@ -76,6 +76,14 @@ var TaskUpdateCmd = &cobra.Command{
 			changed = true
 		}
 
+		if cmd.Flags().Changed("priority") {
+			if !core.ValidPriority(core.Priority(taskUpdatePriority)) {
+				return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
+			}
+			task.Priority = core.Priority(taskUpdatePriority)
+			changed = true
+		}
+
 		if len(taskUpdateAddTags) > 0 || len(taskUpdateRemoveTags) > 0 {
 			tagMap := make(map[string]bool)
 			for _, t := range task.Tags {
@@ -175,6 +183,7 @@ func init() {
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateStatus, "status", "s", "", "New status")
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateAssignedTo, "assigned-to", "a", "", "New assignee")
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdatePriority, "priority", "p", "", "Priority (P0, P1, P2, P3)")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")

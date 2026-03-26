@@ -97,6 +97,10 @@ func formatTLS(t *core.Task) string {
 		parts = append(parts, "effort:"+string(t.Effort))
 	}
 
+	if t.Priority != "" {
+		parts = append(parts, "prio:"+string(t.Priority))
+	}
+
 	if t.Reference != "" && t.Reference != "task://"+t.ID {
 		parts = append(parts, "ref:"+t.Reference)
 	}
@@ -114,7 +118,7 @@ func formatTLS(t *core.Task) string {
 	for k, v := range t.Meta {
 		switch k {
 		case "prio":
-			parts = append(parts, "prio:"+fmt.Sprintf("%v", v))
+			// Skip: priority is now a first-class field serialised above.
 		case "domain":
 			parts = append(parts, "domain:"+fmt.Sprintf("%v", v))
 		case "due":
@@ -255,6 +259,9 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Assigned:"), assignee)
 	if t.Effort != "" {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Effort:"), string(t.Effort))
+	}
+	if t.Priority != "" {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Priority:"), string(t.Priority))
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), t.Reference)
