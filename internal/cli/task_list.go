@@ -102,6 +102,9 @@ var TaskListCmd = &cobra.Command{
 		if taskListSummary {
 			format = formatSummary
 		}
+		if taskListCounters {
+			format = formatCounters
+		}
 		formatTasks(cmd, tasks, format)
 		return nil
 	},
@@ -180,6 +183,9 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	if taskListSummary {
 		format = formatSummary
 	}
+	if taskListCounters {
+		format = formatCounters
+	}
 	formatWorkspaceTasks(cmd, tasks, format)
 	return nil
 }
@@ -212,6 +218,8 @@ func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string)
 		}
 	case formatSummary:
 		renderSummary(out, tasks)
+	case formatCounters:
+		renderCounters(out, tasks)
 	default:
 		renderWorkspaceTable(out, tasks)
 	}
@@ -229,6 +237,7 @@ func init() {
 	TaskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
 	TaskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
 	TaskListCmd.Flags().BoolVar(&taskListSummary, "summary", false, "Show status summary instead of task list")
+	TaskListCmd.Flags().BoolVar(&taskListCounters, "counters", false, "Show flat status counters")
 	TaskListCmd.Flags().StringVar(&taskListWorkspace, "workspace", "", "Query across workspace projects")
 	TaskListCmd.Flags().StringVar(&taskListSpace, "space", "", "Filter to specific space within workspace")
 	TaskListCmd.Flags().StringVar(&taskListProfile, "profile", "", "Filter by aps profile")

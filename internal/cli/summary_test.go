@@ -86,6 +86,124 @@ func TestRenderSummary(t *testing.T) {
 	})
 }
 
+func TestRenderCounters(t *testing.T) {
+	t.Run("EmptyTasks", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderCounters(&buf, nil)
+		output := buf.String()
+		if !contains(output, "No tasks found") {
+			t.Errorf("expected 'No tasks found', got: %s", output)
+		}
+	})
+
+	t.Run("ShowsStatusHeader", func(t *testing.T) {
+		tasks := []*core.Task{
+			{ID: "T-0001", Status: core.StatusTodo},
+			{ID: "T-0002", Status: core.StatusDone},
+		}
+
+		var buf bytes.Buffer
+		renderCounters(&buf, tasks)
+		output := buf.String()
+
+		if !contains(output, "Status counts:") {
+			t.Errorf("expected 'Status counts:' header, got: %s", output)
+		}
+	})
+
+	t.Run("FlatCountsAcrossProjects", func(t *testing.T) {
+		projA := "alpha"
+		projB := "beta"
+		tasks := []*core.Task{
+			{ID: "T-0001", Status: core.StatusTodo, ProjectID: &projA},
+			{ID: "T-0002", Status: core.StatusTodo, ProjectID: &projB},
+			{ID: "T-0003", Status: core.StatusInProgress, ProjectID: &projA},
+			{ID: "T-0004", Status: core.StatusDone, ProjectID: &projB},
+		}
+
+		var buf bytes.Buffer
+		renderCounters(&buf, tasks)
+		output := buf.String()
+
+		// Should NOT group by project
+		if contains(output, "Project:") {
+			t.Errorf("expected no project grouping, got: %s", output)
+		}
+		if !contains(output, "TODO") {
+			t.Errorf("expected TODO in output, got: %s", output)
+		}
+		if !contains(output, "IN_PROGRESS") {
+			t.Errorf("expected IN_PROGRESS in output, got: %s", output)
+		}
+		if !contains(output, "DONE") {
+			t.Errorf("expected DONE in output, got: %s", output)
+		}
+	})
+
+	t.Run("CountsAccurate", func(t *testing.T) {
+		tasks := []*core.Task{
+			{ID: "T-0001", Status: core.StatusTodo},
+			{ID: "T-0002", Status: core.StatusTodo},
+			{ID: "T-0003", Status: core.StatusTodo},
+			{ID: "T-0004", Status: core.StatusDone},
+		}
+
+		var buf bytes.Buffer
+		renderCounters(&buf, tasks)
+		output := buf.String()
+
+		if !contains(output, "3") {
+			t.Errorf("expected count of 3 for TODO, got: %s", output)
+		}
+		if !contains(output, "1") {
+			t.Errorf("expected count of 1 for DONE, got: %s", output)
+		}
+	})
+}
+
+func TestTaskListCountersFlag(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	proj := "test-proj"
+	tasks := []*core.Task{
+		{ID: "T-0001", Title: "Todo 1", Status: core.StatusTodo, ProjectID: &proj},
+		{ID: "T-0002", Title: "Todo 2", Status: core.StatusTodo, ProjectID: &proj},
+		{ID: "T-0003", Title: "Active", Status: core.StatusInProgress, ProjectID: &proj},
+	}
+	for _, task := range tasks {
+		s.CreateTask(ctx, task)
+	}
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "TODO", "--status", "IN_PROGRESS", "--counters"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --counters failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Status counts:") {
+		t.Errorf("expected 'Status counts:' header, got: %s", output)
+	}
+	if !contains(output, "TODO") {
+		t.Errorf("expected TODO in output, got: %s", output)
+	}
+	if !contains(output, "IN_PROGRESS") {
+		t.Errorf("expected IN_PROGRESS in output, got: %s", output)
+	}
+	// Should not show individual task titles
+	if contains(output, "Todo 1") {
+		t.Errorf("expected no task titles in counter output, got: %s", output)
+	}
+}
+
 func TestGroupByProject(t *testing.T) {
 	projA := "proj-a"
 	tasks := []*core.Task{

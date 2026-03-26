@@ -46,6 +46,8 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 		}
 	case formatSummary:
 		renderSummary(out, tasks)
+	case formatCounters:
+		renderCounters(out, tasks)
 	default: // table
 		renderTable(out, tasks)
 	}

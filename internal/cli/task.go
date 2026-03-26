@@ -58,6 +58,7 @@ var (
 	taskUnassignNote     string
 	taskUpdateForce      bool
 	taskListSummary      bool
+	taskListCounters     bool
 
 	taskListWorkspace string
 	taskListSpace     string

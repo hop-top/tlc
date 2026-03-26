@@ -71,6 +71,23 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// renderCounters writes a flat status-count table to w.
+// Unlike renderSummary, tasks are not grouped by project.
+func renderCounters(w io.Writer, tasks []*core.Task) {
+	if len(tasks) == 0 {
+		_, _ = fmt.Fprintln(w, "No tasks found")
+		return
+	}
+
+	counts := statusCounts(tasks)
+	statusNames := sortedKeys(counts)
+
+	_, _ = fmt.Fprintln(w, "Status counts:")
+	for _, status := range statusNames {
+		_, _ = fmt.Fprintf(w, "  %-15s %d\n", status, counts[status])
+	}
+}
+
 // summaryLine returns a one-line summary string like "3 TODO, 1 DONE (4 total)".
 func summaryLine(tasks []*core.Task) string {
 	counts := statusCounts(tasks)

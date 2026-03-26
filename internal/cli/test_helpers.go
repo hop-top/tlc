@@ -255,6 +255,7 @@ func resetTaskFlags() {
 	taskListLimit = 100
 	taskListOffset = 0
 	taskListSummary = false
+	taskListCounters = false
 	taskListWorkspace = ""
 	taskListSpace = ""
 	taskListProfile = ""
