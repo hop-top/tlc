@@ -280,6 +280,17 @@ func resetTaskFlags() {
 
 	tagFilterAllStatuses = false
 
+	// Reset logCmd vars (package-level state not covered by task flag resets).
+	logTaskID = ""
+	logAction = ""
+	logBy = ""
+	logSince = ""
+	logUntil = ""
+	logLimit = 100
+	logOffset = 0
+	logSortDirection = ""
+	logAll = false
+
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
 		TaskCreateCmd, TaskListCmd, TaskShowCmd,
@@ -287,6 +298,7 @@ func resetTaskFlags() {
 		TaskUnclaimCmd, TaskAssignCmd, TaskCompleteCmd,
 		SyncCmd, SyncPullCmd, SyncPushCmd, SyncConfigCmd, SyncStatusCmd,
 		TagCmd, TagListCmd,
+		logCmd,
 	} {
 		if cmd != nil {
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {

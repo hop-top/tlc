@@ -11,6 +11,11 @@ User stories organized by feature area, persona, and priority. Each story define
 - [002 - Task Listing](002-task-listing.md) — Query and filter tasks
 - [003 - Task Claiming](003-task-claiming.md) — AI agent task assignment
 - [004 - Configurable Statuses](004-configurable-statuses.md) — Custom workflow states
+- [005 - Task Update](005-task-update.md) — Update title, description, tags, assignee, status
+- [006 - Task Deletion](006-task-deletion.md) — Delete with `--yes` confirmation skip
+- [007 - Task Reopen](007-task-reopen.md) — Reopen terminal tasks with mandatory `--note`
+- [008 - Task Assignment](008-task-assignment.md) — Assign to profile; unassign with `--note`
+- [009 - Task Audit Log](009-task-audit-log.md) — `tlc log`; filter by action/actor; paginate
 
 #### External Sync (010-019)
 - [010 - GitHub Sync](010-github-sync.md) — Bidirectional GitHub issue sync
@@ -43,6 +48,8 @@ User stories organized by feature area, persona, and priority. Each story define
 - [001 - Task Creation](001-task-creation.md)
 - [002 - Task Listing](002-task-listing.md)
 - [004 - Configurable Statuses](004-configurable-statuses.md)
+- [005 - Task Update](005-task-update.md)
+- [006 - Task Deletion](006-task-deletion.md)
 - [020 - Flow Execution](020-flow-execution.md)
 - [030 - TUI Navigation](030-tui-navigation.md)
 
@@ -50,6 +57,8 @@ User stories organized by feature area, persona, and priority. Each story define
 - [001 - Task Creation](001-task-creation.md) (task data available for claiming)
 - [002 - Task Listing](002-task-listing.md) (task data available for querying)
 - [003 - Task Claiming](003-task-claiming.md)
+- [005 - Task Update](005-task-update.md) (update task status to DONE/FAILED)
+- [007 - Task Reopen](007-task-reopen.md) (reopen when blocked or regressed)
 - [011 - AI Agent Task State Transitions](011-ai-agent-task-state-transitions.md) (planned)
 - [020 - Flow Execution](020-flow-execution.md) (agent orchestrates flow steps)
 - [040 - MCP Integration & Tool Use](040-mcp-integration-tool-use.md) (planned)
@@ -58,6 +67,9 @@ User stories organized by feature area, persona, and priority. Each story define
 #### [Team Lead](../personas/team-lead.md)
 - [002 - Task Listing](002-task-listing.md) (filtering and reporting)
 - [004 - Configurable Statuses](004-configurable-statuses.md)
+- [007 - Task Reopen](007-task-reopen.md)
+- [008 - Task Assignment](008-task-assignment.md)
+- [009 - Task Audit Log](009-task-audit-log.md)
 - [010 - GitHub Sync](010-github-sync.md)
 - [012 - Flow Templates](012-flow-templates.md) (planned)
 - [013 - Team Task Assignment](013-team-task-assignment.md) (planned)
@@ -67,6 +79,7 @@ User stories organized by feature area, persona, and priority. Each story define
 #### [Test Engineer](../personas/test-engineer.md)
 - [001 - Task Creation](001-task-creation.md) (E2E validation)
 - [002 - Task Listing](002-task-listing.md) (query validation)
+- [009 - Task Audit Log](009-task-audit-log.md) (audit log validation)
 - [020 - Flow Execution](020-flow-execution.md) (orchestration validation)
 - [050 - E2E Test Framework](050-e2e-test-framework.md) (planned)
 - [051 - Story-to-Test Traceability](051-story-to-test-traceability.md) (planned)
@@ -87,13 +100,18 @@ User stories organized by feature area, persona, and priority. Each story define
 
 | P1 (Critical) | P2 (High) | P3+ (Future) |
 |---|---|---|
-| [001](001-task-creation.md) | [030](030-tui-navigation.md) | [012](012-flow-templates.md) (planned) |
-| [002](002-task-listing.md) | [050](050-e2e-test-framework.md) (planned) | [013](013-team-task-assignment.md) (planned) |
-| [003](003-task-claiming.md) | | [040](040-mcp-integration-tool-use.md) (planned) | [041](041-team-visibility-dashboard.md) (planned) |
-| [010](010-github-sync.md) | | | |
-| [020](020-flow-execution.md) | | | [042](042-cli-command-integration.md) (planned) |
-| [060](060-configuration-validation.md) | | [061](061-environment-setup-verification.md) (planned) | [062](062-storage-location-validation.md) (planned) |
-| [063](063-hierarchical-config-discovery.md) | | | |
+| [001](001-task-creation.md) | [006](006-task-deletion.md) | [012](012-flow-templates.md) (planned) |
+| [002](002-task-listing.md) | [030](030-tui-navigation.md) | [013](013-team-task-assignment.md) (planned) |
+| [003](003-task-claiming.md) | [050](050-e2e-test-framework.md) (planned) | [040](040-mcp-integration-tool-use.md) (planned) |
+| [005](005-task-update.md) | | [041](041-team-visibility-dashboard.md) (planned) |
+| [007](007-task-reopen.md) | | [042](042-cli-command-integration.md) (planned) |
+| [008](008-task-assignment.md) | | |
+| [009](009-task-audit-log.md) | | |
+| [010](010-github-sync.md) | | |
+| [020](020-flow-execution.md) | | |
+| [060](060-configuration-validation.md) | | [061](061-environment-setup-verification.md) (planned) |
+| [062](062-storage-location-validation.md) | | |
+| [063](063-hierarchical-config-discovery.md) | | |
 
 ## Story Format
 

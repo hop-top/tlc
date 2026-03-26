@@ -8,6 +8,9 @@ A team lead or project manager responsible for multi-project coordination, team 
 
 - [002 - Task Listing](../stories/002-task-listing.md)
 - [004 - Task Management](../stories/004-task-management.md)
+- [007 - Task Reopen](../stories/007-task-reopen.md)
+- [008 - Task Assignment](../stories/008-task-assignment.md)
+- [009 - Task Audit Log](../stories/009-task-audit-log.md)
 - [010 - GitHub Sync](../stories/010-github-sync.md)
 - [012 - Flow Templates](../stories/012-flow-templates.md) (planned)
 - [013 - Team Task Assignment](../stories/013-team-task-assignment.md) (planned)

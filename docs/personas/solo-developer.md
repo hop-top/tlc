@@ -9,6 +9,8 @@ A solo developer managing personal projects, side work, or small team tasks. The
 - [001 - Task Creation](../stories/001-task-creation.md)
 - [002 - Task Listing](../stories/002-task-listing.md)
 - [004 - Task Management](../stories/004-task-management.md)
+- [005 - Task Update](../stories/005-task-update.md)
+- [006 - Task Deletion](../stories/006-task-deletion.md)
 - [020 - Flow Execution](../stories/020-flow-execution.md)
 - [030 - TUI Navigation](../stories/030-tui-navigation.md)
 
