@@ -215,17 +215,29 @@ type WorkflowOverride struct {
 	StateMachine *WorkflowDefinition `yaml:"state_machine,omitempty"`
 }
 
+// StaleHook is a shell command run when a task crosses the stale threshold.
+type StaleHook struct {
+	Command string `yaml:"command"`
+}
+
+// StaleConfig holds staleness detection and hook configuration.
+type StaleConfig struct {
+	DefaultTimeout time.Duration `yaml:"default_timeout"`
+	Hooks          []StaleHook   `yaml:"hooks,omitempty"`
+}
+
 // TaskConfig contains task-related configuration.
 type TaskConfig struct {
-	DefaultStatus    string                         `yaml:"default_status"`
-	IDFormat         string                         `yaml:"id_format"`
-	AutoAssign       bool                           `yaml:"auto_assign"`
-	RequireReference bool                           `yaml:"require_reference"`
-	TodoFile         string                         `yaml:"todo_file"`
-	ArchiveThreshold time.Duration                  `yaml:"archive_threshold"`
-	Statuses         []StatusDefinition             `yaml:"statuses,omitempty"`
-	StateMachine     *WorkflowDefinition            `yaml:"state_machine,omitempty"`
-	Workflows        map[string]WorkflowOverride    `yaml:"workflows,omitempty"`
+	DefaultStatus    string                      `yaml:"default_status"`
+	IDFormat         string                      `yaml:"id_format"`
+	AutoAssign       bool                        `yaml:"auto_assign"`
+	RequireReference bool                        `yaml:"require_reference"`
+	TodoFile         string                      `yaml:"todo_file"`
+	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
+	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
+	StateMachine     *WorkflowDefinition         `yaml:"state_machine,omitempty"`
+	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
+	Stale            StaleConfig                 `yaml:"stale,omitempty"`
 }
 
 // GetDefaultStatuses returns the four default task statuses.
@@ -278,6 +290,11 @@ func GetDefaultStateMachine() *WorkflowDefinition {
 
 // Validate validates the task configuration.
 func (t *TaskConfig) Validate() error {
+	// Apply default stale timeout if not set
+	if t.Stale.DefaultTimeout == 0 {
+		t.Stale.DefaultTimeout = 6 * time.Hour
+	}
+
 	// If no statuses defined, populate with defaults
 	if len(t.Statuses) == 0 {
 		t.Statuses = GetDefaultStatuses()
