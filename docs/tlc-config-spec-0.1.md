@@ -353,7 +353,7 @@ git:
 |-----|------|---------|-------------|
 | `auto_generate` | bool | `true` | Auto-generate commit messages from branch |
 | `template` | string | `{type}: {description} (closes #{issue})` | Commit message template |
-| `co_author` | string | `Claude Sonnet 4.5 <noreply@anthropic.com>` | Co-author trailer |
+| `co_author` | string | - | Optional co-author trailer appended to commit message |
 
 **Template Variables**:
 - `{type}` — Branch/task type (feat, fix, etc.)
@@ -367,7 +367,6 @@ git:
   commit:
     auto_generate: true
     template: "{type}: {description} (closes #{issue})"
-    co_author: "Claude Sonnet 4.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -476,6 +475,15 @@ sync:
 | `db_path` | path | `.tlc/db.sqlite` | Database file path (sqlite only) |
 | `connection_string` | string | - | Database connection string (postgres) |
 
+**Two databases**: TLC maintains two distinct SQLite files:
+- **Project DB** — `.tlc/db.sqlite` (or `.hop/tlc/db.sqlite` in hop mode); stores tasks,
+  logs, flow runs, sequences for a single project.
+- **Global DB** — user-level data dir (`<XDG_DATA_HOME>/tlc/db.sqlite`); stores the
+  `projects` registry tracking all known projects across clones/worktrees. Created
+  automatically on first `tlc init`.
+
+The `storage.db_path` config key refers to the project DB only.
+
 **Example (SQLite)**:
 ```yaml
 storage:
@@ -489,6 +497,48 @@ storage:
   backend: postgres
   connection_string: postgresql://user:pass@localhost/tlc
 ```
+
+---
+
+### Project Registry (`projects` table)
+
+Stored in the **Global DB**; added in schema migration v2. Current schema version: **v4**.
+
+```sql
+CREATE TABLE projects (
+    project_id    TEXT PRIMARY KEY,
+    db_path       TEXT NOT NULL,
+    space_uri     TEXT,
+    label         TEXT,
+    registered_at TEXT NOT NULL,
+    last_seen_at  TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'active'
+);
+CREATE INDEX idx_projects_space_uri ON projects(space_uri);
+CREATE INDEX idx_projects_status    ON projects(status);
+```
+
+| Column | Description |
+|--------|-------------|
+| `project_id` | Unique identifier; from git remote (`owner/repo`) or dir name |
+| `db_path` | Absolute path to project's local SQLite DB |
+| `space_uri` | Workspace org path; inferred from `$HOME/.w/<org>` layout; empty if CWD |
+|             | is not under `$HOME/.w/` |
+| `label` | Short name; last `/`-segment of `project_id` |
+| `registered_at` | ISO-8601 timestamp of first registration |
+| `last_seen_at` | ISO-8601 timestamp of last access or path update |
+| `status` | Project state; default `active` |
+
+**Schema migration history**:
+
+| Version | Change |
+|---------|--------|
+| v1 | Initial schema: `tasks`, `task_logs`, `flow_runs`, `task_sequences` |
+| v2 | Added `projects` registry table + indexes |
+| v3 | Added `effort TEXT NOT NULL DEFAULT ''` to `tasks` |
+| v4 | Added `priority TEXT NOT NULL DEFAULT ''` to `tasks` |
+
+See `internal/storage/migrations.go` for authoritative DDL.
 
 ---
 
@@ -743,8 +793,13 @@ TLC automatically detects context when config is missing:
 cd /path/to/repo
 tlc init
 # Creates: /path/to/repo/.tlc/config.yaml
-# Sets: git.worktree.directory = .worktrees
 ```
+
+Project ID fallback chain (first non-empty wins):
+1. `git remote get-url origin` — parses `owner/repo` from GitHub/GitLab/Bitbucket URLs
+2. `git rev-parse --show-toplevel` — uses repo root basename
+3. Ancestor `.git` walk — uses first `.git`-bearing ancestor's basename
+4. Falls back to `"unknown"` if all fail
 
 ### Project Type Detection
 
@@ -959,7 +1014,6 @@ git:
     auto_create: true
   commit:
     auto_generate: true
-    co_author: "Claude Sonnet 4.5 <noreply@anthropic.com>"
 
 sync:
   enabled: true
@@ -1071,5 +1125,5 @@ plugins:
 ---
 
 **Version**: 0.1
-**Last Updated**: 2026-03-08
+**Last Updated**: 2026-03-28
 **Status**: Normative

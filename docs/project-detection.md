@@ -6,9 +6,12 @@ TLC automatically detects projects using a fallback strategy when no explicit co
 
 When you run any TLC command, the system follows this detection order:
 
-1. **Explicit Config**: Check for `.tlc/config.yaml` in the current directory or parent directories
-2. **Git Remote Fallback**: If no config is found, attempt to detect the project from the git remote URL
-3. **Directory Fallback**: If no git remote is found, use the repository directory name
+1. **Explicit Config**: Check for `.tlc/config.yaml` in the current directory or parent
+   directories
+2. **Git Remote Fallback**: If no config is found, attempt to detect from git remote URL
+3. **Git Toplevel Fallback**: If no usable remote, use `git rev-parse --show-toplevel`
+   basename
+4. **Directory Fallback**: Walk ancestors looking for `.git`; use that dir's basename
 
 ## Fallback Modes
 
@@ -60,6 +63,19 @@ Behavior:
     Use detected mode without config
   ```
 
+## Project ID Fallback Chain
+
+`DetectProjectID()` in `internal/core/project.go` resolves in order; first non-empty wins:
+
+1. **Git Remote** (`DetectFromGitRemote`) — runs `git remote get-url origin`; parses
+   `owner/repo` from GitHub, GitLab, or Bitbucket URLs (SSH and HTTPS both supported);
+   strips `.git` suffix.
+2. **Git Toplevel** (`detectFromGitToplevel`) — runs `git rev-parse --show-toplevel`;
+   uses `filepath.Base` of the result.
+3. **Directory Walk** (`detectFromDirectory`) — walks ancestors from cwd looking for a
+   `.git` entry; returns `filepath.Base` of the first match.
+4. **Unknown** — returns `"unknown"` if all three fail.
+
 ## Git Remote Detection
 
 TLC supports automatic project ID detection from the following git hosts:
@@ -68,6 +84,7 @@ TLC supports automatic project ID detection from the following git hosts:
 - **GitLab**: `gitlab.com/user/repo` → `user/repo`
 - **Bitbucket**: `bitbucket.org/user/repo` → `user/repo`
 
+Both HTTPS (`https://github.com/…`) and SSH (`git@github.com:…`) remotes are supported.
 The detection uses the `origin` remote by default.
 
 ## Config File Merging
@@ -174,16 +191,24 @@ global `projects` table. See `internal/cli/init.go`.
 
 ### Inferred Fields
 
-- **`db_path`** -- `<cwd>/<LocalConfigDir(mode)>/db.sqlite`
-- **`space_uri`** -- if cwd is under `$HOME/.w/<org>/`, returns that
-  org path (e.g. `~/.w/ideacrafterslabs`); empty otherwise
-- **`label`** -- last path segment of the project ID (e.g.
-  `org/repo` yields `repo`)
+- **`db_path`** (`localProjectDBPath`) — `<cwd>/<LocalConfigDir(mode)>/db.sqlite`; mode
+  is `hop` or `standalone` (see Entry Point Detection above).
+- **`space_uri`** (`inferSpaceURI`) — space-inference logic:
+  1. Resolve `$HOME/.w/` (symlinks expanded).
+  2. Compute `filepath.Rel($HOME/.w/, cwd)`.
+  3. If cwd is not under `$HOME/.w/`, return `""`.
+  4. Split relative path on `filepath.Separator`; take first segment as org name.
+  5. Return `$HOME/.w/<org>` (unexpanded, using `$HOME` literal path).
+  - Example: cwd `$HOME/.w/ideacrafterslabs/tlc/hops/main` →
+    `space_uri = $HOME/.w/ideacrafterslabs`
+- **`label`** (`inferLabel`) — last `/`-delimited segment of project ID; e.g.
+  `org/repo` → `repo`.
 
 ## Global Projects Table
 
-Added in schema migration v2 (`internal/storage/migrations.go`).
-Tracks all known projects across clones/worktrees.
+Added in schema **migration v2** (`internal/storage/migrations.go`).
+Tracks all known projects across clones/worktrees. Current schema version: **v4**
+(v3 added `effort` column to `tasks`; v4 added `priority` column to `tasks`).
 
 ### Schema
 
