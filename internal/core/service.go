@@ -368,8 +368,8 @@ func (s *TaskService) UnblockTasks(ctx context.Context, completedTaskID string, 
 		}
 
 		// Check if this task is blocked by the completed task
-		blockedBy, ok := task.Meta["blocked_by"].(string)
-		if !ok || blockedBy != completedTaskID {
+		blockedBy := task.BlockedBy()
+		if !contains(blockedBy, completedTaskID) {
 			continue
 		}
 
@@ -379,9 +379,14 @@ func (s *TaskService) UnblockTasks(ctx context.Context, completedTaskID string, 
 			continue
 		}
 
-		// Unblock the task
-		delete(task.Meta, "blocked_by")
 		task.UpdatedAt = time.Now().UTC()
+		task.RemoveBlockedBy([]string{completedTaskID})
+		if len(task.BlockedBy()) > 0 {
+			if err := s.repo.UpdateTask(ctx, task); err != nil {
+				return fmt.Errorf("failed to update task blockers: %w", err)
+			}
+			continue
+		}
 
 		logEntry := &LogEntry{
 			TaskID:    task.ID,

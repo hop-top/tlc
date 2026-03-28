@@ -142,7 +142,16 @@ tlc flow import <uri>                        # import from GitHub or URI
 | `--priority` | `-p` | P0–P3 |
 | `--effort` | `-e` | XS, S, M, L, XL |
 | `--status` | `-s` | Initial status (default: TODO) |
+| `--blocked-by` | | Blocking task ID (repeatable; local ID or cross-project `project/task`) |
 | `--reference` | `-r` | Reference pointer (URL or path) |
+
+### task update — blocker flags
+
+| Flag | Description |
+|------|-------------|
+| `--add-blocked-by` | Add blocking task ID (repeatable; validates existence) |
+| `--remove-blocked-by` | Remove blocking task ID (repeatable) |
+| `--clear-blocked-by` | Clear all blockers |
 
 ### task list — flags reference
 

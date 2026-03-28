@@ -94,6 +94,65 @@ func TestTaskShow(t *testing.T) {
 	t.Run("ShowTaskYAMLFormat", func(t *testing.T) {
 		testShowTaskFormat(t, "yaml", "id:", "title:")
 	})
+
+	t.Run("ShowTaskRelations", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{
+			ID:     "T-0001",
+			Title:  "Base task",
+			Status: core.StatusTodo,
+		})
+		s.CreateTask(ctx, &core.Task{
+			ID:     "T-0002",
+			Title:  "Blocked task",
+			Status: core.StatusTodo,
+			Meta: map[string]interface{}{
+				"blocked_by": []string{"T-0001"},
+			},
+		})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0002"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task show relations failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "Blocked By:") {
+			t.Fatalf("expected Blocked By section, got: %s", output)
+		}
+		if !contains(output, "T-0001") || !contains(output, "Base task") {
+			t.Fatalf("expected resolved blocker in output, got: %s", output)
+		}
+
+		cmd = newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf = new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task show inverse relations failed: %v", err)
+		}
+
+		output = buf.String()
+		if !contains(output, "Blocking:") {
+			t.Fatalf("expected Blocking section, got: %s", output)
+		}
+		if !contains(output, "T-0002") || !contains(output, "Blocked task") {
+			t.Fatalf("expected dependent task in output, got: %s", output)
+		}
+	})
 }
 
 // TestTaskDelete tests the delete command.

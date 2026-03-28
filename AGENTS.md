@@ -27,6 +27,7 @@ exclusively.
 
 ```bash
 tlc task create "title" --tag feat       # create task (tlc assigns ID)
+tlc task create "title" --blocked-by T-0041 --blocked-by other-project/T-0007
 tlc task list                            # list tasks: IN_PROGRESS first, then TODO (default)
 tlc task list --limit 30                 # increase result limit
 tlc task list --status DONE              # filter by a specific status
@@ -41,6 +42,9 @@ tlc task unassign <id> --note "..."      # remove assignee (--note required)
 tlc task update <id> --title "..."       # update title
 tlc task update <id> -d "..."            # replace description (reads first; -d overwrites)
 tlc task update <id> --assigned-to -     # clear assignee (use "-" or "null")
+tlc task update <id> --add-blocked-by T-0041
+tlc task update <id> --remove-blocked-by T-0041
+tlc task update <id> --clear-blocked-by
 tlc task update <id> --status IN_PROGRESS --force  # force status (bypass state machine)
 tlc task delete <id>                     # delete task
 ```

@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 // TestTaskCreate tests basic task creation and ID sequencing.
@@ -315,5 +317,134 @@ func TestTaskCreatePagination(t *testing.T) {
 	}
 	if taskCount != 10 {
 		t.Errorf("expected 10 tasks (6-15), got %d", taskCount)
+	}
+}
+
+func TestTaskCreateWithBlockedBy(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+	if err := s.CreateTask(ctx, &core.Task{ID: "T-0009", Title: "Blocker 1", Status: core.StatusTodo}); err != nil {
+		t.Fatalf("CreateTask(blocker1): %v", err)
+	}
+	if err := s.CreateTask(ctx, &core.Task{ID: "T-0010", Title: "Blocker 2", Status: core.StatusTodo}); err != nil {
+		t.Fatalf("CreateTask(blocker2): %v", err)
+	}
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{
+		"task", "create", "Blocked task",
+		"--blocked-by", "T-0009",
+		"--blocked-by", "T-0010",
+		"--blocked-by", "T-0009",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create --blocked-by failed: %v", err)
+	}
+
+	tasks, err := s.ListTasks(ctx, core.Query{})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+
+	var task *core.Task
+	for _, candidate := range tasks {
+		if candidate.Title == "Blocked task" {
+			task = candidate
+			break
+		}
+	}
+	if task == nil {
+		t.Fatal("task not found after creation")
+	}
+
+	blockedBy := task.BlockedBy()
+	if len(blockedBy) != 2 {
+		t.Fatalf("expected 2 unique blockers, got %d (%v)", len(blockedBy), blockedBy)
+	}
+	if blockedBy[0] != "T-0009" || blockedBy[1] != "T-0010" {
+		t.Fatalf("blocked_by = %v, want [T-0009 T-0010]", blockedBy)
+	}
+}
+
+func TestTaskCreateWithBlockedByRejectsMissingTask(t *testing.T) {
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Blocked task", "--blocked-by", "T-9999"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected create to fail for missing blocker")
+	}
+	if !contains(err.Error(), "invalid blocked_by reference") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTaskCreateWithCrossProjectBlockedBy(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	projectID := "other-project"
+	otherDBPath := filepath.Join(t.TempDir(), "other.sqlite")
+	otherStorage, err := storage.NewSQLiteStorage(otherDBPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStorage(other): %v", err)
+	}
+	defer otherStorage.Close()
+
+	requireProject := projectID
+	if err := otherStorage.CreateTask(ctx, &core.Task{
+		ID:        "T-0007",
+		ProjectID: &requireProject,
+		Title:     "Cross project blocker",
+		Status:    core.StatusTodo,
+	}); err != nil {
+		t.Fatalf("CreateTask(other): %v", err)
+	}
+	if err := s.RegisterProject(ctx, projectID, otherDBPath, "", "Other Project"); err != nil {
+		t.Fatalf("RegisterProject: %v", err)
+	}
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Blocked task", "--blocked-by", "other-project/T-0007"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create with cross-project blocker failed: %v", err)
+	}
+
+	task, _ := s.GetTask(ctx, "T-0001")
+	if task == nil {
+		t.Fatal("task not found after creation")
+	}
+	blockedBy := task.BlockedBy()
+	if len(blockedBy) != 1 || blockedBy[0] != "other-project/T-0007" {
+		t.Fatalf("blocked_by = %v, want [other-project/T-0007]", blockedBy)
 	}
 }

@@ -577,6 +577,13 @@ TLC distinguishes between two types of tasks based on their origin:
 }
 ```
 
+Implementation note:
+- TLC stores `meta.blocked_by` as a string array in JSON/YAML.
+- `tlc task create --blocked-by` validates that each referenced blocker exists.
+- `tlc task update --add-blocked-by` also validates existence.
+- Local blockers may be given as `T-0001`; cross-project blockers use URI-style
+  identifiers such as `other-project/T-0007`.
+
 ### External Synced Tasks
 
 **Definition**: Tasks that originated from external systems (GitHub, Jira, Linear, etc.).

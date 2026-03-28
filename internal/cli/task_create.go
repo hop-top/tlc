@@ -27,7 +27,12 @@ var TaskCreateCmd = &cobra.Command{
 			return createTaskInteractive(title)
 		}
 
-		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, make(map[string]interface{}))
+		meta := make(map[string]interface{})
+		if blockedBy := core.NormalizeBlockedBy(taskBlockedBy); len(blockedBy) > 0 {
+			meta["blocked_by"] = blockedBy
+		}
+
+		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta)
 		if err != nil {
 			return err
 		}
@@ -148,6 +153,13 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
+	if blockedBy := core.NormalizeBlockedBy(meta["blocked_by"]); len(blockedBy) > 0 {
+		validated, err := validateBlockedByRefs(ctx, s, s, blockedBy)
+		if err != nil {
+			return err
+		}
+		meta["blocked_by"] = validated
+	}
 
 	finalID := id
 	if finalID == "" {
@@ -219,6 +231,7 @@ func init() {
 	TaskCreateCmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
 	TaskCreateCmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
 	TaskCreateCmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority (P0, P1, P2, P3)")
+	TaskCreateCmd.Flags().StringSliceVar(&taskBlockedBy, "blocked-by", []string{}, "Blocking task IDs (repeatable)")
 	TaskCreateCmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
 	TaskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
 	TaskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")

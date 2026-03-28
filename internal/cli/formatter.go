@@ -119,6 +119,10 @@ func formatTLS(t *core.Task) string {
 
 	for k, v := range t.Meta {
 		switch k {
+		case "blocked_by":
+			if blockedBy := t.BlockedBy(); len(blockedBy) > 0 {
+				parts = append(parts, "blocked_by="+strings.Join(blockedBy, ","))
+			}
 		case "prio":
 			// Skip: priority is now a first-class field serialised above.
 		case "domain":

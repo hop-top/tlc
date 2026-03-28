@@ -295,6 +295,8 @@ func parseTLS(line string) (*core.Task, error) {
 			kv := strings.SplitN(token, "=", 2)
 			key, val := kv[0], kv[1]
 			switch key {
+			case "blocked_by":
+				task.SetBlockedBy(core.NormalizeBlockedBy(val))
 			case "project_id":
 				task.ProjectID = &val
 			case "created_at":

@@ -279,6 +279,98 @@ func TestTaskCreateWithPriority(t *testing.T) {
 	}
 }
 
+func TestTaskUpdateBlockedBy(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Blocked task",
+		Status: core.StatusTodo,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{"T-0009"},
+		},
+	}
+	s.CreateTask(ctx, task)
+	s.CreateTask(ctx, &core.Task{ID: "T-0009", Title: "Blocker 1", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0010", Title: "Blocker 2", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{
+		"task", "update", "T-0001",
+		"--add-blocked-by", "T-0010",
+		"--add-blocked-by", "T-0009",
+		"--remove-blocked-by", "T-0009",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update blockers failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+
+	blockedBy := updatedTask.BlockedBy()
+	if len(blockedBy) != 1 || blockedBy[0] != "T-0010" {
+		t.Fatalf("blocked_by = %v, want [T-0010]", blockedBy)
+	}
+}
+
+func TestTaskUpdateClearBlockedBy(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Blocked task",
+		Status: core.StatusTodo,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{"T-0001", "T-0002"},
+		},
+	}
+	s.CreateTask(ctx, task)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--clear-blocked-by"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --clear-blocked-by failed: %v", err)
+	}
+
+	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	if updatedTask == nil {
+		t.Fatal("task not found after update")
+	}
+	if len(updatedTask.BlockedBy()) != 0 {
+		t.Fatalf("expected blocked_by to be cleared, got %v", updatedTask.BlockedBy())
+	}
+	if _, ok := updatedTask.Meta["blocked_by"]; ok {
+		t.Fatalf("blocked_by key should be removed after clear, got %v", updatedTask.Meta["blocked_by"])
+	}
+}
+
 // TestTaskCreateWithPriorityInvalid tests that an invalid priority value is rejected.
 func TestTaskCreateWithPriorityInvalid(t *testing.T) {
 	_, cleanup := setupTestDir(t)

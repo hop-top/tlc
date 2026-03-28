@@ -240,6 +240,9 @@ func resetTaskFlags() {
 	taskDescription = ""
 	taskStatus = "TODO"
 	taskAssignedTo = ""
+	taskEffort = ""
+	taskPriority = ""
+	taskBlockedBy = []string{}
 	taskTags = []string{}
 	taskReference = ""
 	taskInteractive = false
@@ -268,6 +271,11 @@ func resetTaskFlags() {
 	taskUpdateDescription = ""
 	taskUpdateStatus = ""
 	taskUpdateAssignedTo = ""
+	taskUpdateEffort = ""
+	taskUpdatePriority = ""
+	taskUpdateAddBlockedBy = []string{}
+	taskUpdateRemoveBlockedBy = []string{}
+	taskUpdateClearBlockedBy = false
 	taskUpdateAddTags = []string{}
 	taskUpdateRemoveTags = []string{}
 

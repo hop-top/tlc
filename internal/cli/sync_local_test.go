@@ -356,12 +356,52 @@ func TestFormatTLS_QuotesTitleForRoundtrip(t *testing.T) {
 	}
 }
 
+func TestParseTLS_BlockedByList(t *testing.T) {
+	task, err := parseTLS(`[ ] T-0001 "Blocked task" blocked_by=T-0002,T-0003`)
+	if err != nil {
+		t.Fatalf("parseTLS failed: %v", err)
+	}
+
+	blockedBy := task.BlockedBy()
+	if len(blockedBy) != 2 {
+		t.Fatalf("expected 2 blockers, got %d (%v)", len(blockedBy), blockedBy)
+	}
+	if blockedBy[0] != "T-0002" || blockedBy[1] != "T-0003" {
+		t.Fatalf("blocked_by = %v, want [T-0002 T-0003]", blockedBy)
+	}
+}
+
+func TestFormatTLS_BlockedByRoundtrip(t *testing.T) {
+	task := &core.Task{
+		ID:     "T-0001",
+		Title:  "Blocked task",
+		Status: core.StatusTodo,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{"T-0002", "T-0003"},
+		},
+	}
+
+	line := formatTLS(task)
+	if !strings.Contains(line, "blocked_by=T-0002,T-0003") {
+		t.Fatalf("expected blocked_by token in TLS, got: %s", line)
+	}
+
+	parsed, err := parseTLS(line)
+	if err != nil {
+		t.Fatalf("parseTLS roundtrip failed: %v", err)
+	}
+	blockedBy := parsed.BlockedBy()
+	if len(blockedBy) != 2 || blockedBy[0] != "T-0002" || blockedBy[1] != "T-0003" {
+		t.Fatalf("roundtrip blocked_by = %v, want [T-0002 T-0003]", blockedBy)
+	}
+}
+
 func TestParseQuotedString(t *testing.T) {
 	tests := []struct {
-		input     string
-		wantStr   string
-		wantRest  string
-		wantErr   bool
+		input    string
+		wantStr  string
+		wantRest string
+		wantErr  bool
 	}{
 		{`"hello world" rest`, "hello world", "rest", false},
 		{`"escaped \"quote\"" rest`, `escaped "quote"`, "rest", false},

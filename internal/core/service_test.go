@@ -215,3 +215,80 @@ func TestTaskService_Transition(t *testing.T) {
 		t.Error("expected error for TODO -> DONE transition, got nil")
 	}
 }
+
+func TestTaskService_UnblockTasks_RemovesCompletedBlocker(t *testing.T) {
+	repo := &mockRepo{tasks: make(map[string]*Task)}
+	service := NewTaskService(repo, repo)
+
+	repo.tasks["T-1"] = &Task{
+		ID:     "T-1",
+		Title:  "Blocked task",
+		Status: StatusTodo,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{"T-9", "T-10"},
+			"requirements": map[string]interface{}{
+				"capabilities": []interface{}{"review"},
+			},
+		},
+	}
+
+	assignee := &Assignee{
+		ID: "worker",
+		Delegation: &DelegationRules{
+			Unblocks: []string{"review"},
+		},
+	}
+
+	if err := service.UnblockTasks(context.Background(), "T-9", assignee, "worker"); err != nil {
+		t.Fatalf("UnblockTasks failed: %v", err)
+	}
+
+	blockedBy := repo.tasks["T-1"].BlockedBy()
+	if len(blockedBy) != 1 || blockedBy[0] != "T-10" {
+		t.Fatalf("blocked_by = %v, want [T-10]", blockedBy)
+	}
+	if len(repo.logs) != 0 {
+		t.Fatalf("expected no unblock log while blockers remain, got %d logs", len(repo.logs))
+	}
+}
+
+func TestTaskService_UnblockTasks_LegacyStringFullyUnblocks(t *testing.T) {
+	repo := &mockRepo{tasks: make(map[string]*Task)}
+	service := NewTaskService(repo, repo)
+
+	repo.tasks["T-1"] = &Task{
+		ID:     "T-1",
+		Title:  "Blocked task",
+		Status: StatusTodo,
+		Meta: map[string]interface{}{
+			"blocked_by": "T-9",
+			"requirements": map[string]interface{}{
+				"capabilities": []interface{}{"review"},
+			},
+		},
+	}
+
+	assignee := &Assignee{
+		ID: "worker",
+		Delegation: &DelegationRules{
+			Unblocks: []string{"review"},
+		},
+	}
+
+	if err := service.UnblockTasks(context.Background(), "T-9", assignee, "worker"); err != nil {
+		t.Fatalf("UnblockTasks failed: %v", err)
+	}
+
+	if len(repo.tasks["T-1"].BlockedBy()) != 0 {
+		t.Fatalf("expected blockers to be cleared, got %v", repo.tasks["T-1"].BlockedBy())
+	}
+	if _, ok := repo.tasks["T-1"].Meta["blocked_by"]; ok {
+		t.Fatalf("blocked_by key should be removed, got %v", repo.tasks["T-1"].Meta["blocked_by"])
+	}
+	if len(repo.logs) != 1 {
+		t.Fatalf("expected 1 unblock log, got %d", len(repo.logs))
+	}
+	if repo.logs[0].Action != ActionUnblocked {
+		t.Fatalf("log action = %q, want %q", repo.logs[0].Action, ActionUnblocked)
+	}
+}

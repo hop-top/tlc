@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -55,4 +56,134 @@ func (t *Task) NeedsPush() bool {
 	}
 	// Use a small buffer to avoid jitter issues with time precision
 	return t.UpdatedAt.After(t.LastSyncAt.Add(time.Millisecond))
+}
+
+// NormalizeBlockedBy converts supported blocked_by representations into a
+// canonical ordered, deduplicated string slice.
+func NormalizeBlockedBy(value interface{}) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case string:
+		return normalizeBlockedByStrings(parseBlockedByString(v))
+	case []string:
+		return normalizeBlockedByStrings(v)
+	case []interface{}:
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				items = append(items, s)
+			}
+		}
+		return normalizeBlockedByStrings(items)
+	default:
+		return nil
+	}
+}
+
+func parseBlockedByString(value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		trimmed = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	}
+	if trimmed == "" {
+		return nil
+	}
+
+	parts := strings.Split(trimmed, ",")
+	if len(parts) == 1 && strings.Contains(trimmed, " ") {
+		parts = strings.Fields(trimmed)
+	}
+	return parts
+}
+
+func normalizeBlockedByStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// BlockedBy returns the task blockers as a canonical string slice.
+func (t *Task) BlockedBy() []string {
+	if t == nil || t.Meta == nil {
+		return nil
+	}
+	return NormalizeBlockedBy(t.Meta["blocked_by"])
+}
+
+// SetBlockedBy updates blocked_by metadata, removing the key when empty.
+func (t *Task) SetBlockedBy(ids []string) {
+	if t == nil {
+		return
+	}
+
+	normalized := normalizeBlockedByStrings(ids)
+	if len(normalized) == 0 {
+		if t.Meta != nil {
+			delete(t.Meta, "blocked_by")
+		}
+		return
+	}
+
+	if t.Meta == nil {
+		t.Meta = make(map[string]interface{})
+	}
+	t.Meta["blocked_by"] = normalized
+}
+
+// AddBlockedBy appends blocker IDs while preserving order and uniqueness.
+func (t *Task) AddBlockedBy(ids []string) {
+	combined := append(append([]string{}, t.BlockedBy()...), ids...)
+	t.SetBlockedBy(combined)
+}
+
+// RemoveBlockedBy removes blocker IDs from blocked_by metadata.
+func (t *Task) RemoveBlockedBy(ids []string) {
+	if t == nil {
+		return
+	}
+
+	toRemove := make(map[string]struct{}, len(ids))
+	for _, id := range normalizeBlockedByStrings(ids) {
+		toRemove[id] = struct{}{}
+	}
+	if len(toRemove) == 0 {
+		return
+	}
+
+	current := t.BlockedBy()
+	if len(current) == 0 {
+		return
+	}
+
+	filtered := make([]string, 0, len(current))
+	for _, id := range current {
+		if _, ok := toRemove[id]; ok {
+			continue
+		}
+		filtered = append(filtered, id)
+	}
+	t.SetBlockedBy(filtered)
 }

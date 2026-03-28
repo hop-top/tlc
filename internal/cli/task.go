@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/plugin"
+	"hop.top/tlc/internal/storage"
+	"hop.top/tlc/internal/uri"
 )
 
 var (
@@ -20,6 +22,7 @@ var (
 	taskAssignedTo  string
 	taskEffort      string
 	taskPriority    string
+	taskBlockedBy   []string
 	taskTags        []string
 	taskReference   string
 	taskInteractive bool
@@ -38,14 +41,17 @@ var (
 	taskShowLogs             bool
 	taskShowLogSortDirection string
 
-	taskUpdateTitle       string
-	taskUpdateDescription string
-	taskUpdateStatus      string
-	taskUpdateAssignedTo  string
-	taskUpdateEffort      string
-	taskUpdatePriority    string
-	taskUpdateAddTags     []string
-	taskUpdateRemoveTags  []string
+	taskUpdateTitle           string
+	taskUpdateDescription     string
+	taskUpdateStatus          string
+	taskUpdateAssignedTo      string
+	taskUpdateEffort          string
+	taskUpdatePriority        string
+	taskUpdateAddBlockedBy    []string
+	taskUpdateRemoveBlockedBy []string
+	taskUpdateClearBlockedBy  bool
+	taskUpdateAddTags         []string
+	taskUpdateRemoveTags      []string
 
 	taskDeleteYes bool
 
@@ -222,6 +228,47 @@ func updateSyncedTask(ctx context.Context, task *core.Task, s core.Repository) e
 	return nil
 }
 
+func validateBlockedByRefs(ctx context.Context, registryStorage, localStorage *storage.SQLiteStorage, refs []string) ([]string, error) {
+	normalized := core.NormalizeBlockedBy(refs)
+	if len(normalized) == 0 {
+		return nil, nil
+	}
+
+	validated := make([]string, 0, len(normalized))
+	for _, ref := range normalized {
+		normalizedRef := uri.NormalizeTaskID(ref)
+		resolverStorage := localStorage
+		if strings.Contains(normalizedRef, "/") || strings.Contains(normalizedRef, "://") {
+			resolverStorage = registryStorage
+		}
+
+		resolved, err := uri.NewResolver(resolverStorage).ResolveTask(ctx, normalizedRef)
+		if err != nil {
+			return nil, fmt.Errorf("invalid blocked_by reference %q: %w", ref, err)
+		}
+
+		validated = append(validated, canonicalBlockedByRef(localStorage, normalizedRef, resolved))
+		if resolved.Storage != resolverStorage {
+			_ = resolved.Storage.Close()
+		}
+	}
+
+	return core.NormalizeBlockedBy(validated), nil
+}
+
+func canonicalBlockedByRef(base *storage.SQLiteStorage, fallback string, resolved *uri.ResolvedTask) string {
+	if resolved == nil || resolved.Task == nil {
+		return fallback
+	}
+	if resolved.Storage == base {
+		return resolved.Task.ID
+	}
+	if resolved.Task.ProjectID != nil && *resolved.Task.ProjectID != "" {
+		return *resolved.Task.ProjectID + "/" + resolved.Task.ID
+	}
+	return fallback
+}
+
 func deleteSyncedTask(_ context.Context, task *core.Task, _ core.Repository) error {
 	if task.OriginSystem == nil || *task.OriginSystem == "" {
 		return fmt.Errorf("task does not have an origin system")
@@ -281,4 +328,3 @@ func init() {
 
 	RootCmd.AddCommand(TaskCmd)
 }
-
