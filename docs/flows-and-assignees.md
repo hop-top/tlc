@@ -119,6 +119,54 @@ delegation:
     - "deployment"
 ```
 
+### 6. EVA Step Gate
+
+Optional per-step contract validation via the EVA HTTP gateway. When `gate` is set,
+a step only succeeds if EVA approves its output; downstream steps are blocked on failure.
+EVA integration is opt-in — flows without `gate` are unaffected.
+
+**Fields:**
+
+- `contract` — name of the EVA contract to invoke
+- `eva_url` — base URL of the EVA gateway (e.g. `http://eva.internal`)
+
+**Auth:** set `EVA_KEY` env var; sent as `X-Eva-Key` header.
+
+**API contract:**
+
+- Endpoint: `POST {eva_url}/v1/contract/invoke`
+- Request body: `{"contract": "<name>", "body": <step_output>}`
+- Pass: HTTP 200, `{"eva_status": "pass", "attempts": N}`
+- Violation: HTTP 422, `{"eva_status": "contract_violation", "violations": [...]}`
+
+**Example:**
+
+```yaml
+steps:
+  plan:
+    type: task
+    title: Write plan
+    gate:
+      contract: plan-quality
+      eva_url: http://eva.internal
+
+  implement:
+    type: task
+    title: Implement
+    depends_on: [plan]   # blocked until plan passes EVA gate
+```
+
+**Usage — `RunEvaGate`:**
+
+```
+RunEvaGate(ctx, gate *StepGate, stepOutput map[string]any, apiKey string) error
+```
+
+- `gate == nil` → no-op, returns nil
+- pass → nil error
+- violation → actionable error with evaluator details + retry hint
+- non-200 non-violation → wrapped error with HTTP status + gateway URL
+
 ## CLI Commands
 
 ### Assignee Management
