@@ -87,6 +87,17 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			lastSyncAt = &s
 		}
 
+		var staleTimeout *int64
+		if task.StaleTimeout != nil {
+			ns := int64(*task.StaleTimeout)
+			staleTimeout = &ns
+		}
+		var staleFiredAt *string
+		if task.StaleFiredAt != nil {
+			s := task.StaleFiredAt.Format(time.RFC3339)
+			staleFiredAt = &s
+		}
+
 		// Coalesce nil ProjectID to empty string to prevent NULL composite PK duplication
 		var projectID string
 		if task.ProjectID != nil {
@@ -94,12 +105,12 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 		}
 
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
 			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
-			string(task.Effort), string(task.Priority),
+			string(task.Effort), string(task.Priority), staleTimeout, task.BlockedReason, staleFiredAt,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert task: %w", err)
@@ -112,19 +123,21 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	proj := core.DetectProject()
 	var row *sql.Row
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
+		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
 	} else {
 		// Prefer the global bucket (project_id='') over project-scoped rows so that
 		// tasks created outside any project context are consistently resolved even
 		// when sync has duplicated them into project-specific rows.
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
+		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
 	}
 
 	var task core.Task
 	var createdAtStr, updatedAtStr string
 	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
+	var staleTimeoutNs sql.NullInt64
+	var blockedReasonStr, staleFiredAtStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -160,6 +173,17 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	}
 	if priorityStr.Valid {
 		task.Priority = core.Priority(priorityStr.String)
+	}
+	if staleTimeoutNs.Valid {
+		d := time.Duration(staleTimeoutNs.Int64)
+		task.StaleTimeout = &d
+	}
+	if blockedReasonStr.Valid {
+		task.BlockedReason = &blockedReasonStr.String
+	}
+	if staleFiredAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		task.StaleFiredAt = &t
 	}
 
 	return &task, nil
@@ -168,15 +192,17 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID string) (*core.Task, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		"SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks WHERE id = ? AND project_id = ?",
+		"SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at FROM tasks WHERE id = ? AND project_id = ?",
 		id, projectID,
 	)
 
 	var task core.Task
 	var createdAtStr, updatedAtStr string
 	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
+	var staleTimeoutNs sql.NullInt64
+	var blockedReasonStr, staleFiredAtStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -212,6 +238,17 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 	}
 	if priorityStr.Valid {
 		task.Priority = core.Priority(priorityStr.String)
+	}
+	if staleTimeoutNs.Valid {
+		d := time.Duration(staleTimeoutNs.Int64)
+		task.StaleTimeout = &d
+	}
+	if blockedReasonStr.Valid {
+		task.BlockedReason = &blockedReasonStr.String
+	}
+	if staleFiredAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		task.StaleFiredAt = &t
 	}
 
 	return &task, nil
@@ -228,16 +265,28 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 			lastSyncAt = &s
 		}
 
+		var staleTimeout *int64
+		if task.StaleTimeout != nil {
+			ns := int64(*task.StaleTimeout)
+			staleTimeout = &ns
+		}
+		var staleFiredAt *string
+		if task.StaleFiredAt != nil {
+			s := task.StaleFiredAt.Format(time.RFC3339)
+			staleFiredAt = &s
+		}
+
 		projectID := ""
 		if task.ProjectID != nil {
 			projectID = *task.ProjectID
 		}
 		res, err := tx.ExecContext(ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority), task.ID, projectID,
+			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority),
+			staleTimeout, task.BlockedReason, staleFiredAt, task.ID, projectID,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
@@ -272,16 +321,28 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			lastSyncAt = &s
 		}
 
+		var staleTimeout *int64
+		if task.StaleTimeout != nil {
+			ns := int64(*task.StaleTimeout)
+			staleTimeout = &ns
+		}
+		var staleFiredAt *string
+		if task.StaleFiredAt != nil {
+			s := task.StaleFiredAt.Format(time.RFC3339)
+			staleFiredAt = &s
+		}
+
 		projectID := ""
 		if task.ProjectID != nil {
 			projectID = *task.ProjectID
 		}
 		res, err := tx.ExecContext(ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?
+			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
-			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority), task.ID, projectID,
+			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority),
+			staleTimeout, task.BlockedReason, staleFiredAt, task.ID, projectID,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update task: %w", err)
@@ -318,7 +379,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority FROM tasks"
+	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at FROM tasks"
 	var args []interface{}
 
 	// Group filters by field to implement OR logic for same field
