@@ -4,6 +4,10 @@
 
 ### Added
 
+- `--blocked <reason>` on `tlc task update`: set blocked reason on a task.
+- `--unblock` on `tlc task update`: clear blocked reason.
+- `--timeout <duration>` on `tlc task update` and `tlc task create`: set per-task
+  stale timeout (e.g. `2h`, `30m`). Resets stale-crossing state on update.
 - `effort` field on tasks: set sizing estimate (XS/S/M/L/XL) via
   `tlc task create --effort` or `tlc task update --effort`.
   Shown in `tlc task show`; serialized in JSON/YAML/TLS formats.

@@ -52,6 +52,11 @@ var (
 	taskUpdateClearBlockedBy  bool
 	taskUpdateAddTags         []string
 	taskUpdateRemoveTags      []string
+	taskUpdateBlocked         string
+	taskUpdateUnblock         bool
+	taskUpdateTimeout         string
+
+	taskCreateTimeout string
 
 	taskDeleteYes bool
 

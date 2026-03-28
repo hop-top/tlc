@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"hop.top/tlc/internal/core"
 )
@@ -620,5 +621,157 @@ func TestTaskCreateWithEffort(t *testing.T) {
 	}
 	if tasks[0].Effort != core.EffortL {
 		t.Errorf("expected effort L, got %q", tasks[0].Effort)
+	}
+}
+
+// TestTaskUpdate_BlockedReason tests setting a blocked reason via --blocked flag.
+func TestTaskUpdate_BlockedReason(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--blocked", "waiting on T-0002"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --blocked failed: %v", err)
+	}
+
+	updated, _ := s.GetTask(ctx, "T-0001")
+	if updated == nil {
+		t.Fatal("task not found after update")
+	}
+	if updated.BlockedReason == nil {
+		t.Fatal("BlockedReason is nil, expected 'waiting on T-0002'")
+	}
+	if *updated.BlockedReason != "waiting on T-0002" {
+		t.Errorf("BlockedReason = %q, want 'waiting on T-0002'", *updated.BlockedReason)
+	}
+}
+
+// TestTaskUpdate_Unblock tests clearing a blocked reason via --unblock flag.
+func TestTaskUpdate_Unblock(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	reason := "waiting on T-0002"
+	s.CreateTask(ctx, &core.Task{
+		ID:            "T-0001",
+		Title:         "Blocked Task",
+		Status:        core.StatusTodo,
+		BlockedReason: &reason,
+	})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--unblock"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --unblock failed: %v", err)
+	}
+
+	updated, _ := s.GetTask(ctx, "T-0001")
+	if updated == nil {
+		t.Fatal("task not found after update")
+	}
+	if updated.BlockedReason != nil {
+		t.Errorf("BlockedReason = %q, expected nil after --unblock", *updated.BlockedReason)
+	}
+}
+
+// TestTaskUpdate_Timeout tests setting a stale timeout via --timeout flag.
+func TestTaskUpdate_Timeout(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--timeout", "2h"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --timeout failed: %v", err)
+	}
+
+	updated, _ := s.GetTask(ctx, "T-0001")
+	if updated == nil {
+		t.Fatal("task not found after update")
+	}
+	if updated.StaleTimeout == nil {
+		t.Fatal("StaleTimeout is nil, expected 2h")
+	}
+	expected := 2 * time.Hour
+	if *updated.StaleTimeout != expected {
+		t.Errorf("StaleTimeout = %v, want 2h", *updated.StaleTimeout)
+	}
+}
+
+// TestTaskUpdate_TimeoutInvalid tests that an invalid --timeout value is rejected.
+func TestTaskUpdate_TimeoutInvalid(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--timeout", "notaduration"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for invalid --timeout, got nil")
+	}
+}
+
+// TestTaskCreate_Timeout tests setting stale timeout on task create via --timeout flag.
+func TestTaskCreate_Timeout(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "create", "Timeout Task", "--timeout", "2h"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create --timeout failed: %v", err)
+	}
+
+	tasks, _ := s.ListTasks(ctx, core.Query{})
+	if len(tasks) == 0 {
+		t.Fatal("no tasks found after create")
+	}
+	if tasks[0].StaleTimeout == nil {
+		t.Fatal("StaleTimeout is nil, expected 2h")
+	}
+	expected := 2 * time.Hour
+	if *tasks[0].StaleTimeout != expected {
+		t.Errorf("StaleTimeout = %v, want 2h", *tasks[0].StaleTimeout)
 	}
 }

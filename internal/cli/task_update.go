@@ -124,7 +124,25 @@ var TaskUpdateCmd = &cobra.Command{
 			changed = true
 		}
 
+		if cmd.Flags().Changed("blocked") {
+			task.BlockedReason = &taskUpdateBlocked
+			changed = true
+		}
+		if cmd.Flags().Changed("unblock") && taskUpdateUnblock {
+			task.BlockedReason = nil
+			changed = true
+		}
+		if cmd.Flags().Changed("timeout") {
+			d, err := time.ParseDuration(taskUpdateTimeout)
+			if err != nil {
+				return fmt.Errorf("invalid --timeout %q: %w", taskUpdateTimeout, err)
+			}
+			task.StaleTimeout = &d
+			changed = true
+		}
+
 		if changed {
+			task.StaleFiredAt = nil // reset crossing state on any change
 			// Config-driven validation for update.
 			var assignedTo string
 			if task.AssignedTo != nil {
@@ -252,6 +270,9 @@ func init() {
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateBlocked, "blocked", "", "Set blocked reason")
+	TaskUpdateCmd.Flags().BoolVar(&taskUpdateUnblock, "unblock", false, "Clear blocked reason")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateTimeout, "timeout", "", "Stale timeout (e.g. 2h, 30m)")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 }
