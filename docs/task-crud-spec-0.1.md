@@ -50,6 +50,52 @@ A Task MUST be representable as:
 
 ---
 
+## Configuration
+
+### Stale Detection
+
+Staleness is computed at read-time: `now − updated_at > effective_timeout`.
+No daemon required.
+
+#### Keys
+
+- `task.stale.default_timeout` — duration; project-wide stale threshold; default `6h`
+  - Applied when a task's `stale_timeout` is nil
+  - Format: Go duration string (`6h`, `30m`, `72h`)
+- `task.stale.hooks` — list of hook objects; fired when a task crosses the stale threshold
+  - Each entry: `{command: string}`
+  - Command is a Go `text/template` string; expanded before execution via `sh -c`
+
+#### Hook Template Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `{{.ID}}` | string | Task ID (e.g. `T-0042`) |
+| `{{.Title}}` | string | Task title |
+| `{{.AssignedTo}}` | string | Assignee identifier; empty if unassigned |
+| `{{.UpdatedAt}}` | time.Time | Last mutation timestamp (UTC) |
+| `{{.Timeout}}` | time.Duration | Effective stale threshold |
+| `{{.StaleSince}}` | time.Duration | How long past the threshold |
+
+#### Hook Fire Semantics
+
+- Fired once per stale crossing; tracked via `stale_fired_at`
+- Cleared on any task update (stale clock resets; `stale_fired_at` set to nil)
+- `tlc task stale --run-hooks` forces re-fire regardless of `stale_fired_at`
+- Hook failures are non-fatal; remaining hooks run regardless
+
+#### Example Config (YAML)
+
+```yaml
+task:
+  stale:
+    default_timeout: 6h
+    hooks:
+      - command: 'echo "stale: {{.ID}} {{.Title}} (since {{.StaleSince}})" >> /tmp/stale.log'
+```
+
+---
+
 ## Status Semantics (CRUD-Level)
 
 - TODO
