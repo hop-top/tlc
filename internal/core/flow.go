@@ -97,6 +97,10 @@ type Step struct {
 
 	// Task template for task generation (flows & assignees feature)
 	TaskTemplate *TaskTemplate `json:"task_template,omitempty" yaml:"task_template,omitempty"`
+
+	// Gate is optional. When set, the step output is validated by EVA before
+	// the step is marked succeeded.
+	Gate *StepGate `json:"gate,omitempty" yaml:"gate,omitempty"`
 }
 
 // TaskTemplate defines how to generate tasks from flow steps.
@@ -124,6 +128,13 @@ type BranchCase struct {
 type RetryPolicy struct {
 	MaxAttempts int `json:"max_attempts" yaml:"max_attempts"`
 	BackoffMS   int `json:"backoff_ms" yaml:"backoff_ms"`
+}
+
+// StepGate configures optional EVA contract validation for a step output.
+// When present, the step is only marked succeeded if EVA returns a pass result.
+type StepGate struct {
+	Contract string `json:"contract" yaml:"contract"` // named EVA contract
+	EvaURL   string `json:"eva_url"  yaml:"eva_url"`  // EVA gateway base URL
 }
 
 // FlowRun represents an execution instance of a flow definition.

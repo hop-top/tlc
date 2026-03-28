@@ -78,7 +78,38 @@ Flow steps can include task templates for automatic task generation:
 - **Requirements**: Capabilities, domains, tools needed
 - **Context**: Additional metadata
 
-### 3. Assignee Capabilities
+### 3. Step Gate (optional EVA validation)
+
+Attaches an EVA contract validation gate to a task step. When present, the step only succeeds
+if EVA approves the step output. Downstream steps are blocked on failure per existing
+dependency rules.
+
+Fields:
+- `contract` — name of the EVA contract to invoke
+- `eva_url` — base URL of the EVA gateway (e.g. `http://localhost:8080`)
+
+Auth: set `EVA_KEY` env var; sent as `X-Eva-Key` header.
+
+Example:
+
+```yaml
+steps:
+  plan:
+    step_id: plan
+    type: task
+    title: Write plan
+    gate:
+      contract: plan-quality
+      eva_url: http://eva.internal
+
+  implement:
+    step_id: implement
+    type: task
+    title: Implement
+    depends_on: [plan]   # blocked until plan passes EVA gate
+```
+
+### 4. Assignee Capabilities
 
 Assignees declare what they can do:
 
@@ -86,7 +117,7 @@ Assignees declare what they can do:
 - **Domains**: Areas of expertise
 - **Tools**: Tools they have access to
 
-### 4. Assignment Engine
+### 5. Assignment Engine
 
 The assignment engine matches tasks to assignees using weighted scoring:
 
@@ -96,7 +127,7 @@ The assignment engine matches tasks to assignees using weighted scoring:
 
 Best-scoring assignee gets auto-assigned to the task.
 
-### 5. Delegation & Hand-offs
+### 6. Delegation & Hand-offs
 
 #### Flow-to-Flow Hand-offs (via Subflow)
 
