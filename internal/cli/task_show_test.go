@@ -155,6 +155,33 @@ func TestTaskShow(t *testing.T) {
 	})
 }
 
+// TestTaskShowNotFound validates that showing a non-existent task returns an
+// actionable error message telling the agent what to do next.
+func TestTaskShowNotFound(t *testing.T) {
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "show", "T-9999"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for non-existent task, got nil")
+	}
+
+	msg := err.Error()
+	if !contains(msg, "T-9999") {
+		t.Errorf("expected task ID in error message, got: %q", msg)
+	}
+	if !contains(msg, "tlc task list") {
+		t.Errorf("expected actionable hint 'tlc task list' in error message, got: %q", msg)
+	}
+}
+
 // TestTaskDelete tests the delete command.
 func TestTaskDelete(t *testing.T) {
 	t.Run("DeleteTask", func(t *testing.T) {

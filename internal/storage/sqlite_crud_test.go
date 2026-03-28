@@ -128,6 +128,98 @@ func TestSQLiteStorage_GetTaskLogs(t *testing.T) {
 	}
 }
 
+// TestStaleFields_RoundTrip verifies stale_timeout, blocked_reason, and stale_fired_at
+// persist through CreateTask → GetTask and UpdateTask correctly.
+func TestStaleFields_RoundTrip(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "stale_roundtrip.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	timeout := 48 * time.Hour
+	reason := "blocked by infra outage"
+	firedAt := time.Now().UTC().Truncate(time.Second)
+
+	task := &core.Task{
+		ID:            "T-0001",
+		Title:         "Stale round-trip test",
+		Status:        core.StatusTodo,
+		Reference:     "docs/test.md",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+		StaleTimeout:  &timeout,
+		BlockedReason: &reason,
+		StaleFiredAt:  &firedAt,
+	}
+
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask failed: %v", err)
+	}
+
+	got, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("task not found")
+	}
+
+	if got.StaleTimeout == nil {
+		t.Fatal("StaleTimeout is nil after round-trip")
+	}
+	if *got.StaleTimeout != timeout {
+		t.Errorf("StaleTimeout: expected %v, got %v", timeout, *got.StaleTimeout)
+	}
+	if got.BlockedReason == nil {
+		t.Fatal("BlockedReason is nil after round-trip")
+	}
+	if *got.BlockedReason != reason {
+		t.Errorf("BlockedReason: expected %q, got %q", reason, *got.BlockedReason)
+	}
+	if got.StaleFiredAt == nil {
+		t.Fatal("StaleFiredAt is nil after round-trip")
+	}
+	if !got.StaleFiredAt.Equal(firedAt) {
+		t.Errorf("StaleFiredAt: expected %v, got %v", firedAt, *got.StaleFiredAt)
+	}
+
+	// Verify UpdateTask persists field changes and nil-clears stale_fired_at.
+	newTimeout := 24 * time.Hour
+	newReason := "updated reason"
+	got.StaleTimeout = &newTimeout
+	got.BlockedReason = &newReason
+	got.StaleFiredAt = nil
+	got.UpdatedAt = time.Now().UTC()
+
+	if err := s.UpdateTask(ctx, got); err != nil {
+		t.Fatalf("UpdateTask failed: %v", err)
+	}
+
+	got2, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("GetTask after update failed: %v", err)
+	}
+	if got2.StaleTimeout == nil || *got2.StaleTimeout != newTimeout {
+		t.Errorf("updated StaleTimeout: expected %v, got %v", newTimeout, got2.StaleTimeout)
+	}
+	if got2.BlockedReason == nil || *got2.BlockedReason != newReason {
+		t.Errorf("updated BlockedReason: expected %q, got %v", newReason, got2.BlockedReason)
+	}
+	if got2.StaleFiredAt != nil {
+		t.Errorf("updated StaleFiredAt: expected nil, got %v", *got2.StaleFiredAt)
+	}
+}
+
 func TestUpdateTaskWithLog_GlobalTask(t *testing.T) {
 	resetProjectDetection()
 	tmpDir := t.TempDir()
@@ -257,71 +349,3 @@ func TestUpdateTask_GlobalTask(t *testing.T) {
 	}
 }
 
-// TestStaleFields_RoundTrip verifies that StaleTimeout, BlockedReason, and StaleFiredAt
-// round-trip correctly through CreateTask / GetTask.
-func TestStaleFields_RoundTrip(t *testing.T) {
-	resetProjectDetection()
-	tmpDir := t.TempDir()
-	oldCwd, _ := os.Getwd()
-	_ = os.Chdir(tmpDir)
-	defer func() { _ = os.Chdir(oldCwd) }()
-	defer resetProjectDetection()
-
-	dbPath := filepath.Join(tmpDir, "stale_fields.db")
-	s, err := NewSQLiteStorage(dbPath)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
-	defer s.Close()
-
-	ctx := context.Background()
-
-	timeout := 2 * time.Hour
-	reason := "waiting on T-0001"
-	firedAt := time.Now().UTC().Truncate(time.Second)
-
-	task := &core.Task{
-		ID:            "T-0099",
-		Title:         "stale test",
-		Status:        core.StatusInProgress,
-		Reference:     "task://T-0099",
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC().Add(-3 * time.Hour),
-		StaleTimeout:  &timeout,
-		BlockedReason: &reason,
-		StaleFiredAt:  &firedAt,
-	}
-
-	if err := s.CreateTask(ctx, task); err != nil {
-		t.Fatalf("CreateTask failed: %v", err)
-	}
-
-	got, err := s.GetTask(ctx, "T-0099")
-	if err != nil {
-		t.Fatalf("GetTask failed: %v", err)
-	}
-	if got == nil {
-		t.Fatal("task not found")
-	}
-
-	if got.StaleTimeout == nil {
-		t.Fatal("StaleTimeout is nil, expected non-nil")
-	}
-	if *got.StaleTimeout != timeout {
-		t.Fatalf("StaleTimeout mismatch: got %v, want %v", *got.StaleTimeout, timeout)
-	}
-
-	if got.BlockedReason == nil {
-		t.Fatal("BlockedReason is nil, expected non-nil")
-	}
-	if *got.BlockedReason != reason {
-		t.Fatalf("BlockedReason mismatch: got %q, want %q", *got.BlockedReason, reason)
-	}
-
-	if got.StaleFiredAt == nil {
-		t.Fatal("StaleFiredAt is nil, expected non-nil")
-	}
-	if !got.StaleFiredAt.Equal(firedAt) {
-		t.Fatalf("StaleFiredAt mismatch: got %v, want %v", *got.StaleFiredAt, firedAt)
-	}
-}
