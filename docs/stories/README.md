@@ -39,6 +39,9 @@ User stories organized by feature area, persona, and priority. Each story define
 - [063 - Hierarchical Config Discovery](063-hierarchical-config-discovery.md)
   (in progress) — Nested project config and task merging
 
+#### Error UX (065-069)
+- [065 - Actionable Error Messages](065-actionable-error-messages.md) — Agent-first errors with next steps
+
 #### Specialized Topics
 - [user-stories-taskflow-0.1.md](user-stories-taskflow-0.1.md) — Flow execution semantics and edge cases
 
@@ -60,6 +63,7 @@ User stories organized by feature area, persona, and priority. Each story define
 - [005 - Task Update](005-task-update.md) (update task status to DONE/FAILED)
 - [007 - Task Reopen](007-task-reopen.md) (reopen when blocked or regressed)
 - [011 - AI Agent Task State Transitions](011-ai-agent-task-state-transitions.md) (planned)
+- [065 - Actionable Error Messages](065-actionable-error-messages.md)
 - [020 - Flow Execution](020-flow-execution.md) (agent orchestrates flow steps)
 - [040 - MCP Integration & Tool Use](040-mcp-integration-tool-use.md) (planned)
 - [042 - CLI Command Integration](042-cli-command-integration.md) (planned)
@@ -112,6 +116,7 @@ User stories organized by feature area, persona, and priority. Each story define
 | [060](060-configuration-validation.md) | | [061](061-environment-setup-verification.md) (planned) |
 | [062](062-storage-location-validation.md) | | |
 | [063](063-hierarchical-config-discovery.md) | | |
+| [065](065-actionable-error-messages.md) | | |
 
 ## Story Format
 
