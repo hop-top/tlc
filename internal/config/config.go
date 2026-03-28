@@ -42,6 +42,7 @@ type Config struct {
 	Storage    StorageConfig     `yaml:"storage"`
 	UI         UIConfig          `yaml:"ui"`
 	Workspaces []WorkspaceConfig `yaml:"workspaces,omitempty"`
+	Validation ValidationConfig  `yaml:"validation,omitempty"`
 }
 
 // Validate validates the project configuration.
@@ -77,6 +78,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := c.ValidateWorkspaces(); err != nil {
+		return err
+	}
+	if err := c.Validation.Validate(); err != nil {
 		return err
 	}
 	return nil

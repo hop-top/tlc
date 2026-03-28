@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/uri"
 )
@@ -124,6 +125,25 @@ var TaskUpdateCmd = &cobra.Command{
 		}
 
 		if changed {
+			// Config-driven validation for update.
+			var assignedTo string
+			if task.AssignedTo != nil {
+				assignedTo = *task.AssignedTo
+			}
+			valCfg := getValidationConfig()
+			if err := valCfg.ValidateTaskOp(config.ValidationOpUpdate, config.TaskFields{
+				Title:       task.Title,
+				Description: task.Description,
+				Status:      string(task.Status),
+				AssignedTo:  assignedTo,
+				Effort:      string(task.Effort),
+				Priority:    string(task.Priority),
+				Tags:        task.Tags,
+				Reference:   task.Reference,
+			}); err != nil {
+				return err
+			}
+
 			task.UpdatedAt = now
 
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
@@ -183,6 +203,25 @@ var TaskDeleteCmd = &cobra.Command{
 			if !confirm {
 				return fmt.Errorf("delete aborted")
 			}
+		}
+
+		// Config-driven validation for delete.
+		var assignedTo string
+		if task.AssignedTo != nil {
+			assignedTo = *task.AssignedTo
+		}
+		valCfg := getValidationConfig()
+		if err := valCfg.ValidateTaskOp(config.ValidationOpDelete, config.TaskFields{
+			Title:       task.Title,
+			Description: task.Description,
+			Status:      string(task.Status),
+			AssignedTo:  assignedTo,
+			Effort:      string(task.Effort),
+			Priority:    string(task.Priority),
+			Tags:        task.Tags,
+			Reference:   task.Reference,
+		}); err != nil {
+			return err
 		}
 
 		if task.OriginSystem != nil && *task.OriginSystem != "" {

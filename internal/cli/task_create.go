@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -147,6 +148,22 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	if !core.ValidPriority(core.Priority(priority)) {
 		return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", priority)
 	}
+
+	// Config-driven validation for create.
+	valCfg := getValidationConfig()
+	if err := valCfg.ValidateTaskOp(config.ValidationOpCreate, config.TaskFields{
+		Title:       title,
+		Description: description,
+		Status:      status,
+		AssignedTo:  assignedTo,
+		Effort:      effort,
+		Priority:    priority,
+		Tags:        tags,
+		Reference:   reference,
+	}); err != nil {
+		return err
+	}
+
 	s, err := getStorage()
 	if err != nil {
 		return err
