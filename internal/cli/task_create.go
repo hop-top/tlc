@@ -203,7 +203,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	}
 
 	if task.Reference == "" {
-		task.Reference = fmt.Sprintf("task://%s", task.ID)
+		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
 
 	// Retry with a fresh sequence ID if the generated ID collides with an existing task
@@ -225,7 +225,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 			return fmt.Errorf("failed to create task: %w", err)
 		}
 		task.ID = fmt.Sprintf("T-%04d", seq)
-		task.Reference = fmt.Sprintf("task://%s", task.ID)
+		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
 
 	logEntry := &core.LogEntry{
@@ -241,6 +241,16 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 
 	_, _ = fmt.Fprintf(w, "Created task %s: %s\n", task.ID, task.Title)
 	return nil
+}
+
+// buildTaskReference constructs an absolute task URI.
+// Format: task://<projectID>/<taskID> when a project is detected;
+// falls back to task://<taskID> (relative) otherwise.
+func buildTaskReference(taskID string, proj *core.ProjectDetection) string {
+	if proj != nil && proj.ProjectID != "" {
+		return fmt.Sprintf("task://%s/%s", proj.ProjectID, taskID)
+	}
+	return fmt.Sprintf("task://%s", taskID)
 }
 
 func init() {
