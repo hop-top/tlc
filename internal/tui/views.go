@@ -117,10 +117,6 @@ func (m Model) View() string {
 		return "Loading form..."
 	}
 
-	if m.width == 0 || m.height == 0 {
-		return "Initializing..."
-	}
-
 	header := m.headerView()
 	footer := m.helpView()
 
