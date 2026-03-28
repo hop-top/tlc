@@ -307,6 +307,41 @@ When no custom statuses are configured, TLC uses 4 defaults:
 | `DONE` | completed | yes | `x` |
 | `SKIPPED` | — | yes | `-` |
 
+#### `task.stale` — Staleness Detection
+
+Controls how long a task can be idle before it is considered stale, and
+which shell hooks to fire when the threshold is crossed.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `default_timeout` | duration | `6h` | Project-wide stale threshold; applies to tasks without a per-task `stale_timeout` |
+| `hooks` | list | `[]` | Shell commands run when a task crosses the stale threshold |
+
+Each entry in `hooks` has a single `command` field — a shell command that
+supports Go `text/template` expansion with the following variables:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `{{.ID}}` | string | Task ID (e.g. `T-0042`) |
+| `{{.Title}}` | string | Task title |
+| `{{.AssignedTo}}` | string | Assignee profile name |
+| `{{.UpdatedAt}}` | time.Time | Last updated timestamp |
+| `{{.Timeout}}` | duration | Effective stale threshold |
+| `{{.StaleSince}}` | duration | How long the task has been stale |
+
+Hook failures are non-fatal; all hooks run regardless of individual errors.
+
+**Example**:
+
+```yaml
+task:
+  stale:
+    default_timeout: 8h
+    hooks:
+      - command: 'echo "Task {{.ID}} ({{.Title}}) is stale since {{.StaleSince}}"'
+      - command: 'tlc task update {{.ID}} --tag stale'
+```
+
 ---
 
 ### `git` — Git Integration
