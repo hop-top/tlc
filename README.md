@@ -217,7 +217,7 @@ Complete a task:
 Assign or unassign a task:
 ```bash
 ./bin/tlc task assign T-0042 codex
-./bin/tlc task unassign T-0042
+./bin/tlc task unassign T-0042 --note "reason"
 ```
 
 Create a new task:
