@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -205,8 +206,26 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		task.Reference = fmt.Sprintf("task://%s", task.ID)
 	}
 
-	if err := s.CreateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to create task: %w", err)
+	// Retry with a fresh sequence ID if the generated ID collides with an existing task
+	// (sequence can lag behind tasks created via import or explicit --id).
+	for {
+		err := s.CreateTask(ctx, task)
+		if err == nil {
+			break
+		}
+		if id != "" || !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
+		var projectID string
+		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+			projectID = proj.ProjectID
+		}
+		seq, seqErr := s.GetNextSequenceID(ctx, projectID)
+		if seqErr != nil {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
+		task.ID = fmt.Sprintf("T-%04d", seq)
+		task.Reference = fmt.Sprintf("task://%s", task.ID)
 	}
 
 	logEntry := &core.LogEntry{
