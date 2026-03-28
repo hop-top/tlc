@@ -288,6 +288,9 @@ func resetTaskFlags() {
 
 	tagFilterAllStatuses = false
 
+	// Reset alias flags.
+	aliasGlobal = false
+
 	// Reset logCmd vars (package-level state not covered by task flag resets).
 	logTaskID = ""
 	logAction = ""
@@ -307,6 +310,7 @@ func resetTaskFlags() {
 		SyncCmd, SyncPullCmd, SyncPushCmd, SyncConfigCmd, SyncStatusCmd,
 		TagCmd, TagListCmd,
 		logCmd,
+		aliasAddCmd, aliasRemoveCmd,
 	} {
 		if cmd != nil {
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {
