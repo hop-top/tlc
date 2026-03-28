@@ -91,12 +91,24 @@ func inferSpaceURI() string {
 	if err != nil {
 		return ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+	home := os.Getenv("HOME")
+	if home == "" {
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
 	}
 	wDir := filepath.Join(home, ".w")
-	rel, err := filepath.Rel(wDir, cwd)
+	compareWDir := wDir
+	compareCwd := cwd
+	if resolvedWDir, err := filepath.EvalSymlinks(compareWDir); err == nil {
+		compareWDir = resolvedWDir
+	}
+	if resolvedCwd, err := filepath.EvalSymlinks(compareCwd); err == nil {
+		compareCwd = resolvedCwd
+	}
+	rel, err := filepath.Rel(compareWDir, compareCwd)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return ""
 	}

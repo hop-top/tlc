@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -147,7 +148,7 @@ var TaskDeleteCmd = &cobra.Command{
 	Use:   "delete <task-id>",
 	Short: "Delete a task",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		s, err := getStorage()
 		if err != nil {
@@ -166,6 +167,10 @@ var TaskDeleteCmd = &cobra.Command{
 		}
 
 		if !taskDeleteYes {
+			if !deletePromptInteractive(cmd) {
+				return fmt.Errorf("task delete requires --yes in non-interactive mode")
+			}
+
 			var confirm bool
 			err := huh.NewConfirm().
 				Title(fmt.Sprintf("Delete task %s (%s)?", task.ID, task.Title)).
@@ -176,8 +181,7 @@ var TaskDeleteCmd = &cobra.Command{
 				return fmt.Errorf("failed to run confirm dialog: %w", err)
 			}
 			if !confirm {
-				fmt.Println("Aborted")
-				return nil
+				return fmt.Errorf("delete aborted")
 			}
 		}
 
@@ -211,4 +215,26 @@ func init() {
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
+}
+
+func deletePromptInteractive(cmd *cobra.Command) bool {
+	stdin, ok := cmd.InOrStdin().(*os.File)
+	if !ok {
+		return false
+	}
+	stdout, ok := cmd.OutOrStdout().(*os.File)
+	if !ok {
+		return false
+	}
+
+	stdinInfo, err := stdin.Stat()
+	if err != nil || (stdinInfo.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+	stdoutInfo, err := stdout.Stat()
+	if err != nil || (stdoutInfo.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+
+	return true
 }
