@@ -253,6 +253,29 @@ func formatStatus(status core.TaskStatus) string {
 	}
 }
 
+// resolveTaskReference returns the absolute reference URI for a task.
+// If the stored reference is relative (task://T-XXXX), it is expanded using the
+// task's project_id or the currently detected project.
+func resolveTaskReference(t *core.Task) string {
+	ref := t.Reference
+	if ref == "" {
+		ref = fmt.Sprintf("task://%s", t.ID)
+	}
+	// Already absolute: contains a path segment beyond the task ID.
+	if !strings.HasPrefix(ref, "task://T-") {
+		return ref
+	}
+	// Relative form: task://T-XXXX — expand with project ID.
+	taskID := strings.TrimPrefix(ref, "task://")
+	if t.ProjectID != nil && *t.ProjectID != "" {
+		return fmt.Sprintf("task://%s/%s", *t.ProjectID, taskID)
+	}
+	if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+		return fmt.Sprintf("task://%s/%s", proj.ProjectID, taskID)
+	}
+	return ref
+}
+
 func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Task: %s", t.ID)))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)
@@ -270,7 +293,7 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Priority:"), string(t.Priority))
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), t.Reference)
+	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), t.UpdatedAt.Format(time.RFC3339))
 
