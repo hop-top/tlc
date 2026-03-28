@@ -56,7 +56,12 @@ var RootCmd = &cobra.Command{
 }
 
 // Execute runs the root command and handles any errors.
+// Alias expansion is applied to os.Args before cobra parses them.
 func Execute() {
+	expanded, ok := ExpandAliases(os.Args)
+	if ok {
+		os.Args = expanded
+	}
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
