@@ -256,3 +256,72 @@ func TestUpdateTask_GlobalTask(t *testing.T) {
 		t.Errorf("expected global row status TODO (unaffected), got %s", global.Status)
 	}
 }
+
+// TestStaleFields_RoundTrip verifies that StaleTimeout, BlockedReason, and StaleFiredAt
+// round-trip correctly through CreateTask / GetTask.
+func TestStaleFields_RoundTrip(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldCwd) }()
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "stale_fields.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	timeout := 2 * time.Hour
+	reason := "waiting on T-0001"
+	firedAt := time.Now().UTC().Truncate(time.Second)
+
+	task := &core.Task{
+		ID:            "T-0099",
+		Title:         "stale test",
+		Status:        core.StatusInProgress,
+		Reference:     "task://T-0099",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC().Add(-3 * time.Hour),
+		StaleTimeout:  &timeout,
+		BlockedReason: &reason,
+		StaleFiredAt:  &firedAt,
+	}
+
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask failed: %v", err)
+	}
+
+	got, err := s.GetTask(ctx, "T-0099")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("task not found")
+	}
+
+	if got.StaleTimeout == nil {
+		t.Fatal("StaleTimeout is nil, expected non-nil")
+	}
+	if *got.StaleTimeout != timeout {
+		t.Fatalf("StaleTimeout mismatch: got %v, want %v", *got.StaleTimeout, timeout)
+	}
+
+	if got.BlockedReason == nil {
+		t.Fatal("BlockedReason is nil, expected non-nil")
+	}
+	if *got.BlockedReason != reason {
+		t.Fatalf("BlockedReason mismatch: got %q, want %q", *got.BlockedReason, reason)
+	}
+
+	if got.StaleFiredAt == nil {
+		t.Fatal("StaleFiredAt is nil, expected non-nil")
+	}
+	if !got.StaleFiredAt.Equal(firedAt) {
+		t.Fatalf("StaleFiredAt mismatch: got %v, want %v", *got.StaleFiredAt, firedAt)
+	}
+}

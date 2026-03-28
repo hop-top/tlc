@@ -605,7 +605,7 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 
 func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID string) (*core.Task, error) {
 	sqlQuery := `
-		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority
+		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at
 		FROM tasks
 		WHERE origin_system = ? AND json_extract(meta, '$.origin_id') = ?
 		LIMIT 1
@@ -615,8 +615,10 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 	var task core.Task
 	var createdAtStr, updatedAtStr string
 	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
+	var staleTimeoutNs sql.NullInt64
+	var blockedReasonStr, staleFiredAtStr sql.NullString
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr)
+	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -653,6 +655,17 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 	if priorityStr.Valid {
 		task.Priority = core.Priority(priorityStr.String)
 	}
+	if staleTimeoutNs.Valid {
+		d := time.Duration(staleTimeoutNs.Int64)
+		task.StaleTimeout = &d
+	}
+	if blockedReasonStr.Valid {
+		task.BlockedReason = &blockedReasonStr.String
+	}
+	if staleFiredAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		task.StaleFiredAt = &t
+	}
 
 	return &task, nil
 }
@@ -684,7 +697,7 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 	// A task needs push if it has an origin system AND (it has never been synced OR updated_at > last_sync_at)
 	// AND it is NOT archived.
 	sqlQuery := `
-		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority
+		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at
 		FROM tasks
 		WHERE origin_system IS NOT NULL AND origin_system != ''
 		AND (last_sync_at IS NULL OR updated_at > last_sync_at)
@@ -919,7 +932,9 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	var task core.Task
 	var createdAtStr, updatedAtStr string
 	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
-	if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr); err != nil {
+	var staleTimeoutNs sql.NullInt64
+	var blockedReasonStr, staleFiredAtStr sql.NullString
+	if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr); err != nil {
 		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
@@ -949,6 +964,17 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	}
 	if priorityStr.Valid {
 		task.Priority = core.Priority(priorityStr.String)
+	}
+	if staleTimeoutNs.Valid {
+		d := time.Duration(staleTimeoutNs.Int64)
+		task.StaleTimeout = &d
+	}
+	if blockedReasonStr.Valid {
+		task.BlockedReason = &blockedReasonStr.String
+	}
+	if staleFiredAtStr.Valid {
+		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		task.StaleFiredAt = &t
 	}
 	return &task, nil
 }
