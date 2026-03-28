@@ -128,6 +128,11 @@ pre-commit-install: ## Install pre-commit hooks
 verify: lint test ## Run linting and tests (CI-like checks)
 	@echo "$(COLOR_GREEN)✓ All verification checks passed$(COLOR_RESET)"
 
+validate-docs: ## Validate tlc command examples in docs/AGENTS.md (Refs: tlc/T-0067)
+	@echo "$(COLOR_BLUE)Validating doc command examples...$(COLOR_RESET)"
+	@./scripts/validate-doc-commands.sh
+	@echo "$(COLOR_GREEN)✓ Doc command validation passed$(COLOR_RESET)"
+
 docs-links: ## Check documentation internal links using lychee
 	@echo "$(COLOR_BLUE)Checking documentation links...$(COLOR_RESET)"
 	@if ! command -v lychee >/dev/null 2>&1; then \

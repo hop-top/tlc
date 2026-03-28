@@ -156,6 +156,40 @@ All error messages in this codebase must follow the **agent-first actionable** p
 - Transition error: `core.ErrInvalidTransition` (includes `Allowed []string` field)
 - CLI helpers: `internal/cli/errors.go` — `errNoteRequired`, `errDeleteRequiresYes`, …
 
+## Doc Command Validation
+
+CLI examples in docs (AGENTS.md, README.md, etc.) must stay in sync with
+the live `tlc` CLI registry. Stale examples mislead agents and break automation.
+
+### How it works
+
+`scripts/validate-doc-commands.sh` probes every documented subcommand and flag
+using `--help` mode. Exits non-zero if any check fails.
+
+Covers (46 checks as of 2026-03-28):
+- all top-level subcommands (`task`, `flow`, `auth`, `config`, …)
+- all `task` and `flow` subcommands
+- key flags: `--no-verify`, `--yes`, `--mine`, `--counters`, `--force`, etc.
+
+### Running locally
+
+```bash
+make validate-docs               # via Makefile target
+# or directly:
+./scripts/validate-doc-commands.sh
+```
+
+### Keeping examples in sync
+
+1. After adding/removing CLI commands or flags, run `make validate-docs`.
+2. If a check fails, update the doc example to match the current CLI surface.
+3. Do NOT edit the script to skip a failing check — fix the doc or the CLI.
+4. Add new checks to the script when new subcommands or flags are introduced.
+
+### CI integration
+
+Add to CI pipeline: `make validate-docs`
+
 ## Required Docs to Keep Updated
 
 - `README.md`
