@@ -64,8 +64,8 @@ type Task struct {
 	Priority     Priority               `json:"priority,omitempty" yaml:"priority,omitempty"`
 	CreatedAt    time.Time              `json:"created_at" yaml:"created_at"`
 	UpdatedAt    time.Time              `json:"updated_at" yaml:"updated_at"`
-	OriginSystem *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`
-	LastSyncAt   *time.Time             `json:"last_sync_at,omitempty" yaml:"last_sync_at,omitempty"`
+	OriginSystem  *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`
+	LastSyncAt    *time.Time             `json:"last_sync_at,omitempty" yaml:"last_sync_at,omitempty"`
 	Archived      bool                   `json:"archived" yaml:"archived"`
 	ProjectID     *string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
 	Meta          map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
