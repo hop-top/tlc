@@ -6,6 +6,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -90,15 +91,27 @@ var TaskListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
-		// Apply project default stale timeout to tasks with nil StaleTimeout.
-		if taskListStale {
-			var taskCfg config.TaskConfig
-			_ = viper.UnmarshalKey("task", &taskCfg)
-			_ = taskCfg.Validate()
+		// Load stale config once; apply project default timeout + auto-fire hooks.
+		var taskCfg config.TaskConfig
+		_ = viper.UnmarshalKey("task", &taskCfg)
+		_ = taskCfg.Validate()
+
+		// Apply project default stale timeout to all tasks with nil StaleTimeout.
+		for _, t := range tasks {
+			if t.StaleTimeout == nil && taskCfg.Stale.DefaultTimeout > 0 {
+				d := taskCfg.Stale.DefaultTimeout
+				t.StaleTimeout = &d
+			}
+		}
+
+		// Auto-fire stale hooks once per crossing (StaleFiredAt == nil guards re-fire).
+		if len(taskCfg.Stale.Hooks) > 0 {
+			now := time.Now().UTC()
 			for _, t := range tasks {
-				if t.StaleTimeout == nil && taskCfg.Stale.DefaultTimeout > 0 {
-					d := taskCfg.Stale.DefaultTimeout
-					t.StaleTimeout = &d
+				if t.IsStale() && t.StaleFiredAt == nil {
+					_ = core.RunStaleHooks(t, taskCfg.Stale.Hooks)
+					t.StaleFiredAt = &now
+					_ = s.UpdateTask(ctx, t)
 				}
 			}
 		}

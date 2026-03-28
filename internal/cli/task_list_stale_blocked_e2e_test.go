@@ -5,9 +5,12 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 )
 
@@ -105,5 +108,106 @@ func TestTaskList_BlockedFilter_E2E(t *testing.T) {
 	}
 	if contains(out, "E2E unblocked task") {
 		t.Errorf("did not expect 'E2E unblocked task' in --blocked output; got:\n%s", out)
+	}
+}
+
+// TestTaskList_AutoFireHook_E2E verifies that `tlc task list` auto-fires stale
+// hooks (once per crossing) when hooks are configured. The hook writes the task
+// ID to a tmpfile; the test asserts the file is written and StaleFiredAt is set.
+func TestTaskList_AutoFireHook_E2E(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	// Write hook output to a temp file so we can assert it fired.
+	hookOut := filepath.Join(t.TempDir(), "hook-fired.txt")
+
+	// Configure stale hook via viper so task_list.go picks it up.
+	// Use 5m timeout; task is 3h old → clearly stale.
+	viper.Set("task.stale.hooks", []map[string]any{
+		{"command": "echo {{.ID}} > " + hookOut},
+	})
+
+	shortTimeout := 5 * time.Minute
+	staleTask := &core.Task{
+		ID:           "T-0010",
+		Title:        "E2E auto-fire hook task",
+		Status:       core.StatusInProgress,
+		UpdatedAt:    time.Now().Add(-3 * time.Hour), // stale: 3h > 5m
+		StaleTimeout: &shortTimeout,                  // per-task timeout; avoids config default
+	}
+	if err := s.CreateTask(ctx, staleTask); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "IN_PROGRESS"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list: %v", err)
+	}
+
+	// Assert hook fired: output file must exist and contain the task ID.
+	data, err := os.ReadFile(hookOut)
+	if err != nil {
+		t.Fatalf("hook output file not written: %v", err)
+	}
+	if !contains(string(data), "T-0010") {
+		t.Errorf("expected hook output to contain T-0010; got: %q", string(data))
+	}
+
+	// Assert StaleFiredAt is persisted on the task.
+	got, err := s.GetTask(ctx, "T-0010")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.StaleFiredAt == nil {
+		t.Error("expected StaleFiredAt to be set after auto-fire")
+	}
+}
+
+// TestTaskUpdate_ClearsStaleFiredAt_E2E verifies that any `tlc task update`
+// clears StaleFiredAt, resetting the stale crossing state.
+func TestTaskUpdate_ClearsStaleFiredAt_E2E(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	// Seed a task with StaleFiredAt already set.
+	firedAt := time.Now().UTC().Add(-1 * time.Hour)
+	task := &core.Task{
+		ID:           "T-0020",
+		Title:        "E2E stale-fired task",
+		Status:       core.StatusInProgress,
+		UpdatedAt:    time.Now().Add(-3 * time.Hour),
+		StaleFiredAt: &firedAt,
+	}
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	// Run `tlc task update` with a title change — any change should clear StaleFiredAt.
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0020", "--title", "E2E stale-fired task updated"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update: %v", err)
+	}
+
+	// Assert StaleFiredAt is now nil.
+	got, err := s.GetTask(ctx, "T-0020")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.StaleFiredAt != nil {
+		t.Errorf("expected StaleFiredAt to be nil after update; got %v", got.StaleFiredAt)
 	}
 }

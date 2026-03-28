@@ -80,7 +80,11 @@ No daemon required.
 #### Hook Fire Semantics
 
 - Fired once per stale crossing; tracked via `stale_fired_at`
-- Cleared on any task update (stale clock resets; `stale_fired_at` set to nil)
+- **Auto-fired on `tlc task list`**: after filtering, before rendering, any task with
+  `IsStale() == true` and `StaleFiredAt == nil` triggers `RunStaleHooks` and records
+  `StaleFiredAt`; subsequent `task list` calls are no-ops until the crossing resets
+- Crossing resets naturally: any task update advances `UpdatedAt` and sets
+  `StaleFiredAt = nil`; staleness is re-evaluated on the next `task list` run
 - `tlc task stale --run-hooks` forces re-fire regardless of `stale_fired_at`
 - Hook failures are non-fatal; remaining hooks run regardless
 
@@ -940,5 +944,7 @@ task:
 ### Hook Firing Lifecycle
 
 - `stale_fired_at` records when hooks last fired for a task.
-- Cleared when task is updated (staleness clock resets with `updated_at`).
-- `tlc task stale --run-hooks` re-fires hooks for all currently-stale tasks.
+- Auto-fired during `tlc task list` — once per stale crossing (guarded by `StaleFiredAt == nil`).
+- Cleared on any `tlc task update` — `StaleFiredAt` set to nil; stale clock resets with `updated_at`.
+- `tlc task stale --run-hooks` re-fires hooks for all currently-stale tasks regardless of
+  `stale_fired_at`.
