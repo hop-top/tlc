@@ -7,13 +7,21 @@ import (
 )
 
 type ErrInvalidTransition struct {
-	From TaskStatus
-	To   TaskStatus
-	Msg  string
+	From    TaskStatus
+	To      TaskStatus
+	Msg     string
+	Allowed []string // valid target statuses from From (nil = unknown/no rules)
 }
 
 func (e ErrInvalidTransition) Error() string {
-	return fmt.Sprintf("invalid transition from %s to %s: %s", e.From, e.To, e.Msg)
+	base := fmt.Sprintf("cannot transition task from %s to %s: %s", e.From, e.To, e.Msg)
+	if len(e.Allowed) > 0 {
+		return fmt.Sprintf(
+			"%s; valid transitions from %s: %v; use --force to bypass",
+			base, e.From, e.Allowed,
+		)
+	}
+	return base + "; use --force to bypass the state machine"
 }
 
 // ValidateTransition checks if a status transition is allowed using the

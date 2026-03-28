@@ -159,7 +159,7 @@ var TaskUpdateCmd = &cobra.Command{
 
 			return syncTODOAll()
 		}
-		fmt.Println("No changes specified")
+		fmt.Println("No changes specified; use --title, --description, --status, --assigned-to, or other flags to update")
 		return nil
 	},
 }
@@ -188,7 +188,7 @@ var TaskDeleteCmd = &cobra.Command{
 
 		if !taskDeleteYes {
 			if !deletePromptInteractive(cmd) {
-				return fmt.Errorf("task delete requires --yes in non-interactive mode")
+				return errDeleteRequiresYes(id)
 			}
 
 			var confirm bool
@@ -201,7 +201,7 @@ var TaskDeleteCmd = &cobra.Command{
 				return fmt.Errorf("failed to run confirm dialog: %w", err)
 			}
 			if !confirm {
-				return fmt.Errorf("delete aborted")
+				return fmt.Errorf("delete aborted; task %s was not deleted", task.ID)
 			}
 		}
 

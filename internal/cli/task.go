@@ -244,7 +244,10 @@ func validateBlockedByRefs(ctx context.Context, registryStorage, localStorage *s
 
 		resolved, err := uri.NewResolver(resolverStorage).ResolveTask(ctx, normalizedRef)
 		if err != nil {
-			return nil, fmt.Errorf("invalid blocked_by reference %q: %w", ref, err)
+			return nil, fmt.Errorf(
+				"invalid blocked_by reference %q: %w; run 'tlc task list' to see available task IDs",
+				ref, err,
+			)
 		}
 
 		validated = append(validated, canonicalBlockedByRef(localStorage, normalizedRef, resolved))

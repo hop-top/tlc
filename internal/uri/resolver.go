@@ -44,7 +44,7 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 			return nil, err
 		}
 		if task == nil {
-			return nil, fmt.Errorf("task not found: %s", u.ID)
+			return nil, &ErrTaskNotFound{ID: u.ID}
 		}
 		return &ResolvedTask{Task: task, Storage: r.storage}, nil
 	}
@@ -70,7 +70,7 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 			return nil, err
 		}
 		if task == nil {
-			return nil, fmt.Errorf("task not found: %s", taskID)
+			return nil, &ErrTaskNotFound{ID: taskID}
 		}
 		return &ResolvedTask{Task: task, Storage: r.storage}, nil
 	}
@@ -81,7 +81,7 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 		return nil, fmt.Errorf("failed to lookup project %q: %w", projectID, err)
 	}
 	if regProj == nil {
-		return nil, fmt.Errorf("project %q not found in registry", projectID)
+		return nil, &ErrProjectNotFound{ProjectID: projectID}
 	}
 
 	// Open project database
@@ -97,7 +97,7 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 	}
 	if task == nil {
 		_ = projStorage.Close()
-		return nil, fmt.Errorf("task %q not found in project %q", taskID, projectID)
+		return nil, &ErrTaskNotFound{ID: taskID, ProjectID: projectID}
 	}
 
 	return &ResolvedTask{Task: task, Storage: projStorage}, nil

@@ -124,6 +124,38 @@ Read `.xray` files when present in directories for cached context.
 4. Deterministic tests; explicit exit-code assertions for CLI.
 5. No sleep-based automation in tests or runtime.
 
+## Error Philosophy
+
+All error messages in this codebase must follow the **agent-first actionable** pattern:
+
+- **Name the subject**: include the task ID, project ID, or resource that caused the error.
+- **State what went wrong**: one clause, no jargon.
+- **Provide next step**: tell the agent exactly what command to run or flag to add.
+- **Degrade gracefully**: if a Hop product (wsm, aps, …) is absent, omit its hint — never fail
+  because a sibling tool isn't installed.
+
+### Pattern
+
+```
+<what failed>: <why>; <next step with exact command>
+```
+
+### Examples
+
+| Bad | Good |
+|-----|------|
+| `task not found` | `task T-0042 not found; run 'tlc task list' to see available tasks` |
+| `project not found in registry` | `project "hop-top/tlc" not found; run 'tlc init' in the project root` |
+| `invalid transition` | `cannot transition from TODO to DONE: … valid: [IN_PROGRESS SKIPPED]; use --force to bypass` |
+| `--note is required` | `--note is required; re-run with: tlc task reopen T-0042 --note "<reason>"` |
+| `task delete requires --yes` | `task delete requires confirmation; re-run with: tlc task delete T-0042 --yes` |
+
+### Implementation anchors
+
+- Sentinel error types: `uri.ErrTaskNotFound`, `uri.ErrProjectNotFound`
+- Transition error: `core.ErrInvalidTransition` (includes `Allowed []string` field)
+- CLI helpers: `internal/cli/errors.go` — `errNoteRequired`, `errDeleteRequiresYes`, …
+
 ## Required Docs to Keep Updated
 
 - `README.md`
