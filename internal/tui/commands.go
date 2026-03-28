@@ -8,6 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/log"
+	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -64,6 +67,23 @@ func (m Model) fetchFlowRuns() tea.Msg {
 
 func (m Model) syncPull() tea.Msg {
 	// Not implemented yet - needs plugin integration
+	return nil
+}
+
+// persistTagColors writes the in-memory tagColors map to the viper config file.
+// Called asynchronously (as a tea.Cmd) so disk I/O never blocks the render loop.
+func (m Model) persistTagColors() tea.Msg {
+	if len(m.tagColors) == 0 {
+		return nil
+	}
+	viper.Set("ui.tag_colors", m.tagColors)
+	if _, err := config.PrepareViperForWrite(viper.GetViper()); err != nil {
+		log.Warn("failed to prepare config for tag colors", "error", err)
+		return nil
+	}
+	if err := viper.WriteConfig(); err != nil {
+		log.Warn("failed to persist tag colors", "error", err)
+	}
 	return nil
 }
 

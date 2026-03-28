@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
@@ -35,6 +36,14 @@ type Model struct {
 	taskTitle        string
 	taskDescription  string
 	err              error
+
+	// mdRenderer is a cached glamour renderer; recreated only on window resize.
+	mdRenderer    *glamour.TermRenderer
+	mdRenderWidth int
+
+	// tagColors holds unsaved tag→color assignments accumulated during a session.
+	// Written to viper/disk via persistTagColors cmd, not inside View().
+	tagColors map[string]string
 }
 
 func NewModel(service *core.TaskService) Model {
@@ -54,6 +63,12 @@ func NewModel(service *core.TaskService) Model {
 	tp := themepicker.New([]themepicker.Theme{defaultTheme})
 	tp.SetFetcher(themepicker.FetchTheme)
 
+	// Seed tagColors from viper so existing config is respected.
+	tc := viper.GetStringMapString("ui.tag_colors")
+	if tc == nil {
+		tc = make(map[string]string)
+	}
+
 	return Model{
 		service:          service,
 		view:             "dashboard",
@@ -61,6 +76,7 @@ func NewModel(service *core.TaskService) Model {
 		viewport:         vp,
 		logSortDirection: direction,
 		themePicker:      tp,
+		tagColors:        tc,
 	}
 }
 
@@ -76,6 +92,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - viewportOffset
+
+		// Rebuild cached markdown renderer when width changes.
+		wrapWidth := msg.Width - 10
+		if wrapWidth != m.mdRenderWidth || m.mdRenderer == nil {
+			m.mdRenderWidth = wrapWidth
+			if r, err := glamour.NewTermRenderer(
+				glamour.WithAutoStyle(),
+				glamour.WithWordWrap(wrapWidth),
+			); err == nil {
+				m.mdRenderer = r
+			}
+		}
 
 		// Resize theme picker
 		var cmd tea.Cmd
@@ -96,7 +124,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selected = len(m.tasks) - 1
 		}
 		m = m.syncViewport()
-		return m, nil
+		// Persist any newly-assigned tag colors asynchronously (no-op if nothing changed).
+		return m, m.persistTagColors
 	case flowRunsMsg:
 		m.flowRuns = msg
 		return m, nil

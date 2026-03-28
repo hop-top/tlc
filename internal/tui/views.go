@@ -6,8 +6,6 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
-	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 )
@@ -29,15 +27,30 @@ const (
 	sortAsc         = "asc"
 )
 
-func renderMarkdown(content string, wrapWidth int) string {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(wrapWidth),
-	)
-	if err != nil {
-		return content
+// renderMarkdown renders content with the model's cached glamour renderer.
+// If the renderer is nil (not yet built or invalidated), it falls back to
+// building one on the fly — but that path is only hit before the first
+// WindowSizeMsg arrives.
+func (m Model) renderMarkdown(content string) string {
+	r := m.mdRenderer
+	if r == nil {
+		w := m.mdRenderWidth
+		if w <= 0 {
+			w = 80
+		}
+		var err error
+		r, err = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(w),
+		)
+		if err != nil {
+			return content
+		}
+		// Note: cannot persist r back into value-receiver model here;
+		// renderer is rebuilt on first render after startup or resize.
+		// After the first WindowSizeMsg, m.mdRenderer is populated by Update().
 	}
-	out, err := renderer.Render(content)
+	out, err := r.Render(content)
 	if err != nil {
 		return content
 	}
@@ -73,30 +86,20 @@ func formatAssignee(assignee *string) string {
 	return "@" + *assignee
 }
 
+// getTagStyle returns the lipgloss style for a tag, using the model's in-memory
+// tagColors map. No disk I/O here — tagColors is populated in NewModel from viper
+// and new assignments are written back to viper lazily (not on every render).
+// Maps are reference types in Go, so mutations here propagate to the caller's copy.
 func (m Model) getTagStyle(tag string) lipgloss.Style {
-	colors := viper.GetStringMapString("ui.tag_colors")
-	if colors == nil {
-		colors = make(map[string]string)
-	}
-
-	color, ok := colors[tag]
+	color, ok := m.tagColors[tag]
 	if !ok {
-		// Use hash for stable but random-looking color assignment
+		// Stable hash → palette index.
 		h := 0
 		for _, c := range tag {
 			h += int(c)
 		}
 		color = styles.Current.TagColors[h%len(styles.Current.TagColors)]
-
-		// Save to config for future consistency
-		colors[tag] = color
-		viper.Set("ui.tag_colors", colors)
-		if _, err := config.PrepareViperForWrite(viper.GetViper()); err != nil {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-		}
-		if err := viper.WriteConfig(); err != nil {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-		}
+		m.tagColors[tag] = color // map mutation propagates; no copy-on-write issue
 	}
 
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
@@ -301,7 +304,7 @@ func (m Model) detailView() string {
 
 	if task.Description != "" {
 		s.WriteString("Description:\n")
-		s.WriteString(styles.Current.Box.Render(renderMarkdown(task.Description, m.width-10)))
+		s.WriteString(styles.Current.Box.Render(m.renderMarkdown(task.Description)))
 		s.WriteString("\n")
 	}
 
