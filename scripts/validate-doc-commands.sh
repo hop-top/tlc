@@ -100,6 +100,10 @@ check_flag "task update --add-tag"           $TLC task update --add-tag
 check_flag "task update --remove-tag"        $TLC task update --remove-tag
 check_flag "task update --add-blocked-by"    $TLC task update --add-blocked-by
 check_flag "task update --remove-blocked-by" $TLC task update --remove-blocked-by
+check_flag "task update --blocked"           $TLC task update --blocked
+check      "task update --unblock"           $TLC task update --unblock
+check_flag "task update --timeout"           $TLC task update --timeout
+check_flag "task create --timeout"           $TLC task create --timeout
 
 echo
 echo "-- help llm formats --"

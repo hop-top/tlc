@@ -64,6 +64,7 @@ User stories organized by feature area, persona, and priority. Each story define
 - [007 - Task Reopen](007-task-reopen.md) (reopen when blocked or regressed)
 - [011 - AI Agent Task State Transitions](011-ai-agent-task-state-transitions.md) (planned)
 - [065 - Actionable Error Messages](065-actionable-error-messages.md)
+- [066 - Stale Timeout and Blocked Reason Flags](066-stale-blocked-flags.md)
 - [020 - Flow Execution](020-flow-execution.md) (agent orchestrates flow steps)
 - [040 - MCP Integration & Tool Use](040-mcp-integration-tool-use.md) (planned)
 - [042 - CLI Command Integration](042-cli-command-integration.md) (planned)

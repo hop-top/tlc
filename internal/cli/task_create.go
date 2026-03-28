@@ -34,7 +34,16 @@ var TaskCreateCmd = &cobra.Command{
 			meta["blocked_by"] = blockedBy
 		}
 
-		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta)
+		var staleTimeout *time.Duration
+		if taskCreateTimeout != "" {
+			d, err := time.ParseDuration(taskCreateTimeout)
+			if err != nil {
+				return fmt.Errorf("invalid --timeout %q: %w", taskCreateTimeout, err)
+			}
+			staleTimeout = &d
+		}
+
+		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout)
 		if err != nil {
 			return err
 		}
@@ -133,14 +142,14 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta)
+	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta, nil)
 	if err != nil {
 		return err
 	}
 	return syncToTODO()
 }
 
-func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}) error {
+func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration) error {
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 	if !core.ValidEffort(core.Effort(effort)) {
 		return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", effort)
@@ -200,18 +209,19 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	}
 
 	task := &core.Task{
-		ID:          finalID,
-		Title:       title,
-		Description: description,
-		Status:      core.TaskStatus(status),
-		AssignedTo:  assigneePtr,
-		Effort:      core.Effort(effort),
-		Priority:    core.Priority(priority),
-		Tags:        tags,
-		Reference:   reference,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		Meta:        meta,
+		ID:           finalID,
+		Title:        title,
+		Description:  description,
+		Status:       core.TaskStatus(status),
+		AssignedTo:   assigneePtr,
+		Effort:       core.Effort(effort),
+		Priority:     core.Priority(priority),
+		Tags:         tags,
+		Reference:    reference,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Meta:         meta,
+		StaleTimeout: staleTimeout,
 	}
 
 	// Auto-assign project_id if in a project context.
@@ -281,4 +291,5 @@ func init() {
 	TaskCreateCmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
 	TaskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
 	TaskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
+	TaskCreateCmd.Flags().StringVar(&taskCreateTimeout, "timeout", "", "Stale timeout (e.g. 2h)")
 }
