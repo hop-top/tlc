@@ -80,17 +80,28 @@ Flow steps can include task templates for automatic task generation:
 
 ### 3. Step Gate (optional EVA validation)
 
-Attaches an EVA contract validation gate to a task step. When present, the step only succeeds
-if EVA approves the step output. Downstream steps are blocked on failure per existing
-dependency rules.
+Optional per-step contract validation via the EVA HTTP gateway. When `gate` is set,
+a step only succeeds if EVA approves its output; downstream steps are blocked on failure.
+EVA integration is opt-in — flows without `gate` are unaffected.
 
-Fields:
+**Fields:**
+
 - `contract` — name of the EVA contract to invoke
 - `eva_url` — base URL of the EVA gateway (e.g. `http://localhost:8080`)
 
-Auth: set `EVA_KEY` env var; sent as `X-Eva-Key` header.
+**Auth:** set `EVA_KEY` env var; sent as `X-Eva-Key` header.
 
-Example:
+**API contract:**
+
+- Endpoint: `POST {eva_url}/v1/contract/invoke`
+- Request body: `{"contract": "<name>", "body": <step_output>}`
+- Pass: HTTP 200, `{"eva_status": "pass", "attempts": N}`
+- Violation: HTTP 422, `{"eva_status": "contract_violation", "violations": [...]}`
+
+**Downstream blocking:** if gate rejects, step is marked `failed`; all steps that
+`depends_on` it remain blocked and do not execute.
+
+**Example:**
 
 ```yaml
 steps:
@@ -108,6 +119,17 @@ steps:
     title: Implement
     depends_on: [plan]   # blocked until plan passes EVA gate
 ```
+
+**`RunEvaGate` function signature (Go):**
+
+```
+RunEvaGate(ctx, gate *StepGate, stepOutput map[string]any, apiKey string) error
+```
+
+- `gate == nil` → no-op, returns nil
+- pass → nil error
+- violation → actionable error with evaluator details + retry hint
+- non-200 non-violation → wrapped error with HTTP status + gateway URL
 
 ### 4. Assignee Capabilities
 
@@ -150,53 +172,6 @@ delegation:
     - "deployment"
 ```
 
-### 6. EVA Step Gate
-
-Optional per-step contract validation via the EVA HTTP gateway. When `gate` is set,
-a step only succeeds if EVA approves its output; downstream steps are blocked on failure.
-EVA integration is opt-in — flows without `gate` are unaffected.
-
-**Fields:**
-
-- `contract` — name of the EVA contract to invoke
-- `eva_url` — base URL of the EVA gateway (e.g. `http://eva.internal`)
-
-**Auth:** set `EVA_KEY` env var; sent as `X-Eva-Key` header.
-
-**API contract:**
-
-- Endpoint: `POST {eva_url}/v1/contract/invoke`
-- Request body: `{"contract": "<name>", "body": <step_output>}`
-- Pass: HTTP 200, `{"eva_status": "pass", "attempts": N}`
-- Violation: HTTP 422, `{"eva_status": "contract_violation", "violations": [...]}`
-
-**Example:**
-
-```yaml
-steps:
-  plan:
-    type: task
-    title: Write plan
-    gate:
-      contract: plan-quality
-      eva_url: http://eva.internal
-
-  implement:
-    type: task
-    title: Implement
-    depends_on: [plan]   # blocked until plan passes EVA gate
-```
-
-**Usage — `RunEvaGate`:**
-
-```
-RunEvaGate(ctx, gate *StepGate, stepOutput map[string]any, apiKey string) error
-```
-
-- `gate == nil` → no-op, returns nil
-- pass → nil error
-- violation → actionable error with evaluator details + retry hint
-- non-200 non-violation → wrapped error with HTTP status + gateway URL
 
 ## CLI Commands
 
