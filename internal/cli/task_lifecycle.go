@@ -173,7 +173,7 @@ var TaskUnassignCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if taskUnassignNote == "" {
-			return fmt.Errorf("--note is required when unassigning a task")
+			return errNoteRequired(fmt.Sprintf("tlc task unassign %s", args[0]))
 		}
 
 		id := args[0]
@@ -284,7 +284,7 @@ var TaskReopenCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if taskReopenNote == "" {
-			return fmt.Errorf("--note is required when reopening a task")
+			return errNoteRequired(fmt.Sprintf("tlc task reopen %s", args[0]))
 		}
 
 		id := args[0]
@@ -306,7 +306,12 @@ var TaskReopenCmd = &cobra.Command{
 
 		wm := core.DefaultWorkflow()
 		if !wm.IsTerminal(task.Status) {
-			return fmt.Errorf("task %s is not in a terminal state (status: %s)", task.ID, task.Status)
+			return fmt.Errorf(
+				"task %s cannot be reopened: current status %s is not terminal "+
+					"(terminal statuses: DONE, SKIPPED); use 'tlc task update %s --status <status> --force' "+
+					"to force a status change instead",
+				task.ID, task.Status, task.ID,
+			)
 		}
 
 		initialStatus, wmErr := wm.StatusForRole("initial")

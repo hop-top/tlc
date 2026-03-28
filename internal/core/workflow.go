@@ -119,7 +119,11 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 		if force {
 			return nil
 		}
-		return ErrInvalidTransition{From: current, To: next, Msg: "terminal states are immutable"}
+		return ErrInvalidTransition{
+			From: current,
+			To:   next,
+			Msg:  "terminal states are immutable; run 'tlc task reopen <id> --note \"<reason>\"' first",
+		}
 	}
 
 	if force {
@@ -129,7 +133,11 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 	// Check rules
 	allowed, hasRule := wm.rules[currentStr]
 	if !hasRule {
-		return ErrInvalidTransition{From: current, To: next, Msg: "no transition rules defined for current status"}
+		return ErrInvalidTransition{
+			From: current,
+			To:   next,
+			Msg:  "no transition rules defined for current status",
+		}
 	}
 
 	for _, a := range allowed {
@@ -138,7 +146,12 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 		}
 	}
 
-	return ErrInvalidTransition{From: current, To: next, Msg: "transition not allowed by state machine"}
+	return ErrInvalidTransition{
+		From:    current,
+		To:      next,
+		Msg:     "transition not allowed by state machine",
+		Allowed: allowed,
+	}
 }
 
 // GetStatusDef returns the StatusDefinition for a given status.
