@@ -75,6 +75,9 @@ var (
 	taskListSpace     string
 	taskListProfile   string
 	taskListSquad     string
+
+	taskListStale   bool
+	taskListBlocked bool
 )
 
 // appendNote appends a note to the task's description, separated by a newline.

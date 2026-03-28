@@ -95,6 +95,8 @@ check "task list --summary"        $TLC task list --summary
 check "task list --counters"       $TLC task list --counters
 check_flag "task list --workspace"      $TLC task list --workspace
 check_flag "task list --space"          $TLC task list --space
+check      "task list --stale"          $TLC task list --stale
+check      "task list --blocked"        $TLC task list --blocked
 check      "task update --force"        $TLC task update --force
 check_flag "task update --add-tag"           $TLC task update --add-tag
 check_flag "task update --remove-tag"        $TLC task update --remove-tag

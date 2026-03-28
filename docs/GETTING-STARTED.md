@@ -200,7 +200,42 @@ tlc tui
 
 ---
 
-### Stage 10: Workspace Queries (10 minutes)
+### Stage 10: Stale & Blocked Detection (5 minutes)
+**Goal**: Surface idle and blocked tasks quickly
+
+**Concepts**: Staleness threshold, blocked reason, post-query filters
+
+Per-task stale timeout (optional) — tasks with no update past the threshold are stale.
+Mark tasks blocked with a human reason string.
+
+```bash
+# Flag a task as blocked
+tlc task update T-0001 --blocked "waiting on design approval"
+
+# Set a custom stale timeout (overrides project default)
+tlc task update T-0001 --timeout 4h
+
+# Show only stale tasks
+tlc task list --stale
+
+# Show only blocked tasks
+tlc task list --blocked
+
+# Combine with other filters
+tlc task list --stale --status IN_PROGRESS
+tlc task list --blocked --assigned-to me
+
+# Clear blocked reason
+tlc task update T-0001 --unblock
+```
+
+The table output includes `Stale` and `Blocked` columns for at-a-glance visibility.
+
+**When to move on**: You can surface stale or blocked work in one command.
+
+---
+
+### Stage 11: Workspace Queries (10 minutes)
 **Goal**: Query tasks across multiple projects
 
 **Concepts**: Workspaces, spaces, cross-project queries

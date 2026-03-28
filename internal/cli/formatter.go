@@ -137,12 +137,31 @@ func formatTLS(t *core.Task) string {
 	return strings.Join(parts, " ")
 }
 
+// formatDuration returns a short human-readable duration using the largest unit only.
+// e.g. 2d, 3h, 45m
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	days := int(d.Hours()) / 24
+	if days > 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+	hours := int(d.Hours())
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dm", int(d.Minutes()))
+}
+
 func renderTable(w io.Writer, tasks []*core.Task) {
 	columns := []table.Column{
 		{Title: "ID", Width: 10},
 		{Title: "Title", Width: 40},
 		{Title: "Status", Width: 15},
 		{Title: "Assigned", Width: 15},
+		{Title: "Stale", Width: 8},
+		{Title: "Blocked", Width: 20},
 	}
 
 	rows := make([]table.Row, 0, len(tasks))
@@ -152,11 +171,26 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			assignee = *t.AssignedTo
 		}
 
+		staleCol := "-"
+		if t.IsStale() {
+			if s := t.StaleSince(); s != nil {
+				staleCol = lipgloss.NewStyle().Foreground(warningColor).
+					Render("! " + formatDuration(*s))
+			}
+		}
+
+		blockedCol := "-"
+		if t.IsBlocked() {
+			blockedCol = *t.BlockedReason
+		}
+
 		rows = append(rows, table.Row{
 			t.ID,
 			t.Title,
 			formatStatus(t.Status),
 			assignee,
+			staleCol,
+			blockedCol,
 		})
 	}
 	tbl := table.New(

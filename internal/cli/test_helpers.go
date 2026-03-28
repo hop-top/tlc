@@ -263,6 +263,8 @@ func resetTaskFlags() {
 	taskListSpace = ""
 	taskListProfile = ""
 	taskListSquad = ""
+	taskListStale = false
+	taskListBlocked = false
 
 	taskShowLogs = false
 	taskShowLogSortDirection = ""

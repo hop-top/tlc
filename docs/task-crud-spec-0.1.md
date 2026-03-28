@@ -157,6 +157,9 @@ Rules:
   - tags
   - assigned_to
   - substring search on title
+  - `--stale` — post-query: keep only tasks where `IsStale()` is true
+    (applies project `stale.default_timeout` to tasks with no per-task timeout)
+  - `--blocked` — post-query: keep only tasks where `BlockedReason` is non-empty
 
 #### Query Operators
 

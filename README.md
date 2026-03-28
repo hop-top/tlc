@@ -165,6 +165,8 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Create: `tlc task create "Task title" --assigned-to @me --tag feature`
 - Create blocked task: `tlc task create "Task title" --blocked-by T-0041 --blocked-by other-project/T-0007`
 - List: `tlc task list --mine` (shows IN_PROGRESS first, then TODO by default)
+- List stale: `tlc task list --stale` (only tasks past their stale threshold)
+- List blocked: `tlc task list --blocked` (only tasks with a blocked reason)
 - Update: `tlc task update T-0042 --status IN_PROGRESS`
 - Update blockers: `tlc task update T-0042 --add-blocked-by T-0009 --remove-blocked-by T-0003`
 - Mark blocked: `tlc task update T-0042 --blocked "waiting on T-0009"`

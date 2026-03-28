@@ -90,6 +90,34 @@ var TaskListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
+		// Apply project default stale timeout to tasks with nil StaleTimeout.
+		if taskListStale {
+			var taskCfg config.TaskConfig
+			_ = viper.UnmarshalKey("task", &taskCfg)
+			_ = taskCfg.Validate()
+			for _, t := range tasks {
+				if t.StaleTimeout == nil && taskCfg.Stale.DefaultTimeout > 0 {
+					d := taskCfg.Stale.DefaultTimeout
+					t.StaleTimeout = &d
+				}
+			}
+		}
+
+		// Post-query filter for --stale and --blocked.
+		if taskListStale || taskListBlocked {
+			filtered := tasks[:0]
+			for _, t := range tasks {
+				if taskListStale && !t.IsStale() {
+					continue
+				}
+				if taskListBlocked && !t.IsBlocked() {
+					continue
+				}
+				filtered = append(filtered, t)
+			}
+			tasks = filtered
+		}
+
 		if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
 			sort.SliceStable(tasks, func(i, j int) bool {
 				iIP := tasks[i].Status == "IN_PROGRESS"
@@ -242,4 +270,6 @@ func init() {
 	TaskListCmd.Flags().StringVar(&taskListSpace, "space", "", "Filter to specific space within workspace")
 	TaskListCmd.Flags().StringVar(&taskListProfile, "profile", "", "Filter by aps profile")
 	TaskListCmd.Flags().StringVar(&taskListSquad, "squad", "", "Filter by aps squad members")
+	TaskListCmd.Flags().BoolVar(&taskListStale, "stale", false, "Show only stale tasks")
+	TaskListCmd.Flags().BoolVar(&taskListBlocked, "blocked", false, "Show only blocked tasks")
 }

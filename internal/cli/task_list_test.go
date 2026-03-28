@@ -421,3 +421,88 @@ func TestTaskList(t *testing.T) {
 		}
 	})
 }
+
+func TestTaskList_StaleFilter(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	timeout := 1 * time.Minute // short timeout so old UpdatedAt triggers stale
+	staleTask := &core.Task{
+		ID:           "T-0001",
+		Title:        "Stale task",
+		Status:       core.StatusInProgress,
+		UpdatedAt:    time.Now().Add(-2 * time.Hour), // well past 1m timeout
+		StaleTimeout: &timeout,
+	}
+	freshTask := &core.Task{
+		ID:        "T-0002",
+		Title:     "Fresh task",
+		Status:    core.StatusTodo,
+		UpdatedAt: time.Now(),
+		// no StaleTimeout → never stale
+	}
+	s.CreateTask(ctx, staleTask)
+	s.CreateTask(ctx, freshTask)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--stale", "--status", "IN_PROGRESS,TODO"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --stale failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Stale task") {
+		t.Errorf("expected 'Stale task' in --stale output; got: %s", output)
+	}
+	if contains(output, "Fresh task") {
+		t.Errorf("did not expect 'Fresh task' in --stale output; got: %s", output)
+	}
+}
+
+func TestTaskList_BlockedFilter(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	reason := "waiting on external API"
+	blockedTask := &core.Task{
+		ID:            "T-0001",
+		Title:         "Blocked task",
+		Status:        core.StatusTodo,
+		BlockedReason: &reason,
+	}
+	freeTask := &core.Task{
+		ID:     "T-0002",
+		Title:  "Free task",
+		Status: core.StatusTodo,
+	}
+	s.CreateTask(ctx, blockedTask)
+	s.CreateTask(ctx, freeTask)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--blocked", "--status", "TODO"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --blocked failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Blocked task") {
+		t.Errorf("expected 'Blocked task' in --blocked output; got: %s", output)
+	}
+	if contains(output, "Free task") {
+		t.Errorf("did not expect 'Free task' in --blocked output; got: %s", output)
+	}
+}
