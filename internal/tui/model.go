@@ -81,7 +81,7 @@ func NewModel(service *core.TaskService) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.fetchTasks
+	return tea.Batch(tea.WindowSize(), m.fetchTasks)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
