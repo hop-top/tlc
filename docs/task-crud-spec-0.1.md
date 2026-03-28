@@ -884,3 +884,58 @@ Error: Invalid status transition
 - External task logs include SYNC_* actions
 - External task reference points to origin system URL
 - Internal task reference points to internal documentation
+
+---
+
+## Stale Hook Runner
+
+### Overview
+
+`RunStaleHooks(task *Task, hooks []config.StaleHook) error` executes shell
+commands when a task crosses the stale threshold. Hook commands are Go
+`text/template` strings expanded against `StaleHookData` before being
+passed to `sh -c`.
+
+Always returns `nil`. Hook failures emit a warning to stdout and continue;
+all hooks run regardless of individual failures.
+
+### Template Variables
+
+| Variable | Type | Description |
+|---|---|---|
+| `{{.ID}}` | string | Task ID (e.g. `T-0094`) |
+| `{{.Title}}` | string | Task title |
+| `{{.AssignedTo}}` | string | Assignee handle (empty string if unassigned) |
+| `{{.UpdatedAt}}` | time.Time | Last update timestamp (UTC) |
+| `{{.Timeout}}` | time.Duration | Effective stale threshold |
+| `{{.StaleSince}}` | time.Duration | How long task has been past threshold (0 if not stale) |
+
+### Configuration
+
+In `.tlc/config.yaml`:
+
+```yaml
+task:
+  stale:
+    default_timeout: 6h         # fallback when task has no per-task timeout
+    hooks:
+      - command: 'echo "stale: {{.ID}} ({{.Title}})" >> /tmp/stale.log'
+      - command: 'notify-send "Stale task" "{{.ID}} stale for {{.StaleSince}}"'
+```
+
+- `default_timeout` — project-wide stale threshold; default `6h` if unset.
+- `hooks` — list of hook entries; each entry has a single `command` field.
+- Per-task `stale_timeout` overrides `default_timeout` when set.
+
+### Failure Semantics
+
+- Template parse error → warning + skip hook; continue.
+- Template execute error → warning + skip hook; continue.
+- Shell command non-zero exit → warning + continue; next hook still runs.
+- `RunStaleHooks` itself NEVER returns a non-nil error.
+
+### Hook Firing Lifecycle
+
+- `stale_fired_at` records when hooks last fired for a task.
+- Cleared when task is updated (staleness clock resets with `updated_at`).
+- `tlc task stale --run-hooks` re-fires hooks for all currently-stale tasks.
