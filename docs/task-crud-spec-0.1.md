@@ -44,6 +44,9 @@ A Task MUST be representable as:
 - logs: array of log entries (recommended, see task-log-spec-0.1.md)
 - meta: object/map (optional)
 - archived: boolean (defaults to false)
+- stale_timeout: duration in nanoseconds (optional); task is stale if `now − updated_at > stale_timeout`
+- blocked_reason: string (optional); human-readable explanation of why the task is blocked
+- stale_fired_at: ISO8601 UTC (optional); timestamp when the stale alert was last emitted
 
 ---
 
@@ -361,6 +364,13 @@ CREATE INDEX idx_tasks_assigned_to ON tasks(assigned_to);
 CREATE INDEX idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX idx_task_logs_task_id ON task_logs(task_id);
 ```
+
+Schema migrations (additive):
+- v3: `effort TEXT NOT NULL DEFAULT ''`
+- v4: `priority TEXT NOT NULL DEFAULT ''`
+- v5: `stale_timeout INTEGER` (nanoseconds, NULL if unset),
+      `blocked_reason TEXT` (NULL if unset),
+      `stale_fired_at TEXT` (RFC3339, NULL if unset)
 
 **Rules:**
 - ACID transactions for all mutations

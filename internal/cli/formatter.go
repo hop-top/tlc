@@ -292,6 +292,15 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	if t.Priority != "" {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Priority:"), string(t.Priority))
 	}
+	if t.StaleTimeout != nil {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Timeout:"), t.StaleTimeout.String())
+	}
+	if t.BlockedReason != nil && *t.BlockedReason != "" {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Blocked Reason:"), *t.BlockedReason)
+	}
+	if t.StaleFiredAt != nil {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Fired At:"), t.StaleFiredAt.Format(time.RFC3339))
+	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))

@@ -155,6 +155,59 @@ func TestTaskShow(t *testing.T) {
 	})
 }
 
+// TestTaskShow_StaleFields_E2E is an end-to-end test: writes a task with stale
+// fields directly to storage, then reads it back via "tlc task show" and verifies
+// StaleTimeout, BlockedReason, and StaleFiredAt appear in the rendered output.
+func TestTaskShow_StaleFields_E2E(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	timeout := 48 * time.Hour
+	reason := "waiting for infra ticket"
+	firedAt := time.Now().UTC().Truncate(time.Second)
+
+	task := &core.Task{
+		ID:            "T-0001",
+		Title:         "E2E stale fields test",
+		Status:        core.StatusInProgress,
+		Reference:     "docs/stale-e2e.md",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC().Add(-50 * time.Hour),
+		StaleTimeout:  &timeout,
+		BlockedReason: &reason,
+		StaleFiredAt:  &firedAt,
+	}
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("setup CreateTask failed: %v", err)
+	}
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "show", "T-0001"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task show failed: %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("show output: %s", output)
+
+	if !contains(output, "48h0m0s") {
+		t.Errorf("expected StaleTimeout '48h0m0s' in output, got: %s", output)
+	}
+	if !contains(output, reason) {
+		t.Errorf("expected BlockedReason %q in output, got: %s", reason, output)
+	}
+	if !contains(output, firedAt.Format(time.RFC3339)) {
+		t.Errorf("expected StaleFiredAt %q in output, got: %s", firedAt.Format(time.RFC3339), output)
+	}
+}
+
 // TestTaskShowNotFound validates that showing a non-existent task returns an
 // actionable error message telling the agent what to do next.
 func TestTaskShowNotFound(t *testing.T) {
