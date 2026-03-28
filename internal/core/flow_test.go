@@ -294,6 +294,43 @@ func TestFlowExecutor_PauseResume(t *testing.T) {
 	}
 }
 
+func TestParseFlow_WithGate(t *testing.T) {
+	raw := `
+flow_id: test-flow
+entry_step: plan
+steps:
+  plan:
+    step_id: plan
+    type: task
+    title: Write plan
+    gate:
+      contract: plan-quality
+      eva_url: http://localhost:8080
+  implement:
+    step_id: implement
+    type: task
+    title: Implement
+    depends_on: [plan]
+`
+	flow, err := ParseFlow(strings.NewReader(raw), "test.yaml")
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	planStep := flow.Steps["plan"]
+	if planStep.Gate == nil {
+		t.Fatal("expected Gate to be set on plan step")
+	}
+	if planStep.Gate.Contract != "plan-quality" {
+		t.Errorf("expected contract plan-quality, got %s", planStep.Gate.Contract)
+	}
+	if planStep.Gate.EvaURL != "http://localhost:8080" {
+		t.Errorf("expected eva_url http://localhost:8080, got %s", planStep.Gate.EvaURL)
+	}
+	if flow.Steps["implement"].Gate != nil {
+		t.Error("expected no Gate on implement step")
+	}
+}
+
 func TestParseFlow_Validation(t *testing.T) {
 	tests := []struct {
 		name    string
