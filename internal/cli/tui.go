@@ -23,7 +23,7 @@ var tuiCmd = &cobra.Command{
 
 		service := core.NewTaskService(store, store)
 
-		p := tea.NewProgram(tui.NewModel(service), tea.WithAltScreen(), tea.WithMouseCellMotion())
+		p := tea.NewProgram(tui.NewModel(service), tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error running TUI: %v", err)
 			os.Exit(1)
