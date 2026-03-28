@@ -166,6 +166,7 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Create blocked task: `tlc task create "Task title" --blocked-by T-0041 --blocked-by other-project/T-0007`
 - List: `tlc task list --mine` (shows IN_PROGRESS first, then TODO by default)
 - List stale: `tlc task list --stale` (only tasks past their stale threshold)
+- Stale subcommand: `tlc task stale` (dedicated stale view; fires hooks with `--run-hooks`)
 - List blocked: `tlc task list --blocked` (only tasks with a blocked reason)
 - Update: `tlc task update T-0042 --status IN_PROGRESS`
 - Update blockers: `tlc task update T-0042 --add-blocked-by T-0009 --remove-blocked-by T-0003`
@@ -234,6 +235,35 @@ Create a new task:
 Update a task status:
 ```bash
 ./bin/tlc task update T-0042 --status DONE
+```
+
+### Stale Task Detection
+
+Tasks are stale when not updated within their timeout. Use `tlc task stale` to list them:
+
+```bash
+# List stale tasks (uses per-task timeout; falls back to task.stale.default_timeout config)
+tlc task stale
+
+# List stale tasks and fire configured hooks (sets StaleFiredAt; re-fires even if set)
+tlc task stale --run-hooks
+```
+
+Configure project-wide defaults and hooks in `.tlc.yaml`:
+
+```yaml
+task:
+  stale:
+    default_timeout: 6h           # applied to tasks with no per-task timeout
+    hooks:
+      - command: 'echo "stale: {{.ID}} ({{.Title}})" >> /tmp/stale.log'
+```
+
+Per-task timeout via CLI:
+
+```bash
+tlc task update T-0042 --timeout 2h
+tlc task create "Design API schema" --timeout 4h
 ```
 
 ### Workspaces

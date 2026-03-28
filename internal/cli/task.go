@@ -327,6 +327,7 @@ var TaskCmd = &cobra.Command{
 func init() {
 	TaskCmd.AddCommand(TaskCreateCmd)
 	TaskCmd.AddCommand(TaskListCmd)
+	TaskCmd.AddCommand(TaskStaleCmd)
 	TaskCmd.AddCommand(TaskShowCmd)
 	TaskCmd.AddCommand(TaskUpdateCmd)
 	TaskCmd.AddCommand(TaskDeleteCmd)

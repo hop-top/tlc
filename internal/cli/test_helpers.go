@@ -266,6 +266,8 @@ func resetTaskFlags() {
 	taskListStale = false
 	taskListBlocked = false
 
+	taskStaleRunHooks = false
+
 	taskShowLogs = false
 	taskShowLogSortDirection = ""
 
@@ -306,7 +308,7 @@ func resetTaskFlags() {
 
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
-		TaskCreateCmd, TaskListCmd, TaskShowCmd,
+		TaskCreateCmd, TaskListCmd, TaskStaleCmd, TaskShowCmd,
 		TaskUpdateCmd, TaskDeleteCmd, TaskClaimCmd,
 		TaskUnclaimCmd, TaskAssignCmd, TaskCompleteCmd,
 		SyncCmd, SyncPullCmd, SyncPushCmd, SyncConfigCmd, SyncStatusCmd,

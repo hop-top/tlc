@@ -72,6 +72,7 @@ check "task complete"    $TLC task complete
 check "task create"      $TLC task create
 check "task delete"      $TLC task delete
 check "task list"        $TLC task list
+check "task stale"       $TLC task stale
 check "task reopen"      $TLC task reopen
 check "task show"        $TLC task show
 check "task unassign"    $TLC task unassign
@@ -97,6 +98,7 @@ check_flag "task list --workspace"      $TLC task list --workspace
 check_flag "task list --space"          $TLC task list --space
 check      "task list --stale"          $TLC task list --stale
 check      "task list --blocked"        $TLC task list --blocked
+check      "task stale --run-hooks"     $TLC task stale --run-hooks
 check      "task update --force"        $TLC task update --force
 check_flag "task update --add-tag"           $TLC task update --add-tag
 check_flag "task update --remove-tag"        $TLC task update --remove-tag

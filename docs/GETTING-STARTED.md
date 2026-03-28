@@ -215,8 +215,14 @@ tlc task update T-0001 --blocked "waiting on design approval"
 # Set a custom stale timeout (overrides project default)
 tlc task update T-0001 --timeout 4h
 
-# Show only stale tasks
+# Show only stale tasks (filter flag on list)
 tlc task list --stale
+
+# Dedicated stale subcommand — lists IN_PROGRESS + TODO tasks past their threshold
+tlc task stale
+
+# Fire configured stale hooks for all stale tasks (re-fires even if StaleFiredAt is set)
+tlc task stale --run-hooks
 
 # Show only blocked tasks
 tlc task list --blocked
@@ -230,6 +236,19 @@ tlc task update T-0001 --unblock
 ```
 
 The table output includes `Stale` and `Blocked` columns for at-a-glance visibility.
+
+Configure project-wide stale hooks in `.tlc.yaml`:
+
+```yaml
+task:
+  stale:
+    default_timeout: 6h
+    hooks:
+      - command: 'echo "stale: {{.ID}} ({{.Title}})" >> /tmp/stale.log'
+```
+
+Hook template variables: `{{.ID}}`, `{{.Title}}`, `{{.AssignedTo}}`, `{{.UpdatedAt}}`,
+`{{.Timeout}}`, `{{.StaleSince}}`.
 
 **When to move on**: You can surface stale or blocked work in one command.
 
