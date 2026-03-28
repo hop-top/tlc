@@ -66,9 +66,12 @@ type Task struct {
 	UpdatedAt    time.Time              `json:"updated_at" yaml:"updated_at"`
 	OriginSystem *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`
 	LastSyncAt   *time.Time             `json:"last_sync_at,omitempty" yaml:"last_sync_at,omitempty"`
-	Archived     bool                   `json:"archived" yaml:"archived"`
-	ProjectID    *string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
-	Meta         map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
+	Archived      bool                   `json:"archived" yaml:"archived"`
+	ProjectID     *string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	Meta          map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
+	StaleTimeout  *time.Duration         `json:"stale_timeout,omitempty" yaml:"stale_timeout,omitempty"`
+	BlockedReason *string                `json:"blocked_reason,omitempty" yaml:"blocked_reason,omitempty"`
+	StaleFiredAt  *time.Time             `json:"stale_fired_at,omitempty" yaml:"stale_fired_at,omitempty"`
 }
 
 type RegisteredProject struct {
