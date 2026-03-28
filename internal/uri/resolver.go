@@ -49,18 +49,20 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 		return &ResolvedTask{Task: task, Storage: r.storage}, nil
 	}
 
-	// Case 2: Shorthand project/task or URI
-	projectID := u.Space
-	taskID := u.ID
-
-	// If ID still contains slashes, it might be project/task
-	if strings.Contains(taskID, "/") {
-		parts := strings.SplitN(taskID, "/", 2)
-		if projectID == "" {
-			projectID = parts[0]
-		}
-		taskID = parts[1]
-	}
+	// Case 2: Shorthand project/task or absolute URI.
+	//
+	// The hop.top/uri library places the first path segment in Space and the
+	// remainder in ID.  For multi-segment project IDs the task ID is always
+	// the *last* slash-delimited segment; everything before it (including
+	// Space) forms the project ID.
+	//
+	// Examples:
+	//   task://hop-top/tlc/T-0001  → Space=hop-top  ID=tlc/T-0001
+	//     → projectID=hop-top/tlc  taskID=T-0001
+	//   hop-top/tlc/T-0001         → Space=hop-top  ID=tlc/T-0001  (same)
+	//   tlc/T-0001                 → Space=tlc       ID=T-0001
+	//     → projectID=tlc          taskID=T-0001
+	projectID, taskID := splitProjectTask(u.Space, u.ID)
 
 	if projectID == "" {
 		task, err := r.storage.GetTask(ctx, taskID)
@@ -101,6 +103,26 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 	return &ResolvedTask{Task: task, Storage: projStorage}, nil
 }
 
+// splitProjectTask derives (projectID, taskID) from the Space and ID fields
+// returned by hop.top/uri.Parse.
+//
+// The task ID is always the last slash-delimited segment of the combined
+// "space/id" path.  Everything before it is the project ID.
+//
+//	space="hop-top"  id="tlc/T-0001"  → ("hop-top/tlc", "T-0001")
+//	space="tlc"      id="T-0001"      → ("tlc",          "T-0001")
+//	space=""         id="T-0001"      → ("",              "T-0001")
+func splitProjectTask(space, id string) (projectID, taskID string) {
+	combined := id
+	if space != "" {
+		combined = space + "/" + id
+	}
+	if idx := strings.LastIndex(combined, "/"); idx >= 0 {
+		return combined[:idx], combined[idx+1:]
+	}
+	return "", combined
+}
+
 // ResolvedFlow represents a flow and the directory it was found in.
 type ResolvedFlow struct {
 	Flow *core.Flow
@@ -114,16 +136,7 @@ func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow
 		return nil, err
 	}
 
-	projectID := u.Space
-	flowID := u.ID
-
-	if strings.Contains(flowID, "/") {
-		parts := strings.SplitN(flowID, "/", 2)
-		if projectID == "" {
-			projectID = parts[0]
-		}
-		flowID = parts[1]
-	}
+	projectID, flowID := splitProjectTask(u.Space, u.ID)
 
 	// If it's a file path, just parse it
 	if _, err := os.Stat(input); err == nil {
