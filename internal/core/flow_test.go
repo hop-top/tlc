@@ -2,6 +2,9 @@ package core
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -328,6 +331,98 @@ steps:
 	}
 	if flow.Steps["implement"].Gate != nil {
 		t.Error("expected no Gate on implement step")
+	}
+}
+
+func TestFlowExecutor_EvaGate_Pass(t *testing.T) {
+	// EVA server that always passes.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"eva_status": "pass", "attempts": 1})
+	}))
+	defer srv.Close()
+
+	repo := NewMockRepository()
+	logRepo := NewMockLogRepository()
+	repo.CreateTask(context.Background(), &Task{ID: "T-gate-1", Title: "Plan task", Status: StatusTodo})
+
+	flow := &Flow{
+		ID:        "gate-pass-flow",
+		EntryStep: "plan",
+		Steps: map[string]Step{
+			"plan": {
+				ID:      "plan",
+				Type:    StepTypeTask,
+				Title:   "Plan",
+				TaskRef: "T-gate-1",
+				Gate:    &StepGate{Contract: "plan-quality", EvaURL: srv.URL},
+			},
+		},
+	}
+
+	ex := NewFlowExecutor(repo, logRepo)
+	statuses := map[string]StepStatus{}
+	err := ex.ExecuteForTest(context.Background(), flow, &FlowRun{ID: "r1"}, statuses, "agent-1")
+	if err != nil {
+		t.Fatalf("expected pass, got: %v", err)
+	}
+	if statuses["plan"] != StepStatusSucceeded {
+		t.Errorf("expected plan=succeeded, got %s", statuses["plan"])
+	}
+}
+
+func TestFlowExecutor_EvaGate_Violation(t *testing.T) {
+	// EVA server that returns a contract violation.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"eva_status": "contract_violation",
+			"attempts":   1,
+			"violations": []map[string]any{{"evaluator": "contains", "score": 0.0}},
+		})
+	}))
+	defer srv.Close()
+
+	repo := NewMockRepository()
+	logRepo := NewMockLogRepository()
+	repo.CreateTask(context.Background(), &Task{ID: "T-gate-2", Title: "Plan task", Status: StatusTodo})
+	repo.CreateTask(context.Background(), &Task{ID: "T-gate-3", Title: "Implement task", Status: StatusTodo})
+
+	flow := &Flow{
+		ID:        "gate-fail-flow",
+		EntryStep: "plan",
+		Steps: map[string]Step{
+			"plan": {
+				ID:      "plan",
+				Type:    StepTypeTask,
+				Title:   "Plan",
+				TaskRef: "T-gate-2",
+				Gate:    &StepGate{Contract: "plan-quality", EvaURL: srv.URL},
+			},
+			"implement": {
+				ID:        "implement",
+				Type:      StepTypeTask,
+				Title:     "Implement",
+				TaskRef:   "T-gate-3",
+				DependsOn: []string{"plan"},
+			},
+		},
+	}
+
+	ex := NewFlowExecutor(repo, logRepo)
+	statuses := map[string]StepStatus{}
+	err := ex.ExecuteForTest(context.Background(), flow, &FlowRun{ID: "r2"}, statuses, "agent-1")
+	if err == nil {
+		t.Fatal("expected error from EVA violation")
+	}
+	if statuses["plan"] != StepStatusFailed {
+		t.Errorf("expected plan=failed, got %s", statuses["plan"])
+	}
+	// implement must not have run (downstream blocked by failed plan)
+	if statuses["implement"] == StepStatusSucceeded {
+		t.Error("implement should not have succeeded when plan failed")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -78,7 +79,7 @@ Usage:
 		}
 		flow := res.Flow
 
-		executor := core.NewFlowExecutor(s, s)
+		executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY"))
 
 		by := flowRunBy
 		if by == "" {
@@ -319,7 +320,7 @@ Example:
 		}
 		flow := res.Flow
 
-		executor := core.NewFlowExecutor(s, s)
+		executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY"))
 
 		runID := fmt.Sprintf("run:%s", generateID())
 

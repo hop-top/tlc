@@ -120,6 +120,20 @@ steps:
     depends_on: [plan]   # blocked until plan passes EVA gate
 ```
 
+**Runtime behavior in FlowExecutor:**
+
+Gate fires after the task step executes and returns success. Sequence per step:
+
+1. Task step executes → returns success.
+2. `RunEvaGate` called with `step.Gate` and env `EVA_KEY`.
+3. EVA returns pass (HTTP 200) → step marked `succeeded`; execution continues.
+4. EVA returns violation (HTTP 422) → step marked `failed`; error returned; no
+   downstream steps run.
+5. Steps that list the failed step in `depends_on` remain `pending`; executor
+   halts on "terminal failure state" for that step.
+
+Steps without `gate` skip the check entirely — no EVA call made.
+
 **`RunEvaGate` function signature (Go):**
 
 ```

@@ -13,6 +13,7 @@ import (
 type FlowExecutor struct {
 	repo    Repository
 	logRepo LogRepository
+	evaKey  string // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
 }
 
 func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
@@ -20,6 +21,13 @@ func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
 		repo:    repo,
 		logRepo: logRepo,
 	}
+}
+
+// WithEvaKey sets the EVA API key used for gate authentication.
+// Typically called at construction with os.Getenv("EVA_KEY").
+func (e *FlowExecutor) WithEvaKey(key string) *FlowExecutor {
+	e.evaKey = key
+	return e
 }
 
 // Execute initiates a flow run.
@@ -194,6 +202,18 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 		mu.Unlock()
 		e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END", fmt.Sprintf("Step failed: %v", err), map[string]any{"status": "failed"})
 		return err
+	}
+
+	// EVA gate: validate step output before marking succeeded.
+	if step.Gate != nil {
+		if gateErr := RunEvaGate(ctx, step.Gate, nil, e.evaKey); gateErr != nil {
+			statuses[stepID] = StepStatusFailed
+			mu.Unlock()
+			e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END",
+				fmt.Sprintf("EVA gate rejected step: %v", gateErr),
+				map[string]any{"status": "failed", "gate_error": gateErr.Error()})
+			return gateErr
+		}
 	}
 
 	statuses[stepID] = StepStatusSucceeded
@@ -416,6 +436,20 @@ func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string
 	}
 
 	return task
+}
+
+// ExecuteForTest exposes single-step execution for unit testing.
+// Executes only the named entry step and its downstream (via recursive executeStep).
+// Do not use outside tests.
+func (e *FlowExecutor) ExecuteForTest(
+	ctx context.Context,
+	flow *Flow,
+	run *FlowRun,
+	statuses map[string]StepStatus,
+	by string,
+) error {
+	mu := &sync.Mutex{}
+	return e.executeStep(ctx, flow, run, flow.EntryStep, statuses, mu, by)
 }
 
 // generateTaskID creates a unique task ID (e.g., T-0042).
