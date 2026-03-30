@@ -78,6 +78,8 @@ var (
 
 	taskListStale   bool
 	taskListBlocked bool
+
+	taskNoPrompt bool
 )
 
 // appendNote appends a note to the task's description, separated by a newline.
@@ -337,6 +339,8 @@ func init() {
 	TaskCmd.AddCommand(TaskUnassignCmd)
 	TaskCmd.AddCommand(TaskCompleteCmd)
 	TaskCmd.AddCommand(TaskReopenCmd)
+
+	TaskCmd.PersistentFlags().BoolVar(&taskNoPrompt, "no-prompt", false, "Skip confirmation prompts")
 
 	RootCmd.AddCommand(TaskCmd)
 }

@@ -382,6 +382,17 @@ func TestTaskList(t *testing.T) {
 		}
 	})
 
+	t.Run("NoPromptFlagExists", func(t *testing.T) {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		f := TaskCmd.PersistentFlags().Lookup("no-prompt")
+		if f == nil {
+			t.Error("expected --no-prompt persistent flag on TaskCmd")
+		}
+	})
+
 	t.Run("ListTasksArchived", func(t *testing.T) {
 		ctx, cleanup := setupTestDir(t)
 		defer cleanup()

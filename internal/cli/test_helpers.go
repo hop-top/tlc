@@ -290,6 +290,7 @@ func resetTaskFlags() {
 	taskAssignNote = ""
 	taskCompleteNote = ""
 	taskUpdateForce = false
+	taskNoPrompt = false
 
 	tagFilterAllStatuses = false
 
@@ -323,6 +324,9 @@ func resetTaskFlags() {
 			})
 		}
 	}
+	TaskCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		f.Changed = false
+	})
 }
 
 func newTestCmd() *cobra.Command {
