@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/uri"
 )
 
 var TaskClaimCmd = &cobra.Command{
@@ -340,61 +339,74 @@ var TaskCompleteCmd = &cobra.Command{
 }
 
 var TaskReopenCmd = &cobra.Command{
-	Use:   "reopen <task-id>",
+	Use:   "reopen <task-id|pattern>...",
 	Short: "Reopen a completed or skipped task",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if taskReopenNote == "" {
-			return errNoteRequired(fmt.Sprintf("tlc task reopen %s", args[0]))
+			return errNoteRequired("tlc task reopen <task-id|pattern>...")
 		}
 
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, args[0]); err != nil {
+				return err
+			}
 		}
 
-		wm := core.DefaultWorkflow()
-		if !wm.IsTerminal(task.Status) {
-			return fmt.Errorf(
-				"task %s cannot be reopened: current status %s is not terminal "+
-					"(terminal statuses: DONE, SKIPPED); use 'tlc task update %s --status <status> --force' "+
-					"to force a status change instead",
-				task.ID, task.Status, task.ID,
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
+
+			wm := core.DefaultWorkflow()
+			if !wm.IsTerminal(task.Status) {
+				errs = append(errs, fmt.Sprintf(
+					"%s: cannot be reopened: current status %s is not terminal "+
+						"(terminal statuses: DONE, SKIPPED); use 'tlc task update %s --status <status> --force' "+
+						"to force a status change instead",
+					task.ID, task.Status, task.ID,
+				))
+				continue
+			}
+
+			initialStatus, wmErr := wm.StatusForRole("initial")
+			if wmErr != nil {
+				return fmt.Errorf("workflow has no initial status: %w", wmErr)
+			}
+
+			user := core.GetCurrentUser()
+			details := fmt.Sprintf("(%s → %s)", task.Status, initialStatus)
+			appendAuditLog(task, user, "REOPENED", details, taskReopenNote, time.Now().UTC())
+			logEntry, transErr := task.TransitionWithWorkflow(
+				initialStatus, user, taskReopenNote, wm, true,
 			)
-		}
+			if transErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: failed to reopen task: %v", task.ID, transErr))
+				continue
+			}
 
-		initialStatus, wmErr := wm.StatusForRole("initial")
-		if wmErr != nil {
-			return fmt.Errorf("workflow has no initial status: %w", wmErr)
+			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", task.ID)
 		}
-
-		user := core.GetCurrentUser()
-		details := fmt.Sprintf("(%s → %s)", task.Status, initialStatus)
-		appendAuditLog(task, user, "REOPENED", details, taskReopenNote, time.Now().UTC())
-		logEntry, err := task.TransitionWithWorkflow(
-			initialStatus, user, taskReopenNote, wm, true,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to reopen task: %w", err)
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-			return err
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
