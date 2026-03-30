@@ -30,6 +30,16 @@ The backlog stays uncluttered; automation pipelines stay unblocked.
 4. **Given** a task `T-0001` exists, **When** I run `tlc task delete T-0001 -y`
    (short flag), **Then** the task is deleted (same behaviour as `--yes`).
 
+5. **Given** tasks `T-0001`, `T-0002` exist, **When** I run
+   `tlc task delete T-0001 T-0002 --yes`, **Then** both tasks are permanently removed.
+
+6. **Given** tasks `T-0001`, `T-0002` exist, **When** I run
+   `tlc task delete T-0001 T-0002` without `--yes` or `--no-prompt` in a non-TTY,
+   **Then** the command exits with an error requiring explicit confirmation.
+
+7. **Given** tasks `T-0001`, `T-0002` exist, **When** I run
+   `tlc task delete T-0001 T-0002 --no-prompt`, **Then** both tasks are removed without prompt.
+
 ## Tests
 
 ### E2E
@@ -48,3 +58,6 @@ The backlog stays uncluttered; automation pipelines stay unblocked.
 | 2 | Delete without `--yes` fails | `TestTaskDeleteRequiresYes` | ✅ COVERED |
 | 3 | Delete non-existent task errors | `TestTaskDeleteNotFound` | ✅ COVERED |
 | 4 | Short `-y` flag works | `TestTaskDeleteYesShortFlag` | ✅ COVERED |
+| 5 | Multi-ID delete with `--yes` | `TestBatchE2E_DeleteRequiresConfirmOrNoPrompt` | ✅ COVERED |
+| 6 | Multi-ID delete without `--yes` errors | `TestBatchE2E_DeleteRequiresConfirmOrNoPrompt` | ✅ COVERED |
+| 7 | Multi-ID delete with `--no-prompt` | `TestBatchE2E_DeleteRequiresConfirmOrNoPrompt` | ✅ COVERED |

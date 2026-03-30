@@ -44,6 +44,18 @@ Their backlog stays accurate; no phantom duplicates.
    `tlc task update T-0001 --status TODO --force`, **Then** status is set to `TODO`
    (force bypasses terminal-state guard).
 
+9. **Given** tasks `T-0001`, `T-0002`, **When** I run
+   `tlc task update T-0001 T-0002 --add-tag hotfix`, **Then** `hotfix` tag is added to both;
+   all other fields unchanged.
+
+10. **Given** tasks `T-0001`, `T-0002`, **When** I run
+    `tlc task update T-0001 T-0002 --title "New title"`, **Then** the command exits with an
+    error: `--title` cannot be applied to multiple targets simultaneously.
+
+11. **Given** pattern `'T-001\d'` matches >1 task, **When** I run
+    `tlc task update 'T-001\d' --add-tag sprint --no-prompt`, **Then** the tag is added to
+    all matched tasks without a confirmation prompt.
+
 ## Tests
 
 ### E2E
@@ -77,3 +89,6 @@ Their backlog stays accurate; no phantom duplicates.
 | 6 | Clear assignee with `-`/`null` | `TestTaskClearAssigneeDash` / `TestTaskClearAssigneeNull` | ✅ COVERED |
 | 7 | Status transition via update | `TestTaskUpdateCommands/UpdateTask` | ✅ COVERED |
 | 8 | Force transition from terminal state | `TestTaskUpdateForceStatus` | ✅ COVERED |
+| 9 | Multi-ID tag update | `TestBatchUpdateMultiTag` | ✅ COVERED |
+| 10 | `--title` blocked for multi-target | `TestBatchUpdateTitleBlocked` | ✅ COVERED |
+| 11 | Regex update + `--no-prompt` | `TestBatchUpdateMultiTag` | ✅ COVERED |

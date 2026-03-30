@@ -362,7 +362,7 @@ Update task fields.
 #### Synopsis
 
 ```bash
-tlc task update <task-id> [flags]
+tlc task update <task-id|pattern>... [flags]
 ```
 
 #### Flags
@@ -410,7 +410,7 @@ Delete a task (soft delete by default).
 #### Synopsis
 
 ```bash
-tlc task delete <task-id> [flags]
+tlc task delete <task-id|pattern>... [flags]
 ```
 
 #### Flags
@@ -423,11 +423,17 @@ tlc task delete <task-id> [flags]
 #### Examples
 
 ```bash
-# Soft delete (with confirmation)
+# Delete with confirmation
 tlc task delete T-0042
 
-# Hard delete (skip confirmation)
-tlc task delete T-0042 --force --yes
+# Delete skipping confirmation
+tlc task delete T-0042 --yes
+
+# Delete multiple tasks (requires --yes or --no-prompt)
+tlc task delete T-0042 T-0043 --yes
+
+# Delete by pattern (no prompt)
+tlc task delete 'T-004\d' --no-prompt
 ```
 
 ---
@@ -439,7 +445,7 @@ Assign a task to someone without changing its status.
 #### Synopsis
 
 ```bash
-tlc task assign <task-id> <assignee> [flags]
+tlc task assign <assignee> <task-id|pattern>... [flags]
 ```
 
 #### Flags
@@ -459,10 +465,16 @@ tlc task assign <task-id> <assignee> [flags]
 
 ```bash
 # Assign to user
-tlc task assign T-0042 codex
+tlc task assign codex T-0042
 
 # Assign with note
-tlc task assign T-0042 codex --note "Handoff for review"
+tlc task assign codex T-0042 --note "Handoff for review"
+
+# Assign multiple tasks
+tlc task assign codex T-0042 T-0043
+
+# Assign by pattern (no prompt)
+tlc task assign codex 'T-004\d' --no-prompt
 ```
 
 ---
@@ -474,7 +486,7 @@ Remove the assignee from a task without changing its status.
 #### Synopsis
 
 ```bash
-tlc task unassign <task-id>
+tlc task unassign <task-id|pattern>... [flags]
 ```
 
 #### Behavior
@@ -535,7 +547,7 @@ Claim a task for work (collaborative claiming).
 #### Synopsis
 
 ```bash
-tlc task claim <task-id> [flags]
+tlc task claim <task-id|pattern>... [flags]
 ```
 
 #### Flags
@@ -571,7 +583,7 @@ Release claimed task.
 #### Synopsis
 
 ```bash
-tlc task unclaim <task-id> [flags]
+tlc task unclaim <task-id|pattern>... [flags]
 ```
 
 #### Flags
@@ -599,7 +611,7 @@ Mark a task as done.
 #### Synopsis
 
 ```bash
-tlc task complete <task-id> [flags]
+tlc task complete <task-id|pattern>... [flags]
 ```
 
 #### Flags
@@ -640,7 +652,7 @@ Reopen a completed or skipped task, returning it to TODO.
 #### Synopsis
 
 ```bash
-tlc task reopen <task-id> [flags]
+tlc task reopen <task-id|pattern>... [flags]
 ```
 
 #### Flags

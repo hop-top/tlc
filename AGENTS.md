@@ -37,7 +37,7 @@ tlc task complete <id>                   # mark done (transitions status → DON
 tlc task complete <id> --note "..."      # mark done with note
 tlc task unclaim <id>                    # release + transitions status → TODO
 tlc task reopen <id> --note "..."        # reopen terminal task (--note required)
-tlc task assign <id> <assignee>          # assign to someone else
+tlc task assign <assignee> <id|pattern>... # assign to someone (assignee first)
 tlc task unassign <id> --note "..."      # remove assignee (--note required)
 tlc task update <id> --title "..."       # update title
 tlc task update <id> -d "..."            # replace description (reads first; -d overwrites)

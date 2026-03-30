@@ -40,6 +40,14 @@ trivial.
    `tlc task reopen T-9999 --note "Reopen missing"`, **Then** the command returns a
    "not found" error.
 
+6. **Given** tasks `T-0001`, `T-0002` are `DONE`, **When** I run
+   `tlc task reopen T-0001 T-0002 --note "Regression found"`, **Then** both tasks return to
+   `TODO`; the note is appended to each description.
+
+7. **Given** tasks matching `'T-001\d'` exist in terminal state, **When** I run
+   `tlc task reopen 'T-001\d' --note "Revived" --no-prompt`, **Then** all matched tasks are
+   reopened without a confirmation prompt.
+
 ## Tests
 
 ### E2E
@@ -62,3 +70,5 @@ trivial.
 | 3 | Note required; error if missing | `TestTaskReopenRequiresNote` | ✅ COVERED |
 | 4 | Audit trail continuity | `TestTaskReopenAuditContinuity` | ✅ COVERED |
 | 5 | Non-existent task errors | `TestTaskReopenNotFound` | ✅ COVERED |
+| 6 | Multi-ID reopen with note | `TestBatchReopen` | ✅ COVERED |
+| 7 | Regex reopen + `--no-prompt` | `TestBatchReopen` | ✅ COVERED |

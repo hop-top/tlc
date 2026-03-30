@@ -18,13 +18,13 @@ why a task became ownerless. Team capacity planning and retrospectives become ho
 ## Acceptance Scenarios
 
 1. **Given** a task `T-0001` with status `TODO` and no assignee, **When** I run
-   `tlc task assign T-0001 engineer-1`, **Then**:
+   `tlc task assign engineer-1 T-0001`, **Then**:
    - `AssignedTo` is set to `engineer-1`
    - Status remains `TODO` (assign does not transition status unlike claim)
    - Output confirms "Assigned task T-0001 to engineer-1"
 
 2. **Given** a task `T-0001` assigned to `engineer-1`, **When** I run
-   `tlc task assign T-0001 engineer-2 --note "Reassigning for review"`, **Then**:
+   `tlc task assign engineer-2 T-0001 --note "Reassigning for review"`, **Then**:
    - `AssignedTo` is updated to `engineer-2`
    - A `REASSIGNED` log entry exists for this task
 
@@ -38,8 +38,24 @@ why a task became ownerless. Team capacity planning and retrospectives become ho
 4. **Given** a task `T-0001`, **When** I run `tlc task unassign T-0001` without `--note`,
    **Then** the command exits with an error mentioning `--note` is required.
 
-5. **Given** no task `T-9999` exists, **When** I run `tlc task assign T-9999 engineer-1`,
+5. **Given** no task `T-9999` exists, **When** I run `tlc task assign engineer-1 T-9999`,
    **Then** the command returns a "not found" error.
+
+6. **Given** tasks `T-0001`, `T-0002` exist, **When** I run
+   `tlc task assign engineer-1 T-0001 T-0002`, **Then** both tasks are assigned to
+   `engineer-1`; status unchanged on each.
+
+7. **Given** tasks matching `'T-001\d'` exist, **When** I run
+   `tlc task assign engineer-2 'T-001\d' --no-prompt`, **Then** all matched tasks are
+   assigned to `engineer-2` without a confirmation prompt.
+
+8. **Given** tasks `T-0001`, `T-0002` are assigned, **When** I run
+   `tlc task unassign T-0001 T-0002 --note "Releasing for triage"`, **Then** both are
+   unassigned; note appended to each description.
+
+9. **Given** tasks matching `'T-001\d'` exist with assignees, **When** I run
+   `tlc task unassign 'T-001\d' --note "Batch release" --no-prompt`, **Then** all matched
+   tasks are unassigned without a prompt.
 
 ## Tests
 
@@ -64,3 +80,7 @@ why a task became ownerless. Team capacity planning and retrospectives become ho
 | 3 | Unassign clears assignee; note appended | `TestTaskUnassign` / `TestTaskUnassignAppendsNoteToDescription` | ✅ COVERED |
 | 4 | Unassign requires `--note` | `TestTaskUnassignRequiresNote` | ✅ COVERED |
 | 5 | Assign to non-existent task errors | `TestTaskAssign/AssignTaskNotFound` | ✅ COVERED |
+| 6 | Multi-ID assign (assignee first) | `TestBatchAssign` | ✅ COVERED |
+| 7 | Regex assign + `--no-prompt` | `TestBatchE2E_AssignRegexNoPrompt` | ✅ COVERED |
+| 8 | Multi-ID unassign with note | `TestBatchUnassign` | ✅ COVERED |
+| 9 | Regex unassign + `--no-prompt` | `TestBatchUnassign` | ✅ COVERED |

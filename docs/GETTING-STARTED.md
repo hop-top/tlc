@@ -16,6 +16,7 @@ This guide walks you through TLC concepts progressively, from basic task managem
   - [Stage 9: Git Conventions](#stage-9-git-conventions-optional-15-minutes)
   - [Stage 10: Workspace Queries](#stage-10-workspace-queries-10-minutes)
   - [Stage 11: Custom Plugins](#stage-11-custom-plugins-advanced)
+  - [Stage 12: Batch Operations](#stage-12-batch-operations-5-minutes)
 - [🎓 Learning Checkpoints](#-learning-checkpoints)
 - [🚫 Common Mistakes to Avoid](#-common-mistakes-to-avoid)
 - [🎯 Quick Reference by Role](#-quick-reference-by-role)
@@ -284,6 +285,46 @@ tlc task list --workspace default --space ideacrafterslabs
 ```
 
 **When to move on**: You can query tasks across projects in a workspace.
+
+---
+
+### Stage 12: Batch Operations (5 minutes)
+**Goal**: Operate on many tasks in a single command
+
+**Concepts**: Multi-ID, regex patterns, `--no-prompt`
+**Docs**: [Batch Operations](task-crud-spec-0.1.md#batch-operations),
+          [Story 067](stories/067-batch-task-operations.md)
+**Try**:
+```bash
+# Claim multiple tasks at once
+tlc task claim T-0001 T-0002 T-0003
+
+# Complete all tasks matching a pattern (skip confirmation)
+tlc task complete 'T-001\d' --no-prompt
+
+# Assign an entire pattern of tasks to one person
+tlc task assign alice 'auth-.*' --no-prompt
+
+# Add a tag to several tasks in one shot
+tlc task update T-0010 T-0011 T-0012 --add-tag hotfix
+
+# Reopen a set of terminal tasks with an audit note
+tlc task reopen T-0020 T-0021 --note "Regression found in v2.1"
+
+# Delete multiple tasks (requires --yes for >1)
+tlc task delete T-0030 T-0031 --yes
+
+# Use * glob to unclaim everything (requires --no-prompt in non-TTY)
+tlc task unclaim '*' --no-prompt
+```
+
+**Notes**:
+- `assign` signature: assignee comes first — `assign <assignee> <id|pattern>...`
+- `update --title` is blocked when multiple targets are given (ambiguous)
+- Pattern matches >1 task → confirmation prompt in TTY; `--no-prompt` skips it
+- `--no-prompt` is a persistent flag on `task`; works on any subcommand
+
+**When to move on**: You can fan out lifecycle operations across a task set in one command.
 
 ---
 

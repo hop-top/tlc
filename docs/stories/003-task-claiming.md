@@ -40,6 +40,19 @@ As an AI Agent, I want to claim available tasks and transition them through work
 
 8. **Given** a synced task from GitHub/Jira, **When** I claim it, **Then** the task is synced back to the origin system.
 
+11. **Given** tasks `T-0001`, `T-0002` exist, **When** I run `tlc task claim T-0001 T-0002`,
+    **Then** both tasks are claimed in one invocation; output lists each task.
+
+12. **Given** tasks matching `'T-001\d'` exist, **When** I run `tlc task claim 'T-001\d' --no-prompt`,
+    **Then** all matched tasks are claimed without a confirmation prompt.
+
+13. **Given** tasks `T-0001`, `T-0002` are `IN_PROGRESS`, **When** I run
+    `tlc task unclaim T-0001 T-0002`, **Then** both transition to `TODO` in one command.
+
+14. **Given** regex `'T-001\d'` matches >1 task and `--no-prompt` is absent, **When** the
+    command runs interactively, **Then** a confirmation prompt lists matched tasks before
+    proceeding.
+
 9. **Given** valid state transitions, **When** I transition:
     - TODO → IN_PROGRESS ✅
     - TODO → SKIPPED ✅
@@ -90,6 +103,15 @@ As an AI Agent, I want to claim available tasks and transition them through work
 | 8 | Sync claimed task to origin system | Not tested | ❌ NOT COVERED |
 | 9 | Valid state transitions (TODO→IN_PROGRESS→DONE/SKIPPED) | `TestValidateTransition` | ✅ COVERED |
 | 10 | Invalid state transitions (terminal states, direct TODO→DONE) | `TestValidateTransition` | ✅ COVERED |
+
+### Batch Acceptance Criteria
+
+| Scenario | Criteria | Test | Status |
+|---|---|---|---|
+| 11 | Multi-ID claim | `TestBatchClaim` | ✅ COVERED |
+| 12 | Regex claim + `--no-prompt` | `TestBatchE2E_CompleteGlob` | ✅ COVERED |
+| 13 | Multi-ID unclaim | `TestBatchUnclaim` | ✅ COVERED |
+| 14 | Pattern >1 prompts in TTY | `TestBatchE2E_DeleteRequiresConfirmOrNoPrompt` | ✅ COVERED |
 
 ## TODO
 

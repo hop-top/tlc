@@ -253,6 +253,81 @@ Recommendation:
 
 ---
 
+## Batch Operations
+
+Lifecycle commands accept multiple task identifiers in a single invocation, fanning out the
+operation across all resolved tasks.
+
+### ID Forms
+
+| Form | Example | Behaviour |
+|------|---------|-----------|
+| Exact ID | `T-0042` | Resolves to a single task; error if not found |
+| Regex pattern | `T-001\d` | Matches against all tasks in current filtered set |
+| Glob `*` | `*` | Matches all tasks in current filtered set |
+
+### Pattern Detection
+
+An argument is treated as a regex/glob (not an exact ID) when it contains any metacharacter
+from the set: `[ ( * ? + \ . ^ $ { } | )`.
+
+Exact IDs (e.g. `T-0042`, `0042`) are never passed to the regex engine.
+
+### Confirmation Behaviour
+
+When a pattern resolves to more than one task and `--no-prompt` is absent:
+
+- In TTY context: a confirmation prompt lists the matched tasks and asks `y/N`; decline
+  aborts with no mutation.
+- In non-TTY context (scripted, pipe): the command exits non-zero requiring explicit consent.
+
+Single-task matches and exact IDs proceed without a prompt.
+
+### `--no-prompt` Flag
+
+Persistent flag on the `task` parent command; applies to all subcommands.
+
+```
+tlc task --no-prompt <subcommand> <args>
+```
+
+or as a trailing flag:
+
+```
+tlc task <subcommand> <args> --no-prompt
+```
+
+Skips all confirmation prompts. Required in non-TTY batch scripts.
+
+### Command-Specific Rules
+
+| Command | Signature | Multi-target notes |
+|---------|-----------|-------------------|
+| `claim` | `claim <task-id\|pattern>...` | All matched tasks claimed |
+| `unclaim` | `unclaim <task-id\|pattern>...` | All matched tasks unclaimed |
+| `complete` | `complete <task-id\|pattern>...` | All matched tasks completed |
+| `reopen` | `reopen <task-id\|pattern>... --note <msg>` | Note appended to each task |
+| `assign` | `assign <assignee> <task-id\|pattern>...` | Assignee arg comes first |
+| `unassign` | `unassign <task-id\|pattern>... --note <msg>` | Note appended to each task |
+| `update` | `update <task-id\|pattern>... [flags]` | `--title` blocked for multi-target |
+| `delete` | `delete <task-id\|pattern>... [--yes\|-y]` | Requires `--yes`/`-y` or `--no-prompt` for >1 |
+
+### `assign` Signature Change
+
+`assign` takes assignee as the first positional argument, followed by one or more task IDs
+or patterns:
+
+```
+tlc task assign <assignee> <task-id|pattern>...
+```
+
+### Mixed Valid/Invalid IDs
+
+When multiple IDs are given and some are not found, resolved tasks are processed; each
+not-found ID emits an error. Command exits non-zero if any ID failed to resolve.
+
+---
+
 ## Invariants (Normative)
 
 - Every task MUST have exactly one id.
