@@ -38,13 +38,15 @@ Use `tlc` exclusively for all task operations.
 | Command | Effect |
 |---------|--------|
 | `tlc task create "title"` | New task, status=TODO |
-| `tlc task claim <id>` | Assign to self + status→IN_PROGRESS |
+| `tlc task claim <id> [<id>...]` | Assign to self + status→IN_PROGRESS |
 | `tlc task show <id>` | Read details |
-| `tlc task update <id> [flags]` | Mutate fields |
-| `tlc task complete <id>` | status→DONE |
-| `tlc task unclaim <id>` | Release + status→TODO |
-| `tlc task reopen <id> --note "reason"` | Reopen terminal task |
-| `tlc task delete <id> --yes` | Delete (skip prompt) |
+| `tlc task update <id> [<id>...] [flags]` | Mutate fields (batch) |
+| `tlc task complete <id> [<id>...]` | status→DONE |
+| `tlc task unclaim <id> [<id>...]` | Release + status→TODO |
+| `tlc task reopen <id> [<id>...] --note "reason"` | Reopen terminal task |
+| `tlc task assign <assignee> <id> [<id>...]` | Assign to someone (assignee first) |
+| `tlc task unassign <id> [<id>...] --note "reason"` | Remove assignee |
+| `tlc task delete <id> [<id>...] --yes` | Delete (skip prompt) |
 
 ### State machine
 
@@ -116,10 +118,33 @@ tlc task list --summary                      # status counts only
 ### 6 · Assign and unassign
 
 ```bash
-tlc task update T-0046 --assigned-to eng-2   # reassign
+tlc task assign eng-2 T-0046                 # assign (assignee first)
+tlc task assign eng-2 T-0046 T-0047          # assign multiple
+tlc task update T-0046 --assigned-to eng-2   # reassign via update
 tlc task update T-0046 --assigned-to -       # clear assignee
 tlc task unassign T-0046 --note "reason"     # --note required
 ```
+
+### 8 · Batch operations
+
+```bash
+# Multiple exact IDs
+tlc task complete T-0046 T-0047 T-0048
+tlc task claim T-0046 T-0047
+
+# Regex pattern (prompts confirmation when >1 matched)
+tlc task complete "T-004[678]" --no-prompt
+tlc task assign eng-1 "T-00[12]\d" --no-prompt
+
+# Match all
+tlc task update "*" --assigned-to eng-1 --no-prompt
+
+# --no-prompt flag: skip confirmation (also -y for delete)
+tlc task delete T-0046 T-0047 --no-prompt
+```
+
+`--no-prompt` is a persistent flag on `task` — applies to all subcommands.
+`--title` is blocked when updating multiple tasks.
 
 ### 7 · Run a flow
 
@@ -198,6 +223,8 @@ tlc -c /path/to/.tlc/config.yaml task list
 | Long `&&` chains with tlc | Run one command at a time |
 | Use built-in task tools | Use `tlc task` exclusively |
 | `tlc task reopen T-0046` | `tlc task reopen T-0046 --note "reason"` |
+| `tlc task assign T-0046 alice` | `tlc task assign alice T-0046` (assignee first) |
+| `tlc task delete T-0046 T-0047` (no flag) | `tlc task delete T-0046 T-0047 --no-prompt` |
 
 ---
 
