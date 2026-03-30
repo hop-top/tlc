@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -463,6 +465,48 @@ func TestTaskList_StaleFilter(t *testing.T) {
 	}
 	if contains(output, "Fresh task") {
 		t.Errorf("did not expect 'Fresh task' in --stale output; got: %s", output)
+	}
+}
+
+
+// TestTaskList_IDIntactBeyondSecondRow creates four tasks via the CLI (letting
+// storage auto-generate IDs) and verifies that every task ID appears intact
+// (including the leading "T") for all rows in the default table output.
+// The bug manifests as rows 3+ showing "-0003" instead of "T-0003".
+func TestTaskList_IDIntactBeyondSecondRow(t *testing.T) {
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	titles := []string{"Task One", "Task Two", "Task Three", "Task Four"}
+	for i, title := range titles {
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		cmd.SetArgs([]string{"task", "create", fmt.Sprintf("Task %d: %s", i+1, title)})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("create task %d: %v", i+1, err)
+		}
+	}
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "TODO"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list failed: %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("list output:\n%s", output)
+
+	// Every row must show a full "T-XXXX" ID, not a truncated "-XXXX".
+	// Count how many T- prefixed IDs appear; expect at least 4.
+	count := strings.Count(output, "T-")
+	if count < len(titles) {
+		t.Errorf("expected at least %d full T-XXXX IDs in output, found %d; output:\n%s",
+			len(titles), count, output)
 	}
 }
 

@@ -174,8 +174,7 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		staleCol := "-"
 		if t.IsStale() {
 			if s := t.StaleSince(); s != nil {
-				staleCol = lipgloss.NewStyle().Foreground(warningColor).
-					Render("! " + formatDuration(*s))
+				staleCol = "! " + formatDuration(*s)
 			}
 		}
 
@@ -187,7 +186,7 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		rows = append(rows, table.Row{
 			t.ID,
 			t.Title,
-			formatStatus(t.Status),
+			formatStatusPlain(t.Status),
 			assignee,
 			staleCol,
 			blockedCol,
@@ -256,6 +255,20 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 	tbl.SetStyles(s)
 
 	_, _ = fmt.Fprintln(w, tbl.View())
+}
+
+// formatStatusPlain returns the human-readable status label without ANSI
+// escape sequences, safe to embed in table cell data.
+func formatStatusPlain(status core.TaskStatus) string {
+	wm := core.DefaultWorkflow()
+	def, err := wm.GetStatusDef(status)
+	if err != nil {
+		return string(status)
+	}
+	if def.Label != "" {
+		return def.Label
+	}
+	return def.Name
 }
 
 func formatStatus(status core.TaskStatus) string {
