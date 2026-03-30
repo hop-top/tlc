@@ -473,6 +473,9 @@ func TestTaskList_StaleFilter(t *testing.T) {
 // storage auto-generate IDs) and verifies that every task ID appears intact
 // (including the leading "T") for all rows in the default table output.
 // The bug manifests as rows 3+ showing "-0003" instead of "T-0003".
+//
+// TestMain in test_helpers.go runs the suite under both Ascii and TrueColor
+// profiles, so this test exercises the ANSI rendering path automatically.
 func TestTaskList_IDIntactBeyondSecondRow(t *testing.T) {
 	_, cleanup := setupTestDir(t)
 	defer cleanup()

@@ -205,6 +205,7 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		BorderForeground(lipgloss.Color("240")).
 		BorderBottom(true).
 		Bold(true)
+	s.Selected = lipgloss.NewStyle() // no highlight — static display, no cursor
 	tbl.SetStyles(s)
 
 	_, _ = fmt.Fprintln(w, tbl.View())
@@ -252,6 +253,7 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 		BorderForeground(lipgloss.Color("240")).
 		BorderBottom(true).
 		Bold(true)
+	s.Selected = lipgloss.NewStyle() // no highlight — static display, no cursor
 	tbl.SetStyles(s)
 
 	_, _ = fmt.Fprintln(w, tbl.View())

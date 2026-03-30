@@ -36,7 +36,7 @@ build: ## Build the binary to bin/
 	@go build -v -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ Built $(BIN_DIR)/$(BINARY_NAME)$(COLOR_RESET)"
 
-test: ## Run all tests
+test: ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
 	@echo "$(COLOR_BLUE)Running tests...$(COLOR_RESET)"
 	@go test -v -race ./...
 	@echo "$(COLOR_GREEN)✓ All tests passed$(COLOR_RESET)"
