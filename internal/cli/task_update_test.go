@@ -745,6 +745,50 @@ func TestTaskUpdate_TimeoutInvalid(t *testing.T) {
 	}
 }
 
+func TestTaskUpdate_MultipleIDs(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "T-0002", "--assigned-to", "alice"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task.AssignedTo == nil || *task.AssignedTo != "alice" {
+			t.Errorf("expected %s assigned to alice", id)
+		}
+	}
+}
+
+func TestTaskDelete_MultipleIDs_WithNoPrompt(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	cmd.SetArgs([]string{"task", "delete", "T-0001", "T-0002", "--no-prompt"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task != nil {
+			t.Errorf("expected %s to be deleted", id)
+		}
+	}
+}
+
 // TestTaskCreate_Timeout tests setting stale timeout on task create via --timeout flag.
 func TestTaskCreate_Timeout(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)

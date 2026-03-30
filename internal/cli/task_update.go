@@ -4,21 +4,20 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/uri"
 )
 
 var TaskUpdateCmd = &cobra.Command{
-	Use:   "update <task-id>",
+	Use:   "update <task-id|pattern>...",
 	Short: "Update task fields",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
@@ -26,124 +25,141 @@ var TaskUpdateCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
-		}
-
-		changed := false
-		now := time.Now().UTC()
-
-		if cmd.Flags().Changed("title") {
-			task.Title = taskUpdateTitle
-			changed = true
-		}
-		if cmd.Flags().Changed("description") {
-			task.Description = taskUpdateDescription
-			changed = true
-		}
-		if cmd.Flags().Changed("assigned-to") {
-			if taskUpdateAssignedTo == "null" || taskUpdateAssignedTo == "-" {
-				task.AssignedTo = nil
-			} else {
-				task.AssignedTo = &taskUpdateAssignedTo
-			}
-			changed = true
-		}
-
-		if cmd.Flags().Changed("status") {
-			nextStatus := core.TaskStatus(taskUpdateStatus)
-			wm := core.DefaultWorkflow()
-			log, err := task.TransitionWithWorkflow(
-				nextStatus, core.GetCurrentUser(), "Manual update", wm, taskUpdateForce,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to transition task: %w", err)
-			}
-			if err := res.Storage.AddLog(ctx, log); err != nil {
-				fmt.Printf("Warning: failed to write log: %v\n", err)
-			}
-			changed = true
-		}
-
-		if cmd.Flags().Changed("effort") {
-			if !core.ValidEffort(core.Effort(taskUpdateEffort)) {
-				return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
-			}
-			task.Effort = core.Effort(taskUpdateEffort)
-			changed = true
-		}
-
-		if cmd.Flags().Changed("priority") {
-			if !core.ValidPriority(core.Priority(taskUpdatePriority)) {
-				return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
-			}
-			task.Priority = core.Priority(taskUpdatePriority)
-			changed = true
-		}
-
-		if taskUpdateClearBlockedBy {
-			task.SetBlockedBy(nil)
-			changed = true
-		}
-
-		if len(taskUpdateAddBlockedBy) > 0 {
-			validated, err := validateBlockedByRefs(ctx, s, res.Storage, taskUpdateAddBlockedBy)
-			if err != nil {
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, args[0]); err != nil {
 				return err
 			}
-			task.AddBlockedBy(validated)
-			changed = true
 		}
 
-		if len(taskUpdateRemoveBlockedBy) > 0 {
-			task.RemoveBlockedBy(taskUpdateRemoveBlockedBy)
-			changed = true
+		if cmd.Flags().Changed("title") && len(resolved) > 1 {
+			return fmt.Errorf("--title can only be set when updating a single task")
 		}
 
-		if len(taskUpdateAddTags) > 0 || len(taskUpdateRemoveTags) > 0 {
-			tagMap := make(map[string]bool)
-			for _, t := range task.Tags {
-				tagMap[t] = true
-			}
-			for _, t := range taskUpdateAddTags {
-				tagMap[t] = true
-			}
-			for _, t := range taskUpdateRemoveTags {
-				delete(tagMap, t)
-			}
-			newTags := []string{}
-			for t := range tagMap {
-				newTags = append(newTags, t)
-			}
-			task.Tags = newTags
-			changed = true
-		}
+		now := time.Now().UTC()
+		var errs []string
 
-		if cmd.Flags().Changed("blocked") {
-			task.BlockedReason = &taskUpdateBlocked
-			changed = true
-		}
-		if cmd.Flags().Changed("unblock") && taskUpdateUnblock {
-			task.BlockedReason = nil
-			changed = true
-		}
-		if cmd.Flags().Changed("timeout") {
-			d, err := time.ParseDuration(taskUpdateTimeout)
-			if err != nil {
-				return fmt.Errorf("invalid --timeout %q: %w", taskUpdateTimeout, err)
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
 			}
-			task.StaleTimeout = &d
-			changed = true
-		}
 
-		if changed {
-			task.StaleFiredAt = nil // reset crossing state on any change
-			// Config-driven validation for update.
+			changed := false
+
+			if cmd.Flags().Changed("title") {
+				task.Title = taskUpdateTitle
+				changed = true
+			}
+			if cmd.Flags().Changed("description") {
+				task.Description = taskUpdateDescription
+				changed = true
+			}
+			if cmd.Flags().Changed("assigned-to") {
+				if taskUpdateAssignedTo == "null" || taskUpdateAssignedTo == "-" {
+					task.AssignedTo = nil
+				} else {
+					task.AssignedTo = &taskUpdateAssignedTo
+				}
+				changed = true
+			}
+
+			if cmd.Flags().Changed("status") {
+				nextStatus := core.TaskStatus(taskUpdateStatus)
+				wm := core.DefaultWorkflow()
+				log, err := task.TransitionWithWorkflow(
+					nextStatus, core.GetCurrentUser(), "Manual update", wm, taskUpdateForce,
+				)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: failed to transition: %v", task.ID, err))
+					continue
+				}
+				if err := res.Storage.AddLog(ctx, log); err != nil {
+					fmt.Printf("Warning: failed to write log for %s: %v\n", task.ID, err)
+				}
+				changed = true
+			}
+
+			if cmd.Flags().Changed("effort") {
+				if !core.ValidEffort(core.Effort(taskUpdateEffort)) {
+					return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
+				}
+				task.Effort = core.Effort(taskUpdateEffort)
+				changed = true
+			}
+
+			if cmd.Flags().Changed("priority") {
+				if !core.ValidPriority(core.Priority(taskUpdatePriority)) {
+					return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
+				}
+				task.Priority = core.Priority(taskUpdatePriority)
+				changed = true
+			}
+
+			if taskUpdateClearBlockedBy {
+				task.SetBlockedBy(nil)
+				changed = true
+			}
+
+			if len(taskUpdateAddBlockedBy) > 0 {
+				validated, err := validateBlockedByRefs(ctx, s, res.Storage, taskUpdateAddBlockedBy)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+					continue
+				}
+				task.AddBlockedBy(validated)
+				changed = true
+			}
+
+			if len(taskUpdateRemoveBlockedBy) > 0 {
+				task.RemoveBlockedBy(taskUpdateRemoveBlockedBy)
+				changed = true
+			}
+
+			if len(taskUpdateAddTags) > 0 || len(taskUpdateRemoveTags) > 0 {
+				tagMap := make(map[string]bool)
+				for _, t := range task.Tags {
+					tagMap[t] = true
+				}
+				for _, t := range taskUpdateAddTags {
+					tagMap[t] = true
+				}
+				for _, t := range taskUpdateRemoveTags {
+					delete(tagMap, t)
+				}
+				newTags := []string{}
+				for t := range tagMap {
+					newTags = append(newTags, t)
+				}
+				task.Tags = newTags
+				changed = true
+			}
+
+			if cmd.Flags().Changed("blocked") {
+				task.BlockedReason = &taskUpdateBlocked
+				changed = true
+			}
+			if cmd.Flags().Changed("unblock") && taskUpdateUnblock {
+				task.BlockedReason = nil
+				changed = true
+			}
+			if cmd.Flags().Changed("timeout") {
+				d, err := time.ParseDuration(taskUpdateTimeout)
+				if err != nil {
+					return fmt.Errorf("invalid --timeout %q: %w", taskUpdateTimeout, err)
+				}
+				task.StaleTimeout = &d
+				changed = true
+			}
+
+			if !changed {
+				continue
+			}
+
+			task.StaleFiredAt = nil // reset stale crossing state on any change
 			var assignedTo string
 			if task.AssignedTo != nil {
 				assignedTo = *task.AssignedTo
@@ -159,22 +175,31 @@ var TaskUpdateCmd = &cobra.Command{
 				Tags:        task.Tags,
 				Reference:   task.Reference,
 			}); err != nil {
-				return err
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
 			}
 
 			task.UpdatedAt = now
 
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
 				if err := updateSyncedTask(ctx, task, res.Storage); err != nil {
-					return err
+					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+					continue
 				}
 			} else {
 				if err := res.Storage.UpdateTask(ctx, task); err != nil {
-					return fmt.Errorf("failed to update task: %w", err)
+					errs = append(errs, fmt.Sprintf("%s: failed to update: %v", task.ID, err))
+					continue
 				}
 				fmt.Printf("Updated task %s\n", task.ID)
 			}
+		}
 
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+
+		if len(resolved) > 0 {
 			return syncTODOAll()
 		}
 		fmt.Println("No changes specified; use --title, --description, --status, --assigned-to, or other flags to update")
@@ -183,11 +208,10 @@ var TaskUpdateCmd = &cobra.Command{
 }
 
 var TaskDeleteCmd = &cobra.Command{
-	Use:   "delete <task-id>",
+	Use:   "delete <task-id|pattern>...",
 	Short: "Delete a task",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
@@ -195,20 +219,21 @@ var TaskDeleteCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
-		}
 
-		if !taskDeleteYes {
-			if !deletePromptInteractive(cmd) {
-				return errDeleteRequiresYes(id)
+		// For delete: confirm if multiple targets unless --yes or --no-prompt.
+		if (needsConfirm || len(resolved) > 1) && !taskDeleteYes && !taskNoPrompt {
+			if err := confirmBatch(cmd, resolved, strings.Join(args, " ")); err != nil {
+				return err
 			}
-
+		} else if len(resolved) == 1 && !taskDeleteYes && !taskNoPrompt {
+			task := resolved[0].Task
+			if !deletePromptInteractive(cmd) {
+				return errDeleteRequiresYes(task.ID)
+			}
 			var confirm bool
 			err := huh.NewConfirm().
 				Title(fmt.Sprintf("Delete task %s (%s)?", task.ID, task.Title)).
@@ -223,36 +248,49 @@ var TaskDeleteCmd = &cobra.Command{
 			}
 		}
 
-		// Config-driven validation for delete.
-		var assignedTo string
-		if task.AssignedTo != nil {
-			assignedTo = *task.AssignedTo
-		}
-		valCfg := getValidationConfig()
-		if err := valCfg.ValidateTaskOp(config.ValidationOpDelete, config.TaskFields{
-			Title:       task.Title,
-			Description: task.Description,
-			Status:      string(task.Status),
-			AssignedTo:  assignedTo,
-			Effort:      string(task.Effort),
-			Priority:    string(task.Priority),
-			Tags:        task.Tags,
-			Reference:   task.Reference,
-		}); err != nil {
-			return err
-		}
-
-		if task.OriginSystem != nil && *task.OriginSystem != "" {
-			if err := deleteSyncedTask(ctx, task, res.Storage); err != nil {
-				return err
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
 			}
+
+			var assignedTo string
+			if task.AssignedTo != nil {
+				assignedTo = *task.AssignedTo
+			}
+			valCfg := getValidationConfig()
+			if err := valCfg.ValidateTaskOp(config.ValidationOpDelete, config.TaskFields{
+				Title:       task.Title,
+				Description: task.Description,
+				Status:      string(task.Status),
+				AssignedTo:  assignedTo,
+				Effort:      string(task.Effort),
+				Priority:    string(task.Priority),
+				Tags:        task.Tags,
+				Reference:   task.Reference,
+			}); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+
+			if task.OriginSystem != nil && *task.OriginSystem != "" {
+				if err := deleteSyncedTask(ctx, task, res.Storage); err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+					continue
+				}
+			}
+
+			if err := res.Storage.DeleteTask(ctx, task.ID); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: failed to delete: %v", task.ID, err))
+				continue
+			}
+			fmt.Printf("Deleted task %s\n", task.ID)
 		}
 
-		if err := res.Storage.DeleteTask(ctx, task.ID); err != nil {
-			return fmt.Errorf("failed to delete task: %w", err)
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-
-		fmt.Printf("Deleted task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
