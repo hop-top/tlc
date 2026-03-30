@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,269 +12,329 @@ import (
 )
 
 var TaskClaimCmd = &cobra.Command{
-	Use:   "claim <task-id>",
+	Use:   "claim <task-id|pattern>...",
 	Short: "Claim a task for work",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, args[0]); err != nil {
+				return err
+			}
 		}
 
-		user := core.GetCurrentUser()
-		prevStatus := task.Status
-		task.AssignedTo = &user
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
 
-		wm := core.DefaultWorkflow()
-		activeStatus, wmErr := wm.StatusForRole("active")
-		if wmErr != nil {
-			return fmt.Errorf("workflow has no active status: %w", wmErr)
-		}
-		log, err := task.TransitionWithWorkflow(
-			activeStatus, user, taskClaimNote, wm, false,
-		)
-		if err == nil {
-			details := fmt.Sprintf("(%s → %s, assigned to @%s)", prevStatus, activeStatus, user)
-			appendAuditLog(task, user, "CLAIMED", details, taskClaimNote, task.UpdatedAt)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to transition task: %w", err)
-		}
+			user := core.GetCurrentUser()
+			prevStatus := task.Status
+			task.AssignedTo = &user
 
-		if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
-			return err
-		}
+			wm := core.DefaultWorkflow()
+			activeStatus, wmErr := wm.StatusForRole("active")
+			if wmErr != nil {
+				return fmt.Errorf("workflow has no active status: %w", wmErr)
+			}
+			log, transErr := task.TransitionWithWorkflow(
+				activeStatus, user, taskClaimNote, wm, false,
+			)
+			if transErr == nil {
+				details := fmt.Sprintf("(%s → %s, assigned to @%s)", prevStatus, activeStatus, user)
+				appendAuditLog(task, user, "CLAIMED", details, taskClaimNote, task.UpdatedAt)
+			}
+			if transErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				continue
+			}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", task.ID)
+			if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", task.ID)
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
 		return syncTODOAll()
 	},
 }
 
 var TaskUnclaimCmd = &cobra.Command{
-	Use:   "unclaim <task-id>",
+	Use:   "unclaim <task-id|pattern>...",
 	Short: "Release a claimed task",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, args[0]); err != nil {
+				return err
+			}
 		}
 
-		user := core.GetCurrentUser()
-		prevStatus := task.Status
-		task.AssignedTo = nil
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
 
-		wm := core.DefaultWorkflow()
-		initialStatus, wmErr := wm.StatusForRole("initial")
-		if wmErr != nil {
-			return fmt.Errorf("workflow has no initial status: %w", wmErr)
-		}
-		log, err := task.TransitionWithWorkflow(
-			initialStatus, user, taskUnclaimNote, wm, false,
-		)
-		if err == nil {
-			details := fmt.Sprintf("(%s → %s, unassigned)", prevStatus, initialStatus)
-			appendAuditLog(task, user, "UNCLAIMED", details, taskUnclaimNote, task.UpdatedAt)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to transition task: %w", err)
-		}
+			user := core.GetCurrentUser()
+			prevStatus := task.Status
+			task.AssignedTo = nil
 
-		if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
-			return err
-		}
+			wm := core.DefaultWorkflow()
+			initialStatus, wmErr := wm.StatusForRole("initial")
+			if wmErr != nil {
+				return fmt.Errorf("workflow has no initial status: %w", wmErr)
+			}
+			log, transErr := task.TransitionWithWorkflow(
+				initialStatus, user, taskUnclaimNote, wm, false,
+			)
+			if transErr == nil {
+				details := fmt.Sprintf("(%s → %s, unassigned)", prevStatus, initialStatus)
+				appendAuditLog(task, user, "UNCLAIMED", details, taskUnclaimNote, task.UpdatedAt)
+			}
+			if transErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				continue
+			}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", task.ID)
+			if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", task.ID)
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
 		return syncTODOAll()
 	},
 }
 
 var TaskAssignCmd = &cobra.Command{
-	Use:   "assign <task-id> <assignee>",
-	Short: "Assign a task to someone",
-	Args:  cobra.ExactArgs(2),
+	Use:   "assign <assignee> <task-id|pattern>...",
+	Short: "Assign tasks to someone",
+	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
-		assignee := args[1]
+		assignee := args[0]
+		taskArgs := args[1:]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, taskArgs, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, taskArgs[0]); err != nil {
+				return err
+			}
 		}
 
 		user := core.GetCurrentUser()
-		prevAssignee := ""
-		if task.AssignedTo != nil {
-			prevAssignee = *task.AssignedTo
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
+
+			prevAssignee := ""
+			if task.AssignedTo != nil {
+				prevAssignee = *task.AssignedTo
+			}
+
+			task.AssignedTo = &assignee
+			task.UpdatedAt = time.Now().UTC()
+
+			details := fmt.Sprintf("(assigned to @%s)", assignee)
+			if prevAssignee != "" {
+				details = fmt.Sprintf("(reassigned from @%s to @%s)", prevAssignee, assignee)
+			}
+			appendAuditLog(task, user, "ASSIGNED", details, taskAssignNote, task.UpdatedAt)
+
+			logEntry := &core.LogEntry{
+				TaskID:    task.ID,
+				Timestamp: task.UpdatedAt,
+				By:        user,
+				Action:    core.ActionReassigned,
+				Note:      taskAssignNote,
+			}
+
+			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", task.ID, assignee)
 		}
-
-		task.AssignedTo = &assignee
-		task.UpdatedAt = time.Now().UTC()
-
-		details := fmt.Sprintf("(assigned to @%s)", assignee)
-		if prevAssignee != "" {
-			details = fmt.Sprintf("(reassigned from @%s to @%s)", prevAssignee, assignee)
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		appendAuditLog(task, user, "ASSIGNED", details, taskAssignNote, task.UpdatedAt)
-
-		logEntry := &core.LogEntry{
-			TaskID:    task.ID,
-			Timestamp: task.UpdatedAt,
-			By:        user,
-			Action:    core.ActionReassigned,
-			Note:      taskAssignNote,
-		}
-
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-			return err
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", task.ID, assignee)
 		return syncTODOAll()
 	},
 }
 
 var TaskUnassignCmd = &cobra.Command{
-	Use:   "unassign <task-id>",
+	Use:   "unassign <task-id|pattern>...",
 	Short: "Remove assignee from a task",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if taskUnassignNote == "" {
-			return errNoteRequired(fmt.Sprintf("tlc task unassign %s", args[0]))
+			return errNoteRequired("tlc task unassign <task-id|pattern>...")
 		}
 
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, args[0]); err != nil {
+				return err
+			}
 		}
 
-		prevAssignee := ""
-		if task.AssignedTo != nil {
-			prevAssignee = *task.AssignedTo
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
+
+			prevAssignee := ""
+			if task.AssignedTo != nil {
+				prevAssignee = *task.AssignedTo
+			}
+
+			user := core.GetCurrentUser()
+			task.AssignedTo = nil
+			task.UpdatedAt = time.Now().UTC()
+
+			details := "(unassigned)"
+			if prevAssignee != "" {
+				details = fmt.Sprintf("(unassigned from @%s)", prevAssignee)
+			}
+			appendAuditLog(task, user, "UNASSIGNED", details, taskUnassignNote, task.UpdatedAt)
+
+			logEntry := &core.LogEntry{
+				TaskID:    task.ID,
+				Timestamp: task.UpdatedAt,
+				By:        user,
+				Action:    core.ActionReassigned,
+				Note:      taskUnassignNote,
+			}
+
+			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", task.ID)
 		}
-
-		user := core.GetCurrentUser()
-		task.AssignedTo = nil
-		task.UpdatedAt = time.Now().UTC()
-
-		details := "(unassigned)"
-		if prevAssignee != "" {
-			details = fmt.Sprintf("(unassigned from @%s)", prevAssignee)
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		appendAuditLog(task, user, "UNASSIGNED", details, taskUnassignNote, task.UpdatedAt)
-
-		logEntry := &core.LogEntry{
-			TaskID:    task.ID,
-			Timestamp: task.UpdatedAt,
-			By:        user,
-			Action:    core.ActionReassigned,
-			Note:      taskUnassignNote,
-		}
-
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-			return err
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", task.ID)
 		return syncTODOAll()
 	},
 }
 
 var TaskCompleteCmd = &cobra.Command{
-	Use:   "complete <task-id>",
+	Use:   "complete <task-id|pattern>...",
 	Short: "Mark a task as done",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
-
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
+
+		resolved, needsConfirm, err := resolveTaskIDs(ctx, args, s, core.Query{})
 		if err != nil {
 			return err
 		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+		if needsConfirm {
+			if err := confirmBatch(cmd, resolved, args[0]); err != nil {
+				return err
+			}
 		}
 
-		user := core.GetCurrentUser()
-		if task.AssignedTo == nil || *task.AssignedTo == "" {
-			task.AssignedTo = &user
-		}
+		var errs []string
+		for _, res := range resolved {
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
 
-		prevStatus := task.Status
-		wm := core.DefaultWorkflow()
-		completedStatus, wmErr := wm.StatusForRole("completed")
-		if wmErr != nil {
-			return fmt.Errorf("workflow has no completed status: %w", wmErr)
-		}
-		logEntry, err := task.TransitionWithWorkflow(
-			completedStatus, user, taskCompleteNote, wm, taskCompleteNoVerify,
-		)
-		if err == nil {
-			details := fmt.Sprintf("(%s → %s)", prevStatus, completedStatus)
-			appendAuditLog(task, user, "COMPLETED", details, taskCompleteNote, task.UpdatedAt)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to transition task: %w", err)
-		}
+			user := core.GetCurrentUser()
+			if task.AssignedTo == nil || *task.AssignedTo == "" {
+				task.AssignedTo = &user
+			}
 
-		if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-			return err
-		}
+			prevStatus := task.Status
+			wm := core.DefaultWorkflow()
+			completedStatus, wmErr := wm.StatusForRole("completed")
+			if wmErr != nil {
+				return fmt.Errorf("workflow has no completed status: %w", wmErr)
+			}
+			logEntry, transErr := task.TransitionWithWorkflow(
+				completedStatus, user, taskCompleteNote, wm, taskCompleteNoVerify,
+			)
+			if transErr == nil {
+				details := fmt.Sprintf("(%s → %s)", prevStatus, completedStatus)
+				appendAuditLog(task, user, "COMPLETED", details, taskCompleteNote, task.UpdatedAt)
+			}
+			if transErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				continue
+			}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", task.ID)
+			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", task.ID)
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
 		return syncTODOAll()
 	},
 }

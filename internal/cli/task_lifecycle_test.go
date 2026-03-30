@@ -108,7 +108,7 @@ func TestTaskAssign(t *testing.T) {
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "assign", "T-0001", testEngineer1})
+		cmd.SetArgs([]string{"task", "assign", testEngineer1, "T-0001"})
 
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task assign failed: %v", err)
@@ -166,7 +166,7 @@ func TestTaskAssign(t *testing.T) {
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "assign", "T-0001", testEngineer2, "--note", "Reassigning for review"})
+		cmd.SetArgs([]string{"task", "assign", testEngineer2, "T-0001", "--note", "Reassigning for review"})
 
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("task assign with note failed: %v", err)
@@ -219,7 +219,7 @@ func TestTaskAssign(t *testing.T) {
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "assign", "T-9999", testEngineer1})
+		cmd.SetArgs([]string{"task", "assign", testEngineer1, "T-9999"})
 
 		if err := cmd.Execute(); err == nil {
 			t.Fatal("expected error for non-existent task")
@@ -459,6 +459,134 @@ func TestTaskReopenAppendsNoteToDescription(t *testing.T) {
 	}
 	if !contains(task.Description, "Tests failing after merge") {
 		t.Errorf("expected note appended to description, got: %s", task.Description)
+	}
+}
+
+func TestTaskClaim_MultipleIDs(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"task", "claim", "T-0001", "T-0002"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task.Status != core.StatusInProgress {
+			t.Errorf("expected %s IN_PROGRESS, got %s", id, task.Status)
+		}
+	}
+}
+
+func TestTaskComplete_RegexPattern(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	user := "testuser"
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusInProgress, AssignedTo: &user})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusInProgress, AssignedTo: &user})
+	s.CreateTask(ctx, &core.Task{ID: "T-0010", Title: "C", Status: core.StatusInProgress, AssignedTo: &user})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"task", "complete", `T-000[12]`, "--no-prompt"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task.Status != core.StatusDone {
+			t.Errorf("expected %s DONE, got %s", id, task.Status)
+		}
+	}
+	// T-0010 should be untouched
+	task, _ := s.GetTask(ctx, "T-0010")
+	if task.Status != core.StatusInProgress {
+		t.Errorf("expected T-0010 still IN_PROGRESS, got %s", task.Status)
+	}
+}
+
+func TestTaskReopen_MultipleIDs(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusDone})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusDone})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"task", "reopen", "T-0001", "T-0002", "--note", "retry"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task.Status != core.StatusTodo {
+			t.Errorf("expected %s TODO, got %s", id, task.Status)
+		}
+	}
+}
+
+func TestTaskAssign_NewArgOrder(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	cmd.SetArgs([]string{"task", "assign", "alice", "T-0001", "T-0002"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task.AssignedTo == nil || *task.AssignedTo != "alice" {
+			t.Errorf("expected %s assigned to alice", id)
+		}
+	}
+}
+
+func TestTaskAssign_RegexPattern(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "A", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "B", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0010", Title: "C", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	cmd.SetArgs([]string{"task", "assign", "bob", `T-000[12]`, "--no-prompt"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"T-0001", "T-0002"} {
+		task, _ := s.GetTask(ctx, id)
+		if task.AssignedTo == nil || *task.AssignedTo != "bob" {
+			t.Errorf("expected %s assigned to bob", id)
+		}
+	}
+	task, _ := s.GetTask(ctx, "T-0010")
+	if task.AssignedTo != nil {
+		t.Errorf("expected T-0010 unassigned")
 	}
 }
 
