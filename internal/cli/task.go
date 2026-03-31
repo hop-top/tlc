@@ -76,8 +76,10 @@ var (
 	taskListProfile   string
 	taskListSquad     string
 
-	taskListStale   bool
-	taskListBlocked bool
+	taskListStale     bool
+	taskListBlocked   bool
+	taskListPriority  []string
+	taskListBlockedBy []string
 
 	taskNoPrompt bool
 )

@@ -31,6 +31,8 @@ tlc task create "title" --blocked-by T-0041 --blocked-by other-project/T-0007
 tlc task list                            # list tasks: IN_PROGRESS first, then TODO (default)
 tlc task list --limit 30                 # increase result limit
 tlc task list --status DONE              # filter by a specific status
+tlc task list --priority P0              # filter by priority (P0, P1, P2, P3; repeatable)
+tlc task list --blocked-by T-0041        # show tasks blocked by T-0041 (repeatable)
 tlc task show <id>                       # task details
 tlc task claim <id>                      # claim + transitions status → IN_PROGRESS
 tlc task complete <id>                   # mark done (transitions status → DONE)

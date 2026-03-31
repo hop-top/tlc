@@ -73,6 +73,9 @@ var TaskListCmd = &cobra.Command{
 		for _, tag := range taskListTag {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "tags", Operator: core.OpContains, Value: tag})
 		}
+		for _, p := range taskListPriority {
+			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: strings.ToUpper(p)})
+		}
 
 		// Workspace mode: query across workspace projects.
 		if cmd.Flags().Changed("workspace") {
@@ -116,14 +119,17 @@ var TaskListCmd = &cobra.Command{
 			}
 		}
 
-		// Post-query filter for --stale and --blocked.
-		if taskListStale || taskListBlocked {
+		// Post-query filter for --stale, --blocked, --blocked-by.
+		if taskListStale || taskListBlocked || len(taskListBlockedBy) > 0 {
 			filtered := tasks[:0]
 			for _, t := range tasks {
 				if taskListStale && !t.IsStale() {
 					continue
 				}
 				if taskListBlocked && !t.IsBlocked() {
+					continue
+				}
+				if len(taskListBlockedBy) > 0 && !taskBlockedByAny(t, taskListBlockedBy) {
 					continue
 				}
 				filtered = append(filtered, t)
@@ -285,4 +291,19 @@ func init() {
 	TaskListCmd.Flags().StringVar(&taskListSquad, "squad", "", "Filter by aps squad members")
 	TaskListCmd.Flags().BoolVar(&taskListStale, "stale", false, "Show only stale tasks")
 	TaskListCmd.Flags().BoolVar(&taskListBlocked, "blocked", false, "Show only blocked tasks")
+	TaskListCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority (P0, P1, P2, P3)")
+	TaskListCmd.Flags().StringSliceVar(&taskListBlockedBy, "blocked-by", []string{}, "Show only tasks blocked by the given task IDs")
+}
+
+// taskBlockedByAny reports whether t is blocked by any of the given IDs.
+func taskBlockedByAny(t *core.Task, ids []string) bool {
+	blockers := t.BlockedBy()
+	for _, want := range ids {
+		for _, b := range blockers {
+			if strings.EqualFold(b, want) {
+				return true
+			}
+		}
+	}
+	return false
 }

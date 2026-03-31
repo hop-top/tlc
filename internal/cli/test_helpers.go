@@ -266,6 +266,8 @@ func resetTaskFlags() {
 	taskListSquad = ""
 	taskListStale = false
 	taskListBlocked = false
+	taskListPriority = []string{}
+	taskListBlockedBy = []string{}
 
 	taskStaleRunHooks = false
 

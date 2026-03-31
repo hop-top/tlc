@@ -564,3 +564,107 @@ func TestTaskList_BlockedFilter(t *testing.T) {
 		t.Errorf("did not expect 'Free task' in --blocked output; got: %s", output)
 	}
 }
+
+func TestTaskListFilterByPriority(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "P0 task", Status: core.StatusTodo, Priority: core.PriorityP0})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "P2 task", Status: core.StatusTodo, Priority: core.PriorityP2})
+	s.CreateTask(ctx, &core.Task{ID: "T-0003", Title: "No priority task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--priority", "P0"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --priority failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "P0 task") {
+		t.Errorf("expected 'P0 task' in --priority P0 output; got: %s", output)
+	}
+	if contains(output, "P2 task") {
+		t.Errorf("did not expect 'P2 task' in --priority P0 output; got: %s", output)
+	}
+	if contains(output, "No priority task") {
+		t.Errorf("did not expect 'No priority task' in --priority P0 output; got: %s", output)
+	}
+}
+
+func TestTaskListFilterByPriorityMultiple(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "P0 task", Status: core.StatusTodo, Priority: core.PriorityP0})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "P1 task", Status: core.StatusTodo, Priority: core.PriorityP1})
+	s.CreateTask(ctx, &core.Task{ID: "T-0003", Title: "P3 task", Status: core.StatusTodo, Priority: core.PriorityP3})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--priority", "P0,P1"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --priority P0,P1 failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "P0 task") {
+		t.Errorf("expected 'P0 task'; got: %s", output)
+	}
+	if !contains(output, "P1 task") {
+		t.Errorf("expected 'P1 task'; got: %s", output)
+	}
+	if contains(output, "P3 task") {
+		t.Errorf("did not expect 'P3 task'; got: %s", output)
+	}
+}
+
+func TestTaskListFilterByBlockedBy(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	blocker := &core.Task{ID: "T-0001", Title: "Blocker", Status: core.StatusTodo}
+	blocked := &core.Task{ID: "T-0002", Title: "Blocked by T-0001", Status: core.StatusTodo,
+		Meta: map[string]interface{}{"blocked_by": []string{"T-0001"}}}
+	free := &core.Task{ID: "T-0003", Title: "Free task", Status: core.StatusTodo}
+
+	s.CreateTask(ctx, blocker)
+	s.CreateTask(ctx, blocked)
+	s.CreateTask(ctx, free)
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--blocked-by", "T-0001"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --blocked-by failed: %v", err)
+	}
+
+	output := buf.String()
+	if !contains(output, "Blocked by T-0001") {
+		t.Errorf("expected blocked task in output; got: %s", output)
+	}
+	if contains(output, "Free task") {
+		t.Errorf("did not expect 'Free task' in --blocked-by output; got: %s", output)
+	}
+	if contains(output, "Blocker") {
+		t.Errorf("did not expect blocker itself in --blocked-by output; got: %s", output)
+	}
+}
