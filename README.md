@@ -168,6 +168,8 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - List stale: `tlc task list --stale` (only tasks past their stale threshold)
 - Stale subcommand: `tlc task stale` (dedicated stale view; fires hooks with `--run-hooks`)
 - List blocked: `tlc task list --blocked` (only tasks with a blocked reason)
+- List by priority: `tlc task list --priority P0` or `--priority P0,P1`
+- List blocked by: `tlc task list --blocked-by T-0041` (tasks that depend on T-0041)
 - Update: `tlc task update T-0042 --status IN_PROGRESS`
 - Update blockers: `tlc task update T-0042 --add-blocked-by T-0009 --remove-blocked-by T-0003`
 - Mark blocked: `tlc task update T-0042 --blocked "waiting on T-0009"`
