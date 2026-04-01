@@ -65,7 +65,11 @@ var TaskListCmd = &cobra.Command{
 			statusFlags = []string{"IN_PROGRESS", "TODO"}
 		}
 		for _, st := range statusFlags {
-			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
+			normalized, ok := NormalizeStatus(st)
+			if !ok {
+				return fmt.Errorf("unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", st)
+			}
+			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: normalized})
 		}
 		if taskListAssignedTo != "" {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "assigned_to", Value: taskListAssignedTo})
@@ -74,7 +78,11 @@ var TaskListCmd = &cobra.Command{
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "tags", Operator: core.OpContains, Value: tag})
 		}
 		for _, p := range taskListPriority {
-			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: strings.ToUpper(p)})
+			normalized, ok := NormalizePriority(p)
+			if !ok {
+				return fmt.Errorf("unknown priority %q; valid values: P0, P1, P2, P3", p)
+			}
+			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: normalized})
 		}
 
 		// Workspace mode: query across workspace projects.
