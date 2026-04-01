@@ -160,27 +160,24 @@ steps:
 
   check-approval:
     step_id: "check-approval"
-    type: "task"
+    type: "branch"
     title: "Check if PR is approved; route to done or fixer"
     depends_on: ["reviewer-pass"]
-    task_template:
-      title: "Route: approved → done; request_changes → fixer-pass"
-      description: |
-        ```bash
-        ACTION=$(jq -r .action /tmp/pr-review-N.json)
-        if [ "$ACTION" = "approve" ]; then
-          echo "APPROVED"
-          exit 0
-        fi
-        ```
-
-        If approved: mark flow DONE.
-        Otherwise: proceed to fixer-pass.
+    cases:
+      - when: "action == 'approve'"
+        next: "done"
+      - when: "action == 'request_changes'"
+        next: "fixer-pass"
+    # default_next handles 'comment' action (blocking_issues present → fixer; none → done-equivalent)
+    default_next: "fixer-pass"
+    meta:
+      guidance: |
+        Read `action` from /tmp/pr-review-N.json.
+        Valid values: approve | request_changes | comment.
+        'comment' with blocking_issues → treat as request_changes (default_next).
 
         Also check iteration count against max_iterations (default 5).
         If count >= max: surface warning and halt without merge.
-      requirements:
-        tools: ["jq", "bash"]
 
   # ── Phase 3: fixer pass ──────────────────────────────────────────────────────
 
@@ -188,7 +185,6 @@ steps:
     step_id: "fixer-pass"
     type: "task"
     title: "Fixer agent: apply changes from review feedback"
-    depends_on: ["check-approval"]
     task_template:
       title: "Run fixer agent on review comments"
       description: |
@@ -279,12 +275,14 @@ steps:
         tools: ["jq", "gh", "bash"]
 
   # ── Phase 4: done ────────────────────────────────────────────────────────────
+  # Note: the loop-back from handle-fixer-output → reviewer-pass cannot be
+  # expressed as a DAG edge. The loop is driven by the agent following the
+  # procedure instructions in handle-fixer-output until max_iterations is hit.
 
   done:
     step_id: "done"
     type: "task"
     title: "PR approved — emit final summary"
-    depends_on: ["check-approval"]
     task_template:
       title: "Emit final rally result"
       description: |
