@@ -3,10 +3,273 @@ package cli
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 )
+
+// TestTaskFilterStatusCaseInsensitiveTodo verifies --status=todo (lowercase) matches TODO.
+func TestTaskFilterStatusCaseInsensitiveTodo(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Todo task", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Done task", Status: core.StatusDone})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "todo"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --status todo failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "Todo task") {
+		t.Errorf("--status todo: expected 'Todo task', got: %s", out)
+	}
+	if contains(out, "Done task") {
+		t.Errorf("--status todo: unexpected 'Done task', got: %s", out)
+	}
+}
+
+// TestTaskFilterStatusCaseInsensitiveMixed verifies --status=Todo (mixed case) matches TODO.
+func TestTaskFilterStatusCaseInsensitiveMixed(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Todo task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "Todo"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --status Todo failed: %v", err)
+	}
+	if !contains(buf.String(), "Todo task") {
+		t.Errorf("--status Todo: expected 'Todo task'; got: %s", buf.String())
+	}
+}
+
+// TestTaskFilterStatusAliasComplete verifies --status=complete maps to DONE.
+func TestTaskFilterStatusAliasComplete(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	now := time.Now()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Finished task", Status: core.StatusDone, UpdatedAt: now, CreatedAt: now})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Open task", Status: core.StatusTodo, UpdatedAt: now, CreatedAt: now})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "complete"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --status complete failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "Finished task") {
+		t.Errorf("--status complete: expected 'Finished task'; got: %s", out)
+	}
+	if contains(out, "Open task") {
+		t.Errorf("--status complete: unexpected 'Open task'; got: %s", out)
+	}
+}
+
+// TestTaskFilterStatusAliasOpen verifies --status=open maps to TODO.
+func TestTaskFilterStatusAliasOpen(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	now := time.Now()
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Finished task", Status: core.StatusDone, UpdatedAt: now, CreatedAt: now})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Open task", Status: core.StatusTodo, UpdatedAt: now, CreatedAt: now})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "open"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --status open failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "Open task") {
+		t.Errorf("--status open: expected 'Open task'; got: %s", out)
+	}
+	if contains(out, "Finished task") {
+		t.Errorf("--status open: unexpected 'Finished task'; got: %s", out)
+	}
+}
+
+// TestTaskFilterStatusAliasToDo verifies --status=to-do maps to TODO.
+func TestTaskFilterStatusAliasToDo(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Open task", Status: core.StatusTodo})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--status", "to-do"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --status to-do failed: %v", err)
+	}
+	if !contains(buf.String(), "Open task") {
+		t.Errorf("--status to-do: expected 'Open task'; got: %s", buf.String())
+	}
+}
+
+// TestTaskFilterPriorityCaseInsensitiveLower verifies --priority=p0 matches P0.
+func TestTaskFilterPriorityCaseInsensitiveLower(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "P0 task", Status: core.StatusTodo, Priority: core.PriorityP0})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "P2 task", Status: core.StatusTodo, Priority: core.PriorityP2})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--priority", "p0"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --priority p0 failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "P0 task") {
+		t.Errorf("--priority p0: expected 'P0 task'; got: %s", out)
+	}
+	if contains(out, "P2 task") {
+		t.Errorf("--priority p0: unexpected 'P2 task'; got: %s", out)
+	}
+}
+
+// TestTaskFilterPriorityAliasCritical verifies --priority=critical maps to P0.
+func TestTaskFilterPriorityAliasCritical(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Critical task", Status: core.StatusTodo, Priority: core.PriorityP0})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Low task", Status: core.StatusTodo, Priority: core.PriorityP3})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--priority", "critical"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --priority critical failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "Critical task") {
+		t.Errorf("--priority critical: expected 'Critical task'; got: %s", out)
+	}
+	if contains(out, "Low task") {
+		t.Errorf("--priority critical: unexpected 'Low task'; got: %s", out)
+	}
+}
+
+// TestTaskFilterPriorityAliasLow verifies --priority=low maps to P3.
+func TestTaskFilterPriorityAliasLow(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Critical task", Status: core.StatusTodo, Priority: core.PriorityP0})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Low task", Status: core.StatusTodo, Priority: core.PriorityP3})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--priority", "low"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --priority low failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "Low task") {
+		t.Errorf("--priority low: expected 'Low task'; got: %s", out)
+	}
+	if contains(out, "Critical task") {
+		t.Errorf("--priority low: unexpected 'Critical task'; got: %s", out)
+	}
+}
+
+// TestTaskFilterPriorityAliasNumeric verifies --priority=0 maps to P0.
+func TestTaskFilterPriorityAliasNumeric(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Critical task", Status: core.StatusTodo, Priority: core.PriorityP0})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Low task", Status: core.StatusTodo, Priority: core.PriorityP3})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list", "--priority", "0"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --priority 0 failed: %v", err)
+	}
+	out := buf.String()
+	if !contains(out, "Critical task") {
+		t.Errorf("--priority 0: expected 'Critical task'; got: %s", out)
+	}
+	if contains(out, "Low task") {
+		t.Errorf("--priority 0: unexpected 'Low task'; got: %s", out)
+	}
+}
 
 // TestTaskFilterByTag tests standalone filter by tag.
 func TestTaskFilterByTag(t *testing.T) {
