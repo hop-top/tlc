@@ -352,6 +352,26 @@ func newTestCmd() *cobra.Command {
 	return cmd
 }
 
+// isolateInitTest sets up an isolated SQLite database for tests that call
+// runInit directly (without going through resetTestDB). It sets storage.db_path
+// to a temp file so that project registration never touches the real global db.
+// Returns a cleanup func (called via t.Cleanup automatically).
+func isolateInitTest(t *testing.T) {
+	t.Helper()
+	tmpDB, err := os.CreateTemp("", "tlc-init-testdb-*.sqlite")
+	if err != nil {
+		t.Fatalf("failed to create temp db file: %v", err)
+	}
+	tmpDB.Close()
+	dbPath := tmpDB.Name()
+	t.Cleanup(func() { _ = os.Remove(dbPath) })
+
+	dbSyncOnce = sync.Once{}
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbPath)
+	core.ResetDetectionCache()
+}
+
 func newTestInitCmd() *cobra.Command {
 	var (
 		storageBackend      string

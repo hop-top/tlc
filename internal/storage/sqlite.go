@@ -1063,6 +1063,16 @@ func (s *SQLiteStorage) UpdateProjectPath(ctx context.Context, projectID, newDBP
 	})
 }
 
+func (s *SQLiteStorage) DeleteProject(ctx context.Context, projectID string) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "DELETE FROM projects WHERE project_id = ?", projectID)
+		if err != nil {
+			return fmt.Errorf("failed to delete project: %w", err)
+		}
+		return nil
+	})
+}
+
 func (s *SQLiteStorage) TouchProject(ctx context.Context, projectID string) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339)

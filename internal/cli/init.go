@@ -344,6 +344,16 @@ func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) 
 	return choice, fmt.Errorf("failed to run form: %w", err)
 }
 
+func addInitFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
+	cmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
+	cmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")
+	cmd.Flags().Bool("no-track", false, "Do not add .tlc/ to .gitignore")
+	cmd.Flags().StringVar(&fallbackMode, "fallback-mode", "", "Project fallback mode: auto, detected, prompt (default: auto)")
+	cmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: "+strategyShare+")")
+}
+
 var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize TLC in current directory",
@@ -353,14 +363,19 @@ var InitCmd = &cobra.Command{
 	},
 }
 
+// ProjectInitCmd is InitCmd registered under `tlc project init`.
+var ProjectInitCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize TLC in current directory",
+	Long:  "Create .tlc directory and default configuration file.",
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		return runInit(cmd, &storageBackend, &dbPath, &force, &fallbackMode, &duplicateIDStrategy)
+	},
+}
+
 func init() {
-	InitCmd.Flags().StringVar(&storageBackend, "storage", "sqlite", "Storage backend: local, sqlite")
-	InitCmd.Flags().StringVar(&dbPath, "db-path", "", "Database file path (default: global)")
-	InitCmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config")
-	InitCmd.Flags().Bool("track", false, "Add .tlc/ to .gitignore")
-	InitCmd.Flags().Bool("no-track", false, "Do not add .tlc/ to .gitignore")
-	InitCmd.Flags().StringVar(&fallbackMode, "fallback-mode", "", "Project fallback mode: auto, detected, prompt (default: auto)")
-	InitCmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: "+strategyShare+")")
+	addInitFlags(InitCmd)
+	addInitFlags(ProjectInitCmd)
 
 	RootCmd.AddCommand(InitCmd)
 }

@@ -85,6 +85,7 @@ git:
 
 			t.Setenv("HOME", homeDir)
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+			t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
 
 			viper.Reset()
 			initConfig()
@@ -138,6 +139,7 @@ func TestInitCmd_ConfigStructure(t *testing.T) {
 	defer os.Chdir(oldWd)
 
 	viper.Reset()
+	isolateInitTest(t)
 
 	cmd := newTestCmd()
 	cmd.AddCommand(newTestInitCmd())
@@ -204,6 +206,7 @@ func runInitConfigTest(t *testing.T, args []string, wantFallback, wantDupStrateg
 	defer os.Chdir(oldWd)
 
 	viper.Reset()
+	isolateInitTest(t)
 
 	cmd := newTestCmd()
 	cmd.AddCommand(newTestInitCmd())
@@ -323,6 +326,7 @@ func TestInitCmd_ConfigStructureWithProject(t *testing.T) {
 	defer os.Chdir(oldWd)
 
 	viper.Reset()
+	isolateInitTest(t)
 
 	cmd := newTestCmd()
 	cmd.AddCommand(newTestInitCmd())

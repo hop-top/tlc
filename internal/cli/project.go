@@ -14,6 +14,8 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
+var projectPruneYes bool
+
 var (
 	projectExportFormat string
 	projectImportForce  bool
@@ -257,13 +259,74 @@ func renderProjectTable(cmd *cobra.Command, projects []core.RegisteredProject) {
 	_, _ = fmt.Fprintln(w, tbl.View())
 }
 
+var ProjectPruneCmd = &cobra.Command{
+	Use:   "prune",
+	Short: "Remove stale project registrations",
+	Long:  "Delete registered projects whose database file no longer exists on disk.",
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := context.Background()
+		s, err := getStorageRaw()
+		if err != nil {
+			return fmt.Errorf("failed to open storage: %w", err)
+		}
+		defer func() { _ = s.Close() }()
+
+		projects, err := s.ListAllProjects(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list projects: %w", err)
+		}
+
+		var stale []core.RegisteredProject
+		for _, p := range projects {
+			if _, statErr := os.Stat(p.DBPath); os.IsNotExist(statErr) {
+				stale = append(stale, p)
+			}
+		}
+
+		if len(stale) == 0 {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No stale projects found.")
+			return nil
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d stale project(s):\n", len(stale))
+		for _, p := range stale {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  (%s)\n", p.ProjectID, p.DBPath)
+		}
+
+		if !projectPruneYes {
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), "Remove these projects? [y/N] ")
+			var answer string
+			_, _ = fmt.Fscan(cmd.InOrStdin(), &answer)
+			if answer != "y" && answer != "Y" {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
+				return nil
+			}
+		}
+
+		removed := 0
+		for _, p := range stale {
+			if delErr := s.DeleteProject(ctx, p.ProjectID); delErr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "failed to remove %s: %v\n", p.ProjectID, delErr)
+				continue
+			}
+			removed++
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed %d project(s).\n", removed)
+		return nil
+	},
+}
+
 func init() {
 	ProjectExportCmd.Flags().StringVarP(&projectExportFormat, "format", "f", "yaml", "Output format (yaml, json)")
 	ProjectImportCmd.Flags().BoolVar(&projectImportForce, "force", false, "Overwrite existing tasks on conflict")
 	ProjectListCmd.Flags().StringVarP(&projectListFormat, "format", "f", "", "Output format (table, json, yaml)")
+	ProjectPruneCmd.Flags().BoolVarP(&projectPruneYes, "yes", "y", false, "Skip confirmation prompt")
 
 	ProjectCmd.AddCommand(ProjectExportCmd)
 	ProjectCmd.AddCommand(ProjectImportCmd)
+	ProjectCmd.AddCommand(ProjectInitCmd)
 	ProjectCmd.AddCommand(ProjectListCmd)
+	ProjectCmd.AddCommand(ProjectPruneCmd)
 	RootCmd.AddCommand(ProjectCmd)
 }

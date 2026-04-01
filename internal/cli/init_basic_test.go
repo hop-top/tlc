@@ -171,6 +171,7 @@ func TestInitCmd(t *testing.T) {
 			defer os.Chdir(oldWd)
 
 			viper.Reset()
+			isolateInitTest(t)
 
 			if tt.setupGit {
 				if err := os.Mkdir(".git", 0o755); err != nil {
@@ -277,6 +278,7 @@ func TestInitCmd_ExistingTLC(t *testing.T) {
 			defer os.Chdir(oldWd)
 
 			viper.Reset()
+			isolateInitTest(t)
 
 			if err := tt.setup(tmpDir); err != nil {
 				t.Fatalf("setup failed: %v", err)
