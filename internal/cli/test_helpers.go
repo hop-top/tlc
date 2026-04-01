@@ -287,6 +287,7 @@ func resetTaskFlags() {
 	taskUpdateRemoveTags = []string{}
 
 	taskDeleteYes = false
+	taskGraphFormat = ""
 	taskClaimNote = ""
 	taskUnclaimNote = ""
 	taskAssignNote = ""
@@ -312,7 +313,7 @@ func resetTaskFlags() {
 
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
-		TaskCreateCmd, TaskListCmd, TaskStaleCmd, TaskShowCmd,
+		TaskCreateCmd, TaskListCmd, TaskGraphCmd, TaskStaleCmd, TaskShowCmd,
 		TaskUpdateCmd, TaskDeleteCmd, TaskClaimCmd,
 		TaskUnclaimCmd, TaskAssignCmd, TaskCompleteCmd,
 		SyncCmd, SyncPullCmd, SyncPushCmd, SyncConfigCmd, SyncStatusCmd,
