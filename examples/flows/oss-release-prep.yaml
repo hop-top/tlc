@@ -1,0 +1,386 @@
+flow_id: "flow:oss-release-prep:1.0"
+name: "OSS Release Preparation"
+version: "1.0"
+description: "Prepare a codebase for initial open-source release"
+entry_step: "audit-repo"
+
+config:
+  category: "release"
+  triggers:
+    - "initial OSS release"
+    - "open-sourcing a project"
+    - "preparing public repo"
+
+  procedure: |
+    ## OSS Release Preparation
+
+    Systematically prepares a private codebase for public open-source release.
+    Covers legal, documentation, community, CI/CD, and hygiene concerns.
+
+    ## Phases
+
+    ### Phase 1: Audit (sequential)
+    Scan the repo before touching anything — find secrets, TODOs,
+    private refs, and binary blobs that must not ship.
+
+    ### Phase 2: Legal + Identity (parallel)
+    License file, copyright headers, and CODEOWNERS can all be
+    written independently.
+
+    ### Phase 3: Core Documentation (parallel)
+    README, CONTRIBUTING guide, and security policy are independent.
+
+    ### Phase 4: Community Files (parallel)
+    Issue/PR templates, code of conduct, and changelog skeleton
+    have no ordering dependencies.
+
+    ### Phase 5: CI/CD (parallel)
+    Test workflow, release workflow, and dependency-update bot
+    config can be wired up simultaneously.
+
+    ### Phase 6: Final Gate (sequential)
+    Review everything assembled, run the full test suite, then
+    cut the initial tag and publish.
+
+steps:
+  # ── Phase 1: Audit ──────────────────────────────────────────────────────────
+
+  audit-repo:
+    step_id: "audit-repo"
+    type: "task"
+    title: "Audit repo for secrets, private refs, and binary blobs"
+    task_ref: "task:audit-repo"
+    meta:
+      tool: "gitleaks + manual"
+      commands: |
+        # Secret scan — full git history; exits non-zero on findings
+        gitleaks detect --source . --report-format json \
+          --report-path gitleaks-report.json
+        # Large binary audit
+        git rev-list --objects --all \
+          | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
+          | awk '/^blob/ && $3 > 1048576 { print $3, $4 }' | sort -rn | head -20
+      guidance: |
+        - Review gitleaks-report.json; block release on any HIGH findings
+        - Inspect large-binary list; decide keep vs. remove each
+        - Manually grep for internal hostnames, IPs, TODO/FIXME referencing
+          internal systems or people (LLM step — tool cannot infer intent)
+
+  # ── Phase 2: Legal + Identity (parallel) ────────────────────────────────────
+
+  legal-parallel:
+    step_id: "legal-parallel"
+    type: "parallel"
+    title: "Legal and identity files"
+    depends_on: ["audit-repo"]
+    children: ["add-license", "add-copyright-headers", "add-codeowners"]
+    max_concurrency: 3
+
+  add-license:
+    step_id: "add-license"
+    type: "task"
+    title: "Add LICENSE file"
+    task_ref: "task:add-license"
+    meta:
+      tool: "gh CLI"
+      commands: |
+        # Confirm SPDX id with owner first (LLM step), then:
+        YEAR=$(date +%Y)
+        OWNER="<copyright holder>"
+        LICENSE="mit"   # or apache-2.0, etc.
+        # Fetch canonical text from choosealicense.com and write file
+        curl -sL "https://choosealicense.com/licenses/${LICENSE}/" \
+          | sed -n 's/.*<pre id="license-text">\(.*\)<\/pre>.*/\1/p' \
+          > /dev/null   # use gh instead:
+        gh repo edit --license "${LICENSE}"
+        # Update manifest license field (go.mod has no field; package.json does)
+        # jq --arg l "${LICENSE}" '.license = $l' package.json | sponge package.json
+      guidance: |
+        - Confirm SPDX identifier with owner before running (LLM decision)
+        - Replace OWNER and LICENSE vars above
+        - Update go.mod/pyproject.toml/package.json license field manually
+          if not handled by gh
+
+  add-copyright-headers:
+    step_id: "add-copyright-headers"
+    type: "task"
+    title: "Add copyright/license headers to source files"
+    task_ref: "task:add-copyright-headers"
+    meta:
+      tool: "addlicense"
+      commands: |
+        YEAR=$(date +%Y)
+        # Dry run first
+        addlicense -check -l mit -c "<copyright holder>" \
+          -ignore "vendor/**" -ignore "**/*.pb.go" -ignore "**/*.gen.*" .
+        # Apply headers
+        addlicense -l mit -c "<copyright holder>" \
+          -ignore "vendor/**" -ignore "**/*.pb.go" -ignore "**/*.gen.*" .
+        git add -A && git commit -m "chore: add license headers"
+      guidance: |
+        - Install: go install github.com/google/addlicense@latest
+        - Replace <copyright holder> with the legal entity name
+        - Review the diff before committing; adjust -ignore patterns as needed
+
+  add-codeowners:
+    step_id: "add-codeowners"
+    type: "task"
+    title: "Add CODEOWNERS file"
+    task_ref: "task:add-codeowners"
+    meta:
+      guidance: |
+        - Create .github/CODEOWNERS (or CODEOWNERS at root)
+        - Map top-level directories to maintainer GitHub handles
+        - Add a catch-all rule (*) pointing to core maintainers
+
+  # ── Phase 3: Core Documentation (parallel) ───────────────────────────────────
+
+  core-docs-parallel:
+    step_id: "core-docs-parallel"
+    type: "parallel"
+    title: "Core documentation"
+    depends_on: ["legal-parallel"]
+    children: ["write-readme", "write-contributing", "write-security-policy"]
+    max_concurrency: 3
+
+  write-readme:
+    step_id: "write-readme"
+    type: "task"
+    title: "Write README.md"
+    task_ref: "task:write-readme"
+    meta:
+      guidance: |
+        Required sections:
+        - Project name + one-line description
+        - Badges (build status, license, latest release)
+        - Why this project exists (motivation)
+        - Quick-start / installation
+        - Usage examples (runnable snippets)
+        - Configuration reference (or link)
+        - Roadmap / status
+        - License and contributing pointers
+
+  write-contributing:
+    step_id: "write-contributing"
+    type: "task"
+    title: "Write CONTRIBUTING.md"
+    task_ref: "task:write-contributing"
+    meta:
+      guidance: |
+        - Prerequisites (language version, tools)
+        - Fork + clone + local-dev setup steps
+        - Running tests and linting
+        - Commit message convention
+        - PR process and review SLA
+        - Issue triage policy
+
+  write-security-policy:
+    step_id: "write-security-policy"
+    type: "task"
+    title: "Write SECURITY.md"
+    task_ref: "task:write-security-policy"
+    meta:
+      guidance: |
+        - Supported versions table
+        - Responsible disclosure instructions
+        - Contact channel (security@… or GitHub private advisory)
+        - Expected response timeline
+
+  # ── Phase 4: Community Files (parallel) ─────────────────────────────────────
+
+  community-parallel:
+    step_id: "community-parallel"
+    type: "parallel"
+    title: "Community and governance files"
+    depends_on: ["core-docs-parallel"]
+    children: ["add-issue-templates", "add-pr-template",
+               "add-code-of-conduct", "init-changelog"]
+    max_concurrency: 4
+
+  add-issue-templates:
+    step_id: "add-issue-templates"
+    type: "task"
+    title: "Add GitHub issue templates"
+    task_ref: "task:add-issue-templates"
+    meta:
+      guidance: |
+        Create .github/ISSUE_TEMPLATE/:
+        - bug_report.md — env, steps to reproduce, expected vs actual
+        - feature_request.md — problem statement, proposed solution
+        - blank.md — catch-all with checklist
+
+  add-pr-template:
+    step_id: "add-pr-template"
+    type: "task"
+    title: "Add pull request template"
+    task_ref: "task:add-pr-template"
+    meta:
+      guidance: |
+        Create .github/pull_request_template.md:
+        - Summary of change
+        - Related issue(s)
+        - Testing notes
+        - Checklist (tests, docs, changelog entry)
+
+  add-code-of-conduct:
+    step_id: "add-code-of-conduct"
+    type: "task"
+    title: "Add CODE_OF_CONDUCT.md"
+    task_ref: "task:add-code-of-conduct"
+    meta:
+      tool: "npx covgen"
+      commands: |
+        # Generates Contributor Covenant v2.1 with contact email substituted
+        npx covgen "<contact-email>"
+        # optionally relocate: mv CODE_OF_CONDUCT.md .github/CODE_OF_CONDUCT.md
+      guidance: |
+        - Replace <contact-email> with the project's public contact address
+        - No LLM content generation needed; covgen writes the canonical text
+
+  init-changelog:
+    step_id: "init-changelog"
+    type: "task"
+    title: "Initialise CHANGELOG.md"
+    task_ref: "task:init-changelog"
+    meta:
+      guidance: |
+        - Follow Keep a Changelog format
+        - Add [Unreleased] section
+        - Summarise notable changes since project inception
+          (or note "initial public release" if history is private)
+
+  # ── Phase 5: CI/CD (parallel) ────────────────────────────────────────────────
+
+  cicd-parallel:
+    step_id: "cicd-parallel"
+    type: "parallel"
+    title: "CI/CD pipelines and automation"
+    depends_on: ["community-parallel"]
+    children: ["add-ci-workflow", "add-release-workflow", "add-dependency-bot"]
+    max_concurrency: 3
+
+  add-ci-workflow:
+    step_id: "add-ci-workflow"
+    type: "task"
+    title: "Add CI workflow (lint, test, build)"
+    task_ref: "task:add-ci-workflow"
+    meta:
+      guidance: |
+        Create .github/workflows/ci.yml:
+        - Trigger: push + pull_request on main/master
+        - Jobs: lint → test → build (sequential within job)
+        - Matrix: supported language/runtime versions
+        - Cache dependencies for speed
+        - Upload coverage report (e.g. Codecov)
+
+  add-release-workflow:
+    step_id: "add-release-workflow"
+    type: "task"
+    title: "Add release workflow (tag → publish)"
+    task_ref: "task:add-release-workflow"
+    meta:
+      tool: "goreleaser init (Go) OR semantic-release init (JS/TS)"
+      commands: |
+        # Go projects
+        goreleaser init          # writes .goreleaser.yaml
+        goreleaser check         # validates config
+        # JS/TS projects
+        npx semantic-release-cli setup
+        # Both scaffold the GitHub Actions workflow; review before committing
+      guidance: |
+        - goreleaser init covers: build matrix, GitHub Release, checksums,
+          cosign signing, Homebrew tap — edit .goreleaser.yaml to taste
+        - semantic-release covers: version bump, CHANGELOG, npm publish,
+          GitHub Release — edit .releaserc to add/remove plugins
+        - After scaffolding, commit and verify CI picks up the workflow
+
+  add-dependency-bot:
+    step_id: "add-dependency-bot"
+    type: "task"
+    title: "Configure Dependabot (or Renovate)"
+    task_ref: "task:add-dependency-bot"
+    meta:
+      tool: "npx create-renovate-config OR gh CLI write"
+      commands: |
+        # Option A — Renovate (richer rules)
+        npx create-renovate-config
+        # Option B — Dependabot via gh CLI (no npm required)
+        mkdir -p .github
+        cat > .github/dependabot.yml << 'EOF'
+        version: 2
+        updates:
+          - package-ecosystem: "gomod"
+            directory: "/"
+            schedule: { interval: "weekly" }
+            open-pull-requests-limit: 5
+            labels: ["dependencies"]
+          - package-ecosystem: "github-actions"
+            directory: "/"
+            schedule: { interval: "weekly" }
+        EOF
+      guidance: |
+        - Adjust package-ecosystem entries to match the actual stack
+        - Renovate is preferred for monorepos or complex update rules
+
+  # ── Phase 6: Final Gate (sequential) ─────────────────────────────────────────
+
+  join-all-prep:
+    step_id: "join-all-prep"
+    type: "join"
+    title: "All prep phases complete"
+    wait_for: ["cicd-parallel"]
+
+  final-review:
+    step_id: "final-review"
+    type: "task"
+    title: "Final review: checklist walk-through"
+    task_ref: "task:final-review"
+    depends_on: ["join-all-prep"]
+    meta:
+      guidance: |
+        Walk through the OSS release checklist:
+        - No secrets or private refs in history (re-run scanner)
+        - LICENSE present and correct
+        - README renders correctly on GitHub
+        - All CI workflows pass on the branch
+        - CHANGELOG has an [Unreleased] or v0.1.0 entry
+        - Issue/PR templates render in GitHub UI
+        - Repo description, topics, and homepage set in GitHub Settings
+        - Branch protection rules enabled on main
+        - Discussions / Issues enabled as appropriate
+
+  run-full-test-suite:
+    step_id: "run-full-test-suite"
+    type: "task"
+    title: "Run full test suite; confirm green"
+    task_ref: "task:run-full-test-suite"
+    depends_on: ["final-review"]
+    meta:
+      tool: "just / make"
+      commands: |
+        just check      # or: make test
+        # exits non-zero on any failure — no LLM interpretation needed
+      guidance: |
+        - If no justfile/Makefile target exists, run the test runner directly
+          (go test ./..., npm test, pytest, etc.)
+        - Check coverage output meets project threshold before proceeding
+
+  cut-initial-tag:
+    step_id: "cut-initial-tag"
+    type: "task"
+    title: "Cut initial release tag (v0.1.0 or v1.0.0)"
+    task_ref: "task:cut-initial-tag"
+    depends_on: ["run-full-test-suite"]
+    meta:
+      tool: "gh CLI"
+      commands: |
+        VERSION="v0.1.0"   # confirm with owner first (LLM decision)
+        git tag -s "${VERSION}" -m "Initial public release"
+        git push origin "${VERSION}"
+        # Creates GitHub Release with auto-generated notes from commits
+        gh release create "${VERSION}" --generate-notes --title "${VERSION}"
+      guidance: |
+        - Confirm version string with owner before tagging (LLM decision)
+        - Update version constant/package.json/pyproject.toml before tagging
+        - Commit version bump before running the commands above
+        - Announce on relevant channels after release page is live
