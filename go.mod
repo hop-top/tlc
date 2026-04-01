@@ -23,7 +23,6 @@ require (
 	golang.org/x/crypto v0.47.0
 	golang.org/x/oauth2 v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
-	hop.top/hdl v0.0.0
 	hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7
 	hop.top/uri v0.0.0
 	hop.top/uri/completions v0.0.0-20260315135125-fc061a7b6a61
