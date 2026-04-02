@@ -60,6 +60,51 @@ func TestAllFlowsParse(t *testing.T) {
 	}
 }
 
+// TestFlowAgentFieldParsedFromDisk verifies that a flow YAML with agent: field
+// on disk round-trips correctly through ParseFlow.
+func TestFlowAgentFieldParsedFromDisk(t *testing.T) {
+	path := filepath.Join(flowsDir, "writing-plans.yaml")
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	defer f.Close() //nolint:errcheck
+
+	flow, err := core.ParseFlow(f, path)
+	require.NoError(t, err)
+	assert.Equal(t, "claude", flow.Agent.Name, "writing-plans.yaml should declare agent: claude")
+}
+
+// TestAdapterResolverDispatchesCorrectBinary verifies that AdapterResolver
+// picks the adapter whose Binary() matches the flow's declared agent.
+func TestAdapterResolverDispatchesCorrectBinary(t *testing.T) {
+	adapters := map[string]flowtest.AgentAdapter{
+		"claude": flowtest.NewClaudeAdapter(),
+		"llm":    flowtest.NewLLMAdapter(),
+	}
+	flow := &core.Flow{Agent: core.AgentRef{Name: "llm"}}
+	resolver := flowtest.NewAdapterResolver(adapters, flow, nil)
+
+	step := core.Step{ID: "s", Type: core.StepTypeTask, Title: "s"}
+	a, _, err := resolver.Resolve(step)
+	require.NoError(t, err)
+	assert.Equal(t, "llm", a.Name())
+	assert.Equal(t, "llm", a.Binary())
+}
+
+// TestAdapterResolverUnknownAgentFatal verifies that an unknown adapter name
+// produces a clear error message naming the adapter.
+func TestAdapterResolverUnknownAgentFatal(t *testing.T) {
+	adapters := map[string]flowtest.AgentAdapter{
+		"claude": flowtest.NewClaudeAdapter(),
+	}
+	flow := &core.Flow{Agent: core.AgentRef{Name: "does-not-exist"}}
+	resolver := flowtest.NewAdapterResolver(adapters, flow, nil)
+
+	step := core.Step{ID: "s", Type: core.StepTypeTask, Title: "s"}
+	_, _, err := resolver.Resolve(step)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does-not-exist")
+}
+
 // TestAllFlowsHaveHappyPathFixture verifies each flow has a happy-path run scaffold.
 // This fails until fixtures are created — driving fixture creation via TDD.
 func TestAllFlowsHaveHappyPathFixture(t *testing.T) {

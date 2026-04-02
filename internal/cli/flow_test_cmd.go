@@ -219,8 +219,22 @@ func executeRun(
 		}
 	}()
 
-	// Wire agent runner — dispatches claude shim per step in record/replay mode.
-	sandboxRunner := flowtest.NewSandboxAgentRunner(sb, mode, &runWithPassthrough)
+	// Wire agent runner — dispatches adapter shim per step in record/replay mode.
+	adapters := map[string]flowtest.AgentAdapter{
+		"claude":   flowtest.NewClaudeAdapter(),
+		"gemini":   flowtest.NewGeminiAdapter(),
+		"fabric":   flowtest.NewFabricAdapter(),
+		"llm":      flowtest.NewLLMAdapter(),
+		"codex":    flowtest.NewCodexAdapter(),
+		"opencode": flowtest.NewOpenCodeAdapter(),
+		"routellm": flowtest.NewRouteLLMAdapter(),
+	}
+	globalCfg, err := flowtest.LoadGlobalAdapterConfig()
+	if err != nil {
+		return 3, fmt.Errorf("adapter config: %w", err)
+	}
+	resolver := flowtest.NewAdapterResolver(adapters, flow, globalCfg)
+	sandboxRunner := flowtest.NewSandboxAgentRunner(sb, mode, &runWithPassthrough, resolver)
 	agentRunner := &loggingAgentRunner{
 		inner:  sandboxRunner,
 		stderr: os.Stderr,

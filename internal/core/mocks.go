@@ -3,6 +3,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ type MockRepository struct {
 	Tasks    map[string]*Task
 	FlowRuns map[string]*FlowRun
 	logs     []*LogEntry
+	seqs     map[string]int
 }
 
 func NewMockRepository() *MockRepository {
@@ -21,10 +23,26 @@ func NewMockRepository() *MockRepository {
 		Tasks:    make(map[string]*Task),
 		FlowRuns: make(map[string]*FlowRun),
 		logs:     make([]*LogEntry, 0),
+		seqs:     make(map[string]int),
 	}
 }
 
+func (m *MockRepository) GetNextSequenceID(_ context.Context, projectID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if projectID == "" {
+		projectID = "default"
+	}
+	m.seqs[projectID]++
+	return m.seqs[projectID], nil
+}
+
 func (m *MockRepository) CreateTask(ctx context.Context, task *Task) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.Tasks[task.ID]; exists {
+		return fmt.Errorf("UNIQUE constraint failed: tasks.id")
+	}
 	m.Tasks[task.ID] = task
 	return nil
 }
@@ -227,4 +245,31 @@ func (m *MockLogRepository) GetLogs(ctx context.Context, taskID string, sortDire
 
 func (m *MockLogRepository) ListLogs(ctx context.Context, query LogQuery) ([]*LogEntry, error) {
 	return m.Logs, nil
+}
+
+// MockAgentRunner is a configurable AgentRunner for unit tests.
+// CanHandleFunc defaults to always-true when nil.
+// RunFunc defaults to returning an empty output map when nil.
+type MockAgentRunner struct {
+	CanHandleFunc func(Step) bool
+	RunFunc       func(context.Context, Step, string) (map[string]any, error)
+	Calls         []Step
+	mu            sync.Mutex
+}
+
+func (m *MockAgentRunner) CanHandle(step Step) bool {
+	if m.CanHandleFunc != nil {
+		return m.CanHandleFunc(step)
+	}
+	return true
+}
+
+func (m *MockAgentRunner) Run(ctx context.Context, step Step, prompt string) (map[string]any, error) {
+	m.mu.Lock()
+	m.Calls = append(m.Calls, step)
+	m.mu.Unlock()
+	if m.RunFunc != nil {
+		return m.RunFunc(ctx, step, prompt)
+	}
+	return map[string]any{"mock": fmt.Sprintf("step:%s", step.ID)}, nil
 }

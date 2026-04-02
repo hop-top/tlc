@@ -13,6 +13,9 @@ import (
 // the parsed step output. Implementations are responsible for subprocess
 // lifecycle, env injection, and cassette record/replay.
 type AgentRunner interface {
+	// CanHandle reports whether this runner should handle the given step.
+	// If false, executeTemplateStep falls through to the DB-only ephemeral path.
+	CanHandle(step Step) bool
 	Run(ctx context.Context, step Step, prompt string) (map[string]any, error)
 }
 
@@ -448,7 +451,8 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 // is required — the task is identified by a generated UUID.
 func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by string) (map[string]any, error) {
 	// Agent dispatch path: runner handles subprocess, cassette, and output.
-	if e.agentRunner != nil {
+	// Falls through to DB-only path if runner is nil or declines the step.
+	if e.agentRunner != nil && e.agentRunner.CanHandle(step) {
 		prompt := buildAgentPrompt(step)
 		output, err := e.agentRunner.Run(ctx, step, prompt)
 		if err != nil {
