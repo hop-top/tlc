@@ -1,7 +1,6 @@
 // Package main is the composer shim for the flowtest sandbox.
-// Cassette-backed: records/replays composer interactions without network access.
 package main
 
-import "hop.top/tlc/internal/flowtest/shims/shimlib"
+import "hop.top/tlc/internal/flowtest/shims/shims"
 
-func main() { shimlib.Run("composer") }
+func main() { shims.Run("composer") }

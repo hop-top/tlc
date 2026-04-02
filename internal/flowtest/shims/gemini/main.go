@@ -1,6 +1,6 @@
 // Package main is the gemini shim for the flowtest sandbox.
 package main
 
-import "hop.top/tlc/internal/flowtest/shims/shimlib"
+import "hop.top/tlc/internal/flowtest/shims/shims"
 
-func main() { shimlib.Run("gemini") }
+func main() { shims.Run("gemini") }

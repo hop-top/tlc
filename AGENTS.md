@@ -103,6 +103,40 @@ tlc task list --track <track-id>                 # filter by track
 Auto-transition: when a linked task is claimed (→ IN_PROGRESS), a pending
 track auto-transitions to active.
 
+### `tlc flow test` — Deterministic Flow Testing
+
+Run a flow definition through a hermetic sandbox with cassette-backed tool shims.
+
+```bash
+# replay all named runs for a flow
+tlc flow test examples/flows/pr-review-loop.yaml
+
+# replay one named run
+tlc flow test examples/flows/pr-review-loop.yaml happy-path
+
+# record cassettes (proxy real tool calls; write to fixtures/)
+tlc flow test examples/flows/pr-review-loop.yaml happy-path --record
+
+# force live execution for named tools; replay everything else
+tlc flow test examples/flows/pr-review-loop.yaml happy-path --passthrough wrangler,docker
+
+# keep sandbox dir after run for debugging
+tlc flow test examples/flows/pr-review-loop.yaml happy-path --keep-sandbox
+```
+
+Exit codes:
+
+| Code | Meaning |
+|------|---------|
+| 0 | All steps executed; all contracts passed |
+| 1 | Step failed or contract violated |
+| 2 | Cassette miss in replay mode |
+| 3 | Sandbox setup failure |
+
+Named runs live under `fixtures/<flow-name>/<run-name>/`. Each run has a
+`record/` dir (cassettes) and optional `contracts/` dir (eva contracts).
+Add a `test.yaml` manifest to declare `expected_exit` or `passthrough` overrides.
+
 ### `git hop` — Worktree Management
 
 NEVER run `git worktree`, `git branch`, or `git checkout -b` directly.

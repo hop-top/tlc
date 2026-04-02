@@ -1,6 +1,6 @@
 // Package main is the copilot shim for the flowtest sandbox.
 package main
 
-import "hop.top/tlc/internal/flowtest/shims/shimlib"
+import "hop.top/tlc/internal/flowtest/shims/shims"
 
-func main() { shimlib.Run("copilot") }
+func main() { shims.Run("copilot") }
