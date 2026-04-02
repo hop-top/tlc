@@ -29,8 +29,8 @@ check() {
 check_flag() {
   local label="$1"; shift
   local subcmd=("$@")
-  # Extract just the flag name (last arg)
-  local flag="${subcmd[-1]}"
+  # Extract just the flag name (last arg) — bash 3.2 compat (no negative indices)
+  local flag="${subcmd[${#subcmd[@]}-1]}"
   local parent=("${subcmd[@]:0:${#subcmd[@]}-1}")
   if "${parent[@]}" --help 2>&1 | grep -qF -- "$flag"; then
     echo "  OK  $label"

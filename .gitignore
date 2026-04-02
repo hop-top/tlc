@@ -5,6 +5,27 @@ tlc
 *.db
 *.test
 
+# Shim binaries (must live in internal/flowtest/shims/bin/, never project root)
+catchall
+claude
+codex
+composer
+copilot
+docker
+docker-compose
+fabric
+gemini
+gh
+git
+llm
+npm
+npx
+opencode
+passthrough
+pip
+tlc-shim-catchall
+uv
+
 # Development artifacts
 tmp/
 *.log

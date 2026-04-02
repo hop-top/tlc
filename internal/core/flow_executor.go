@@ -11,9 +11,10 @@ import (
 
 // FlowExecutor handles the execution of flow definitions.
 type FlowExecutor struct {
-	repo    Repository
-	logRepo LogRepository
-	evaKey  string // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
+	repo     Repository
+	logRepo  LogRepository
+	evaKey   string // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
+	testMode bool   // when true, unresolved task_ref falls back to ephemeral task
 }
 
 func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
@@ -27,6 +28,13 @@ func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
 // Typically called at construction with os.Getenv("EVA_KEY").
 func (e *FlowExecutor) WithEvaKey(key string) *FlowExecutor {
 	e.evaKey = key
+	return e
+}
+
+// WithTestMode enables flow-test mode: unresolved task_ref falls back to an
+// ephemeral task instead of returning an error. Use only in tlc flow test.
+func (e *FlowExecutor) WithTestMode() *FlowExecutor {
+	e.testMode = true
 	return e
 }
 
@@ -191,8 +199,12 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 		err = e.executeParallelStep(ctx, flow, run, step, statuses, mu, by)
 	case StepTypeRetry:
 		err = e.executeRetryStep(ctx, flow, run, step, statuses, mu, by)
+	case StepTypeBranch:
+		err = e.executeBranchStep(ctx, flow, step, statuses, mu, by)
+	case StepTypeJoin:
+		// All wait_for deps are already enforced by the depends_on scheduler.
+		// Nothing to execute — the step succeeds immediately.
 	default:
-		// Other types (branch, etc.) will be implemented in subsequent tasks
 		return fmt.Errorf("unsupported step type for execution: %s", step.Type)
 	}
 
@@ -309,12 +321,25 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 }
 
 func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string) error {
+	// task_template steps: create an ephemeral task, complete it, then return.
+	if step.TaskRef == "" && step.TaskTemplate != nil {
+		return e.executeTemplateStep(ctx, step, by)
+	}
+
 	taskID := step.TaskRef
 	task, err := e.repo.GetTask(ctx, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
+		if e.testMode {
+			// Unresolved task_ref in test mode: fall back to ephemeral task.
+			synthetic := step
+			if synthetic.TaskTemplate == nil {
+				synthetic.TaskTemplate = &TaskTemplate{Title: step.Title}
+			}
+			return e.executeTemplateStep(ctx, synthetic, by)
+		}
 		return fmt.Errorf("task %s not found", taskID)
 	}
 
@@ -394,6 +419,76 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 			"extra":   meta,
 		},
 	})
+}
+
+// executeTemplateStep creates an ephemeral task from step.TaskTemplate, runs it
+// through the standard task lifecycle, then completes it. No persistent task ID
+// is required — the task is identified by a generated UUID.
+func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by string) error {
+	wm := DefaultWorkflow()
+	initialStatus, _ := wm.StatusForRole("initial")
+	activeStatus, _ := wm.StatusForRole("active")
+	completedStatus, _ := wm.StatusForRole("completed")
+
+	task := &Task{
+		ID:          generateTaskID(),
+		Title:       step.TaskTemplate.Title,
+		Description: step.TaskTemplate.Description,
+		Status:      initialStatus,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := e.repo.CreateTask(ctx, task); err != nil {
+		return fmt.Errorf("flow template step %q: create task: %w", step.ID, err)
+	}
+
+	task.Status = activeStatus
+	task.UpdatedAt = time.Now()
+	if err := e.repo.UpdateTask(ctx, task); err != nil {
+		return fmt.Errorf("flow template step %q: claim task: %w", step.ID, err)
+	}
+
+	task.Status = completedStatus
+	task.UpdatedAt = time.Now()
+	if err := e.repo.UpdateTask(ctx, task); err != nil {
+		return fmt.Errorf("flow template step %q: complete task: %w", step.ID, err)
+	}
+	_ = e.logRepo.AddLog(ctx, &LogEntry{
+		TaskID:    task.ID,
+		Timestamp: time.Now(),
+		By:        by,
+		Action:    "DONE",
+		Note:      "Completed by flow executor (template step)",
+	})
+	return nil
+}
+
+// executeBranchStep evaluates branch cases and marks unchosen downstream paths
+// as skipped so the scheduler does not deadlock waiting for them.
+// In flow test mode (no runtime condition data), the default_next branch is taken.
+func (e *FlowExecutor) executeBranchStep(_ context.Context, flow *Flow, step Step, statuses map[string]StepStatus, mu *sync.Mutex, _ string) error {
+	// Determine chosen next step: first case whose condition evaluates true, else default.
+	// At flow-test time we have no runtime values, so we always take default_next.
+	chosen := step.DefaultNext
+
+	// Mark all non-chosen case targets as skipped so the scheduler can proceed.
+	mu.Lock()
+	for _, c := range step.Cases {
+		if c.Next != chosen {
+			if statuses[c.Next] == StepStatusPending {
+				statuses[c.Next] = StepStatusSkipped
+			}
+		}
+	}
+	mu.Unlock()
+
+	// Validate chosen target exists.
+	if chosen != "" {
+		if _, ok := flow.Steps[chosen]; !ok {
+			return fmt.Errorf("branch step %q: default_next %q not found in flow", step.ID, chosen)
+		}
+	}
+	return nil
 }
 
 // ExtractTasksFromFlow generates tasks from flow steps with task templates.

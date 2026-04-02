@@ -2,6 +2,7 @@
 //
 // It intercepts docker invocations and records/replays them via xrr cassettes,
 // allowing flow tests to run without a real Docker daemon.
+//go:build shimbin
 package main
 
 import (

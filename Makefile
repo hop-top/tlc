@@ -60,10 +60,10 @@ build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 	@echo "$(COLOR_BLUE)Building flowtest shims...$(COLOR_RESET)"
 	@mkdir -p $(SHIMS_BIN_DIR)
 	@for shim in $(SHIMS); do \
-		go build -buildvcs=false -o $(SHIMS_BIN_DIR)/$$shim ./internal/flowtest/shims/$$shim/ || exit 1; \
+		go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/$$shim ./internal/flowtest/shims/$$shim/ || exit 1; \
 		echo "  built $$shim"; \
 	done
-	@go build -buildvcs=false -o $(SHIMS_BIN_DIR)/tlc-shim-catchall ./internal/flowtest/shims/catchall/
+	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/tlc-shim-catchall ./internal/flowtest/shims/catchall/
 	@echo "  built tlc-shim-catchall"
 	@echo "$(COLOR_GREEN)✓ Shims built to $(SHIMS_BIN_DIR)/$(COLOR_RESET)"
 

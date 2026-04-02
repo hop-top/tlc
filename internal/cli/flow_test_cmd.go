@@ -209,7 +209,7 @@ func executeRun(
 	}()
 
 	// Execute flow.
-	executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY"))
+	executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY")).WithTestMode()
 	by := core.GetCurrentUser()
 
 	flowRun, err := executor.Execute(ctx, flow, by)

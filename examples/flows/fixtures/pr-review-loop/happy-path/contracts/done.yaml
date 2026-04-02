@@ -1,0 +1,9 @@
+name: done_gate
+provider: filesystem
+evaluators:
+  - name: contains
+    substring: '"result": "Approved"'
+    mode: binary
+  - name: regex
+    pattern: '"iterations"\s*:\s*[1-9][0-9]*'
+    mode: binary

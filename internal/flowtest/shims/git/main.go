@@ -3,6 +3,7 @@
 // It does NOT use cassettes. Instead it rewrites GIT_DIR and GIT_WORK_TREE to
 // point at the sandbox repo, then execs the real git binary so all git
 // operations stay isolated to the sandbox without any recording or replay.
+//go:build shimbin
 package main
 
 import (

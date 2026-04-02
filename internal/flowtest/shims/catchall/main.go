@@ -9,6 +9,7 @@
 //     capture, write cassette, emit output.
 //   - replay: load cassette, emit stored output.
 //   - miss → stderr message, exit 2.
+//go:build shimbin
 package main
 
 import (
