@@ -53,6 +53,13 @@ type Flow struct {
 	Config      *FlowConfig     `json:"config,omitempty" yaml:"config,omitempty"`
 }
 
+// FlowInputDef describes a named input variable accepted by a flow.
+type FlowInputDef struct {
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
+	Default     any    `json:"default,omitempty" yaml:"default,omitempty"`
+}
+
 // FlowConfig holds flow configuration including procedural instructions.
 type FlowConfig struct {
 	// Procedural instructions (markdown format, like superpowers skills)
@@ -61,6 +68,8 @@ type FlowConfig struct {
 	Category string `json:"category,omitempty" yaml:"category,omitempty"`
 	// Triggers that suggest using this flow
 	Triggers []string `json:"triggers,omitempty" yaml:"triggers,omitempty"`
+	// Named input variables accepted by this flow
+	Inputs map[string]FlowInputDef `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	// Additional config parameters
 	Params map[string]any `json:"params,omitempty" yaml:"params,omitempty"`
 }

@@ -1,0 +1,464 @@
+flow_id: "flow:create-agent-skill:1.0"
+name: "Create Agent Skill"
+version: "1.0"
+description: "Create a folder-based agent skill for any CLI, API, or toolset"
+entry_step: "decide-shape"
+
+config:
+  category: "documentation"
+  triggers:
+    - "create agent skill"
+    - "add skill for this tool"
+    - "create skill folder"
+    - "document tool for agents"
+    - "agentskills.io skill"
+    - "skill for CLI"
+    - "skill for API"
+
+  procedure: |
+    ## Create Agent Skill
+
+    Produces a well-structured agent skill folder that teaches an LLM
+    how to use a CLI, API, server, or any toolset — covering:
+    - Core invocation and configuration
+    - Operation patterns (with runnable examples)
+    - Common mistakes and error handling
+    - Scripts/commands for repetitive operations
+
+    The output is a skill folder conforming to the agentskills.io spec:
+
+    ```
+    skill/
+    ├── SKILL.md           # main skill doc (required)
+    ├── references/        # extended docs, API refs, deep guides
+    ├── scripts/           # executable helpers for repetitive ops
+    └── templates/         # config/code templates for output
+    ```
+
+    ## Audience
+
+    The LLM reading the skill.  Not a human developer.
+    Write to teach an autonomous agent — not to explain to a user.
+    Every line must be actionable.
+
+    ## When to create a new skill
+
+    - A CLI, API, or service is used repeatedly across sessions and the
+      agent keeps making the same mistakes or needs repeated setup
+    - An op is complex enough that free-form guidance produces errors
+    - A set of commands has precise, non-obvious invocation order
+    - The project exposes scripts/commands worth naming and documenting
+
+    ## Skill types this flow covers
+
+    | Target | Primary content |
+    |--------|----------------|
+    | CLI tool | command reference, flags, common workflows, error table |
+    | HTTP API / server | base URL, auth, endpoint patterns, request/response shapes |
+    | SDK / library | install, init, key APIs, error handling |
+    | Scripts / ops | named operations, invocation, expected output |
+
+steps:
+  # ── Phase 1: Decide shape ────────────────────────────────────────────────────
+
+  decide-shape:
+    step_id: "decide-shape"
+    type: "branch"
+    title: "Single file or folder skill?"
+    cases:
+      - when: "complexity == 'simple'"
+        next: "simple-skill-path"
+      - when: "complexity == 'complex'"
+        next: "audit-tool"
+    default_next: "audit-tool"
+    meta:
+      guidance: |
+        Use the flat single-file path (SKILL.md only) when:
+        - Tool has ≤ ~20 commands/endpoints
+        - No scripts or templates needed
+        - No extended reference docs needed
+        - SKILL.md stays under 5k words
+
+        Use the folder path otherwise. When in doubt, start folder — it
+        scales; a flat file does not.
+
+  simple-skill-path:
+    step_id: "simple-skill-path"
+    type: "task"
+    title: "Write single-file SKILL.md (simple tool)"
+    task_ref: "task:simple-skill-path"
+    meta:
+      guidance: |
+        Write a single SKILL.md at skill/<tool-name>/SKILL.md.
+
+        Required frontmatter:
+        ```yaml
+        ---
+        name: <lowercase-hyphen-case>
+        description: |
+          <active voice, 250-350 chars>
+          <Paragraph 1: what it does + key features>
+          <Paragraph 2: "Use when:" + 3-5 triggers + 2-3 error keywords>
+        ---
+        ```
+
+        Sections to include (adapt to tool):
+        1. When to use / auto-activation conditions
+        2. Quick start (smallest runnable example)
+        3. Core commands / endpoints — table (Command | Effect)
+        4. Key flags / options reference table
+        5. Common workflows (numbered steps)
+        6. Common mistakes table (Mistake | Correct)
+        7. Error handling table (Error | Cause | Fix)
+
+        Rules:
+        - Max 5k words
+        - Max 100 chars/line
+        - No narrative — tables and code blocks only
+        - Write for an LLM reader, not a human developer
+
+  # ── Phase 2: Audit tool surface (folder path) ────────────────────────────────
+
+  audit-tool:
+    step_id: "audit-tool"
+    type: "task"
+    title: "Audit tool surface: CLI, API, scripts, error patterns"
+    task_ref: "task:audit-tool"
+    meta:
+      tool: "shell --help sweep + xray"
+      commands: |
+        TOOL="<tool-name>"
+
+        # Dump full CLI surface
+        $TOOL --help > /tmp/${TOOL}-surface.txt
+        $TOOL help --all >> /tmp/${TOOL}-surface.txt 2>&1 || true
+        # Per-subcommand sweep (adapt list to actual subcommands)
+        for sub in $($TOOL --help | awk '/^  [a-z]/{print $1}'); do
+          echo "=== $TOOL $sub ===" >> /tmp/${TOOL}-surface.txt
+          $TOOL $sub --help 2>&1 >> /tmp/${TOOL}-surface.txt
+        done
+
+        # For HTTP API: dump OpenAPI spec if available
+        curl -s http://localhost:PORT/openapi.json > /tmp/${TOOL}-openapi.json 2>/dev/null
+
+        # For scripts/ops: enumerate build targets
+        just --list 2>/dev/null > /tmp/${TOOL}-ops.txt || \
+          make -qp 2>/dev/null | awk -F: '/^[a-zA-Z]/{print $1}' >> /tmp/${TOOL}-ops.txt
+      guidance: |
+        - Read /tmp/${TOOL}-surface.txt to build the command inventory (LLM step)
+        - Identify the 5-10 most-used commands by scanning READMEs and issues
+        - Trigger invalid ops manually to collect exact error messages (LLM step)
+
+  # ── Phase 3: Research and scaffold (parallel) ────────────────────────────────
+
+  research-parallel:
+    step_id: "research-parallel"
+    type: "parallel"
+    title: "Research common mistakes, errors, and op patterns"
+    depends_on: ["audit-tool"]
+    children: ["research-errors", "research-ops", "scaffold-folder"]
+    max_concurrency: 3
+
+  research-errors:
+    step_id: "research-errors"
+    type: "task"
+    title: "Collect error messages and failure modes"
+    task_ref: "task:research-errors"
+    meta:
+      guidance: |
+        Deliberately trigger errors to collect exact messages:
+        - Missing required flags/args
+        - Invalid values
+        - Wrong command order (e.g. not initialised before running)
+        - Auth failures
+        - State machine violations (if applicable)
+
+        For each error, record:
+        - Exact error string (copy-paste from terminal)
+        - Root cause (one clause)
+        - Fix (exact command to run)
+
+        This feeds the Error Handling table and the description's
+        "Use when: troubleshooting X" keywords.
+
+  research-ops:
+    step_id: "research-ops"
+    type: "task"
+    title: "Identify repetitive operations worth scripting"
+    task_ref: "task:research-ops"
+    meta:
+      guidance: |
+        Look for operations that are:
+        - Run on every project setup (init, configure, auth)
+        - Multi-step with a fixed order
+        - Prone to typos or wrong flag combinations
+        - Frequently asked about (check READMEs, docs, issues)
+
+        For each candidate op:
+        - Write the exact invocation sequence
+        - Note expected output (what success looks like)
+        - Note destructive side-effects if any
+
+        These become scripts/ entries or named workflow sections.
+
+  scaffold-folder:
+    step_id: "scaffold-folder"
+    type: "task"
+    title: "Scaffold skill folder structure"
+    task_ref: "task:scaffold-folder"
+    meta:
+      tool: "skill-creator init script"
+      commands: |
+        SKILL="<tool-name>"
+        # skill-creator init writes canonical folder + frontmatter placeholder
+        python3 ~/.agents/skills/skill-creator/scripts/init_skill.py "${SKILL}"
+        # result: skill/${SKILL}/{SKILL.md,references/,scripts/,templates/}
+        # If skill-creator not installed, scaffold manually:
+        # mkdir -p "skill/${SKILL}"/{references,scripts,templates}
+        # printf -- "---\nname: ${SKILL}\ndescription: |\n  [DRAFT]\n---\n" \
+        #   > "skill/${SKILL}/SKILL.md"
+      guidance: |
+        - Do not write SKILL.md content yet — downstream steps do that
+        - Confirm target location: skill/ (project-local) or
+          ~/.agents/skills/ (global)
+
+  # ── Phase 4: Write core docs (parallel) ─────────────────────────────────────
+
+  write-parallel:
+    step_id: "write-parallel"
+    type: "parallel"
+    title: "Write SKILL.md body and reference docs"
+    depends_on: ["research-parallel"]
+    children: ["write-skill-md", "write-references", "write-scripts"]
+    max_concurrency: 3
+
+  write-skill-md:
+    step_id: "write-skill-md"
+    type: "task"
+    title: "Write SKILL.md body"
+    task_ref: "task:write-skill-md"
+    meta:
+      guidance: |
+        Write the body of SKILL.md.  Leave frontmatter description
+        blank — it will be written last after content is stable.
+
+        Required sections (adapt to tool type):
+
+        ### 1. When to Use / Auto-activation
+        - List conditions that should auto-trigger this skill
+        - e.g. presence of config file, binary, env var, import
+
+        ### 2. Quick Start
+        - Minimal working example (≤ 10 lines)
+        - Must be runnable as-is (no placeholders)
+
+        ### 3. Core Commands / Endpoints
+        - Table: Command/Endpoint | Effect | Notes
+        - Group by noun (task, project, flow) not by verb
+
+        ### 4. Key Flags / Options
+        - Table: Flag | Values | Default | Purpose
+        - Mark required vs optional
+        - Include bypass flags or escape hatches
+
+        ### 5. Common Workflows
+        - 3-8 numbered-step workflows for the most frequent ops
+        - Each workflow: title → steps → expected output
+        - Use pseudocode for multi-step sequences
+
+        ### 6. Agent Loop Contract (if stateful tool)
+        - Mandatory claim-before-work style contract
+        - DO / DON'T callouts for the most dangerous anti-patterns
+
+        ### 7. State Machine (if applicable)
+        - ASCII diagram
+        - Valid + invalid transitions table
+
+        ### 8. Common Mistakes
+        - Table: Mistake | Correct
+        - Source from research-errors step
+        - Include mistakes LLMs make (not just humans)
+
+        ### 9. Error Handling
+        - Table: Error message | Cause | Fix (exact command)
+        - Use copy-pasted error strings as row keys
+
+        Style rules:
+        - Max 5k words; put overflow in references/
+        - Max 100 chars/line
+        - Tables over prose everywhere
+        - No narrative paragraphs in command sections
+        - Write for an LLM reader
+
+  write-references:
+    step_id: "write-references"
+    type: "task"
+    title: "Write references/ deep-dive docs"
+    task_ref: "task:write-references"
+    meta:
+      guidance: |
+        For each topic that is too long for SKILL.md, create a
+        dedicated file in references/:
+
+        Naming: `references/<topic>.md`
+        Examples:
+        - `references/api-endpoints.md` — full endpoint catalogue
+        - `references/config-reference.md` — all config keys + types
+        - `references/troubleshooting.md` — extended error guide
+        - `references/data-model.md` — field-level data model reference
+
+        Each reference file must start with a one-line summary and
+        a link back to SKILL.md.
+
+        Add a `## References` section at the bottom of SKILL.md
+        linking to each file with a one-line description.
+
+        Skip this step if SKILL.md fits within 5k words.
+
+  write-scripts:
+    step_id: "write-scripts"
+    type: "task"
+    title: "Write scripts/ for repetitive operations"
+    task_ref: "task:write-scripts"
+    meta:
+      guidance: |
+        For each op identified in research-ops, decide:
+        - Worth a standalone script? → scripts/<op-name>.sh (or .py)
+        - Worth a named workflow section in SKILL.md? → add there
+
+        Script rules:
+        - Must be executable (`chmod +x`)
+        - Must print usage when run with no args or --help
+        - Must print expected output comments at key steps
+        - Must be idempotent or clearly warn when not
+        - Must not silently swallow errors (set -e or equivalent)
+
+        Script header template:
+        ```bash
+        #!/usr/bin/env bash
+        # <op-name>: <one-line description>
+        # Usage: ./<op-name>.sh [args]
+        # Requires: <tool-name> >= <version>
+        set -euo pipefail
+        ```
+
+        Document each script in SKILL.md under:
+        ## Scripts
+        | Script | Purpose | Usage |
+        |--------|---------|-------|
+
+        Skip this step if no repetitive ops were identified.
+
+  # ── Phase 5: Write description (sequential) ──────────────────────────────────
+
+  write-description:
+    step_id: "write-description"
+    type: "task"
+    title: "Write SKILL.md frontmatter description"
+    task_ref: "task:write-description"
+    depends_on: ["write-parallel"]
+    meta:
+      guidance: |
+        Now that the full content is written, craft the description.
+
+        Target: 250-350 characters.
+
+        Template:
+        ```
+        <Active verb> with <tool-name>. Covers <3-4 key topics>.
+
+        Use when: <trigger 1>, <trigger 2>, <trigger 3>, or
+        troubleshooting "<exact error string 1>" or "<exact error 2>".
+        ```
+
+        Checklist:
+        - Active voice ("Build X", not "This skill provides X")
+        - Names the tool explicitly
+        - 3-5 "Use when:" scenarios matching real usage patterns
+        - 2-3 exact error strings from the error research step
+        - No meta-commentary ("This comprehensive skill...")
+        - 250-350 chars total
+
+        Write it into the SKILL.md frontmatter, replacing the
+        [DRAFT] placeholder.
+
+  # ── Phase 6: Validate and register ──────────────────────────────────────────
+
+  validate-parallel:
+    step_id: "validate-parallel"
+    type: "parallel"
+    title: "Validate skill quality and structure"
+    depends_on: ["write-description"]
+    children: ["validate-structure", "validate-examples"]
+    max_concurrency: 2
+
+  validate-structure:
+    step_id: "validate-structure"
+    type: "task"
+    title: "Validate skill folder structure and frontmatter"
+    task_ref: "task:validate-structure"
+    meta:
+      tool: "skill-creator quick_validate"
+      commands: |
+        SKILL="<tool-name>"
+        python3 ~/.agents/skills/skill-creator/scripts/quick_validate.py \
+          "skill/${SKILL}"
+        # checks: name format, description length, "Use when:" presence,
+        #         file existence, line length (≤ 100), word count (≤ 5k)
+      guidance: |
+        - Fix any reported issues before proceeding
+        - References/ link validity and script presence need manual check
+          if quick_validate does not cover them
+
+  validate-examples:
+    step_id: "validate-examples"
+    type: "task"
+    title: "Run every code example; confirm output matches"
+    task_ref: "task:validate-examples"
+    meta:
+      tool: "shellcheck + shell flag probes"
+      commands: |
+        SKILL="<tool-name>"
+
+        # Lint all scripts for correctness
+        shellcheck skill/${SKILL}/scripts/*.sh 2>/dev/null || true
+
+        # Probe every documented flag: extract commands from SKILL.md and
+        # run --help to confirm they exist
+        grep -oP '(?<=`)<tool>[^`]+' skill/${SKILL}/SKILL.md \
+          | sort -u > /tmp/skill-cmds.txt
+        # Review /tmp/skill-cmds.txt and probe any flags in doubt
+
+        # Test each script prints usage
+        for s in skill/${SKILL}/scripts/*.sh; do
+          [ -f "$s" ] && bash "$s" --help 2>&1 | head -3
+        done
+      guidance: |
+        - Any example requiring live credentials: mark with
+          "# NOTE: requires <X> — cannot validate in isolation"
+        - Mismatches between documented output and actual output are LLM fixes
+
+  register-skill:
+    step_id: "register-skill"
+    type: "task"
+    title: "Register and smoke-test skill discovery"
+    task_ref: "task:register-skill"
+    depends_on: ["validate-parallel"]
+    meta:
+      tool: "ln + ls (shell)"
+      commands: |
+        SKILL="<tool-name>"
+        SKILL_PATH="$(pwd)/skill/${SKILL}"
+
+        # Install globally
+        ln -sf "${SKILL_PATH}" ~/.agents/skills/${SKILL}
+        ln -sf "${SKILL_PATH}" ~/.claude/skills/${SKILL}
+
+        # Confirm symlinks resolve correctly (exits non-zero if broken)
+        ls -la ~/.claude/skills/${SKILL}/SKILL.md
+        ls -la ~/.agents/skills/${SKILL}/SKILL.md
+      guidance: |
+        - Smoke-test discovery by starting a new session and typing
+          "help me use <tool-name>" — confirm Claude loads the skill
+        - If not discovered: check description keywords match usage patterns;
+          verify symlink target is not a broken path

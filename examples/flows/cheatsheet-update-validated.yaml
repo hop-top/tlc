@@ -1,0 +1,345 @@
+flow_id: "flow:cheatsheet-update-validated:1.0"
+name: "Cheatsheet Creation / Update (Validated)"
+version: "1.0"
+description: "Create or refresh human + agent cheatsheets with eva gating and routellm routing"
+entry_step: "audit-surface"
+
+config:
+  category: "documentation"
+  triggers:
+    - "CLI surface changed"
+    - "new command or flag added"
+    - "cheatsheet out of date"
+    - "creating cheatsheets for first time"
+    - "project docs refresh"
+
+  validation_strategy: |
+    ## Validation Strategy
+
+    ### eva (deterministic gating)
+    Applied after each phase that produces file content.
+    Contracts live in evals/cheatsheet/ and use only Tier 1 evaluators
+    (zero LLM calls, deterministic exit codes):
+
+    - cheatsheet-structure.yaml  — required sections present in both files
+    - cheatsheet-flags.yaml      — every documented flag exists in live --help
+    - cheatsheet-render.yaml     — markdown structure (tables, fencing, headings)
+
+    Eva is the authoritative gate: the flow does not commit until eva exits 0.
+
+    ### routellm (LLM cost routing)
+    Applied to the two draft steps — the only genuinely generative steps:
+    - draft-human-cheatsheet  — medium complexity; route via mf at threshold 0.30
+    - draft-agent-cheatsheet  — high complexity (more precise, more dangerous to
+                                get wrong); route via mf at threshold 0.10
+
+    cross-check is also LLM-heavy but short-context; route at threshold 0.50.
+
+  eva_contracts_dir: "evals/cheatsheet"
+  routellm_config: "config/routellm.yaml"
+
+steps:
+  # ── Phase 1: Audit current state ────────────────────────────────────────────
+
+  audit-surface:
+    step_id: "audit-surface"
+    type: "task"
+    title: "Audit CLI surface and existing cheatsheets"
+    task_ref: "task:audit-surface"
+    meta:
+      tool: "doc-validate script + shell --help sweep"
+      commands: |
+        make validate-docs
+        tlc --help > /tmp/cli-surface.txt
+        for cmd in task flow sync config tag log uri tui; do
+          echo "=== tlc $cmd ===" >> /tmp/cli-surface.txt
+          tlc $cmd --help 2>&1 >> /tmp/cli-surface.txt
+        done
+      guidance: |
+        - Interpret validate-docs failures as the delta list (LLM step)
+        - Diff /tmp/cli-surface.txt against existing cheatsheets
+
+  # ── Phase 2: Spec & context read (parallel) ──────────────────────────────────
+
+  context-parallel:
+    step_id: "context-parallel"
+    type: "parallel"
+    title: "Read specs and AGENTS.md for context"
+    depends_on: ["audit-surface"]
+    children: ["read-cli-spec", "read-agents-md", "read-existing-cheatsheets"]
+    max_concurrency: 3
+
+  read-cli-spec:
+    step_id: "read-cli-spec"
+    type: "task"
+    title: "Read CLI spec for authoritative command definitions"
+    task_ref: "task:read-cli-spec"
+    meta:
+      guidance: |
+        Read docs/tlc-cli-spec-0.1.md. Extract: command descriptions, flag
+        definitions, defaults, valid values, error codes, bypass flags.
+
+  read-agents-md:
+    step_id: "read-agents-md"
+    type: "task"
+    title: "Read AGENTS.md for agent conventions"
+    task_ref: "task:read-agents-md"
+    meta:
+      guidance: |
+        Read project AGENTS.md and ~/.agents/AGENTS.md. Extract rules that
+        belong in the agent cheatsheet (bypass flags, loop contract, -d semantics,
+        assignee lookup order). AGENTS.md wins over CLI spec on conflicts.
+
+  read-existing-cheatsheets:
+    step_id: "read-existing-cheatsheets"
+    type: "task"
+    title: "Read existing cheatsheets (if present)"
+    task_ref: "task:read-existing-cheatsheets"
+    meta:
+      guidance: |
+        Read docs/cheatsheet-human.md and docs/cheatsheet-agent.md.
+        Map each section heading to the delta list from audit-surface.
+        Flag stale, missing, or correct sections.
+
+  # ── Phase 3: Draft both cheatsheets (parallel, routellm-routed) ──────────────
+
+  draft-parallel:
+    step_id: "draft-parallel"
+    type: "parallel"
+    title: "Draft human and agent cheatsheets"
+    depends_on: ["context-parallel"]
+    children: ["draft-human-cheatsheet", "draft-agent-cheatsheet"]
+    max_concurrency: 2
+
+  draft-human-cheatsheet:
+    step_id: "draft-human-cheatsheet"
+    type: "task"
+    title: "Draft cheatsheet-human.md"
+    task_ref: "task:draft-human-cheatsheet"
+    meta:
+      routellm_hint: "medium"
+      routellm_model: "router-mf-0.30"
+      guidance: |
+        Target reader: developer using the CLI interactively.
+
+        Route via routellm at threshold 0.30 — medium complexity; weak model
+        handles well-structured reference docs reliably.
+
+        Required sections: Setup, Create (flags table), List & Filter, Inspect,
+        Claim/Unclaim, Update (-d warning), Complete/Reopen/Delete, Assign,
+        Batch Ops, Tags, Stale, Flows, Sync, Config, Output Formats,
+        URI Scheme, Common Tips + Failure Modes table.
+
+        Style: scannable in ≤ 30s; code blocks; right-aligned # comments;
+        100-char line limit; no narrative prose.
+
+  draft-agent-cheatsheet:
+    step_id: "draft-agent-cheatsheet"
+    type: "task"
+    title: "Draft cheatsheet-agent.md"
+    task_ref: "task:draft-agent-cheatsheet"
+    meta:
+      routellm_hint: "strong"
+      routellm_model: "router-mf-0.10"
+      guidance: |
+        Target reader: autonomous agent, LLM, script.
+
+        Route to strong model at threshold 0.10 — agent cheatsheet errors
+        cause cascading agent failures; quality bar is higher than human doc.
+
+        Required sections: Prerequisites, Agent Loop Contract (DO/DON'T),
+        Create, List/Query (--format json), Inspect, State Transitions
+        (ASCII diagram), Bypass Flags (disambiguation table — mandatory),
+        Update (-d replace warning), Assign (wsm→aps→ask order),
+        Batch Ops, Stale, Flows, Sync, Output Formats (json first),
+        Task Completion Protocol, Error Handling table, Task Data Model table.
+
+        Style: tables over prose; no narrative; 100-char line limit.
+
+  # ── Phase 4: Cross-check (routellm-routed) ───────────────────────────────────
+
+  cross-check:
+    step_id: "cross-check"
+    type: "task"
+    title: "Cross-check the two drafts for consistency and gaps"
+    task_ref: "task:cross-check"
+    depends_on: ["draft-parallel"]
+    meta:
+      routellm_hint: "medium"
+      routellm_model: "router-mf-0.50"
+      guidance: |
+        Route at threshold 0.50 — consistency check is pattern-matching;
+        weak model handles it unless the spec is ambiguous.
+
+        Check: every command in human appears in agent (or intentionally omitted);
+        flag tables use same values; bypass flag semantics identical;
+        error messages match; all delta-list items addressed.
+
+  # ── Phase 5: eva gate — structure validation ─────────────────────────────────
+
+  gate-structure:
+    step_id: "gate-structure"
+    type: "task"
+    title: "eva gate: required sections present in both cheatsheets"
+    task_ref: "task:gate-structure"
+    depends_on: ["cross-check"]
+    meta:
+      tool: "eva"
+      commands: |
+        eva run \
+          --dataset evals/cheatsheet/structure-dataset.yaml \
+          --no-tui
+        # exits 1 if any required section is missing; no LLM used
+      eva_contract: "evals/cheatsheet/cheatsheet-structure.yaml"
+      eva_contract_body: |
+        name: cheatsheet_structure_gate
+        provider: filesystem
+        evaluators:
+          # Human cheatsheet required sections
+          - name: contains
+            substring: "## Setup"
+            mode: binary
+          - name: contains
+            substring: "## Create"
+            mode: binary
+          - name: contains
+            substring: "Common Tips"
+            mode: binary
+          - name: regex
+            pattern: "Symptom.*Fix|Fix.*Symptom"  # failure modes table header
+            mode: binary
+          # Agent cheatsheet required sections
+          - name: contains
+            substring: "Agent Loop Contract"
+            mode: binary
+          - name: contains
+            substring: "Bypass Flags"
+            mode: binary
+          - name: contains
+            substring: "Task Completion Protocol"
+            mode: binary
+          - name: contains
+            substring: "Task Data Model"
+            mode: binary
+          - name: contains
+            substring: "State Transitions"
+            mode: binary
+        # dataset sends each cheatsheet file as a separate test
+
+  # ── Phase 6: Validate examples against live CLI (parallel) ────────────────────
+
+  validate-parallel:
+    step_id: "validate-parallel"
+    type: "parallel"
+    title: "Validate examples against live CLI"
+    depends_on: ["gate-structure"]
+    children: ["validate-human-examples", "validate-agent-examples"]
+    max_concurrency: 2
+
+  validate-human-examples:
+    step_id: "validate-human-examples"
+    type: "task"
+    title: "Validate human cheatsheet examples against live CLI"
+    task_ref: "task:validate-human-examples"
+    meta:
+      tool: "doc-validate script"
+      commands: |
+        make validate-docs
+        markdownlint docs/cheatsheet-human.md
+      guidance: |
+        Stale flags from validate-docs output are LLM fix targets.
+
+  validate-agent-examples:
+    step_id: "validate-agent-examples"
+    type: "task"
+    title: "Validate agent cheatsheet examples against live CLI"
+    task_ref: "task:validate-agent-examples"
+    meta:
+      tool: "doc-validate script + bypass-flag probes"
+      commands: |
+        make validate-docs
+        markdownlint docs/cheatsheet-agent.md
+        tlc task complete --help | grep -q "\-\-no-verify" \
+          && echo "OK: --no-verify" || echo "MISSING: --no-verify"
+        tlc task update --help | grep -q "\-\-force" \
+          && echo "OK: --force"    || echo "MISSING: --force"
+        tlc task delete --help | grep -q "\-\-yes\|-y" \
+          && echo "OK: --yes/-y"   || echo "MISSING: --yes/-y"
+        tlc task --help  | grep -q "\-\-no-prompt" \
+          && echo "OK: --no-prompt" || echo "MISSING: --no-prompt"
+      guidance: |
+        Probe failures → update bypass-flag table (LLM edit).
+
+  gate-flags:
+    step_id: "gate-flags"
+    type: "task"
+    title: "eva gate: flag examples validated — no stale entries"
+    task_ref: "task:gate-flags"
+    depends_on: ["validate-parallel"]
+    meta:
+      tool: "eva"
+      commands: |
+        # Capture validate-docs output and pass it as the eval response
+        make validate-docs 2>&1 | tee /tmp/validate-docs-output.txt
+        eva run \
+          --dataset evals/cheatsheet/flags-dataset.yaml \
+          --no-tui
+      eva_contract: "evals/cheatsheet/cheatsheet-flags.yaml"
+      eva_contract_body: |
+        name: cheatsheet_flags_gate
+        provider: doc_validator
+        evaluators:
+          - name: regex
+            pattern: "FAIL|stale|not found"
+            # presence = FAIL; contract passes only when output is clean
+            mode: binary
+          - name: contains
+            substring: "checks passed"
+            mode: binary
+        # dataset sends validate-docs stdout as the response
+
+  # ── Phase 7: Write and verify ──────────────────────────────────────────────
+
+  write-cheatsheets:
+    step_id: "write-cheatsheets"
+    type: "task"
+    title: "Write final cheatsheet files to docs/"
+    task_ref: "task:write-cheatsheets"
+    depends_on: ["gate-flags"]
+    meta:
+      tool: "doc-validate + markdownlint (final gate)"
+      commands: |
+        make validate-docs
+        markdownlint docs/cheatsheet-*.md
+        git add docs/cheatsheet-human.md docs/cheatsheet-agent.md
+        git commit -m "docs: update cheatsheets for <change summary>"
+
+  gate-render:
+    step_id: "gate-render"
+    type: "task"
+    title: "eva gate: markdown structure valid in both files"
+    task_ref: "task:gate-render"
+    depends_on: ["write-cheatsheets"]
+    meta:
+      tool: "eva"
+      commands: |
+        eva run \
+          --dataset evals/cheatsheet/render-dataset.yaml \
+          --no-tui
+      eva_contract: "evals/cheatsheet/cheatsheet-render.yaml"
+      eva_contract_body: |
+        name: cheatsheet_render_gate
+        provider: filesystem
+        evaluators:
+          - name: regex
+            pattern: "^#{1,3} "       # headings are H1-H3 only
+            mode: binary
+          - name: regex
+            pattern: "\\|.*\\|.*\\|"  # at least one table row
+            mode: binary
+          - name: regex
+            pattern: "```[a-z]"       # fenced code blocks with language tag
+            mode: binary
+          - name: regex
+            pattern: ".{101,}"        # any line over 100 chars = FAIL
+            mode: warn

@@ -1,0 +1,333 @@
+flow_id: "flow:cheatsheet-update:1.0"
+name: "Cheatsheet Creation / Update"
+version: "1.0"
+description: "Create or refresh human and agent cheatsheets for a project"
+entry_step: "audit-surface"
+
+config:
+  category: "documentation"
+  triggers:
+    - "CLI surface changed"
+    - "new command or flag added"
+    - "cheatsheet out of date"
+    - "creating cheatsheets for first time"
+    - "project docs refresh"
+
+  procedure: |
+    ## Cheatsheet Creation / Update
+
+    Produces or refreshes two cheatsheets:
+    - **cheatsheet-human.md** — scannable daily reference for humans;
+      emphasises discoverability, tips, failure modes
+    - **cheatsheet-agent.md** — autonomous-agent reference; emphasises
+      determinism, contracts, error codes, machine-readable patterns
+
+    The two documents share the same source of truth (CLI + specs) but
+    serve different mental models. They MUST stay in sync with each other
+    and with the live CLI surface.
+
+    ## Triggers
+
+    Run this flow when:
+    - A new command, subcommand, or flag is added or removed
+    - Flag behaviour or defaults change
+    - A new spec section is ratified
+    - Cheatsheets are being created for a new project
+    - Doc-command validation script reports stale examples
+
+    ## Audience Contracts
+
+    ### Human cheatsheet
+    - Scannable in ≤ 30 s
+    - Grouped by intent (create, list, update, …)
+    - Includes tips and common failure mode table
+    - Uses natural-language guidance where helpful
+
+    ### Agent cheatsheet
+    - Optimised for token-efficient parsing
+    - Leads with the agent loop contract
+    - Tables over prose wherever possible
+    - Includes full data model field reference
+    - Explicit bypass-flag disambiguation table
+    - No narrative — only facts
+
+steps:
+  # ── Phase 1: Audit current state ────────────────────────────────────────────
+
+  audit-surface:
+    step_id: "audit-surface"
+    type: "task"
+    title: "Audit CLI surface and existing cheatsheets"
+    task_ref: "task:audit-surface"
+    meta:
+      tool: "doc-validate script + shell --help sweep"
+      commands: |
+        # 1. Validate existing examples against live CLI (exits non-zero on stale)
+        make validate-docs
+        # or: ./scripts/validate-doc-commands.sh
+
+        # 2. Dump full CLI surface to a temp file for diffing
+        tlc --help > /tmp/cli-surface.txt
+        for cmd in task flow sync config tag log uri tui; do
+          echo "=== tlc $cmd ===" >> /tmp/cli-surface.txt
+          tlc $cmd --help 2>&1 >> /tmp/cli-surface.txt
+        done
+      guidance: |
+        - Interpret validate-docs failures as the delta list (LLM step)
+        - Diff /tmp/cli-surface.txt against existing cheatsheets to identify
+          additions, removals, and changed defaults
+
+  # ── Phase 2: Spec & context read (parallel, independent) ────────────────────
+
+  context-parallel:
+    step_id: "context-parallel"
+    type: "parallel"
+    title: "Read specs and AGENTS.md for context"
+    depends_on: ["audit-surface"]
+    children: ["read-cli-spec", "read-agents-md", "read-existing-cheatsheets"]
+    max_concurrency: 3
+
+  read-cli-spec:
+    step_id: "read-cli-spec"
+    type: "task"
+    title: "Read CLI spec for authoritative command definitions"
+    task_ref: "task:read-cli-spec"
+    meta:
+      guidance: |
+        - Locate the CLI spec (e.g. docs/tlc-cli-spec-0.1.md)
+        - Extract: command descriptions, flag definitions, defaults,
+          valid values, error codes, bypass flags
+        - Note any spec sections marked normative — these must appear
+          accurately in both cheatsheets
+        - Identify agent-specific guidance (state machine, bypass flags)
+
+  read-agents-md:
+    step_id: "read-agents-md"
+    type: "task"
+    title: "Read AGENTS.md for agent conventions"
+    task_ref: "task:read-agents-md"
+    meta:
+      guidance: |
+        - Read AGENTS.md (project-level and global ~/.agents/AGENTS.md)
+        - Extract rules that belong in the agent cheatsheet:
+          - claim-before-work contract
+          - -d replaces description (read-first rule)
+          - bypass flag semantics (--no-verify vs --force vs --yes)
+          - assignee lookup order (wsm → aps → ask)
+          - error message patterns
+        - Note anything that diverges from the CLI spec (agent AGENTS.md wins)
+
+  read-existing-cheatsheets:
+    step_id: "read-existing-cheatsheets"
+    type: "task"
+    title: "Read existing cheatsheets (if present)"
+    task_ref: "task:read-existing-cheatsheets"
+    meta:
+      guidance: |
+        - Read docs/cheatsheet-human.md and docs/cheatsheet-agent.md
+          (or equivalent paths) if they exist
+        - Map each section heading to the delta list from audit-surface
+        - Flag sections that are stale, missing, or correctly up to date
+        - Identify sections that appear in human but not agent (or vice-versa)
+          and decide if that's intentional or a gap
+
+  # ── Phase 3: Draft both cheatsheets (parallel) ───────────────────────────────
+
+  draft-parallel:
+    step_id: "draft-parallel"
+    type: "parallel"
+    title: "Draft human and agent cheatsheets"
+    depends_on: ["context-parallel"]
+    children: ["draft-human-cheatsheet", "draft-agent-cheatsheet"]
+    max_concurrency: 2
+
+  draft-human-cheatsheet:
+    step_id: "draft-human-cheatsheet"
+    type: "task"
+    title: "Draft cheatsheet-human.md"
+    task_ref: "task:draft-human-cheatsheet"
+    meta:
+      guidance: |
+        Target reader: developer using the CLI interactively.
+
+        Required sections (adapt to project):
+        1. Setup — init, doctor, version, multi-project targeting
+        2. Create — all create flags in a reference table
+        3. List & Filter — all filter flags; show multi-value examples
+        4. Inspect — show, log commands
+        5. Claim / Unclaim
+        6. Update — all update flags; warn about -d replace semantics
+        7. Complete / Reopen / Delete — bypass flag note
+        8. Assign / Unassign
+        9. Batch Operations — ID, regex, glob patterns
+        10. Tags — if project uses tagging
+        11. Stale Tasks — if project uses stale detection
+        12. Flows — flow commands if exposed
+        13. Sync — if sync feature exists
+        14. Config — config get/set/validate
+        15. Output Formats
+        16. URI Scheme — if applicable
+        17. Common Tips and Failure Modes — table of symptom → fix
+
+        Style rules:
+        - Opening line: "Quick reference for daily task work. Scannable in 30 seconds."
+        - Max line length: 100 chars
+        - Code blocks for all commands; right-aligned comments with `#`
+        - Reference tables for flags (Flag | Values | Purpose)
+        - Failure mode table at the end (Symptom | Fix)
+        - No narrative prose in command sections — labels only
+
+  draft-agent-cheatsheet:
+    step_id: "draft-agent-cheatsheet"
+    type: "task"
+    title: "Draft cheatsheet-agent.md"
+    task_ref: "task:draft-agent-cheatsheet"
+    meta:
+      guidance: |
+        Target reader: autonomous agent, LLM, script.
+
+        Required sections (adapt to project):
+        1. Prerequisites — version, doctor, init; multi-project targeting
+        2. Agent Loop Contract — numbered steps (claim → work → log → complete)
+           with DO / DON'T callouts
+        3. Create — flags table (same schema as human but terser labels)
+        4. List / Query — include --format json; "Deterministic First" heading
+           + ID flexibility note
+        5. Inspect — show + log with --format json
+        6. State Transitions — ASCII state diagram + command mapping
+        7. Bypass Flags — disambiguation table
+           (Flag | Scope | Effect) — critical for agents
+        8. Update — lead with read-first warning for -d
+        9. Assign / Unassign — assignee lookup order (wsm → aps → ask)
+        10. Batch Operations — explicit IDs, regex, glob
+        11. Stale Detection — if applicable
+        12. Flows — flow commands
+        13. Sync — if applicable
+        14. Output Formats — lead with json/yaml for machine use
+        15. Task Completion Protocol — numbered steps with exact commands
+        16. Error Handling — table (Error | Cause | Fix)
+        17. Task Data Model — full field reference table
+            (Field | Values | Notes)
+
+        Style rules:
+        - Opening line: "Quick reference for autonomous agents, scripts, and LLMs."
+        - Max line length: 100 chars
+        - Tables over prose everywhere possible
+        - ASCII state diagram for state machine (not mermaid)
+        - No explanatory narrative — every line must be actionable
+        - Bypass flags section is mandatory; never merge into Update section
+
+  # ── Phase 4: Cross-check (sequential) ───────────────────────────────────────
+
+  cross-check:
+    step_id: "cross-check"
+    type: "task"
+    title: "Cross-check the two drafts for consistency and gaps"
+    task_ref: "task:cross-check"
+    depends_on: ["draft-parallel"]
+    meta:
+      guidance: |
+        Compare cheatsheet-human.md and cheatsheet-agent.md side-by-side:
+
+        Consistency checks:
+        - Every command listed in human also appears in agent (or is
+          intentionally omitted with a reason)
+        - Flag tables use the same values and defaults in both files
+        - Bypass flag semantics are identical in both files
+        - Error messages match between the Error Handling table (agent)
+          and Failure Modes table (human)
+
+        Completeness checks:
+        - Every item in the audit delta list is addressed in both files
+        - Agent cheatsheet has a Task Data Model section
+        - Agent cheatsheet has a Task Completion Protocol section
+        - Human cheatsheet has a Failure Modes table
+
+        Fix any gaps before proceeding.
+
+  # ── Phase 5: Validate against live CLI (parallel) ────────────────────────────
+
+  validate-parallel:
+    step_id: "validate-parallel"
+    type: "parallel"
+    title: "Validate examples against live CLI"
+    depends_on: ["cross-check"]
+    children: ["validate-human-examples", "validate-agent-examples"]
+    max_concurrency: 2
+
+  validate-human-examples:
+    step_id: "validate-human-examples"
+    type: "task"
+    title: "Validate human cheatsheet examples against live CLI"
+    task_ref: "task:validate-human-examples"
+    meta:
+      tool: "doc-validate script"
+      commands: |
+        make validate-docs
+        # exits non-zero listing every stale flag/subcommand — no LLM needed
+        markdownlint docs/cheatsheet-human.md
+      guidance: |
+        - Any flag listed in the cheatsheet that --help no longer shows is a
+          stale entry; remove or update it (LLM edit step after tool run)
+
+  validate-agent-examples:
+    step_id: "validate-agent-examples"
+    type: "task"
+    title: "Validate agent cheatsheet examples against live CLI"
+    task_ref: "task:validate-agent-examples"
+    meta:
+      tool: "doc-validate script + targeted shell probes"
+      commands: |
+        make validate-docs
+        markdownlint docs/cheatsheet-agent.md
+
+        # Probe bypass flags explicitly — deterministic pass/fail
+        tlc task complete --help | grep -q "\-\-no-verify" \
+          && echo "OK: --no-verify" || echo "MISSING: --no-verify"
+        tlc task update --help | grep -q "\-\-force" \
+          && echo "OK: --force"    || echo "MISSING: --force"
+        tlc task delete --help | grep -q "\-\-yes\|-y" \
+          && echo "OK: --yes/-y"   || echo "MISSING: --yes/-y"
+        tlc task --help  | grep -q "\-\-no-prompt" \
+          && echo "OK: --no-prompt" || echo "MISSING: --no-prompt"
+      guidance: |
+        - Probe failures mean the bypass-flag table in the agent cheatsheet
+          needs updating (LLM edit after tool run)
+        - Verify state machine diagram by attempting an invalid transition and
+          comparing the actual error message to the Error Handling table
+
+  # ── Phase 6: Write and verify ────────────────────────────────────────────────
+
+  write-cheatsheets:
+    step_id: "write-cheatsheets"
+    type: "task"
+    title: "Write final cheatsheet files to docs/"
+    task_ref: "task:write-cheatsheets"
+    depends_on: ["validate-parallel"]
+    meta:
+      tool: "doc-validate script (final gate)"
+      commands: |
+        # After LLM writes the files:
+        make validate-docs          # must exit 0
+        markdownlint docs/cheatsheet-*.md
+        git add docs/cheatsheet-human.md docs/cheatsheet-agent.md
+        git commit -m "docs: update cheatsheets for <change summary>"
+      guidance: |
+        - LLM writes the file content; tools gate the commit
+        - If validate-docs exits non-zero: fix the stale example before committing
+
+  verify-render:
+    step_id: "verify-render"
+    type: "task"
+    title: "Verify both cheatsheets render correctly"
+    task_ref: "task:verify-render"
+    depends_on: ["write-cheatsheets"]
+    meta:
+      tool: "markdownlint + prettier"
+      commands: |
+        markdownlint docs/cheatsheet-human.md docs/cheatsheet-agent.md
+        prettier --check "docs/cheatsheet-*.md"
+        # Tables, fencing, and heading order are checked automatically
+      guidance: |
+        - Tool failures indicate structural issues (broken tables, bad headings)
+        - Placeholder text ("<...>") and broken links require LLM inspection

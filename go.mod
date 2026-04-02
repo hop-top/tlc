@@ -27,6 +27,7 @@ require (
 	hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7
 	hop.top/uri v0.0.0
 	hop.top/uri/completions v0.0.0-20260315135125-fc061a7b6a61
+	hop.top/xrr v0.0.0
 	modernc.org/sqlite v1.44.1
 )
 
@@ -99,3 +100,5 @@ require (
 replace hop.top/uri v0.0.0 => hop.top/uri v0.0.0-20260315135125-fc061a7b6a61
 
 replace hop.top/hdl v0.0.0 => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
+
+replace hop.top/xrr v0.0.0 => /Users/jadb/.w/ideacrafterslabs/xrr/hops/main/go
