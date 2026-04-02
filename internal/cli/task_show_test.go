@@ -155,6 +155,67 @@ func TestTaskShow(t *testing.T) {
 	})
 }
 
+// TestTaskShowMultipleIDs verifies that show accepts multiple IDs,
+// prints each task, and returns a non-zero exit on any missing ID.
+func TestTaskShowMultipleIDs(t *testing.T) {
+	t.Run("ShowMultipleTasks", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "First Task", Status: core.StatusTodo})
+		s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Second Task", Status: core.StatusInProgress})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001", "T-0002"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task show multiple failed: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "First Task") {
+			t.Errorf("expected First Task in output, got: %s", output)
+		}
+		if !contains(output, "Second Task") {
+			t.Errorf("expected Second Task in output, got: %s", output)
+		}
+	})
+
+	t.Run("ShowPartialFailContinues", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Exists", Status: core.StatusTodo})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "show", "T-0001", "T-9999"})
+
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatal("expected error when one ID is missing, got nil")
+		}
+		output := buf.String()
+		if !contains(output, "Exists") {
+			t.Errorf("expected valid task to be printed before error, got: %s", output)
+		}
+		if !contains(err.Error(), "T-9999") {
+			t.Errorf("expected missing ID in error, got: %s", err.Error())
+		}
+	})
+}
+
 // TestTaskShow_StaleFields_E2E is an end-to-end test: writes a task with stale
 // fields directly to storage, then reads it back via "tlc task show" and verifies
 // StaleTimeout, BlockedReason, and StaleFiredAt appear in the rendered output.
