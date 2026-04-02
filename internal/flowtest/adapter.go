@@ -710,3 +710,544 @@ func (a *routeLLMAdapter) Probe(ctx context.Context, binPath string) (*AdapterCa
 
 // Operation returns "" — routeLLM is single-mode.
 func (a *routeLLMAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- CrewAIAdapter ----
+
+// CrewAIAdapter wraps the crewai CLI (crewAIInc/crewAI).
+// Capability mappings: capabilities: [multi-agent, role-based, task-orchestration]
+// Default config: ~/.config/crewai. Override: CREWAI_HOME.
+type crewAIAdapter struct{}
+
+func NewCrewAIAdapter() AgentAdapter { return &crewAIAdapter{} }
+
+func (a *crewAIAdapter) Name() string   { return "crewai" }
+func (a *crewAIAdapter) Binary() string { return "crewai" }
+
+func (a *crewAIAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	fixed := []string{"run", "--input", prompt}
+	skip := []string{"dir"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *crewAIAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".config", "crewai")
+	})
+	return injectEnvVar(env, "CREWAI_HOME", dir)
+}
+
+func (a *crewAIAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `binPath --help` and parses --flag lines into Flags.
+func (a *crewAIAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "--help")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") {
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				flagName := strings.TrimRight(parts[0], ",")
+				caps.Flags = append(caps.Flags, flagName)
+			}
+		}
+	}
+
+	return caps, nil
+}
+
+// Operation returns "" — crewai is single-mode.
+func (a *crewAIAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- LangChainAdapter ----
+
+// LangChainAdapter wraps a LangChain agent invoked via `python -m <module>`.
+// LangChain has no stable CLI binary; agents are run as Python modules.
+//
+// Default config dir: ~/.config/langchain (LANGCHAIN_HOME env var).
+// Override with config["dir"].
+//
+// Capability mappings: use `capabilities: [llm, chain, tool-use]` in flow
+// YAML adapter mappings to route steps to this adapter.
+type langchainAdapter struct{}
+
+// NewLangChainAdapter returns an adapter for LangChain agents.
+func NewLangChainAdapter() AgentAdapter { return &langchainAdapter{} }
+
+func (a *langchainAdapter) Name() string   { return "langchain" }
+func (a *langchainAdapter) Binary() string { return "python" }
+
+// BuildArgs builds argv for `python -m <module> --input <prompt>`.
+// module defaults to "agent"; override via config["module"].
+// "dir" and "module" are excluded from --flag expansion.
+func (a *langchainAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	module := "agent"
+	if m, ok := config["module"].(string); ok && m != "" {
+		module = m
+	}
+	fixed := []string{"-m", module, "--input", prompt}
+	skip := []string{"dir", "module"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *langchainAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".config", "langchain")
+	})
+	return injectEnvVar(env, "LANGCHAIN_HOME", dir)
+}
+
+func (a *langchainAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `python -m langchain --help` non-fatally.
+// LangChain has no stable tools/models list CLI; returns empty capabilities.
+func (a *langchainAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	runProbeCmd(ctx, binPath, "-m", "langchain", "--help")
+	return &AdapterCapabilities{}, nil
+}
+
+// Operation returns "" — LangChain adapter is single-mode.
+func (a *langchainAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- GoogleADKAdapter ----
+
+// Capability mappings: capabilities: [llm, tool-use, multi-agent, streaming]
+
+// googleADKAdapter wraps the Google Agent Development Kit CLI (adk).
+// Default config: ~/.config/adk. Override: ADK_HOME or GOOGLE_ADK_HOME env var.
+type googleADKAdapter struct{}
+
+// NewGoogleADKAdapter returns an adapter for the Google ADK CLI.
+func NewGoogleADKAdapter() AgentAdapter { return &googleADKAdapter{} }
+
+func (a *googleADKAdapter) Name() string   { return "google-adk" }
+func (a *googleADKAdapter) Binary() string { return "adk" }
+
+func (a *googleADKAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	module := "agent"
+	if m, ok := config["module"].(string); ok && m != "" {
+		module = m
+	}
+	fixed := []string{"run", module, "--input", prompt}
+	skip := []string{"dir", "module"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *googleADKAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".config", "adk")
+	})
+	return injectEnvVar(env, "ADK_HOME", dir)
+}
+
+func (a *googleADKAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `binPath run --help` and parses --flag lines into Flags.
+func (a *googleADKAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "run", "--help")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") {
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				flagName := strings.TrimRight(parts[0], ",")
+				caps.Flags = append(caps.Flags, flagName)
+			}
+		}
+	}
+
+	return caps, nil
+}
+
+// Operation returns "" — google-adk is single-mode.
+func (a *googleADKAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- MastraAdapter ----
+
+// MastraAdapter wraps the mastra CLI (mastra-ai/mastra).
+// Capability mappings: capabilities: [llm, tool-use, workflow, memory]
+// Default config: ~/.mastra. Override: MASTRA_HOME.
+type mastraAdapter struct{}
+
+// NewMastraAdapter returns an adapter for the mastra CLI.
+func NewMastraAdapter() AgentAdapter { return &mastraAdapter{} }
+
+func (a *mastraAdapter) Name() string   { return "mastra" }
+func (a *mastraAdapter) Binary() string { return "mastra" }
+
+func (a *mastraAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	fixed := []string{"run", "--input", prompt}
+	if agent, ok := config["agent"].(string); ok && agent != "" {
+		fixed = append(fixed, "--agent", agent)
+	}
+	skip := []string{"dir", "agent"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *mastraAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".mastra")
+	})
+	return injectEnvVar(env, "MASTRA_HOME", dir)
+}
+
+func (a *mastraAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `binPath --help` and parses --flag lines into Flags.
+func (a *mastraAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "--help")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") {
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				flagName := strings.TrimRight(parts[0], ",")
+				caps.Flags = append(caps.Flags, flagName)
+			}
+		}
+	}
+
+	return caps, nil
+}
+
+// Operation returns "" — mastra is single-mode.
+func (a *mastraAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- OpenAIAgentsAdapter ----
+
+// OpenAIAgentsAdapter wraps the OpenAI Agents SDK (formerly Swarm) via
+// `python -m <module> --input <prompt>`.
+// Default config dir: ~/.config/openai. Override: OPENAI_CONFIG_DIR.
+// Capability mappings: capabilities: [llm, tool-use, handoff, guardrails]
+type openAIAgentsAdapter struct{}
+
+// NewOpenAIAgentsAdapter returns an adapter for the OpenAI Agents SDK.
+func NewOpenAIAgentsAdapter() AgentAdapter { return &openAIAgentsAdapter{} }
+
+func (a *openAIAgentsAdapter) Name() string   { return "openai-agents" }
+func (a *openAIAgentsAdapter) Binary() string { return "python" }
+
+func (a *openAIAgentsAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	module := "agent"
+	if m, ok := config["module"].(string); ok && m != "" {
+		module = m
+	}
+	fixed := []string{"-m", module, "--input", prompt}
+	skip := []string{"dir", "module"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *openAIAgentsAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".config", "openai")
+	})
+	return injectEnvVar(env, "OPENAI_CONFIG_DIR", dir)
+}
+
+func (a *openAIAgentsAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe returns empty capabilities — no stable CLI probe for OpenAI Agents SDK.
+func (a *openAIAgentsAdapter) Probe(_ context.Context, _ string) (*AdapterCapabilities, error) {
+	return &AdapterCapabilities{}, nil
+}
+
+// Operation returns "" — openai-agents is single-mode.
+func (a *openAIAgentsAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- N8NAdapter ----
+
+// n8nAdapter wraps the n8n CLI workflow automation tool.
+// Capability mappings: capabilities: [workflow, automation, webhook, integration]
+// Default config: ~/.n8n. Override: N8N_USER_FOLDER.
+type n8nAdapter struct{}
+
+// NewN8NAdapter returns an adapter for the n8n CLI.
+func NewN8NAdapter() AgentAdapter { return &n8nAdapter{} }
+
+func (a *n8nAdapter) Name() string   { return "n8n" }
+func (a *n8nAdapter) Binary() string { return "n8n" }
+
+func (a *n8nAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	data := fmt.Sprintf(`{"prompt":%q}`, prompt)
+	fixed := []string{"execute", "--data", data}
+	if wf, ok := config["workflow"].(string); ok && wf != "" {
+		fixed = append(fixed, "--id", wf)
+	} else if f, ok := config["file"].(string); ok && f != "" {
+		fixed = append(fixed, "--file", f)
+	}
+	skip := []string{"dir", "workflow", "file"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *n8nAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".n8n")
+	})
+	return injectEnvVar(env, "N8N_USER_FOLDER", dir)
+}
+
+func (a *n8nAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `binPath --help` and parses --flag lines into Flags.
+func (a *n8nAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "--help")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") {
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				flagName := strings.TrimRight(parts[0], ",")
+				caps.Flags = append(caps.Flags, flagName)
+			}
+		}
+	}
+
+	return caps, nil
+}
+
+// Operation returns "" — n8n is single-mode.
+func (a *n8nAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- BedrockAdapter ----
+
+// bedrockAdapter wraps the AWS CLI to invoke Bedrock models via the converse API.
+// Capability mappings: capabilities: [llm, converse, streaming, guardrails]
+// Default config: ~/.aws. Override via config["dir"] (sets AWS_CONFIG_FILE).
+// Region: config["region"] or AWS_DEFAULT_REGION.
+// Model: config["model"] or "anthropic.claude-3-5-sonnet-20241022-v2:0".
+type bedrockAdapter struct{}
+
+// NewBedrockAdapter returns an adapter for AWS Bedrock via the aws CLI.
+func NewBedrockAdapter() AgentAdapter { return &bedrockAdapter{} }
+
+func (a *bedrockAdapter) Name() string   { return "bedrock" }
+func (a *bedrockAdapter) Binary() string { return "aws" }
+
+func (a *bedrockAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	model := "anthropic.claude-3-5-sonnet-20241022-v2:0"
+	if m, ok := config["model"].(string); ok && m != "" {
+		model = m
+	}
+	body := fmt.Sprintf(`[{"role":"user","content":[{"text":%q}]}]`, prompt)
+	fixed := []string{
+		"bedrock-runtime", "converse",
+		"--model-id", model,
+		"--messages", body,
+		"--output", "json",
+	}
+	skip := []string{"dir", "model", "region"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *bedrockAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".aws")
+	})
+	env = injectEnvVar(env, "AWS_CONFIG_FILE", filepath.Join(dir, "config"))
+	if region, ok := config["region"].(string); ok && region != "" {
+		env = injectEnvVar(env, "AWS_DEFAULT_REGION", region)
+	}
+	return env
+}
+
+func (a *bedrockAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `aws bedrock-runtime converse help` non-fatally.
+// Model list requires AWS API call — skipped for probe; returns empty caps.
+func (a *bedrockAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	runProbeCmd(ctx, binPath, "bedrock-runtime", "converse", "help")
+	return &AdapterCapabilities{}, nil
+}
+
+// Operation returns "" — bedrock is single-mode.
+func (a *bedrockAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- AutoGenAdapter ----
+
+// AutoGenAdapter wraps the autogenstudio CLI (microsoft/autogen).
+// Capability mappings: capabilities: [multi-agent, code-execution, tool-use, conversation]
+// Default config: ~/.autogen. Override: AUTOGEN_HOME.
+// Invocation: `autogenstudio run --task <prompt>` (autogenstudio package).
+// Fallback (if autogenstudio unavailable): `python -m <module> --input <prompt>`.
+type autoGenAdapter struct{}
+
+// NewAutoGenAdapter returns an adapter for the AutoGen Studio CLI.
+func NewAutoGenAdapter() AgentAdapter { return &autoGenAdapter{} }
+
+func (a *autoGenAdapter) Name() string   { return "autogen" }
+func (a *autoGenAdapter) Binary() string { return "autogenstudio" }
+
+func (a *autoGenAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	fixed := []string{"run", "--task", prompt}
+	skip := []string{"dir"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *autoGenAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".autogen")
+	})
+	return injectEnvVar(env, "AUTOGEN_HOME", dir)
+}
+
+func (a *autoGenAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `binPath --help` and parses --flag lines into Flags.
+func (a *autoGenAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "--help")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") {
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				flagName := strings.TrimRight(parts[0], ",")
+				caps.Flags = append(caps.Flags, flagName)
+			}
+		}
+	}
+
+	return caps, nil
+}
+
+// Operation returns "" — autogen is single-mode.
+func (a *autoGenAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- DSPyAdapter ----
+
+// DSPyAdapter wraps a DSPy program invoked via `python -m <module>`.
+// DSPy has no standalone CLI; programs are run as Python modules.
+//
+// Default config cache dir: ~/.cache/dspy (DSPY_CACHEDIR env var).
+// Override with config["dir"].
+//
+// Capability mappings: capabilities: [llm, optimization, chain-of-thought, retrieval]
+type dspyAdapter struct{}
+
+// NewDSPyAdapter returns an adapter for DSPy programs.
+func NewDSPyAdapter() AgentAdapter { return &dspyAdapter{} }
+
+func (a *dspyAdapter) Name() string   { return "dspy" }
+func (a *dspyAdapter) Binary() string { return "python" }
+
+// BuildArgs builds argv for `python -m <module> --input <prompt>`.
+// module defaults to "program"; override via config["module"].
+// "dir" and "module" are excluded from --flag expansion.
+func (a *dspyAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	module := "program"
+	if m, ok := config["module"].(string); ok && m != "" {
+		module = m
+	}
+	fixed := []string{"-m", module, "--input", prompt}
+	skip := []string{"dir", "module"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *dspyAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".cache", "dspy")
+	})
+	return injectEnvVar(env, "DSPY_CACHEDIR", dir)
+}
+
+func (a *dspyAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe returns empty capabilities — DSPy has no stable CLI probe.
+func (a *dspyAdapter) Probe(_ context.Context, _ string) (*AdapterCapabilities, error) {
+	return &AdapterCapabilities{}, nil
+}
+
+// Operation returns "" — DSPy adapter is single-mode.
+func (a *dspyAdapter) Operation(_ core.Step) string { return "" }
+
+// ---- OllamaAdapter ----
+
+// ollamaAdapter wraps the ollama CLI (ollama/ollama).
+// Capability mappings: capabilities: [llm, local, embedding, vision]
+// Default config: ~/.ollama. Override: OLLAMA_HOME.
+// Server override: OLLAMA_HOST (default localhost:11434).
+type ollamaAdapter struct{}
+
+// NewOllamaAdapter returns an adapter for the ollama CLI.
+func NewOllamaAdapter() AgentAdapter { return &ollamaAdapter{} }
+
+func (a *ollamaAdapter) Name() string   { return "ollama" }
+func (a *ollamaAdapter) Binary() string { return "ollama" }
+
+// BuildArgs constructs argv for `ollama run <model> <prompt>`.
+// model defaults to "llama3.2"; override via config["model"].
+// "dir", "model", and "host" are excluded from --flag expansion.
+func (a *ollamaAdapter) BuildArgs(prompt string, config map[string]any, operation string) []string {
+	model := "llama3.2"
+	if m, ok := config["model"].(string); ok && m != "" {
+		model = m
+	}
+	fixed := []string{"run", model, prompt}
+	skip := []string{"dir", "model", "host"}
+	return append(fixed, buildFlagsFromConfig(config, "", skip)...)
+}
+
+func (a *ollamaAdapter) BuildEnv(env []string, config map[string]any) []string {
+	dir := configDir(config, func() string {
+		return filepath.Join(userHome(), ".ollama")
+	})
+	env = injectEnvVar(env, "OLLAMA_HOME", dir)
+	if host, ok := config["host"].(string); ok && host != "" {
+		env = injectEnvVar(env, "OLLAMA_HOST", host)
+	}
+	return env
+}
+
+func (a *ollamaAdapter) ParseOutput(raw []byte) (map[string]any, error) {
+	return parseJSONOrWrap(raw)
+}
+
+// Probe runs `binPath list` and parses model names (format: name:tag per line).
+func (a *ollamaAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "list")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		// Skip header/empty lines; model lines contain ":"
+		if line == "" || !strings.Contains(line, ":") {
+			continue
+		}
+		// First field is the model name (name:tag); skip lines that look like headers.
+		fields := strings.Fields(line)
+		if len(fields) > 0 && strings.Contains(fields[0], ":") {
+			caps.Models = append(caps.Models, fields[0])
+		}
+	}
+
+	return caps, nil
+}
+
+// Operation returns "" — ollama is single-mode.
+func (a *ollamaAdapter) Operation(_ core.Step) string { return "" }

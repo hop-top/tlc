@@ -20,6 +20,16 @@ func allAdapters() []AgentAdapter {
 		NewCodexAdapter(),
 		NewOpenCodeAdapter(),
 		NewRouteLLMAdapter(),
+		NewCrewAIAdapter(),
+		NewLangChainAdapter(),
+		NewGoogleADKAdapter(),
+		NewMastraAdapter(),
+		NewN8NAdapter(),
+		NewBedrockAdapter(),
+		NewDSPyAdapter(),
+		NewOpenAIAgentsAdapter(),
+		NewAutoGenAdapter(),
+		NewOllamaAdapter(),
 	}
 }
 
@@ -41,7 +51,7 @@ func TestAdapterInterface(t *testing.T) {
 			}
 			found := false
 			for _, arg := range args {
-				if arg == "hello" {
+				if strings.Contains(arg, "hello") {
 					found = true
 				}
 			}

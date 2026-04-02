@@ -62,7 +62,12 @@ func builtins() map[string]AgentAdapter {
 		"fabric":   NewFabricAdapter(),
 		"llm":      NewLLMAdapter(),
 		"codex":    NewCodexAdapter(),
-		"opencode": NewOpenCodeAdapter(),
+		"opencode":  NewOpenCodeAdapter(),
+		"crewai":      NewCrewAIAdapter(),
+		"langchain":   NewLangChainAdapter(),
+		"google-adk":  NewGoogleADKAdapter(),
+		"n8n":         NewN8NAdapter(),
+		"bedrock":     NewBedrockAdapter(),
 	}
 }
 

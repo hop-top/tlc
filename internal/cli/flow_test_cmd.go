@@ -225,9 +225,15 @@ func executeRun(
 		"gemini":   flowtest.NewGeminiAdapter(),
 		"fabric":   flowtest.NewFabricAdapter(),
 		"llm":      flowtest.NewLLMAdapter(),
-		"codex":    flowtest.NewCodexAdapter(),
-		"opencode": flowtest.NewOpenCodeAdapter(),
-		"routellm": flowtest.NewRouteLLMAdapter(),
+		"codex":     flowtest.NewCodexAdapter(),
+		"opencode":  flowtest.NewOpenCodeAdapter(),
+		"routellm":  flowtest.NewRouteLLMAdapter(),
+		"crewai":    flowtest.NewCrewAIAdapter(),
+		"langchain": flowtest.NewLangChainAdapter(),
+		"openai-agents": flowtest.NewOpenAIAgentsAdapter(),
+		"autogen":        flowtest.NewAutoGenAdapter(),
+		"n8n":            flowtest.NewN8NAdapter(),
+		"bedrock":        flowtest.NewBedrockAdapter(),
 	}
 	globalCfg, err := flowtest.LoadGlobalAdapterConfig()
 	if err != nil {
