@@ -9,6 +9,12 @@ import (
 type mockRepo struct {
 	tasks map[string]*Task
 	logs  []*LogEntry
+	seq   int
+}
+
+func (m *mockRepo) GetNextSequenceID(_ context.Context, _ string) (int, error) {
+	m.seq++
+	return m.seq, nil
 }
 
 func (m *mockRepo) CreateTask(_ context.Context, t *Task) error {

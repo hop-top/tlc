@@ -7,6 +7,9 @@ import (
 
 // Repository defines the interface for task persistence.
 type Repository interface {
+	// GetNextSequenceID returns the next monotonically-increasing task number for the
+	// given project (empty string = global default). Each call increments the counter.
+	GetNextSequenceID(ctx context.Context, projectID string) (int, error)
 	// CreateTask persists a new task.
 	CreateTask(ctx context.Context, task *Task) error
 	// GetTask retrieves a task by its ID. Returns nil, nil if not found.

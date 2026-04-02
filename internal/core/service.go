@@ -18,6 +18,17 @@ func NewTaskService(repo Repository, logRepo LogRepository) *TaskService {
 	}
 }
 
+// NextTaskID returns the next formatted task ID (e.g. "T-0001") for the given
+// project, using the repository's sequence counter. Empty projectID uses the
+// global sequence.
+func (s *TaskService) NextTaskID(ctx context.Context, projectID string) (string, error) {
+	seq, err := s.repo.GetNextSequenceID(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get next sequence ID: %w", err)
+	}
+	return fmt.Sprintf("T-%04d", seq), nil
+}
+
 func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, note string) error {
 	if err := s.repo.CreateTask(ctx, task); err != nil {
 		return fmt.Errorf("failed to create task: %w", err)
