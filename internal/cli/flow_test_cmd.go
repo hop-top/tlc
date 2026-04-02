@@ -297,6 +297,8 @@ type loggingAgentRunner struct {
 	done   int
 }
 
+func (r *loggingAgentRunner) CanHandle(step core.Step) bool { return r.inner.CanHandle(step) }
+
 func (r *loggingAgentRunner) Run(ctx context.Context, step core.Step, prompt string) (map[string]any, error) {
 	r.done++
 	fmt.Fprintf(r.stderr, "  step %d/%d: %s\n", r.done, r.total, step.ID)

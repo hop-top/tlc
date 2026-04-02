@@ -1,6 +1,7 @@
 package flowtest
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,14 +56,28 @@ func LoadGlobalAdapterConfig() (*GlobalAdapterConfig, error) {
 //  4. global.Adapters.Configs[adapterName]
 //  5. nil → adapter auto-detects
 type AdapterResolver struct {
-	adapters map[string]AgentAdapter
-	flow     *core.Flow
-	global   *GlobalAdapterConfig
+	adapters   map[string]AgentAdapter
+	flow       *core.Flow
+	global     *GlobalAdapterConfig
+	sandbox    *Sandbox                        // optional; enables Probe in ResolveCtx
+	probeCache map[string]*AdapterCapabilities // keyed by adapter name
 }
 
 // NewAdapterResolver creates a resolver bound to a flow and optional global config.
 func NewAdapterResolver(adapters map[string]AgentAdapter, flow *core.Flow, global *GlobalAdapterConfig) *AdapterResolver {
-	return &AdapterResolver{adapters: adapters, flow: flow, global: global}
+	return &AdapterResolver{
+		adapters:   adapters,
+		flow:       flow,
+		global:     global,
+		probeCache: make(map[string]*AdapterCapabilities),
+	}
+}
+
+// WithSandbox attaches a sandbox to the resolver enabling Probe on first resolution.
+// Returns the receiver for chaining.
+func (r *AdapterResolver) WithSandbox(sb *Sandbox) *AdapterResolver {
+	r.sandbox = sb
+	return r
 }
 
 // resolvedRef carries both the resolved adapter name and any inline config.
@@ -73,22 +88,45 @@ type resolvedRef struct {
 
 // Resolve returns the AgentAdapter and config map for the given step.
 // config is nil when no explicit config was found — adapter should auto-detect.
+// For backward compatibility, operation is dropped; use ResolveCtx to get it.
 func (r *AdapterResolver) Resolve(step core.Step) (AgentAdapter, map[string]any, error) {
+	a, cfg, _, err := r.ResolveCtx(context.Background(), step)
+	return a, cfg, err
+}
+
+// ResolveCtx resolves the adapter, scoped config, and operation for the step.
+// On first resolution for each adapter, Probe is called when a sandbox is set
+// (errors are non-fatal: logged to stderr, empty caps stored).
+func (r *AdapterResolver) ResolveCtx(ctx context.Context, step core.Step) (AgentAdapter, map[string]any, string, error) {
 	ref, err := r.resolveRef(step)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	a, ok := r.adapters[ref.name]
 	if !ok {
-		return nil, nil, fmt.Errorf(
+		return nil, nil, "", fmt.Errorf(
 			"adapter resolver: step %q: adapter %q not registered; available: %s",
 			step.ID, ref.name, adapterNames(r.adapters),
 		)
 	}
 
+	// Probe once per adapter name; errors are non-fatal.
+	if r.sandbox != nil {
+		if _, probed := r.probeCache[ref.name]; !probed {
+			binPath := filepath.Join(r.sandbox.BinDir, a.Binary())
+			caps, probeErr := a.Probe(ctx, binPath)
+			if probeErr != nil {
+				fmt.Fprintf(os.Stderr, "adapter resolver: probe %q: %v (continuing)\n", ref.name, probeErr)
+				caps = &AdapterCapabilities{}
+			}
+			r.probeCache[ref.name] = caps
+		}
+	}
+
 	cfg := r.resolveConfig(ref)
-	return a, cfg, nil
+	operation := a.Operation(step)
+	return a, cfg, operation, nil
 }
 
 // resolveRef walks the adapter name chain and returns the first match with its

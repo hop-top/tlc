@@ -200,7 +200,7 @@ func TestAgentRefJSONString(t *testing.T) {
 }
 
 func TestAgentRefJSONStruct(t *testing.T) {
-	ref := AgentRef{Name: "gemini", Config: map[string]string{"dir": "/custom"}}
+	ref := AgentRef{Name: "gemini", Config: map[string]any{"dir": "/custom"}}
 	b, err := json.Marshal(ref)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)

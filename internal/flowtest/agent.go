@@ -25,7 +25,9 @@ type SandboxAgentRunner struct {
 
 // NewSandboxAgentRunner creates a runner bound to the given sandbox, run, and
 // resolver. Must be called before sandbox env vars are injected into the process.
+// The sandbox is wired into the resolver so Probe is called on first resolution.
 func NewSandboxAgentRunner(sb *Sandbox, mode xrr.Mode, run *Run, resolver *AdapterResolver) *SandboxAgentRunner {
+	resolver.WithSandbox(sb)
 	return &SandboxAgentRunner{
 		sandbox:  sb,
 		mode:     mode,
@@ -43,10 +45,12 @@ func (r *SandboxAgentRunner) CanHandle(step core.Step) bool {
 
 // Run dispatches the agent for stepID and returns the parsed step output.
 func (r *SandboxAgentRunner) Run(ctx context.Context, step core.Step, prompt string) (map[string]any, error) {
-	adapter, cfg, err := r.resolver.Resolve(step)
+	adapter, cfg, operation, err := r.resolver.ResolveCtx(ctx, step)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox agent runner: %w", err)
 	}
+
+	binaryPath := filepath.Join(r.sandbox.BinDir, adapter.Binary())
 
 	// Pre-create per-step cassette dir so xrr.FileCassette can write to it.
 	if r.run != nil {
@@ -59,8 +63,7 @@ func (r *SandboxAgentRunner) Run(ctx context.Context, step core.Step, prompt str
 	env := r.sandbox.Env(step.ID, r.mode, r.run)
 	env = adapter.BuildEnv(env, cfg)
 
-	binaryPath := filepath.Join(r.sandbox.BinDir, adapter.Binary())
-	cmd := exec.CommandContext(ctx, binaryPath, adapter.BuildArgs(prompt)...)
+	cmd := exec.CommandContext(ctx, binaryPath, adapter.BuildArgs(prompt, cfg, operation)...)
 	cmd.Dir = r.sandbox.RepoDir
 	cmd.Env = env
 	// Explicit empty stdin so agents don't wait for piped input.
