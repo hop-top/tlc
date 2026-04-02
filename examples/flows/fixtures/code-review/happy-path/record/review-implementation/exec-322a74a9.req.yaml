@@ -1,0 +1,11 @@
+xrr: "1"
+adapter: exec
+fingerprint: 322a74a9
+recorded_at: "2026-04-02T18:23:28Z"
+payload:
+    argv:
+        - /Users/jadb/.claude/plugins/cache/superpowers-marketplace/episodic-memory/1.0.15/cli/episodic-memory.js
+        - sync
+        - --background
+    stdin: |
+        {"session_id":"2a154d5b-2257-4acb-8d8f-2314a784f486","transcript_path":"/Users/jadb/.claude/projects/-private-var-folders-x6-lrc3lbzd1gs0wvmn-z-t76780000gn-T-tlc-flow-test-2202282094-repo/2a154d5b-2257-4acb-8d8f-2314a784f486.jsonl","cwd":"/private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2202282094/repo","hook_event_name":"SessionStart","source":"startup"}

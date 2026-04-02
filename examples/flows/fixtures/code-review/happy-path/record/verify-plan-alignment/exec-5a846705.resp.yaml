@@ -1,7 +1,7 @@
 xrr: "1"
 adapter: exec
 fingerprint: 5a846705
-recorded_at: "2026-04-02T10:31:36Z"
+recorded_at: "2026-04-02T18:21:48Z"
 payload:
     stdout: |
         {"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"Playwright","version":"1.60.0-alpha-1774999321000"}},"jsonrpc":"2.0","id":0}

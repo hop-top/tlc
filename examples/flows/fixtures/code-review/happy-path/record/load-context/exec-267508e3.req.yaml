@@ -1,7 +1,7 @@
 xrr: "1"
 adapter: exec
 fingerprint: "267508e3"
-recorded_at: "2026-04-02T10:30:30Z"
+recorded_at: "2026-04-02T18:20:39Z"
 payload:
     argv:
         - /Users/jadb/.claude/plugins/cache/superpowers-marketplace/episodic-memory/1.0.15/cli/mcp-server-wrapper.js

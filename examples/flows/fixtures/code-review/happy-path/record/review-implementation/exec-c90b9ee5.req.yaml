@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: c90b9ee5
+recorded_at: "2026-04-02T18:24:00Z"
+payload:
+    argv:
+        - /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2202282094/home/.npm/_npx/eea2bd7412d4593b/node_modules/.bin/context7-mcp
+    stdin: |
+        {"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{"roots":{},"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"claude-code","version":"2.1.81"}},"jsonrpc":"2.0","id":0}

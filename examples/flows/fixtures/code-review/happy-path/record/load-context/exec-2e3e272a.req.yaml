@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 2e3e272a
-recorded_at: "2026-04-02T10:23:10Z"
-payload:
-    argv:
-        - -n
-        - executeBranchStep\|BranchStep\|StepTypeBranch\|Cases\|DefaultNext
-        - internal/core/flow_executor.go

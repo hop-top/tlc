@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 24eef990
-recorded_at: "2026-04-02T10:23:11Z"
-payload:
-    argv:
-        - -A5
-        - flow test
-        - scripts/validate-doc-commands.sh

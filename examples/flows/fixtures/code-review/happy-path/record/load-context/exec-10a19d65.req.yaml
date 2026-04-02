@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 10a19d65
-recorded_at: "2026-04-02T10:23:16Z"
-payload:
-    argv:
-        - PATH\|HOME\|GIT_DIR\|os.Getenv
-        - internal/cli/flow_test_cmd.go

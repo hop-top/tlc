@@ -1,7 +1,7 @@
 xrr: "1"
 adapter: exec
 fingerprint: "267508e3"
-recorded_at: "2026-04-02T10:31:34Z"
+recorded_at: "2026-04-02T18:21:46Z"
 payload:
     stdout: |
         {"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"episodic-memory","version":"1.0.0"}},"jsonrpc":"2.0","id":0}

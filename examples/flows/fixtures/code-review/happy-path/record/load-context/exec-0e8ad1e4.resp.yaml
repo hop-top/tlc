@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 0e8ad1e4
-recorded_at: "2026-04-02T10:24:56Z"
-payload:
-    stdout: |
-        internal/cli/flow_test_cmd.go
-    exit_code: 0

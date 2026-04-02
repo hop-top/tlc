@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 6ff8ee3c
-recorded_at: "2026-04-02T10:22:52Z"
-payload:
-    argv:
-        - internal/flowtest/shims/shimlib/
-        - internal/flowtest/shims/shims/

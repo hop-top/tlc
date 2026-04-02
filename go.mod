@@ -23,11 +23,11 @@ require (
 	golang.org/x/crypto v0.47.0
 	golang.org/x/oauth2 v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
-	hop.top/hdl v0.0.0
+	hop.top/hdl v0.0.1-alpha.1
 	hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7
-	hop.top/uri v0.0.0
+	hop.top/uri v0.0.1-alpha.1
 	hop.top/uri/completions v0.0.0-20260315135125-fc061a7b6a61
-	hop.top/xrr v0.0.0
+	hop.top/xrr v0.1.0-alpha.1
 	modernc.org/sqlite v1.44.1
 )
 
@@ -96,9 +96,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace hop.top/uri v0.0.0 => hop.top/uri v0.0.0-20260315135125-fc061a7b6a61
-
-replace hop.top/hdl v0.0.0 => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
-
-replace hop.top/xrr v0.0.0 => /Users/jadb/.w/ideacrafterslabs/xrr/hops/main/go

@@ -1,7 +1,7 @@
 xrr: "1"
 adapter: exec
 fingerprint: 937218c5
-recorded_at: "2026-04-02T10:32:41Z"
+recorded_at: "2026-04-02T18:22:54Z"
 payload:
     argv:
         - /opt/homebrew/bin/npx

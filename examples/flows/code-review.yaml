@@ -3,6 +3,8 @@ name: "Code Review Process"
 version: "1.0"
 description: "Systematic code review against plan and quality standards"
 entry_step: "load-context"
+agent:
+  name: claude
 
 config:
   category: "quality-assurance"

@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: b6f9078a
-recorded_at: "2026-04-02T10:25:09Z"
-payload:
-    argv:
-        - -n
-        - ExitCode\|exitCode\|exit.*2\|cassette miss
-        - internal/cli/flow_test_cmd.go

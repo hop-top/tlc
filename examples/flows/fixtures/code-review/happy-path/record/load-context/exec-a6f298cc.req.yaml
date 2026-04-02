@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: a6f298cc
-recorded_at: "2026-04-02T10:25:13Z"
-payload:
-    argv:
-        - -n
-        - 'return [0-9]\|return exitCode\|Code: [0-9]'
-        - internal/cli/flow_test_cmd.go

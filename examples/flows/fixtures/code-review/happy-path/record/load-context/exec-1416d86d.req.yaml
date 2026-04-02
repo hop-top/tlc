@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 1416d86d
-recorded_at: "2026-04-02T10:14:02Z"
-payload:
-    argv:
-        - "-30"
-    stdin: "diff --git a/go.mod b/go.mod\nindex 8387fda..a5f7f41 100644\n--- a/go.mod\n+++ b/go.mod\n@@ -27,6 +27,7 @@ require (\n \thop.top/upgrade v0.0.0-20260323164843-b8379a5355f7\n \thop.top/uri v0.0.0\n \thop.top/uri/completions v0.0.0-20260315135125-fc061a7b6a61\n+\thop.top/xrr v0.0.0\n \tmodernc.org/sqlite v1.44.1\n )\n \n@@ -99,3 +100,5 @@ require (\n replace hop.top/uri v0.0.0 => hop.top/uri v0.0.0-20260315135125-fc061a7b6a61\n \n replace hop.top/hdl v0.0.0 => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main\n+\n+replace hop.top/xrr v0.0.0 => /Users/jadb/.w/ideacrafterslabs/xrr/hops/main/go\ndiff --git a/go.sum b/go.sum\nindex 61c7b3f..9c9841e 100644\n--- a/go.sum\n+++ b/go.sum\n@@ -206,8 +206,6 @@ golang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=\n golang.org/x/sync v0.19.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=\n golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=\n golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=\n-golang.org/x/sys v0.40.0 h1:DBZZqJ2Rkml6QMQsZywtnjnnGvHza6BTfYFWY9kjEWQ=\n-golang.org/x/sys v0.40.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=\n golang.org/x/sys v0.42.0 h1:omrd2nAlyT5ESRdCLYdm3+fMfNFE/+Rf4bDIQImRJeo=\n golang.org/x/sys v0.42.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=\n golang.org/x/term v0.39.0 h1:RclSuaJf32jOqZz74CkPA9qFuVTX7vhLlpfj/IGWlqY=\n"

@@ -1,7 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 8961bbb7
-recorded_at: "2026-04-02T10:24:42Z"
-payload:
-    argv:
-        - /tmp/codex-review-mvRjIUkI

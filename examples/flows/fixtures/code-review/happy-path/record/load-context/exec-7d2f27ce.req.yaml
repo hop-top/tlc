@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 7d2f27ce
-recorded_at: "2026-04-02T10:13:57Z"
-payload:
-    argv:
-        - "-30"
-        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-4163639547/repo/internal/flowtest/shims/git/main.go

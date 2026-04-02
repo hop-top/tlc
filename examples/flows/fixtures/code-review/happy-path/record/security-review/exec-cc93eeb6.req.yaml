@@ -1,7 +1,7 @@
 xrr: "1"
 adapter: exec
 fingerprint: cc93eeb6
-recorded_at: "2026-04-02T10:36:21Z"
+recorded_at: "2026-04-02T18:26:39Z"
 payload:
     argv:
         - /Users/jadb/.claude/plugins/cache/superpowers-marketplace/superpowers-chrome/1.6.1/mcp/dist/index.js

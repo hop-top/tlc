@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: edc09b06
-recorded_at: "2026-04-02T10:12:32Z"
-payload:
-    stdout: |4
-               1
-    exit_code: 0
