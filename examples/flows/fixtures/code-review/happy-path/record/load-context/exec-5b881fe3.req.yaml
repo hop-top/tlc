@@ -1,0 +1,10 @@
+xrr: "1"
+adapter: exec
+fingerprint: 5b881fe3
+recorded_at: "2026-04-02T10:24:10Z"
+payload:
+    argv:
+        - -oE
+        - '[0-9]+'
+    stdin: |
+        6943 insertion

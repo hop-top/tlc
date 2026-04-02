@@ -1,0 +1,10 @@
+xrr: "1"
+adapter: exec
+fingerprint: 0687017a
+recorded_at: "2026-04-02T10:24:01Z"
+payload:
+    stdout: |
+        replace hop.top/uri v0.0.0 => hop.top/uri v0.0.0-20260315135125-fc061a7b6a61
+        replace hop.top/hdl v0.0.0 => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
+        replace hop.top/xrr v0.0.0 => /Users/jadb/.w/ideacrafterslabs/xrr/hops/main/go
+    exit_code: 0

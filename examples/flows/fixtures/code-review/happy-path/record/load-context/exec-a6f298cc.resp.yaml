@@ -1,0 +1,19 @@
+xrr: "1"
+adapter: exec
+fingerprint: a6f298cc
+recorded_at: "2026-04-02T10:25:13Z"
+payload:
+    stdout: |
+        103:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: storage: %v", err)}
+        110:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: resolve flow: %v", err)}
+        120:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: abs path: %v", err)}
+        130:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: discover runs: %v", err)}
+        152:		return &ExitCodeError{Code: 1, Message: "flow test: one or more runs failed"}
+        178:		return 3, fmt.Errorf("getwd: %w", err)
+        182:		return 3, fmt.Errorf("sandbox: %w", err)
+        189:		return 3, fmt.Errorf("extract shims: %w", err)
+        234:		return 1, nil
+        257:		return 1, nil
+        264:		return 1, nil
+        268:	return 0, nil
+    exit_code: 0

@@ -1,0 +1,11 @@
+xrr: "1"
+adapter: exec
+fingerprint: 937218c5
+recorded_at: "2026-04-02T10:35:54Z"
+payload:
+    argv:
+        - /opt/homebrew/bin/npx
+        - -y
+        - '@upstash/context7-mcp'
+    stdin: |
+        {"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{"roots":{},"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"claude-code","version":"2.1.81"}},"jsonrpc":"2.0","id":0}

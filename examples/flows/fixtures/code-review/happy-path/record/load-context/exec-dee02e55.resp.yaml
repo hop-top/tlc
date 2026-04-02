@@ -1,0 +1,10 @@
+xrr: "1"
+adapter: exec
+fingerprint: dee02e55
+recorded_at: "2026-04-02T10:23:16Z"
+payload:
+    stdout: |
+        		// Don't override HOME in the process env — it breaks keychain auth for
+        		if key == "HOME" {
+        		WithEvaKey(os.Getenv("EVA_KEY")).
+    exit_code: 0

@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: 1cf8c9ea
+recorded_at: "2026-04-02T10:21:17Z"
+payload:
+    argv:
+        - /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-319215592/home/.npm/_npx/9833c18b2d85bc59/node_modules/.bin/playwright-mcp
+    stdin: |
+        {"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{"roots":{},"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"claude-code","version":"2.1.81"}},"jsonrpc":"2.0","id":0}

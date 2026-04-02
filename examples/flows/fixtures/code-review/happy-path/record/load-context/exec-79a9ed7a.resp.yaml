@@ -1,0 +1,38 @@
+xrr: "1"
+adapter: exec
+fingerprint: 79a9ed7a
+recorded_at: "2026-04-02T10:24:57Z"
+payload:
+    stdout: |
+        	// Assert expected exit code.
+        	if run.ExpectedExit != 0 {
+        		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+        			"  result: FAIL (expected exit %d but flow succeeded)\n", run.ExpectedExit)
+        		return 1, nil
+        	}
+
+        	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  result: PASS\n")
+        	return 0, nil
+        }
+
+        // flowFileBaseName returns the base name of a flow file without extension.
+        func flowFileBaseName(path string) string {
+        	base := filepath.Base(path)
+        	if ext := filepath.Ext(base); ext != "" {
+        		return base[:len(base)-len(ext)]
+        	}
+        	return base
+        }
+
+        // envMap extracts key names from an env slice.
+        func envMap(env []string) map[string]struct{} {
+        	m := make(map[string]struct{}, len(env))
+        	for _, kv := range env {
+        		idx := strings.IndexByte(kv, '=')
+        		if idx >= 0 {
+        			m[kv[:idx]] = struct{}{}
+        		}
+        	}
+        	return m
+        }
+    exit_code: 0

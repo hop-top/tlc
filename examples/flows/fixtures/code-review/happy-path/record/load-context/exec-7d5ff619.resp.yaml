@@ -1,0 +1,20 @@
+xrr: "1"
+adapter: exec
+fingerprint: 7d5ff619
+recorded_at: "2026-04-02T10:19:52Z"
+payload:
+    stdout: |
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/llm/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/gemini/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/copilot/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/claude/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/composer/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/codex/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/pip/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/uv/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/fabric/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/docker-compose/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/npx/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/npm/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+        /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/opencode/main.go:5:import "hop.top/tlc/internal/flowtest/shims/shims"
+    exit_code: 0

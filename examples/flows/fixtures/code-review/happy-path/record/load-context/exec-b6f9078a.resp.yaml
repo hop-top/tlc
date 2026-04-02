@@ -1,0 +1,17 @@
+xrr: "1"
+adapter: exec
+fingerprint: b6f9078a
+recorded_at: "2026-04-02T10:25:09Z"
+payload:
+    stdout: |
+        17:// ExitCodeError wraps a process exit code so callers can detect specific codes.
+        18:type ExitCodeError struct {
+        23:func (e *ExitCodeError) Error() string { return e.Message }
+        103:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: storage: %v", err)}
+        110:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: resolve flow: %v", err)}
+        120:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: abs path: %v", err)}
+        130:		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: discover runs: %v", err)}
+        142:		exitCode, err := executeRun(ctx, cmd, flow, s, run, mode, passthroughFlat, keepSandbox)
+        146:		if exitCode != 0 {
+        152:		return &ExitCodeError{Code: 1, Message: "flow test: one or more runs failed"}
+    exit_code: 0

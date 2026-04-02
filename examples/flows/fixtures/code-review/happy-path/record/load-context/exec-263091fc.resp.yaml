@@ -1,0 +1,28 @@
+xrr: "1"
+adapter: exec
+fingerprint: 263091fc
+recorded_at: "2026-04-02T10:23:05Z"
+payload:
+    stdout: |
+        	// Restore original env after run.
+        	defer func() {
+        		for key := range envMap(sandboxEnv) {
+        			_ = os.Unsetenv(key)
+        		}
+        	}()
+
+        	// Wire agent runner — dispatches claude shim per step in record/replay mode.
+        	agentRunner := flowtest.NewSandboxAgentRunner(sb, mode, &runWithPassthrough)
+
+        	// Execute flow.
+        	executor := core.NewFlowExecutor(s, s).
+        		WithEvaKey(os.Getenv("EVA_KEY")).
+        		WithTestMode().
+        		WithAgentRunner(agentRunner)
+        	by := core.GetCurrentUser()
+
+        	flowRun, stepOutputs, err := executor.Execute(ctx, flow, by)
+        	if err != nil {
+        		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  FAIL step error: %v\n", err)
+        		return 1, nil
+    exit_code: 0

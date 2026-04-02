@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: c9ec5417
+recorded_at: "2026-04-02T10:25:20Z"
+payload:
+    argv:
+        - -n
+        - ExitCodeError\|exitCode
+        - internal/cli/root.go

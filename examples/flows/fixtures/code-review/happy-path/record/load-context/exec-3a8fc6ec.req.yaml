@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: 3a8fc6ec
+recorded_at: "2026-04-02T10:25:37Z"
+payload:
+    argv:
+        - "-100"
+    stdin: |
+        Now let me read the actual implementation files:

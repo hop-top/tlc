@@ -87,7 +87,7 @@ Usage:
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Starting flow: %s (ID: %s)\n", flow.Name, flow.ID)
-		run, err := executor.Execute(ctx, flow, by)
+		run, _, err := executor.Execute(ctx, flow, by)
 		if err != nil {
 			return fmt.Errorf("flow execution failed: %w", err)
 		}

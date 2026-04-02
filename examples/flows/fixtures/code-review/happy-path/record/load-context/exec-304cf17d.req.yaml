@@ -1,0 +1,8 @@
+xrr: "1"
+adapter: exec
+fingerprint: 304cf17d
+recorded_at: "2026-04-02T10:12:32Z"
+payload:
+    argv:
+        - -p
+        - /var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-4163639547/home/.gstack/analytics

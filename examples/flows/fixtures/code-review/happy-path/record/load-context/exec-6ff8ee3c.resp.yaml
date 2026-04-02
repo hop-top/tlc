@@ -1,0 +1,12 @@
+xrr: "1"
+adapter: exec
+fingerprint: 6ff8ee3c
+recorded_at: "2026-04-02T10:22:52Z"
+payload:
+    stdout: |
+        internal/flowtest/shims/shimlib/:
+        shim.go
+
+        internal/flowtest/shims/shims/:
+        shim.go
+    exit_code: 0

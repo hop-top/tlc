@@ -1,0 +1,7 @@
+xrr: "1"
+adapter: exec
+fingerprint: ee686a40
+recorded_at: "2026-04-02T10:25:20Z"
+payload:
+    argv:
+        - "-10"

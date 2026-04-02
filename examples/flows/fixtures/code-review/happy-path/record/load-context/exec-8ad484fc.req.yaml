@@ -1,0 +1,12 @@
+xrr: "1"
+adapter: exec
+fingerprint: 8ad484fc
+recorded_at: "2026-04-02T10:22:09Z"
+payload:
+    argv:
+        - pr
+        - view
+        - --json
+        - baseRefName
+        - -q
+        - .baseRefName

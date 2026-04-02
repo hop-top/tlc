@@ -1,0 +1,8 @@
+xrr: "1"
+adapter: exec
+fingerprint: 5b881fe3
+recorded_at: "2026-04-02T10:24:10Z"
+payload:
+    stdout: |
+        6943
+    exit_code: 0

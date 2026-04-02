@@ -1,0 +1,96 @@
+xrr: "1"
+adapter: exec
+fingerprint: 16c1536a
+recorded_at: "2026-04-02T10:22:14Z"
+payload:
+    argv:
+        - "-20"
+    stdin: |4
+         .gitignore                                         |  21 +
+         AGENTS.md                                          |  34 +
+         Makefile                                           |  18 +
+         docs/plans/2026-04-01-flow-test-subcommand.md      | 332 ++++++++
+         docs/plans/2026-04-02-flow-test-subcommand-v2.md   | 865 +++++++++++++++++++++
+         examples/flows/README.md                           | 317 ++++++++
+         examples/flows/cheatsheet-update-validated.yaml    | 345 ++++++++
+         examples/flows/cheatsheet-update.yaml              | 333 ++++++++
+         examples/flows/create-agent-skill-validated.yaml   | 419 ++++++++++
+         examples/flows/create-agent-skill.yaml             | 464 +++++++++++
+         .../brainstorming/happy-path/contracts/.gitkeep    |   0
+         .../brainstorming/happy-path/record/.gitkeep       |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../cheatsheet-update/happy-path/record/.gitkeep   |   0
+         .../code-review/happy-path/contracts/.gitkeep      |   0
+         .../code-review/happy-path/record/.gitkeep         |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../create-agent-skill/happy-path/record/.gitkeep  |   0
+         .../executing-plans/happy-path/contracts/.gitkeep  |   0
+         .../executing-plans/happy-path/record/.gitkeep     |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../oss-release-prep/happy-path/contracts/.gitkeep |   0
+         .../oss-release-prep/happy-path/record/.gitkeep    |   0
+         .../pr-review-loop/happy-path/contracts/done.yaml  |   9 +
+         .../happy-path/contracts/reviewer-pass.yaml        |   9 +
+         .../pr-review-loop/happy-path/record/done/.gitkeep |   0
+         .../happy-path/record/fixer-pass/.gitkeep          |   0
+         .../happy-path/record/handle-fixer-output/.gitkeep |   0
+         .../record/handle-reviewer-output/.gitkeep         |   0
+         .../happy-path/record/load-pr-context/.gitkeep     |   0
+         .../happy-path/record/reviewer-pass/.gitkeep       |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../happy-path/contracts/.gitkeep                  |   0
+         .../happy-path/record/.gitkeep                     |   0
+         .../writing-plans/happy-path/contracts/.gitkeep    |   0
+         .../writing-plans/happy-path/record/.gitkeep       |   0
+         examples/flows/oss-release-prep-validated.yaml     | 488 ++++++++++++
+         examples/flows/oss-release-prep.yaml               | 386 +++++++++
+         examples/flows/pr-review-loop.yaml                 | 305 ++++++++
+         go.mod                                             |   3 +
+         go.sum                                             |   2 -
+         internal/cli/flow.go                               |   2 +-
+         internal/cli/flow_test_cmd.go                      | 290 +++++++
+         internal/core/flow.go                              |   9 +
+         internal/core/flow_executor.go                     | 210 ++++-
+         internal/core/flow_test.go                         |   6 +-
+         internal/flowtest/agent.go                         | 127 +++
+         internal/flowtest/embed.go                         |  66 ++
+         internal/flowtest/flows_test.go                    |  80 ++
+         internal/flowtest/hook.go                          | 158 ++++
+         internal/flowtest/hook_test.go                     |  85 ++
+         internal/flowtest/run.go                           | 127 +++
+         internal/flowtest/run_test.go                      |  87 +++
+         internal/flowtest/sandbox.go                       | 121 +++
+         internal/flowtest/sandbox_test.go                  | 100 +++
+         internal/flowtest/shims/bin/.gitkeep               |   0
+         internal/flowtest/shims/catchall/main.go           | 153 ++++
+         internal/flowtest/shims/claude/main.go             |   7 +
+         internal/flowtest/shims/codex/main.go              |   7 +
+         internal/flowtest/shims/composer/main.go           |   7 +
+         internal/flowtest/shims/copilot/main.go            |   7 +
+         internal/flowtest/shims/docker-compose/main.go     |   7 +
+         internal/flowtest/shims/docker/main.go             | 241 ++++++
+         internal/flowtest/shims/fabric/main.go             |   7 +
+         internal/flowtest/shims/gemini/main.go             |   7 +
+         internal/flowtest/shims/gh/main.go                 | 194 +++++
+         internal/flowtest/shims/git/main.go                |  98 +++
+         internal/flowtest/shims/llm/main.go                |   7 +
+         internal/flowtest/shims/npm/main.go                |   7 +
+         internal/flowtest/shims/npx/main.go                |   7 +
+         internal/flowtest/shims/opencode/main.go           |   7 +
+         internal/flowtest/shims/passthrough/main.go        |  54 ++
+         internal/flowtest/shims/pip/main.go                |   7 +
+         internal/flowtest/shims/shimlib/shim.go            | 163 ++++
+         internal/flowtest/shims/shims/shim.go              | 163 ++++
+         internal/flowtest/shims/uv/main.go                 |   7 +
+         scripts/validate-doc-commands.sh                   |  12 +-
+         87 files changed, 6943 insertions(+), 44 deletions(-)

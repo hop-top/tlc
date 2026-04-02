@@ -1,0 +1,22 @@
+xrr: "1"
+adapter: exec
+fingerprint: beadade4
+recorded_at: "2026-04-02T10:23:45Z"
+payload:
+    stdout: |
+        require (
+        	github.com/andygrunwald/go-jira v1.17.0
+        	github.com/charmbracelet/bubbles v1.0.0
+        	github.com/charmbracelet/bubbletea v1.3.10
+        --
+        require (
+        	al.essio.dev/pkg/shellescape v1.5.1 // indirect
+        	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
+        	github.com/atotto/clipboard v0.1.4 // indirect
+        --
+        replace hop.top/uri v0.0.0 => hop.top/uri v0.0.0-20260315135125-fc061a7b6a61
+
+        replace hop.top/hdl v0.0.0 => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
+
+        replace hop.top/xrr v0.0.0 => /Users/jadb/.w/ideacrafterslabs/xrr/hops/main/go
+    exit_code: 0

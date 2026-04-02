@@ -1,0 +1,37 @@
+xrr: "1"
+adapter: exec
+fingerprint: 7d2f27ce
+recorded_at: "2026-04-02T10:13:57Z"
+payload:
+    stdout: |+
+        // Package main is the git shim for the flowtest sandbox.
+        //
+        // It does NOT use cassettes. Instead it rewrites GIT_DIR and GIT_WORK_TREE to
+        // point at the sandbox repo, then execs the real git binary so all git
+        // operations stay isolated to the sandbox without any recording or replay.
+        //go:build shimbin
+        package main
+
+        import (
+        	"fmt"
+        	"os"
+        	"os/exec"
+        	"path/filepath"
+        )
+
+        func main() {
+        	workTree := os.Getenv("GIT_WORK_TREE")
+        	if workTree == "" {
+        		fmt.Fprintln(os.Stderr, "git-shim: GIT_WORK_TREE is not set")
+        		os.Exit(1)
+        	}
+
+        	gitDir := workTree + "/.git"
+
+        	realGit, err := findReal("git")
+        	if err != nil {
+        		fmt.Fprintln(os.Stderr, "git-shim:", err)
+        		os.Exit(1)
+        	}
+
+    exit_code: 0

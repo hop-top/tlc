@@ -1,0 +1,14 @@
+xrr: "1"
+adapter: exec
+fingerprint: 809e89b1
+recorded_at: "2026-04-02T10:13:49Z"
+payload:
+    stdout: |
+        140:	overallFail := false
+        142:		exitCode, err := executeRun(ctx, cmd, flow, s, run, mode, passthroughFlat, keepSandbox)
+        146:		if exitCode != 0 {
+        147:			overallFail = true
+        151:	if overallFail {
+        261:	if run.ExpectedExit != 0 {
+        263:			"  result: FAIL (expected exit %d but flow succeeded)\n", run.ExpectedExit)
+    exit_code: 0

@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: e4fecbc7
+recorded_at: "2026-04-02T10:19:52Z"
+payload:
+    argv:
+        - -r
+        - shimlib\|hop.top/tlc/internal/flowtest/shims/shims\|hop.top/tlc/internal/flowtest/shims/shimlib
+        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2121801849/repo/internal/flowtest/shims/

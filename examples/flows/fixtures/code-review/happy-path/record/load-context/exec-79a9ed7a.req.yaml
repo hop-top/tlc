@@ -1,0 +1,10 @@
+xrr: "1"
+adapter: exec
+fingerprint: 79a9ed7a
+recorded_at: "2026-04-02T10:24:57Z"
+payload:
+    argv:
+        - -A
+        - "30"
+        - Assert expected exit code
+        - internal/cli/flow_test_cmd.go

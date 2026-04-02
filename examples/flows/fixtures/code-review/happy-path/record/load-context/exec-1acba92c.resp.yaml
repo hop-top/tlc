@@ -1,0 +1,33 @@
+xrr: "1"
+adapter: exec
+fingerprint: 1acba92c
+recorded_at: "2026-04-02T10:22:56Z"
+payload:
+    stdout: |
+        internal/flowtest/shims/claude/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/claude/main.go:func main() { shims.Run("claude") }
+        internal/flowtest/shims/codex/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/codex/main.go:func main() { shims.Run("codex") }
+        internal/flowtest/shims/composer/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/composer/main.go:func main() { shims.Run("composer") }
+        internal/flowtest/shims/copilot/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/copilot/main.go:func main() { shims.Run("copilot") }
+        internal/flowtest/shims/docker-compose/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/docker-compose/main.go:func main() { shims.Run("docker-compose") }
+        internal/flowtest/shims/fabric/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/fabric/main.go:func main() { shims.Run("fabric") }
+        internal/flowtest/shims/gemini/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/gemini/main.go:func main() { shims.Run("gemini") }
+        internal/flowtest/shims/llm/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/llm/main.go:func main() { shims.Run("llm") }
+        internal/flowtest/shims/npm/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/npm/main.go:func main() { shims.Run("npm") }
+        internal/flowtest/shims/npx/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/npx/main.go:func main() { shims.Run("npx") }
+        internal/flowtest/shims/opencode/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/opencode/main.go:func main() { shims.Run("opencode") }
+        internal/flowtest/shims/pip/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/pip/main.go:func main() { shims.Run("pip") }
+        internal/flowtest/shims/uv/main.go:import "hop.top/tlc/internal/flowtest/shims/shims"
+        internal/flowtest/shims/uv/main.go:func main() { shims.Run("uv") }
+    exit_code: 0

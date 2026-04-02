@@ -9,12 +9,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// AgentRunner executes a flow step by dispatching an agent process and returns
+// the parsed step output. Implementations are responsible for subprocess
+// lifecycle, env injection, and cassette record/replay.
+type AgentRunner interface {
+	Run(ctx context.Context, step Step, prompt string) (map[string]any, error)
+}
+
 // FlowExecutor handles the execution of flow definitions.
 type FlowExecutor struct {
-	repo     Repository
-	logRepo  LogRepository
-	evaKey   string // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
-	testMode bool   // when true, unresolved task_ref falls back to ephemeral task
+	repo        Repository
+	logRepo     LogRepository
+	evaKey      string      // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
+	testMode    bool        // when true, unresolved task_ref falls back to ephemeral task
+	agentRunner AgentRunner // nil → DB-only ephemeral path; set by WithAgentRunner
 }
 
 func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
@@ -38,8 +46,17 @@ func (e *FlowExecutor) WithTestMode() *FlowExecutor {
 	return e
 }
 
-// Execute initiates a flow run.
-func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*FlowRun, error) {
+// WithAgentRunner sets the agent dispatcher used by executeTemplateStep.
+// When non-nil, each task_template step spawns the runner instead of
+// completing via DB-only state transitions.
+func (e *FlowExecutor) WithAgentRunner(r AgentRunner) *FlowExecutor {
+	e.agentRunner = r
+	return e
+}
+
+// Execute initiates a flow run and returns the run record, per-step output
+// maps (stepID → parsed JSON output), and any error.
+func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*FlowRun, map[string]map[string]any, error) {
 	runID := "run:" + uuid.New().String()
 
 	run := &FlowRun{
@@ -51,7 +68,7 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 	}
 
 	if err := e.repo.CreateFlowRun(ctx, run); err != nil {
-		return nil, fmt.Errorf("failed to create flow run: %w", err)
+		return nil, nil, fmt.Errorf("failed to create flow run: %w", err)
 	}
 
 	e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_START", fmt.Sprintf("Starting flow: %s", flow.Name), nil)
@@ -78,8 +95,9 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 		}
 	}
 
+	stepOutputs := make(map[string]map[string]any)
 	var mu sync.Mutex
-	err := e.runSequential(ctx, flow, run, stepStatuses, &mu, isChild, by)
+	err := e.runSequential(ctx, flow, run, stepStatuses, stepOutputs, &mu, isChild, by)
 
 	endedAt := time.Now()
 	run.EndedAt = &endedAt
@@ -87,22 +105,22 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 	if err != nil {
 		run.Status = FlowStatusFailed
 		if updateErr := e.repo.UpdateFlowRun(ctx, run); updateErr != nil {
-			return nil, fmt.Errorf("flow failed and update failed: %v (original error: %w)", updateErr, err)
+			return nil, stepOutputs, fmt.Errorf("flow failed and update failed: %v (original error: %w)", updateErr, err)
 		}
 		e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_END", fmt.Sprintf("Flow failed: %v", err), map[string]any{"status": "failed", "error": err.Error()})
-		return run, err
+		return run, stepOutputs, err
 	}
 
 	run.Status = FlowStatusSucceeded
 	if updateErr := e.repo.UpdateFlowRun(ctx, run); updateErr != nil {
-		return nil, fmt.Errorf("flow succeeded but update failed: %w", updateErr)
+		return nil, stepOutputs, fmt.Errorf("flow succeeded but update failed: %w", updateErr)
 	}
 	e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_END", "Flow completed successfully", map[string]any{"status": "succeeded"})
 
-	return run, nil
+	return run, stepOutputs, nil
 }
 
-func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, mu *sync.Mutex, isChild map[string]bool, by string) error {
+func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, isChild map[string]bool, by string) error {
 	// Simple strategy: repeatedly find ready steps until none left or all succeeded
 	for {
 		// Check for external control signals (pause/cancel)
@@ -151,7 +169,11 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 		}
 
 		// Execute the ready step
-		if err := e.executeStep(ctx, flow, run, readyStepID, statuses, mu, by); err != nil {
+		output, err := e.executeStep(ctx, flow, run, readyStepID, statuses, mu, by)
+		if output != nil {
+			stepOutputs[readyStepID] = output
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -182,7 +204,7 @@ func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, _ string) 
 	}
 }
 
-func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
+func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, mu *sync.Mutex, by string) (map[string]any, error) {
 	step := flow.Steps[stepID]
 
 	mu.Lock()
@@ -191,10 +213,13 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 
 	e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_START", fmt.Sprintf("Starting step: %s", step.Title), nil)
 
-	var err error
+	var (
+		output map[string]any
+		err    error
+	)
 	switch step.Type {
 	case StepTypeTask:
-		err = e.executeTaskStep(ctx, step, by)
+		output, err = e.executeTaskStep(ctx, step, by)
 	case StepTypeParallel:
 		err = e.executeParallelStep(ctx, flow, run, step, statuses, mu, by)
 	case StepTypeRetry:
@@ -205,7 +230,7 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 		// All wait_for deps are already enforced by the depends_on scheduler.
 		// Nothing to execute — the step succeeds immediately.
 	default:
-		return fmt.Errorf("unsupported step type for execution: %s", step.Type)
+		return nil, fmt.Errorf("unsupported step type for execution: %s", step.Type)
 	}
 
 	mu.Lock()
@@ -213,18 +238,18 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 		statuses[stepID] = StepStatusFailed
 		mu.Unlock()
 		e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END", fmt.Sprintf("Step failed: %v", err), map[string]any{"status": "failed"})
-		return err
+		return nil, err
 	}
 
 	// EVA gate: validate step output before marking succeeded.
 	if step.Gate != nil {
-		if gateErr := RunEvaGate(ctx, step.Gate, nil, e.evaKey); gateErr != nil {
+		if gateErr := RunEvaGate(ctx, step.Gate, output, e.evaKey); gateErr != nil {
 			statuses[stepID] = StepStatusFailed
 			mu.Unlock()
 			e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END",
 				fmt.Sprintf("EVA gate rejected step: %v", gateErr),
 				map[string]any{"status": "failed", "gate_error": gateErr.Error()})
-			return gateErr
+			return nil, gateErr
 		}
 	}
 
@@ -233,7 +258,7 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 
 	e.updateProgress(ctx, flow, run, statuses, mu)
 	e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END", "Step completed", map[string]any{"status": "succeeded"})
-	return nil
+	return output, nil
 }
 
 func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, mu *sync.Mutex) {
@@ -275,7 +300,7 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 				defer func() { <-sem }()
 			}
 
-			if err := e.executeStep(ctx, flow, run, cid, statuses, mu, by); err != nil {
+			if _, err := e.executeStep(ctx, flow, run, cid, statuses, mu, by); err != nil {
 				errOnce.Do(func() {
 					firstErr = err
 				})
@@ -310,7 +335,7 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 			mu.Unlock()
 		}
 
-		err := e.executeStep(ctx, flow, run, step.Child, statuses, mu, by)
+		_, err := e.executeStep(ctx, flow, run, step.Child, statuses, mu, by)
 		if err == nil {
 			return nil
 		}
@@ -320,8 +345,8 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 	return fmt.Errorf("retry exhausted after %d attempts: %w", maxAttempts, lastErr)
 }
 
-func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string) error {
-	// task_template steps: create an ephemeral task, complete it, then return.
+func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string) (map[string]any, error) {
+	// task_template steps: dispatch via agentRunner when set, else ephemeral DB path.
 	if step.TaskRef == "" && step.TaskTemplate != nil {
 		return e.executeTemplateStep(ctx, step, by)
 	}
@@ -329,7 +354,7 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 	taskID := step.TaskRef
 	task, err := e.repo.GetTask(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("failed to get task: %w", err)
+		return nil, fmt.Errorf("failed to get task: %w", err)
 	}
 	if task == nil {
 		if e.testMode {
@@ -340,7 +365,7 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 			}
 			return e.executeTemplateStep(ctx, synthetic, by)
 		}
-		return fmt.Errorf("task %s not found", taskID)
+		return nil, fmt.Errorf("task %s not found", taskID)
 	}
 
 	wm := DefaultWorkflow()
@@ -348,13 +373,11 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 	completedStatus, _ := wm.StatusForRole("completed")
 	initialStatus, _ := wm.StatusForRole("initial")
 
-	// Simulation of task execution for now
-	// In real implementation, this would call a Runner
 	if task.Status == initialStatus {
 		task.Status = activeStatus
 		task.UpdatedAt = time.Now()
 		if err := e.repo.UpdateTask(ctx, task); err != nil {
-			return fmt.Errorf("failed to update task: %w", err)
+			return nil, fmt.Errorf("failed to update task: %w", err)
 		}
 		if err := e.logRepo.AddLog(ctx, &LogEntry{
 			TaskID:    taskID,
@@ -363,15 +386,14 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 			Action:    "CLAIMED",
 			Note:      "Claimed by flow executor",
 		}); err != nil {
-			return fmt.Errorf("failed to add log: %w", err)
+			return nil, fmt.Errorf("failed to add log: %w", err)
 		}
 	}
 
-	// Complete task
 	task.Status = completedStatus
 	task.UpdatedAt = time.Now()
 	if err := e.repo.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to update task: %w", err)
+		return nil, fmt.Errorf("failed to update task: %w", err)
 	}
 	if err := e.logRepo.AddLog(ctx, &LogEntry{
 		TaskID:    taskID,
@@ -380,10 +402,10 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 		Action:    "DONE",
 		Note:      "Completed by flow executor",
 	}); err != nil {
-		return fmt.Errorf("failed to add log: %w", err)
+		return nil, fmt.Errorf("failed to add log: %w", err)
 	}
 
-	return nil
+	return nil, nil
 }
 
 func (e *FlowExecutor) emitFlowLog(ctx context.Context, flowID, runID, by, action, note string, meta map[string]any) {
@@ -424,7 +446,18 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 // executeTemplateStep creates an ephemeral task from step.TaskTemplate, runs it
 // through the standard task lifecycle, then completes it. No persistent task ID
 // is required — the task is identified by a generated UUID.
-func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by string) error {
+func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by string) (map[string]any, error) {
+	// Agent dispatch path: runner handles subprocess, cassette, and output.
+	if e.agentRunner != nil {
+		prompt := buildAgentPrompt(step)
+		output, err := e.agentRunner.Run(ctx, step, prompt)
+		if err != nil {
+			return nil, fmt.Errorf("flow template step %q: agent run: %w", step.ID, err)
+		}
+		return output, nil
+	}
+
+	// DB-only ephemeral path (test mode w/o runner, or normal non-test execution).
 	wm := DefaultWorkflow()
 	initialStatus, _ := wm.StatusForRole("initial")
 	activeStatus, _ := wm.StatusForRole("active")
@@ -439,19 +472,19 @@ func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by st
 		UpdatedAt:   time.Now().UTC(),
 	}
 	if err := e.repo.CreateTask(ctx, task); err != nil {
-		return fmt.Errorf("flow template step %q: create task: %w", step.ID, err)
+		return nil, fmt.Errorf("flow template step %q: create task: %w", step.ID, err)
 	}
 
 	task.Status = activeStatus
 	task.UpdatedAt = time.Now()
 	if err := e.repo.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("flow template step %q: claim task: %w", step.ID, err)
+		return nil, fmt.Errorf("flow template step %q: claim task: %w", step.ID, err)
 	}
 
 	task.Status = completedStatus
 	task.UpdatedAt = time.Now()
 	if err := e.repo.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("flow template step %q: complete task: %w", step.ID, err)
+		return nil, fmt.Errorf("flow template step %q: complete task: %w", step.ID, err)
 	}
 	_ = e.logRepo.AddLog(ctx, &LogEntry{
 		TaskID:    task.ID,
@@ -460,7 +493,16 @@ func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by st
 		Action:    "DONE",
 		Note:      "Completed by flow executor (template step)",
 	})
-	return nil
+	return nil, nil
+}
+
+// buildAgentPrompt constructs the prompt sent to the agent for a template step.
+func buildAgentPrompt(step Step) string {
+	desc := ""
+	if step.TaskTemplate != nil {
+		desc = step.TaskTemplate.Description
+	}
+	return fmt.Sprintf("Step: %s\n\n%s", step.ID, desc)
 }
 
 // executeBranchStep evaluates branch cases and marks unchosen downstream paths
@@ -544,7 +586,8 @@ func (e *FlowExecutor) ExecuteForTest(
 	by string,
 ) error {
 	mu := &sync.Mutex{}
-	return e.executeStep(ctx, flow, run, flow.EntryStep, statuses, mu, by)
+	_, err := e.executeStep(ctx, flow, run, flow.EntryStep, statuses, mu, by)
+	return err
 }
 
 // generateTaskID creates a unique task ID (e.g., T-0042).

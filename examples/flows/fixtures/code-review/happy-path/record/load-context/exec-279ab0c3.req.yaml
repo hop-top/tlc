@@ -1,0 +1,7 @@
+xrr: "1"
+adapter: exec
+fingerprint: 279ab0c3
+recorded_at: "2026-04-02T10:24:49Z"
+payload:
+    argv:
+        - internal/flowtest/agent.go

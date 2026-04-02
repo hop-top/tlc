@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: 801cabc8
+recorded_at: "2026-04-02T10:25:16Z"
+payload:
+    stdout: |
+        internal/cli/root.go:67:		os.Exit(1)
+        internal/cli/tui.go:29:			os.Exit(1)
+    exit_code: 0

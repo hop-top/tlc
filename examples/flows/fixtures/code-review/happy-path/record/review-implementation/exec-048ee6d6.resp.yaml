@@ -1,0 +1,8 @@
+xrr: "1"
+adapter: exec
+fingerprint: 048ee6d6
+recorded_at: "2026-04-02T10:33:45Z"
+payload:
+    stdout: |
+        {"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"Playwright","version":"1.60.0-alpha-1774999321000"}},"jsonrpc":"2.0","id":0}
+    exit_code: 0

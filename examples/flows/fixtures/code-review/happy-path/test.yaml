@@ -1,0 +1,7 @@
+name: happy-path
+description: Code review flow — all steps pass, no contract violations
+expected_exit: 0
+# codex requires OPENAI_API_KEY which is not available in sandbox; pass through
+# so the shim does not record a 401 failure into the cassette.
+passthrough:
+  - codex

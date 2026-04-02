@@ -1,0 +1,8 @@
+xrr: "1"
+adapter: exec
+fingerprint: 7776ab93
+recorded_at: "2026-04-02T10:23:51Z"
+payload:
+    argv:
+        - hop.top/xrr
+        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-319215592/repo/go.sum

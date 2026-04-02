@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: daab4098
+recorded_at: "2026-04-02T10:23:46Z"
+payload:
+    argv:
+        - -n
+        - executeBranch\|StepTypeBranch\|DefaultNext\|Cases
+        - internal/core/flow.go

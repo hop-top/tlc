@@ -1,0 +1,12 @@
+xrr: "1"
+adapter: exec
+fingerprint: 5645f7a6
+recorded_at: "2026-04-02T10:19:45Z"
+payload:
+    stdout: |+
+        // Package shimlib provides the shared logic for LLM shim binaries used by the
+        // flowtest sandbox.  Each shim (claude, codex, gemini, …) calls Run with its
+        // own name; everything else is handled here.
+        package shims
+
+    exit_code: 0

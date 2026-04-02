@@ -1,0 +1,12 @@
+xrr: "1"
+adapter: exec
+fingerprint: c47f1002
+recorded_at: "2026-04-02T10:22:09Z"
+payload:
+    argv:
+        - repo
+        - view
+        - --json
+        - defaultBranchRef
+        - -q
+        - .defaultBranchRef.name

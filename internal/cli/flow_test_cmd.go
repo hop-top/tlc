@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
@@ -113,8 +114,12 @@ func runFlowTest(
 
 	// Derive flow name from file path for fixture lookup.
 	// DiscoverRuns resolves fixtures/<flowName>/ from flowBaseDir.
+	// Use abs path so cassette dirs passed via env to shims are absolute.
 	flowName := flowFileBaseName(flowFile)
-	flowBaseDir := filepath.Dir(flowFile)
+	flowBaseDir, err := filepath.Abs(filepath.Dir(flowFile))
+	if err != nil {
+		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: abs path: %v", err)}
+	}
 
 	// Discover runs.
 	var discoverOpts []flowtest.Option
@@ -199,7 +204,13 @@ func executeRun(
 		if idx < 0 {
 			continue
 		}
-		_ = os.Setenv(kv[:idx], kv[idx+1:])
+		key := kv[:idx]
+		// Don't override HOME in the process env — it breaks keychain auth for
+		// subprocesses like claude. The agent runner passes its own full env.
+		if key == "HOME" {
+			continue
+		}
+		_ = os.Setenv(key, kv[idx+1:])
 	}
 	// Restore original env after run.
 	defer func() {
@@ -208,26 +219,38 @@ func executeRun(
 		}
 	}()
 
+	// Wire agent runner — dispatches claude shim per step in record/replay mode.
+	sandboxRunner := flowtest.NewSandboxAgentRunner(sb, mode, &runWithPassthrough)
+	agentRunner := &loggingAgentRunner{
+		inner:  sandboxRunner,
+		stderr: os.Stderr,
+		total:  len(flow.Steps),
+	}
+
 	// Execute flow.
-	executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY")).WithTestMode()
+	executor := core.NewFlowExecutor(s, s).
+		WithEvaKey(os.Getenv("EVA_KEY")).
+		WithTestMode().
+		WithAgentRunner(agentRunner)
 	by := core.GetCurrentUser()
 
-	flowRun, err := executor.Execute(ctx, flow, by)
+	flowRun, stepOutputs, err := executor.Execute(ctx, flow, by)
 	if err != nil {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  FAIL step error: %v\n", err)
 		return 1, nil
 	}
 
-	// Run eva contracts for each step.
+	// Run eva contracts for each step using real step outputs where available.
 	hook := flowtest.NewHook(run.ContractsDir)
 	contractFailed := false
 
 	for stepID := range flow.Steps {
-		// Step output is empty map for now; will be populated when executor
-		// writes step output JSON.
-		stepOutput := map[string]any{
-			"status": string(core.StepStatusSucceeded),
-			"run_id": flowRun.ID,
+		stepOutput := stepOutputs[stepID]
+		if stepOutput == nil {
+			stepOutput = map[string]any{
+				"status": string(core.StepStatusSucceeded),
+				"run_id": flowRun.ID,
+			}
 		}
 		if err := hook.Run(stepID, stepOutput); err != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  FAIL contract %s: %v\n", stepID, err)
@@ -249,6 +272,29 @@ func executeRun(
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  result: PASS\n")
 	return 0, nil
+}
+
+// loggingAgentRunner wraps a core.AgentRunner and prints step progress + timing
+// to stderr so operators can follow a long record/replay run in real time.
+type loggingAgentRunner struct {
+	inner  core.AgentRunner
+	stderr *os.File
+	total  int
+	done   int
+}
+
+func (r *loggingAgentRunner) Run(ctx context.Context, step core.Step, prompt string) (map[string]any, error) {
+	r.done++
+	fmt.Fprintf(r.stderr, "  step %d/%d: %s\n", r.done, r.total, step.ID)
+	t0 := time.Now()
+	out, err := r.inner.Run(ctx, step, prompt)
+	elapsed := time.Since(t0)
+	if err != nil {
+		fmt.Fprintf(r.stderr, "  step %d/%d: %s FAIL (%.1fs): %v\n", r.done, r.total, step.ID, elapsed.Seconds(), err)
+	} else {
+		fmt.Fprintf(r.stderr, "  step %d/%d: %s OK (%.1fs)\n", r.done, r.total, step.ID, elapsed.Seconds())
+	}
+	return out, err
 }
 
 // flowFileBaseName returns the base name of a flow file without extension.

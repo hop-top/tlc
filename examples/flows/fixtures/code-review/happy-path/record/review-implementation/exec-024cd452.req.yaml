@@ -1,0 +1,30 @@
+xrr: "1"
+adapter: exec
+fingerprint: 024cd452
+recorded_at: "2026-04-02T10:34:16Z"
+payload:
+    argv:
+        - -p
+        - |
+          Step: review-implementation
+
+          Review implementation details:
+
+          Code Quality:
+          - Readable and maintainable?
+          - Clear variable/function names?
+          - Appropriate comments?
+
+          Correctness:
+          - Logic sound?
+          - Error handling present?
+          - Type safety maintained?
+          - No obvious bugs?
+
+          List implementation issues by priority.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

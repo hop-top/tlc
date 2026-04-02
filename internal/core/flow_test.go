@@ -97,7 +97,7 @@ func TestFlowExecutor_Sequential(t *testing.T) {
 		},
 	}
 
-	run, err := executor.Execute(ctx, flow, "test-user")
+	run, _, err := executor.Execute(ctx, flow, "test-user")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestFlowExecutor_Parallel(t *testing.T) {
 		},
 	}
 
-	run, err := executor.Execute(ctx, flow, "test-user")
+	run, _, err := executor.Execute(ctx, flow, "test-user")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestFlowExecutor_Retry(t *testing.T) {
 	}
 
 	// s1 will fail because T-FAIL not in repo
-	run, err := executor.Execute(ctx, flow, "test-user")
+	run, _, err := executor.Execute(ctx, flow, "test-user")
 	if err == nil {
 		t.Fatal("expected error from exhausted retry")
 	}

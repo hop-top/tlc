@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: 38fc3dd2
+recorded_at: "2026-04-02T10:23:40Z"
+payload:
+    stdout: |
+        	hop.top/xrr v0.0.0
+        replace hop.top/xrr v0.0.0 => /Users/jadb/.w/ideacrafterslabs/xrr/hops/main/go
+    exit_code: 0

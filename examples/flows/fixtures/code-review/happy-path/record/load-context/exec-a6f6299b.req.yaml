@@ -1,0 +1,13 @@
+xrr: "1"
+adapter: exec
+fingerprint: a6f6299b
+recorded_at: "2026-04-02T10:23:04Z"
+payload:
+    argv:
+        - "-20"
+    stdin: |
+        140:	overallFail := false
+        142:		exitCode, err := executeRun(ctx, cmd, flow, s, run, mode, passthroughFlat, keepSandbox)
+        147:			overallFail = true
+        151:	if overallFail {
+        157:func executeRun(

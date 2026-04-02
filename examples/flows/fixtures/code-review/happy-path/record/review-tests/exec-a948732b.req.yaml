@@ -1,0 +1,27 @@
+xrr: "1"
+adapter: exec
+fingerprint: a948732b
+recorded_at: "2026-04-02T10:35:20Z"
+payload:
+    argv:
+        - -p
+        - |
+          Step: review-tests
+
+          Review testing:
+
+          - Tests for main functionality exist?
+          - Edge cases tested?
+          - Error cases tested?
+          - Tests actually pass?
+          - Test names descriptive?
+          - Tests test behavior, not implementation?
+
+          Run tests to verify they pass.
+          Note any gaps in coverage.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

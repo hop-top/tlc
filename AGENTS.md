@@ -133,8 +133,8 @@ Exit codes:
 | 2 | Cassette miss in replay mode |
 | 3 | Sandbox setup failure |
 
-Named runs live under `fixtures/<flow-name>/<run-name>/`. Each run has a
-`record/` dir (cassettes) and optional `contracts/` dir (eva contracts).
+Named runs live under `examples/flows/fixtures/<flow-name>/<run-name>/`. Each run
+has a `record/` dir (cassettes) and optional `contracts/` dir (eva contracts).
 Add a `test.yaml` manifest to declare `expected_exit` or `passthrough` overrides.
 
 ### `git hop` — Worktree Management

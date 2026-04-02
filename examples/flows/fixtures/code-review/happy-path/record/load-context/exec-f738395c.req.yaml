@@ -1,0 +1,8 @@
+xrr: "1"
+adapter: exec
+fingerprint: f738395c
+recorded_at: "2026-04-02T10:25:37Z"
+payload:
+    argv:
+        - "-200"
+        - /Users/jadb/.claude/projects/-private-var-folders-x6-lrc3lbzd1gs0wvmn-z-t76780000gn-T-tlc-flow-test-319215592-repo/fbd9f507-bc81-412e-b634-95b5a79cbb15/tool-results/bak6h0zkq.txt

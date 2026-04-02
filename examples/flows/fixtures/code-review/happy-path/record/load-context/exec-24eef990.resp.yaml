@@ -1,0 +1,20 @@
+xrr: "1"
+adapter: exec
+fingerprint: 24eef990
+recorded_at: "2026-04-02T10:23:11Z"
+payload:
+    stdout: |
+        check "flow test"        $TLC flow test
+
+        echo
+        echo "-- flow test flags --"
+        check_flag "flow test --record"        $TLC flow test --record
+        check_flag "flow test --passthrough"   $TLC flow test --passthrough
+        check_flag "flow test --keep-sandbox"  $TLC flow test --keep-sandbox
+        check_flag "flow test --steps"         $TLC flow test --steps
+
+        echo
+        echo "-- key flag checks --"
+        check "task complete --no-verify"  $TLC task complete --no-verify
+        check "task delete --yes"          $TLC task delete --yes
+    exit_code: 0
