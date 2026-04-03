@@ -1,0 +1,40 @@
+name: gitlab-sync
+version: 0.1.0
+type: external-sync
+description: GitLab issue synchronization
+
+# Capabilities
+capabilities:
+  - sync.pull
+  - sync.push
+  - sync.bidirectional
+
+# Entry point
+entry_point: ./bin/gitlab-sync
+
+# Dependencies
+requires:
+  tlc_version: ">=0.1.0"
+
+# Configuration schema
+config_schema:
+  type: object
+  properties:
+    repo:
+      type: string
+      required: true
+    sync_direction:
+      type: string
+      enum: [pull, push, bidirectional]
+      default: bidirectional
+    import_labels:
+      type: boolean
+      default: true
+    label_prefix:
+      type: string
+      default: "tlc:"
+
+# Permissions required
+permissions:
+  - network.http
+  - credential.read
