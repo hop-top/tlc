@@ -102,14 +102,22 @@ func MapWorkItemToTask(wi *WorkItem, org, project string) *Task {
 		// Flat tags (no colon prefix) are intentionally ignored.
 	}
 
-	// Extract blocked_by from dependency-reverse relations.
+	// Extract blocked_by from dependency-reverse relations and
+	// blocks from dependency-forward relations.
 	var blockedBy []string
+	var blocks []string
 	for _, rel := range wi.Relations {
-		if rel.Rel == "System.LinkTypes.Dependency-Reverse" {
+		switch rel.Rel {
+		case "System.LinkTypes.Dependency-Reverse":
 			// URL format: https://dev.azure.com/{org}/{project}/_apis/wit/workItems/{id}
 			parts := strings.Split(rel.URL, "/")
 			if len(parts) > 0 {
 				blockedBy = append(blockedBy, "AZ-"+parts[len(parts)-1])
+			}
+		case "System.LinkTypes.Dependency-Forward":
+			parts := strings.Split(rel.URL, "/")
+			if len(parts) > 0 {
+				blocks = append(blocks, "AZ-"+parts[len(parts)-1])
 			}
 		}
 	}
@@ -123,6 +131,9 @@ func MapWorkItemToTask(wi *WorkItem, org, project string) *Task {
 	}
 	if len(blockedBy) > 0 {
 		meta["blocked_by"] = blockedBy
+	}
+	if len(blocks) > 0 {
+		meta["blocks"] = blocks
 	}
 
 	return &Task{
