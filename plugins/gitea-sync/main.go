@@ -206,16 +206,27 @@ func fetchGiteaIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 }
 
 func fetchDependencies(owner, repo string, index int64) []GiteaDependency {
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d/dependencies", owner, repo, index)
-	resp, err := giteaRequest("GET", path, nil)
-	if err != nil {
-		return nil
+	const limit = 50
+	page := 1
+	var all []GiteaDependency
+	for {
+		path := fmt.Sprintf("/repos/%s/%s/issues/%d/dependencies?limit=%d&page=%d",
+			owner, repo, index, limit, page)
+		resp, err := giteaRequest("GET", path, nil)
+		if err != nil {
+			return all
+		}
+		var deps []GiteaDependency
+		if err := decodeResponse(resp, &deps); err != nil {
+			return all
+		}
+		all = append(all, deps...)
+		if len(deps) < limit {
+			break
+		}
+		page++
 	}
-	var deps []GiteaDependency
-	if err := decodeResponse(resp, &deps); err != nil {
-		return nil
-	}
-	return deps
+	return all
 }
 
 // --- sync.push ---

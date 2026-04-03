@@ -119,7 +119,7 @@ func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
 	var blockedLabel string
 
 	for _, label := range issue.Labels {
-		name := label.Name
+		name := strings.ToLower(label.Name)
 
 		// Priority labels.
 		if p, ok := priorityLabelMap[name]; ok {
