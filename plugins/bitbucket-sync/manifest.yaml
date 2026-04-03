@@ -7,7 +7,9 @@ description: Bitbucket issue synchronization
 capabilities:
   - sync.pull
   - sync.push
+  - sync.delete
   - sync.bidirectional
+  - auth.status
 
 # Entry point
 entry_point: ./bin/bitbucket-sync

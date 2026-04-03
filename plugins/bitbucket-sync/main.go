@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -243,28 +244,36 @@ func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s/repositories/%s/%s/issues", bitbucketAPIBase, owner, repo)
+	pageURL := fmt.Sprintf(
+		"%s/repositories/%s/%s/issues", bitbucketAPIBase, owner, repo)
 	if lastSyncAt != "" {
-		url += fmt.Sprintf("?q=updated_on>%%22%s%%22", lastSyncAt)
+		if _, err := time.Parse(time.RFC3339, lastSyncAt); err != nil {
+			return nil, fmt.Errorf(
+				"invalid last_sync_at %q: must be RFC3339", lastSyncAt)
+		}
+		pageURL += "?q=" + url.QueryEscape(
+			fmt.Sprintf(`updated_on>"%s"`, lastSyncAt))
 	}
 
 	var tasks []*Task
-	for url != "" {
-		resp, err := bbRequest("GET", url, nil)
+	for pageURL != "" {
+		resp, err := bbRequest("GET", pageURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list bitbucket issues: %w", err)
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			return nil, fmt.Errorf(
 				"bitbucket API returned status %d", resp.StatusCode)
 		}
 
 		var page BitbucketPaginated
 		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+			resp.Body.Close()
 			return nil, fmt.Errorf("failed to decode response: %w", err)
 		}
+		resp.Body.Close()
 
 		for _, raw := range page.Values {
 			var issue BitbucketIssue
@@ -272,38 +281,18 @@ func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 				continue
 			}
 
-			// Fetch component labels for this issue
-			components := fetchIssueComponents(owner, repo, issue.ID)
+			// Component is already in the list response
+			var components []string
+			if issue.Component != nil && issue.Component.Name != "" {
+				components = strings.Split(issue.Component.Name, ",")
+			}
 			tasks = append(tasks, MapBitbucketIssueToTask(&issue, components))
 		}
 
-		url = page.Next
+		pageURL = page.Next
 	}
 
 	return tasks, nil
-}
-
-func fetchIssueComponents(owner, repo string, issueID int) []string {
-	url := fmt.Sprintf("%s/repositories/%s/%s/issues/%d",
-		bitbucketAPIBase, owner, repo, issueID)
-
-	resp, err := bbRequest("GET", url, nil)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	var issue struct {
-		Component *BitbucketComponent `json:"component"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&issue); err != nil {
-		return nil
-	}
-
-	if issue.Component != nil && issue.Component.Name != "" {
-		return strings.Split(issue.Component.Name, ",")
-	}
-	return nil
 }
 
 func createBitbucketIssue(repoFull string, task *Task) error {
@@ -312,7 +301,7 @@ func createBitbucketIssue(repoFull string, task *Task) error {
 		return err
 	}
 
-	issueReq, _ := MapTaskToBitbucketIssue(task)
+	issueReq := MapTaskToBitbucketIssue(task)
 	url := fmt.Sprintf("%s/repositories/%s/%s/issues",
 		bitbucketAPIBase, owner, repo)
 
@@ -354,7 +343,7 @@ func updateBitbucketIssue(repoFull string, task *Task) error {
 		return fmt.Errorf("origin_id missing or not a string")
 	}
 
-	issueReq, _ := MapTaskToBitbucketIssue(task)
+	issueReq := MapTaskToBitbucketIssue(task)
 	url := fmt.Sprintf("%s/repositories/%s/%s/issues/%s",
 		bitbucketAPIBase, owner, repo, originIDStr)
 
@@ -386,13 +375,28 @@ func deleteBitbucketIssue(repoFull string, task *Task) error {
 	}
 
 	// Bitbucket doesn't support true deletion; resolve/close the issue.
-	closeReq := &BitbucketIssueRequest{
-		State: "resolved",
-	}
-	url := fmt.Sprintf("%s/repositories/%s/%s/issues/%s",
+	// BB v2 PUT requires title; fetch current issue to get it.
+	issueURL := fmt.Sprintf("%s/repositories/%s/%s/issues/%s",
 		bitbucketAPIBase, owner, repo, originIDStr)
 
-	resp, err := bbRequest("PUT", url, closeReq)
+	getResp, err := bbRequest("GET", issueURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to fetch issue for close: %w", err)
+	}
+
+	var existing BitbucketIssue
+	decodeErr := json.NewDecoder(getResp.Body).Decode(&existing)
+	getResp.Body.Close()
+	if decodeErr != nil {
+		return fmt.Errorf("failed to decode existing issue: %w", decodeErr)
+	}
+
+	closeReq := &BitbucketIssueRequest{
+		Title: existing.Title,
+		State: "resolved",
+	}
+
+	resp, err := bbRequest("PUT", issueURL, closeReq)
 	if err != nil {
 		return fmt.Errorf("failed to close bitbucket issue: %w", err)
 	}

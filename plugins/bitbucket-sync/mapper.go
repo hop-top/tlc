@@ -60,12 +60,13 @@ type BitbucketComponent struct {
 
 // BitbucketIssueRequest is the payload for creating/updating a Bitbucket issue.
 type BitbucketIssueRequest struct {
-	Title    string            `json:"title"`
-	Content  *BitbucketContent `json:"content,omitempty"`
-	State    string            `json:"state,omitempty"`
-	Priority string            `json:"priority,omitempty"`
-	Kind     string            `json:"kind,omitempty"`
-	Assignee *BitbucketUser    `json:"assignee,omitempty"`
+	Title     string              `json:"title"`
+	Content   *BitbucketContent   `json:"content,omitempty"`
+	State     string              `json:"state,omitempty"`
+	Priority  string              `json:"priority,omitempty"`
+	Kind      string              `json:"kind,omitempty"`
+	Assignee  *BitbucketUser      `json:"assignee,omitempty"`
+	Component *BitbucketComponent `json:"component,omitempty"`
 }
 
 var blockedByRegex = regexp.MustCompile(`(?i)blocked\s+by\s+#(\d+)`)
@@ -191,12 +192,11 @@ func mapComponentsToTask(task *Task, components []string) {
 			}
 		case "effort":
 			task.Effort = strings.ToUpper(value)
-		case "dimension":
-			if value == "scope" {
-				task.Tags = append(task.Tags, "dimension:scope")
-			}
 		case "status":
 			// handled in status mapping, skip
+		default:
+			// Any remaining dim:value label goes into Tags
+			task.Tags = append(task.Tags, comp)
 		}
 	}
 }
@@ -218,7 +218,7 @@ func mapLabelPriority(value string) string {
 }
 
 // MapTaskToBitbucketIssue maps a TLC task to a Bitbucket issue request.
-func MapTaskToBitbucketIssue(task *Task) (*BitbucketIssueRequest, []string) {
+func MapTaskToBitbucketIssue(task *Task) *BitbucketIssueRequest {
 	state := mapStatusToBitbucketState(task.Status)
 	bbPriority := mapTLCPriorityToBitbucket(task.Priority)
 
@@ -255,7 +255,7 @@ func MapTaskToBitbucketIssue(task *Task) (*BitbucketIssueRequest, []string) {
 		}
 	}
 
-	// Build component labels from task fields
+	// Build component label from task fields for BB component field
 	var labels []string
 	if task.Priority != "" {
 		labels = append(labels, "priority:"+strings.ToLower(task.Priority))
@@ -266,7 +266,6 @@ func MapTaskToBitbucketIssue(task *Task) (*BitbucketIssueRequest, []string) {
 	for _, tag := range task.Tags {
 		labels = append(labels, tag)
 	}
-	// Add status label for in-progress or blocked
 	switch task.Status {
 	case "IN_PROGRESS":
 		labels = append(labels, "status:in-progress")
@@ -275,7 +274,14 @@ func MapTaskToBitbucketIssue(task *Task) (*BitbucketIssueRequest, []string) {
 		labels = append(labels, "status:blocked")
 	}
 
-	return req, labels
+	// Store labels as comma-separated BB component (BB's only label-like field)
+	if len(labels) > 0 {
+		req.Component = &BitbucketComponent{
+			Name: strings.Join(labels, ","),
+		}
+	}
+
+	return req
 }
 
 // mapStatusToBitbucketState converts TLC status to Bitbucket issue state.
@@ -306,7 +312,7 @@ func mapTLCPriorityToBitbucket(priority string) string {
 	case "P3":
 		return "trivial"
 	default:
-		return "major" // sensible default
+		return "" // let BB use its own default
 	}
 }
 
