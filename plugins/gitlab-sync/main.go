@@ -165,6 +165,10 @@ func handleSyncDelete(req Request) Response {
 		}
 	}
 
+	// "deleted" is the sync-protocol key shared by all sync plugins
+	// (github-sync, gitlab-sync, jira-sync, linear-sync). In GitLab
+	// context the issues are closed, not removed — the key name is
+	// kept for protocol compatibility.
 	return Response{
 		JSONRPC: "2.0",
 		Result: map[string]interface{}{
