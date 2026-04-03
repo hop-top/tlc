@@ -1,5 +1,6 @@
 .tlc/
 bin/
+plugins/*/bin/
 tlc
 *.db
 *.test

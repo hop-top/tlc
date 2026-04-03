@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build test lint fmt coverage clean watch watch-lint watch-test dev tools pre-commit-install
+.PHONY: help install build build-plugins test lint fmt coverage clean watch watch-lint watch-test dev tools pre-commit-install
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -12,6 +12,7 @@ COLOR_BLUE=\033[34m
 # Variables
 BINARY_NAME=tlc
 BIN_DIR=bin
+PLUGIN_DIRS=$(wildcard plugins/*/main.go)
 COVERAGE_DIR=coverage
 TMP_DIR=tmp
 MAIN_PATH=cmd/tlc/main.go
@@ -30,11 +31,23 @@ install: ## Install the binary to $(GOPATH)/bin
 	@go install $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ Installed to $(shell go env GOPATH)/bin/$(BINARY_NAME)$(COLOR_RESET)"
 
-build: ## Build the binary to bin/
+build: build-plugins ## Build the binary and plugins to bin/
 	@echo "$(COLOR_BLUE)Building $(BINARY_NAME)...$(COLOR_RESET)"
 	@mkdir -p $(BIN_DIR)
 	@go build -v -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ Built $(BIN_DIR)/$(BINARY_NAME)$(COLOR_RESET)"
+
+build-plugins: ## Build all plugin binaries
+	@if [ -n "$(PLUGIN_DIRS)" ]; then \
+		for p in $(PLUGIN_DIRS); do \
+			dir=$$(dirname $$p); \
+			name=$$(basename $$dir); \
+			echo "$(COLOR_BLUE)Building plugin $$name...$(COLOR_RESET)"; \
+			mkdir -p $$dir/bin; \
+			go build -buildvcs=false -o $$dir/bin/$$name ./$$dir/; \
+			echo "$(COLOR_GREEN)✓ Built $$dir/bin/$$name$(COLOR_RESET)"; \
+		done; \
+	fi
 
 test: ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
 	@echo "$(COLOR_BLUE)Running tests...$(COLOR_RESET)"
@@ -69,6 +82,7 @@ coverage: ## Generate test coverage report
 clean: ## Clean build artifacts
 	@echo "$(COLOR_BLUE)Cleaning...$(COLOR_RESET)"
 	@rm -rf $(BIN_DIR) $(COVERAGE_DIR) $(TMP_DIR)
+	@rm -rf plugins/*/bin
 	@find . -name "*.test" -type f -delete
 	@find . -name "*.out" -type f -delete
 	@echo "$(COLOR_GREEN)✓ Clean complete$(COLOR_RESET)"
