@@ -224,10 +224,13 @@ func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
 	body := buildPushBody(task)
 
 	req := &github.IssueRequest{
-		Title:  &task.Title,
-		Body:   &body,
-		State:  &state,
-		Labels: &labels,
+		Title: &task.Title,
+		Body:  &body,
+		State: &state,
+	}
+
+	if len(labels) > 0 {
+		req.Labels = &labels
 	}
 
 	if stateReason != "" {
@@ -278,6 +281,9 @@ func buildPushLabels(task *Task) []string {
 	// Pass through tags
 	labels = append(labels, task.Tags...)
 
+	if len(labels) == 0 {
+		return nil
+	}
 	return labels
 }
 
