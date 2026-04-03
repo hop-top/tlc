@@ -157,3 +157,78 @@ func TestFieldNorm_E2E_UnknownStatus(t *testing.T) {
 		t.Errorf("expected error to mention 'xyz', got: %v", err)
 	}
 }
+
+func TestFieldNorm_E2E_UpdateStatusAlias(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	now := time.Now()
+	_ = s.CreateTask(ctx, &core.Task{
+		ID:        "T-0030",
+		Title:     "Alias update task",
+		Status:    core.StatusTodo,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	for _, tc := range []struct {
+		alias  string
+		expect core.TaskStatus
+	}{
+		{"in-progress", core.StatusInProgress},
+		{"wip", core.StatusInProgress},
+		{"IN_PROGRESS", core.StatusInProgress},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			// Reset to TODO first
+			task, _ := s.GetTask(ctx, "T-0030")
+			task.Status = core.StatusTodo
+			_ = s.UpdateTask(ctx, task)
+
+			resetTaskFlags()
+			cmd := newTestCmd()
+			cmd.AddCommand(TaskCmd)
+			buf := new(bytes.Buffer)
+			cmd.SetOut(buf)
+			cmd.SetArgs([]string{"task", "update", "T-0030", "--status", tc.alias})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("task update --status %s: %v", tc.alias, err)
+			}
+
+			updated, _ := s.GetTask(ctx, "T-0030")
+			if updated.Status != tc.expect {
+				t.Errorf("alias %q: got status %s, want %s", tc.alias, updated.Status, tc.expect)
+			}
+		})
+	}
+}
+
+func TestFieldNorm_E2E_UpdateStatusUnknown(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	now := time.Now()
+	_ = s.CreateTask(ctx, &core.Task{
+		ID:        "T-0031",
+		Title:     "Unknown status task",
+		Status:    core.StatusTodo,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	cmd.SetArgs([]string{"task", "update", "T-0031", "--status", "xyz"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for unknown status, got nil")
+	}
+	if !strings.Contains(err.Error(), "xyz") {
+		t.Errorf("expected error to mention 'xyz', got: %v", err)
+	}
+}

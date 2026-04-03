@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v69/github"
@@ -80,9 +81,12 @@ func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
 		state = "closed"
 	}
 
+	// Unescape backticks that were shell-escaped during task creation.
+	body := strings.ReplaceAll(task.Description, "\\`", "`")
+
 	req := &github.IssueRequest{
 		Title:  &task.Title,
-		Body:   &task.Description,
+		Body:   &body,
 		State:  &state,
 		Labels: &task.Tags,
 	}

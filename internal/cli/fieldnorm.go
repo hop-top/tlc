@@ -105,3 +105,10 @@ func normalizeEnum(input string, aliases map[string]string, canonical []string) 
 
 	return "", false
 }
+
+// unescapeMarkdown removes shell-style backslash escaping from markdown
+// content. Agents and shells often escape backticks (\`) when passing
+// descriptions via CLI flags, producing broken code fences on sync push.
+func unescapeMarkdown(s string) string {
+	return strings.ReplaceAll(s, "\\`", "`")
+}

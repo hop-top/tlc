@@ -150,6 +150,7 @@ func createTaskInteractive(initialTitle string) error {
 }
 
 func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration) error {
+	description = unescapeMarkdown(description)
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 	if !core.ValidEffort(core.Effort(effort)) {
 		return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", effort)

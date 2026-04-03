@@ -103,3 +103,23 @@ func TestNormalizePriority(t *testing.T) {
 		})
 	}
 }
+
+func TestUnescapeMarkdown(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"no backticks", "no backticks"},
+		{"inline \\`code\\`", "inline `code`"},
+		{"\\`\\`\\`go\nfmt.Println()\n\\`\\`\\`", "```go\nfmt.Println()\n```"},
+		{"already `clean`", "already `clean`"},
+		{"", ""},
+	}
+
+	for _, tc := range tests {
+		got := unescapeMarkdown(tc.input)
+		if got != tc.want {
+			t.Errorf("unescapeMarkdown(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}

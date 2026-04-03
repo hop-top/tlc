@@ -55,7 +55,7 @@ var TaskUpdateCmd = &cobra.Command{
 				changed = true
 			}
 			if cmd.Flags().Changed("description") {
-				task.Description = taskUpdateDescription
+				task.Description = unescapeMarkdown(taskUpdateDescription)
 				changed = true
 			}
 			if cmd.Flags().Changed("assigned-to") {
@@ -68,7 +68,12 @@ var TaskUpdateCmd = &cobra.Command{
 			}
 
 			if cmd.Flags().Changed("status") {
-				nextStatus := core.TaskStatus(taskUpdateStatus)
+				normalized, ok := NormalizeStatus(taskUpdateStatus)
+				if !ok {
+					errs = append(errs, fmt.Sprintf("%s: unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", task.ID, taskUpdateStatus))
+					continue
+				}
+				nextStatus := core.TaskStatus(normalized)
 				wm := core.DefaultWorkflow()
 				log, err := task.TransitionWithWorkflow(
 					nextStatus, core.GetCurrentUser(), "Manual update", wm, taskUpdateForce,
