@@ -66,6 +66,10 @@ var effortToLabel = map[string]string{
 // blockedByRe matches "blocked by #N" or "depends on #N" patterns.
 var blockedByRe = regexp.MustCompile(`(?i)(?:blocked by|depends on)\s+#(\d+)`)
 
+// blockedByLineRe matches full lines containing only "Blocked by #N" or
+// "Depends on #N" references (used to strip stale header lines on push).
+var blockedByLineRe = regexp.MustCompile(`(?im)^(?:blocked by|depends on)\s+#\d+\s*$`)
+
 // MapGitHubIssueToTask maps a GitHub issue to a TLC task.
 func MapGitHubIssueToTask(issue *github.Issue) *Task {
 	number := issue.GetNumber()
@@ -97,21 +101,34 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 		task.Meta["milestone_id"] = fmt.Sprintf("%d", issue.Milestone.GetNumber())
 	}
 
-	// Classify labels
-	mapLabelsToTask(issue.Labels, task)
+	// Classify labels (also detects status labels in single pass)
+	hasInProgress, hasBlocked := mapLabelsToTask(issue.Labels, task)
 
 	// Determine status from state + labels + state_reason
-	mapStatusFromIssue(issue, state, task)
+	mapStatusFromIssue(issue, state, hasInProgress, hasBlocked, task)
 
 	// Parse body for blocked-by references
 	parseBlockedBy(body, task)
+
+	// Derive BlockedReason from actual refs when available
+	if task.BlockedReason != nil {
+		if refs, ok := task.Meta["blocked_by"].([]string); ok && len(refs) > 0 {
+			parts := make([]string, len(refs))
+			for i, r := range refs {
+				parts[i] = "#" + r
+			}
+			reason := "blocked by " + strings.Join(parts, ", ")
+			task.BlockedReason = &reason
+		}
+	}
 
 	return task
 }
 
 // mapLabelsToTask classifies issue labels into priority, effort, tags, and
-// detects status labels. Returns true if a status:blocked label was found.
-func mapLabelsToTask(labels []*github.Label, task *Task) {
+// detects status labels. Returns status label flags so callers avoid a
+// second iteration over labels.
+func mapLabelsToTask(labels []*github.Label, task *Task) (hasInProgress, hasBlocked bool) {
 	var tags []string
 	for _, label := range labels {
 		name := label.GetName()
@@ -129,7 +146,15 @@ func mapLabelsToTask(labels []*github.Label, task *Task) {
 			continue
 		}
 
-		// Status labels are consumed by mapStatusFromIssue; skip here
+		// Status labels — capture flags, don't add to tags
+		if nameLower == "status:blocked" {
+			hasBlocked = true
+			continue
+		}
+		if nameLower == "status:in-progress" {
+			hasInProgress = true
+			continue
+		}
 		if strings.HasPrefix(nameLower, "status:") {
 			continue
 		}
@@ -145,11 +170,13 @@ func mapLabelsToTask(labels []*github.Label, task *Task) {
 	if len(tags) > 0 {
 		task.Tags = tags
 	}
+	return hasInProgress, hasBlocked
 }
 
-// mapStatusFromIssue determines the task status from issue state, labels,
-// and state_reason.
-func mapStatusFromIssue(issue *github.Issue, state string, task *Task) {
+// mapStatusFromIssue determines the task status from issue state, label flags,
+// and state_reason. The hasInProgress/hasBlocked flags are provided by
+// mapLabelsToTask to avoid a second label iteration.
+func mapStatusFromIssue(issue *github.Issue, state string, hasInProgress, hasBlocked bool, task *Task) {
 	if state == githubStateClosed {
 		reason := issue.GetStateReason()
 		if reason == "not_planned" {
@@ -158,19 +185,6 @@ func mapStatusFromIssue(issue *github.Issue, state string, task *Task) {
 			task.Status = "DONE"
 		}
 		return
-	}
-
-	// Open issue: check for status labels
-	hasBlocked := false
-	hasInProgress := false
-	for _, label := range issue.Labels {
-		nameLower := strings.ToLower(label.GetName())
-		switch nameLower {
-		case "status:blocked":
-			hasBlocked = true
-		case "status:in-progress":
-			hasInProgress = true
-		}
 	}
 
 	switch {
@@ -268,9 +282,15 @@ func buildPushLabels(task *Task) []string {
 }
 
 // buildPushBody prepends blocked-by references to the task description.
+// Existing "Blocked by #N" / "Depends on #N" header lines are stripped first
+// to prevent duplication across pull-push sync cycles.
 func buildPushBody(task *Task) string {
 	// Unescape backticks that were shell-escaped during task creation.
 	body := strings.ReplaceAll(task.Description, "\\`", "`")
+
+	// Strip existing blocked-by/depends-on header lines to avoid duplication.
+	body = blockedByLineRe.ReplaceAllString(body, "")
+	body = strings.TrimLeft(body, "\n")
 
 	refs := extractBlockedByRefs(task)
 	if len(refs) == 0 {
