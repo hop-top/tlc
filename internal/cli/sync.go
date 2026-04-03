@@ -17,6 +17,22 @@ import (
 	"hop.top/tlc/internal/sync"
 )
 
+// ensureGitHubToken sets GITHUB_TOKEN from gh CLI if not already set.
+func ensureGitHubToken() {
+	if os.Getenv("GITHUB_TOKEN") != "" {
+		return
+	}
+	if _, err := exec.LookPath("gh"); err != nil {
+		return
+	}
+	cmd := exec.CommandContext(context.Background(), "gh", "auth", "token")
+	if out, err := cmd.Output(); err == nil {
+		if token := strings.TrimSpace(string(out)); token != "" {
+			_ = os.Setenv("GITHUB_TOKEN", token)
+		}
+	}
+}
+
 const (
 	syncSystemGitHub   = "github"
 	syncDirectionPull  = "pull"
@@ -119,16 +135,9 @@ func autoConfigureGitHub(directionHint string) error {
 		return nil // Already configured with correct settings
 	}
 
-	// Try to get token from gh CLI if available
-	if _, err := exec.LookPath("gh"); err == nil {
-		cmd = exec.CommandContext(ctx, "gh", "auth", "token")
-		if tokenOutput, err := cmd.Output(); err == nil {
-			token := strings.TrimSpace(string(tokenOutput))
-			if token != "" {
-				_ = os.Setenv("GITHUB_TOKEN", token)
-				viper.Set("sync.github.use_gh_auth", true)
-			}
-		}
+	ensureGitHubToken()
+	if os.Getenv("GITHUB_TOKEN") != "" {
+		viper.Set("sync.github.use_gh_auth", true)
 	}
 
 	// Save to config file
@@ -175,16 +184,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 		if err := autoConfigureGitHub(syncDirectionPull); err != nil {
 			return err
 		}
-		// Always try to get token from gh if available and not already set
-		if os.Getenv("GITHUB_TOKEN") == "" {
-			if _, err := exec.LookPath("gh"); err == nil {
-				ghCmd := exec.CommandContext(context.Background(), "gh", "auth", "token")
-				if tokenOutput, err := ghCmd.Output(); err == nil {
-					token := strings.TrimSpace(string(tokenOutput))
-					_ = os.Setenv("GITHUB_TOKEN", token)
-				}
-			}
-		}
+		ensureGitHubToken()
 	}
 
 	s, err := getStorage()
@@ -388,16 +388,7 @@ var SyncPushCmd = &cobra.Command{
 			if err := autoConfigureGitHub(syncDirectionPush); err != nil {
 				return err
 			}
-			// Always try to get token from gh if available and not already set
-			if os.Getenv("GITHUB_TOKEN") == "" {
-				if _, err := exec.LookPath("gh"); err == nil {
-					ghCmd := exec.CommandContext(ctx, "gh", "auth", "token")
-					if tokenOutput, err := ghCmd.Output(); err == nil {
-						token := strings.TrimSpace(string(tokenOutput))
-						_ = os.Setenv("GITHUB_TOKEN", token)
-					}
-				}
-			}
+			ensureGitHubToken()
 		}
 
 		s, err := getStorage()

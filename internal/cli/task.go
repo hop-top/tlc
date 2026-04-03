@@ -197,6 +197,9 @@ func updateSyncedTask(ctx context.Context, task *core.Task, s core.Repository) e
 	}
 
 	system := *task.OriginSystem
+	if system == syncSystemGitHub {
+		ensureGitHubToken()
+	}
 	fmt.Printf("Syncing task %s to %s...\n", task.ID, system)
 
 	if err := s.UpdateTask(ctx, task); err != nil {
