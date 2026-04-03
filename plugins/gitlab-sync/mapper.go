@@ -171,7 +171,7 @@ func parseLabelDimensions(labels []string, task *Task) {
 		}
 
 		// Scoped labels (dimension:scope) become tags
-		if strings.Contains(label, ":") {
+		if strings.Contains(lower, ":") {
 			tags = append(tags, label)
 			continue
 		}

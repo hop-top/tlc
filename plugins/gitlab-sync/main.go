@@ -55,6 +55,7 @@ type Error struct {
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		var req Request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
@@ -110,19 +111,24 @@ func handleSyncPush(req Request) Response {
 		return errResp(req.ID, -32602, "Invalid params")
 	}
 
+	client, err := newGitLabClient()
+	if err != nil {
+		return errResp(req.ID, -32603, fmt.Sprintf("GitLab client: %v", err))
+	}
+
 	updated := []string{}
 	failed := map[string]string{}
 	for _, task := range params.Tasks {
-		var err error
+		var opErr error
 		originID, ok := task.Meta["origin_id"].(string)
 		if !ok || originID == "" {
-			err = createGitLabIssue(params.Repo, &task)
+			opErr = createGitLabIssue(client, params.Repo, &task)
 		} else {
-			err = updateGitLabIssue(params.Repo, &task)
+			opErr = updateGitLabIssue(client, params.Repo, &task)
 		}
 
-		if err != nil {
-			failed[task.ID] = err.Error()
+		if opErr != nil {
+			failed[task.ID] = opErr.Error()
 		} else {
 			updated = append(updated, task.ID)
 		}
@@ -144,10 +150,15 @@ func handleSyncDelete(req Request) Response {
 		return errResp(req.ID, -32602, "Invalid params")
 	}
 
+	client, err := newGitLabClient()
+	if err != nil {
+		return errResp(req.ID, -32603, fmt.Sprintf("GitLab client: %v", err))
+	}
+
 	deleted := []string{}
 	failed := map[string]string{}
 	for _, task := range params.Tasks {
-		if err := closeGitLabIssue(params.Repo, &task); err != nil {
+		if err := closeGitLabIssue(client, params.Repo, &task); err != nil {
 			failed[task.ID] = err.Error()
 		} else {
 			deleted = append(deleted, task.ID)
@@ -267,12 +278,7 @@ func fetchBlockingLinks(
 	}
 }
 
-func createGitLabIssue(repoFull string, task *Task) error {
-	client, err := newGitLabClient()
-	if err != nil {
-		return err
-	}
-
+func createGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error {
 	pid := repoFull
 	data := MapTaskToGitLabIssueData(task)
 
@@ -306,12 +312,7 @@ func createGitLabIssue(repoFull string, task *Task) error {
 	return nil
 }
 
-func updateGitLabIssue(repoFull string, task *Task) error {
-	client, err := newGitLabClient()
-	if err != nil {
-		return err
-	}
-
+func updateGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error {
 	pid := repoFull
 	iid, err := extractIID(task)
 	if err != nil {
@@ -342,12 +343,7 @@ func updateGitLabIssue(repoFull string, task *Task) error {
 	return nil
 }
 
-func closeGitLabIssue(repoFull string, task *Task) error {
-	client, err := newGitLabClient()
-	if err != nil {
-		return err
-	}
-
+func closeGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error {
 	pid := repoFull
 	iid, err := extractIID(task)
 	if err != nil {
@@ -378,6 +374,10 @@ func createBlockedByLinks(
 	for _, ref := range strings.Split(blockedBy, ",") {
 		targetRef := strings.TrimSpace(ref)
 		if targetRef == "" {
+			continue
+		}
+		// Validate ref is numeric before sending to API.
+		if _, convErr := strconv.Atoi(targetRef); convErr != nil {
 			continue
 		}
 		_, _, _ = client.IssueLinks.CreateIssueLink(
