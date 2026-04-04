@@ -78,6 +78,10 @@ var trackCreateCmd = &cobra.Command{
 		if track.AssignedTo != nil {
 			_, _ = fmt.Fprintf(w, "  Assigned: %s\n", *track.AssignedTo)
 		}
+
+		if configDir := resolveConfigDir(); configDir != "" {
+			scaffoldTrackDir(w, track, configDir)
+		}
 		return nil
 	},
 }

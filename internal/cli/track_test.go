@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"hop.top/tlc/internal/core"
@@ -440,6 +442,114 @@ func TestTrackDelete_WithLinkedTasks(t *testing.T) {
 		err = cmd.Execute()
 		if err == nil {
 			t.Fatal("expected error deleting track with linked tasks, got nil")
+		}
+	})
+}
+
+func TestTrackCreate_ScaffoldsDirectory(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		cwd, _ := os.Getwd()
+		// resolveConfigDir derives .tlc/ from the flat .tlc.yaml config
+		// that setupTestDir creates. The dir is created automatically if
+		// it doesn't exist.
+		tlcDir := filepath.Join(cwd, ".tlc")
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "create", "My Feature", "--type", "feature", "--id", "my-feature"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track create failed: %v", err)
+		}
+
+		trackDir := filepath.Join(tlcDir, "tracks", "my-feature")
+
+		// metadata.json
+		metaPath := filepath.Join(trackDir, "metadata.json")
+		if _, err := os.Stat(metaPath); err != nil {
+			t.Errorf("metadata.json not created: %v", err)
+		}
+
+		// plan.md with frontmatter
+		planPath := filepath.Join(trackDir, "plan.md")
+		planData, err := os.ReadFile(planPath)
+		if err != nil {
+			t.Fatalf("plan.md not created: %v", err)
+		}
+		if !contains(string(planData), "tracks:") {
+			t.Error("plan.md missing 'tracks:' frontmatter")
+		}
+		if !contains(string(planData), "tasks: []") {
+			t.Error("plan.md missing 'tasks: []' frontmatter")
+		}
+		if !contains(string(planData), "my-feature") {
+			t.Error("plan.md missing track ID")
+		}
+
+		// tracks/tracks.md registry
+		registryPath := filepath.Join(tlcDir, "tracks", "tracks.md")
+		registryData, err := os.ReadFile(registryPath)
+		if err != nil {
+			t.Fatalf("tracks.md not created: %v", err)
+		}
+		if !contains(string(registryData), "my-feature") {
+			t.Error("tracks.md missing track entry")
+		}
+
+		// Next-step instructions in output
+		output := buf.String()
+		if !contains(output, "Scaffolded:") {
+			t.Errorf("expected 'Scaffolded:' in output, got: %s", output)
+		}
+		if !contains(output, "[required]") {
+			t.Errorf("expected '[required]' next steps in output, got: %s", output)
+		}
+		if !contains(output, "--add-plan") {
+			t.Errorf("expected '--add-plan' instruction in output, got: %s", output)
+		}
+	})
+}
+
+func TestTrackCreate_PlanMDIdempotent(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		cwd, _ := os.Getwd()
+		tlcDir := filepath.Join(cwd, ".tlc")
+		trackDir := filepath.Join(tlcDir, "tracks", "idem-test")
+		if err := os.MkdirAll(trackDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		existingContent := "# pre-existing"
+		planPath := filepath.Join(trackDir, "plan.md")
+		if err := os.WriteFile(planPath, []byte(existingContent), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "create", "Idem Test", "--type", "bug", "--id", "idem-test"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track create failed: %v", err)
+		}
+
+		data, err := os.ReadFile(planPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != existingContent {
+			t.Errorf("plan.md was overwritten; expected %q, got %q", existingContent, string(data))
 		}
 	})
 }

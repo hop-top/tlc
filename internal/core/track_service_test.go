@@ -110,6 +110,10 @@ func (r *stubTaskRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, err
 	return nil, nil
 }
 
+func (r *stubTaskRepo) GetNextSequenceID(_ context.Context, _ string) (int, error) {
+	return 1, nil
+}
+
 func (r *stubTaskRepo) ListTasks(_ context.Context, query Query) ([]*Task, error) {
 	// Filter by track_id if requested.
 	for _, f := range query.Filters {

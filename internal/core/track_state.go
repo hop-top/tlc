@@ -18,7 +18,7 @@ const (
 // Rules:
 //   - stale: status in {pending, active}, 1+ tasks, max(task.UpdatedAt) < now - threshold
 //   - unlinked: 0 linked tasks
-//   - blocked: 1+ tasks, all non-terminal tasks have unresolved blocked_by
+//   - blocked: 1+ non-terminal tasks blocked by a task outside this track
 //   - healthy: none of the above (exclusive with other flags)
 //
 // Multiple non-healthy flags can coexist.
@@ -42,7 +42,7 @@ func ComputeTrackState(
 		}
 	}
 
-	// Blocked check: all non-terminal tasks must have unresolved blocked_by.
+	// Blocked check: any non-terminal task blocked by something outside this track.
 	if isTrackBlocked(tasks) {
 		flags = append(flags, TrackStateBlocked)
 	}
@@ -64,23 +64,27 @@ func maxTaskUpdatedAt(tasks []*Task) time.Time {
 	return max
 }
 
-// isTrackBlocked returns true when every non-terminal task has a non-empty
-// blocked_by list.
+// isTrackBlocked returns true when at least one non-terminal task has a
+// blocked_by entry that points to a task outside this track (external blocker).
+// Intra-track dependencies (one track task blocking another) are sequencing,
+// not blockers, and must not flag the track as blocked.
 func isTrackBlocked(tasks []*Task) bool {
-	wm := DefaultWorkflow()
-	nonTerminalCount := 0
-	blockedCount := 0
+	// Build a set of all task IDs in this track for fast lookup.
+	inTrack := make(map[string]struct{}, len(tasks))
+	for _, t := range tasks {
+		inTrack[t.ID] = struct{}{}
+	}
 
+	wm := DefaultWorkflow()
 	for _, t := range tasks {
 		if wm.IsTerminal(t.Status) {
 			continue
 		}
-		nonTerminalCount++
-		if len(t.BlockedBy()) > 0 {
-			blockedCount++
+		for _, blocker := range t.BlockedBy() {
+			if _, ok := inTrack[blocker]; !ok {
+				return true
+			}
 		}
 	}
-
-	// Need at least one non-terminal task, and all must be blocked.
-	return nonTerminalCount > 0 && blockedCount == nonTerminalCount
+	return false
 }

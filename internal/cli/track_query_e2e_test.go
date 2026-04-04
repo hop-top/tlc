@@ -536,6 +536,150 @@ func TestTrackShow_E2E_NotFound(t *testing.T) {
 	})
 }
 
+// TestTrackList_E2E_BlockedWhenAnyTaskBlocked verifies that a track is
+// flagged as blocked when at least one non-terminal linked task has a
+// blocked_by, even if other tasks are unblocked.
+func TestTrackList_E2E_BlockedWhenAnyTaskBlocked(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		resetTrackListFlags()
+		resetTrackFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		now := time.Now().UTC()
+		svc := core.NewTrackService(s, s)
+		for _, tr := range []*core.Track{
+			{
+				ID: "partial-blocked", Title: "Partially Blocked",
+				Type: "feature", Status: core.TrackStatusActive,
+				CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: "fully-clear", Title: "No Blockers",
+				Type: "feature", Status: core.TrackStatusActive,
+				CreatedAt: now, UpdatedAt: now,
+			},
+		} {
+			if err := svc.CreateTrack(ctx, tr); err != nil {
+				t.Fatalf("create track: %v", err)
+			}
+		}
+
+		// partial-blocked: one blocked task, one unblocked task.
+		trID := "partial-blocked"
+		blockedMeta := map[string]interface{}{"blocked_by": []string{"T-9999"}}
+		tasks := []*core.Task{
+			{
+				ID: "T-0010", Title: "Blocked task", Status: core.StatusTodo,
+				TrackID: &trID, CreatedAt: now, UpdatedAt: now,
+				Meta: blockedMeta,
+			},
+			{
+				ID: "T-0011", Title: "Free task", Status: core.StatusInProgress,
+				TrackID: &trID, CreatedAt: now, UpdatedAt: now,
+			},
+		}
+		// fully-clear: one unblocked task only.
+		clearID := "fully-clear"
+		tasks = append(tasks, &core.Task{
+			ID: "T-0012", Title: "Clear task", Status: core.StatusInProgress,
+			TrackID: &clearID, CreatedAt: now, UpdatedAt: now,
+		})
+		for _, task := range tasks {
+			if err := s.CreateTask(ctx, task); err != nil {
+				t.Fatalf("create task %s: %v", task.ID, err)
+			}
+		}
+
+		// Filter by --state blocked: only partial-blocked should appear.
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "list", "--state", "blocked"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track list --state blocked: %v", err)
+		}
+
+		out := buf.String()
+		if !contains(out, "partial-blocked") {
+			t.Errorf("expected partial-blocked in blocked list, got:\n%s", out)
+		}
+		if contains(out, "fully-clear") {
+			t.Errorf("unexpected fully-clear in blocked list, got:\n%s", out)
+		}
+	})
+}
+
+// TestTrackShow_E2E_BlockedState verifies that show renders 'blocked'
+// in the state field when any non-terminal task has a blocked_by.
+func TestTrackShow_E2E_BlockedState(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		resetTrackListFlags()
+		resetTrackFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		now := time.Now().UTC()
+		svc := core.NewTrackService(s, s)
+		track := &core.Track{
+			ID: "show-blocked", Title: "Show Blocked",
+			Type: "feature", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := svc.CreateTrack(ctx, track); err != nil {
+			t.Fatalf("create track: %v", err)
+		}
+
+		trID := "show-blocked"
+		blockedMeta := map[string]interface{}{"blocked_by": []string{"T-9999"}}
+		blockedTask := &core.Task{
+			ID: "T-0020", Title: "Blocked task", Status: core.StatusTodo,
+			TrackID: &trID, CreatedAt: now, UpdatedAt: now,
+			Meta: blockedMeta,
+		}
+		freeTask := &core.Task{
+			ID: "T-0021", Title: "Free task", Status: core.StatusInProgress,
+			TrackID: &trID, CreatedAt: now, UpdatedAt: now,
+		}
+		for _, task := range []*core.Task{blockedTask, freeTask} {
+			if err := s.CreateTask(ctx, task); err != nil {
+				t.Fatalf("create task %s: %v", task.ID, err)
+			}
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "show", "show-blocked"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track show: %v", err)
+		}
+
+		out := buf.String()
+		if !contains(out, "blocked") {
+			t.Errorf("expected 'blocked' state in show output, got:\n%s", out)
+		}
+	})
+}
+
 // TestTrackSummary_E2E_StatusCounts creates tracks in various
 // statuses, runs summary, and verifies the status counts.
 func TestTrackSummary_E2E_StatusCounts(t *testing.T) {

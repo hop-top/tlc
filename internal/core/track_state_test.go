@@ -53,14 +53,41 @@ func TestComputeTrackState_Blocked(t *testing.T) {
 	assertFlags(t, flags, core.TrackStateBlocked)
 }
 
-func TestComputeTrackState_NotBlockedWhenSomeUnblocked(t *testing.T) {
+func TestComputeTrackState_BlockedWhenAnyNonTerminalBlocked(t *testing.T) {
 	track := &core.Track{Status: core.TrackStatusActive}
 	tasks := []*core.Task{
 		blockedTask("T-0001", core.StatusTodo, "T-0099"),
 		{ID: "T-0002", Status: core.StatusInProgress, UpdatedAt: time.Now().UTC()},
 	}
+	// One task is blocked — track should be flagged blocked even though T-0002 is unblocked.
+	flags := core.ComputeTrackState(track, tasks, 24*time.Hour)
+	assertFlags(t, flags, core.TrackStateBlocked)
+}
+
+func TestComputeTrackState_NotBlockedByIntraTrackDeps(t *testing.T) {
+	// Tasks form a chain: T-0001 → T-0002. Both are in the track.
+	// Intra-track deps must not flag the track as blocked.
+	track := &core.Track{Status: core.TrackStatusActive}
+	tasks := []*core.Task{
+		{ID: "T-0001", Status: core.StatusTodo, UpdatedAt: time.Now().UTC()},
+		blockedTask("T-0002", core.StatusTodo, "T-0001"),
+	}
 	flags := core.ComputeTrackState(track, tasks, 24*time.Hour)
 	assertFlags(t, flags, core.TrackStateHealthy)
+}
+
+func TestComputeTrackState_BlockedByExternalDepOnlyWhenMixed(t *testing.T) {
+	// T-0001 is blocked by intra-track T-0002 (not external).
+	// T-0003 is blocked by external T-9999.
+	// Track should be flagged blocked due to T-0003.
+	track := &core.Track{Status: core.TrackStatusActive}
+	tasks := []*core.Task{
+		{ID: "T-0002", Status: core.StatusTodo, UpdatedAt: time.Now().UTC()},
+		blockedTask("T-0001", core.StatusTodo, "T-0002"),
+		blockedTask("T-0003", core.StatusTodo, "T-9999"),
+	}
+	flags := core.ComputeTrackState(track, tasks, 24*time.Hour)
+	assertFlags(t, flags, core.TrackStateBlocked)
 }
 
 func TestComputeTrackState_MultipleFlags(t *testing.T) {
