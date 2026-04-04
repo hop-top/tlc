@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/inbox"
+	"hop.top/tlc/internal/storage"
 )
 
 var InboxCmd = &cobra.Command{
@@ -20,9 +23,9 @@ var InboxCmd = &cobra.Command{
 var inboxProcessCmd = &cobra.Command{
 	Use:   "process",
 	Short: "Process pending inbox files",
-	Long: `Scan .tlc/inbox/create/ and .tlc/inbox/transition/
-for pending files, create tasks or transition statuses,
-and move processed files to processed/ or failed/.`,
+	Long: `Scan inbox create/ and transition/ dirs for pending
+files, create tasks or transition statuses, and move
+processed files to processed/ or failed/.`,
 	RunE: runInboxProcess,
 }
 
@@ -34,12 +37,9 @@ func runInboxProcess(cmd *cobra.Command, _ []string) error {
 				"run 'tlc init' first",
 		)
 	}
+	defer func() { _ = s.Close() }()
 
-	svc := core.NewTaskService(s, s)
-	dir := inboxDir()
-
-	proc := inbox.NewFileInboxProcessor(dir, svc, s)
-	result, err := proc.Process(cmd.Context())
+	result, err := processInbox(cmd, s)
 	if err != nil {
 		return fmt.Errorf("inbox process: %w", err)
 	}
@@ -53,18 +53,52 @@ func runInboxProcess(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// inboxDir returns the inbox directory path (.tlc/inbox/).
+// processInbox runs the inbox processor against the given storage.
+func processInbox(
+	cmd *cobra.Command, s *storage.SQLiteStorage,
+) (*inbox.InboxResult, error) {
+	svc := core.NewTaskService(s, s)
+	dir := inboxDir()
+	projectID := resolveProjectID()
+	proc := inbox.NewFileInboxProcessor(dir, svc, projectID)
+	return proc.Process(cmd.Context())
+}
+
+// inboxDir returns the inbox directory path using the detected
+// config mode (supports .tlc/ and .hop/tlc/).
 func inboxDir() string {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return ".tlc/inbox"
+		return filepath.Join(
+			config.LocalConfigDir(config.DetectMode()),
+			"inbox",
+		)
 	}
-	return filepath.Join(cwd, ".tlc", "inbox")
+	return filepath.Join(
+		cwd,
+		config.LocalConfigDir(config.DetectMode()),
+		"inbox",
+	)
+}
+
+// resolveProjectID returns the current project ID if detected.
+func resolveProjectID() string {
+	det := core.DetectProject()
+	if det != nil && det.InProject {
+		return det.ProjectID
+	}
+	return ""
 }
 
 // autoProcessInbox runs inbox processing if auto_process is enabled
 // and the inbox dirs are non-empty. Called from PersistentPreRunE.
-func autoProcessInbox(cmd *cobra.Command) {
+// Skips when the current command is already `inbox process`.
+func autoProcessInbox(
+	cmd *cobra.Command, s *storage.SQLiteStorage,
+) {
+	if isInboxProcessCmd(cmd) {
+		return
+	}
 	if !inboxAutoProcessEnabled() {
 		return
 	}
@@ -74,14 +108,7 @@ func autoProcessInbox(cmd *cobra.Command) {
 		return
 	}
 
-	s, err := getStorage()
-	if err != nil {
-		return
-	}
-
-	svc := core.NewTaskService(s, s)
-	proc := inbox.NewFileInboxProcessor(dir, svc, s)
-	result, err := proc.Process(cmd.Context())
+	result, err := processInbox(cmd, s)
 	if err != nil {
 		log.Debug("auto inbox process failed", "error", err)
 		return
@@ -95,6 +122,11 @@ func autoProcessInbox(cmd *cobra.Command) {
 			"failed", len(result.Failed),
 		)
 	}
+}
+
+// isInboxProcessCmd returns true if cmd is `tlc inbox process`.
+func isInboxProcessCmd(cmd *cobra.Command) bool {
+	return strings.HasSuffix(cmd.CommandPath(), "inbox process")
 }
 
 // inboxAutoProcessEnabled checks viper config for

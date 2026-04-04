@@ -26,21 +26,22 @@ type InboxProcessor interface {
 
 // FileInboxProcessor processes inbox files from a directory tree.
 type FileInboxProcessor struct {
-	inboxDir string
-	svc      *core.TaskService
-	logRepo  core.LogRepository
+	inboxDir  string
+	svc       *core.TaskService
+	projectID string
 }
 
 // NewFileInboxProcessor creates a new FileInboxProcessor.
+// projectID scopes task ID sequencing; pass "" for global.
 func NewFileInboxProcessor(
 	inboxDir string,
 	svc *core.TaskService,
-	logRepo core.LogRepository,
+	projectID string,
 ) *FileInboxProcessor {
 	return &FileInboxProcessor{
-		inboxDir: inboxDir,
-		svc:      svc,
-		logRepo:  logRepo,
+		inboxDir:  inboxDir,
+		svc:       svc,
+		projectID: projectID,
 	}
 }
 
@@ -69,7 +70,9 @@ func (p *FileInboxProcessor) Process(
 	}
 
 	if err := p.processTransitions(ctx, result); err != nil {
-		return result, fmt.Errorf("inbox: process transitions: %w", err)
+		return result, fmt.Errorf(
+			"inbox: process transitions: %w", err,
+		)
 	}
 
 	return result, nil
@@ -104,6 +107,9 @@ func (p *FileInboxProcessor) processCreates(
 		data, err := os.ReadFile(src)
 		if err != nil {
 			p.fail(name, err, result)
+			moveFile(src, filepath.Join(
+				p.inboxDir, dirFailed, name,
+			))
 			continue
 		}
 
@@ -116,7 +122,7 @@ func (p *FileInboxProcessor) processCreates(
 			continue
 		}
 
-		taskID, err := p.svc.NextTaskID(ctx, "")
+		taskID, err := p.svc.NextTaskID(ctx, p.projectID)
 		if err != nil {
 			p.fail(name, err, result)
 			moveFile(src, filepath.Join(
@@ -125,7 +131,7 @@ func (p *FileInboxProcessor) processCreates(
 			continue
 		}
 
-		task := buildTask(taskID, parsed)
+		task := buildTask(taskID, parsed, p.projectID)
 
 		if err := p.svc.CreateTask(
 			ctx, task, "inbox", "",
@@ -138,9 +144,11 @@ func (p *FileInboxProcessor) processCreates(
 		}
 
 		result.Created = append(result.Created, taskID)
-		moveFile(src, filepath.Join(
+		if err := moveFile(src, filepath.Join(
 			p.inboxDir, dirProcessed, name,
-		))
+		)); err != nil {
+			p.fail(name, err, result)
+		}
 	}
 
 	return nil
@@ -163,6 +171,9 @@ func (p *FileInboxProcessor) processTransitions(
 		data, err := os.ReadFile(src)
 		if err != nil {
 			p.fail(name, err, result)
+			moveFile(src, filepath.Join(
+				p.inboxDir, dirFailed, name,
+			))
 			continue
 		}
 
@@ -192,9 +203,11 @@ func (p *FileInboxProcessor) processTransitions(
 		result.Transitioned = append(
 			result.Transitioned, intent.ID,
 		)
-		moveFile(src, filepath.Join(
+		if err := moveFile(src, filepath.Join(
 			p.inboxDir, dirProcessed, name,
-		))
+		)); err != nil {
+			p.fail(name, err, result)
+		}
 	}
 
 	return nil
@@ -231,7 +244,9 @@ func (p *FileInboxProcessor) fail(
 }
 
 // buildTask converts a ParseResult into a core.Task.
-func buildTask(id string, pr *ParseResult) *core.Task {
+func buildTask(
+	id string, pr *ParseResult, projectID string,
+) *core.Task {
 	now := time.Now().UTC()
 	task := &core.Task{
 		ID:          id,
@@ -251,6 +266,9 @@ func buildTask(id string, pr *ParseResult) *core.Task {
 	if pr.TrackID != "" {
 		t := pr.TrackID
 		task.TrackID = &t
+	}
+	if projectID != "" {
+		task.ProjectID = &projectID
 	}
 	return task
 }
@@ -287,7 +305,12 @@ func sortedFiles(
 }
 
 // moveFile renames src to dst, creating parent dirs as needed.
-func moveFile(src, dst string) {
-	_ = os.MkdirAll(filepath.Dir(dst), 0o755)
-	_ = os.Rename(src, dst)
+func moveFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("create parent dir for %s: %w", dst, err)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("rename %s to %s: %w", src, dst, err)
+	}
+	return nil
 }

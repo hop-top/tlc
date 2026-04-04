@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"hop.top/tlc/internal/core"
 )
 
 // ParseResult holds parsed task creation data from inbox files.
@@ -91,11 +93,45 @@ func ParseTransitionJSON(data []byte) (*TransitionIntent, error) {
 	return &t, nil
 }
 
-// validateCreate checks that title is non-empty.
+// validStatuses enumerates accepted task status values.
+var validStatuses = map[string]bool{
+	"TODO":        true,
+	"IN_PROGRESS": true,
+	"DONE":        true,
+	"SKIPPED":     true,
+}
+
+// validateCreate checks title is non-empty and enums are valid.
 func validateCreate(r *ParseResult) error {
 	if strings.TrimSpace(r.Title) == "" {
 		return fmt.Errorf(
-			"inbox create: title is required; add a non-empty title field",
+			"inbox create: title is required; " +
+				"add a non-empty title field",
+		)
+	}
+	if r.Status != "" && !validStatuses[r.Status] {
+		return fmt.Errorf(
+			"inbox create: invalid status %q; "+
+				"allowed: TODO, IN_PROGRESS, DONE, SKIPPED",
+			r.Status,
+		)
+	}
+	if r.Priority != "" && !core.ValidPriority(
+		core.Priority(r.Priority),
+	) {
+		return fmt.Errorf(
+			"inbox create: invalid priority %q; "+
+				"allowed: P0, P1, P2, P3, P4",
+			r.Priority,
+		)
+	}
+	if r.Effort != "" && !core.ValidEffort(
+		core.Effort(r.Effort),
+	) {
+		return fmt.Errorf(
+			"inbox create: invalid effort %q; "+
+				"allowed: XS, S, M, L, XL",
+			r.Effort,
 		)
 	}
 	return nil
@@ -119,6 +155,13 @@ func validateTransition(t *TransitionIntent) error {
 		return fmt.Errorf(
 			"inbox transition: status is required; "+
 				"add a non-empty status field",
+		)
+	}
+	if !validStatuses[t.Status] {
+		return fmt.Errorf(
+			"inbox transition: invalid status %q; "+
+				"allowed: TODO, IN_PROGRESS, DONE, SKIPPED",
+			t.Status,
 		)
 	}
 	return nil

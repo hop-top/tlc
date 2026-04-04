@@ -45,7 +45,7 @@ func newTestEnv(t *testing.T) (
 	svc := core.NewTaskService(s, s)
 	inboxDir := filepath.Join(tmp, "inbox")
 
-	proc := NewFileInboxProcessor(inboxDir, svc, s)
+	proc := NewFileInboxProcessor(inboxDir, svc, "")
 	return proc, svc, s, inboxDir
 }
 
