@@ -482,12 +482,18 @@ type LinearSyncConfig struct {
 	SyncDirection string `yaml:"sync_direction"`
 }
 
+// InboxConfig controls inbox-based task creation and transitions.
+type InboxConfig struct {
+	AutoProcess bool `yaml:"auto_process"`
+}
+
 // StorageConfig contains storage configuration.
 type StorageConfig struct {
 	Backend          string           `yaml:"backend"`
 	DBPath           string           `yaml:"db_path"`
 	ConnectionString string           `yaml:"connection_string"`
 	Filesystem       FilesystemConfig `yaml:"filesystem"`
+	Inbox            InboxConfig      `yaml:"inbox"`
 }
 
 // FilesystemConfig controls filesystem projection of tasks.
