@@ -484,19 +484,109 @@ type LinearSyncConfig struct {
 
 // StorageConfig contains storage configuration.
 type StorageConfig struct {
-	Backend          string `yaml:"backend"`
-	DBPath           string `yaml:"db_path"`
-	ConnectionString string `yaml:"connection_string"`
+	Backend          string           `yaml:"backend"`
+	DBPath           string           `yaml:"db_path"`
+	ConnectionString string           `yaml:"connection_string"`
+	Filesystem       FilesystemConfig `yaml:"filesystem"`
+}
+
+// FilesystemConfig controls filesystem projection of tasks.
+// Accepts bool or object form in YAML:
+//   - filesystem: true  → defaults (group_by: [status], sort_by: [id])
+//   - filesystem: false → disabled
+//   - filesystem: { group_by: [status, tag], sort_by: [priority, id] }
+type FilesystemConfig struct {
+	Enabled bool     `yaml:"-"`
+	GroupBy []string `yaml:"-"`
+	SortBy  []string `yaml:"-"`
+}
+
+// allowedGroupBy lists valid group_by field names.
+var allowedGroupBy = map[string]bool{
+	"status":      true,
+	"tag":         true,
+	"priority":    true,
+	"effort":      true,
+	"assigned_to": true,
+	"track":       true,
+}
+
+// allowedSortBy lists valid sort_by field names.
+var allowedSortBy = map[string]bool{
+	"id":         true,
+	"priority":   true,
+	"effort":     true,
+	"created_at": true,
+	"updated_at": true,
+	"title":      true,
+}
+
+// UnmarshalYAML handles bool or object form for FilesystemConfig.
+func (f *FilesystemConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try bool first
+	var boolVal bool
+	if err := unmarshal(&boolVal); err == nil {
+		f.Enabled = boolVal
+		if boolVal {
+			f.GroupBy = []string{"status"}
+			f.SortBy = []string{"id"}
+		}
+		return nil
+	}
+
+	// Try object form
+	type rawFilesystem struct {
+		GroupBy []string `yaml:"group_by"`
+		SortBy  []string `yaml:"sort_by"`
+	}
+	var raw rawFilesystem
+	if err := unmarshal(&raw); err != nil {
+		return fmt.Errorf("filesystem: must be bool or object with group_by/sort_by")
+	}
+
+	f.Enabled = true
+	f.GroupBy = raw.GroupBy
+	f.SortBy = raw.SortBy
+
+	// Apply defaults for missing fields
+	if len(f.GroupBy) == 0 {
+		f.GroupBy = []string{"status"}
+	}
+	if len(f.SortBy) == 0 {
+		f.SortBy = []string{"id"}
+	}
+
+	return nil
 }
 
 // Validate validates the storage configuration.
 func (s *StorageConfig) Validate() error {
 	switch s.Backend {
 	case "sqlite", "local", "postgres", "":
-		return nil
 	default:
 		return fmt.Errorf("invalid storage backend: %s", s.Backend)
 	}
+
+	if s.Filesystem.Enabled {
+		for _, g := range s.Filesystem.GroupBy {
+			if !allowedGroupBy[g] {
+				return fmt.Errorf(
+					"storage.filesystem.group_by: invalid field %q; allowed: status, tag, priority, effort, assigned_to, track",
+					g,
+				)
+			}
+		}
+		for _, sb := range s.Filesystem.SortBy {
+			if !allowedSortBy[sb] {
+				return fmt.Errorf(
+					"storage.filesystem.sort_by: invalid field %q; allowed: id, priority, effort, created_at, updated_at, title",
+					sb,
+				)
+			}
+		}
+	}
+
+	return nil
 }
 
 // UIConfig contains UI-related configuration.
