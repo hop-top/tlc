@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build build-plugins build-shims test test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline
+.PHONY: help install build build-plugins build-shims test test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -216,6 +216,31 @@ docs-links-offline: ## Check documentation internal links (offline mode - exclud
 		exit 1; \
 	}
 	@echo "$(COLOR_GREEN)✓ All internal documentation links valid$(COLOR_RESET)"
+
+prebuild: ## Run all Go quality gates before building (fmt, vet, lint, test, mod tidy)
+	@echo "$(COLOR_BOLD)Running prebuild quality gates...$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[1/5] Formatting...$(COLOR_RESET)"
+	@gofmt -s -w $(GO_FILES)
+	@echo "$(COLOR_GREEN)✓ Format complete$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[2/5] Vetting...$(COLOR_RESET)"
+	@go vet ./...
+	@echo "$(COLOR_GREEN)✓ Vet passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[3/5] Linting...$(COLOR_RESET)"
+	@golangci-lint run --config .golangci.yml
+	@echo "$(COLOR_GREEN)✓ Lint passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[4/5] Testing...$(COLOR_RESET)"
+	@go test -v -race -coverprofile=coverage.out ./...
+	@echo "$(COLOR_GREEN)✓ Tests passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[5/5] Tidying modules...$(COLOR_RESET)"
+	@go mod tidy && go mod verify
+	@echo "$(COLOR_GREEN)✓ Modules verified$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_GREEN)$(COLOR_BOLD)All prebuild quality gates passed$(COLOR_RESET)"
 
 # Development shorthand aliases
 .PHONY: w wl wt
