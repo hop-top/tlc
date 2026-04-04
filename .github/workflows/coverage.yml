@@ -8,4 +8,5 @@ on:
 
 jobs:
   coverage:
-    uses: charmbracelet/meta/.github/workflows/coverage.yml@main
+    uses: hop-top/kit/.github/workflows/coverage.yml@main
+    secrets: inherit

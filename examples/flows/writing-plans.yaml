@@ -3,6 +3,7 @@ name: "Writing Implementation Plans"
 version: "1.0"
 description: "Create detailed implementation plans before coding"
 entry_step: "understand-requirements"
+agent: claude
 
 config:
   category: "planning"

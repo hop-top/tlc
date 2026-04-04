@@ -1,0 +1,30 @@
+xrr: "1"
+adapter: exec
+fingerprint: 0e365d90
+recorded_at: "2026-04-02T18:21:15Z"
+payload:
+    argv:
+        - -p
+        - |
+          Step: load-context
+
+          Load the context needed for review:
+
+          1. Find and read the original plan document
+             - Usually in docs/plans/ or .claude/plans/
+             - Review objectives, requirements, approach
+
+          2. Identify what changed
+             - Run git diff to see all changes
+             - List modified/created files
+             - Understand scope
+
+          3. Load relevant code
+             - Read changed files
+             - Understand how they fit together
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

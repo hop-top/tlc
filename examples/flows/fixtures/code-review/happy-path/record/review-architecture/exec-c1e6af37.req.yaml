@@ -1,0 +1,25 @@
+xrr: "1"
+adapter: exec
+fingerprint: c1e6af37
+recorded_at: "2026-04-02T18:23:27Z"
+payload:
+    argv:
+        - -p
+        - |
+          Step: review-architecture
+
+          Review architectural decisions:
+
+          - Follows existing project patterns?
+          - Proper separation of concerns?
+          - SOLID principles applied?
+          - Appropriate abstractions?
+          - Integration with existing code clean?
+
+          Note any architectural concerns.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

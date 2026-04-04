@@ -29,8 +29,8 @@ check() {
 check_flag() {
   local label="$1"; shift
   local subcmd=("$@")
-  # Extract just the flag name (last arg)
-  local flag="${subcmd[-1]}"
+  # Extract just the flag name (last arg) — bash 3.2 compat (no negative indices)
+  local flag="${subcmd[${#subcmd[@]}-1]}"
   local parent=("${subcmd[@]:0:${#subcmd[@]}-1}")
   if "${parent[@]}" --help 2>&1 | grep -qF -- "$flag"; then
     echo "  OK  $label"
@@ -86,6 +86,14 @@ check "flow invoke"      $TLC flow invoke
 check "flow list"        $TLC flow list
 check "flow run"         $TLC flow run
 check "flow status"      $TLC flow status
+check "flow test"        $TLC flow test
+
+echo
+echo "-- flow test flags --"
+check_flag "flow test --record"        $TLC flow test --record
+check_flag "flow test --passthrough"   $TLC flow test --passthrough
+check_flag "flow test --keep-sandbox"  $TLC flow test --keep-sandbox
+check_flag "flow test --steps"         $TLC flow test --steps
 
 echo
 echo "-- key flag checks --"

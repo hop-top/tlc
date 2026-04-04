@@ -8,4 +8,5 @@ on:
 
 jobs:
   lint:
-    uses: charmbracelet/meta/.github/workflows/lint.yml@main
+    uses: hop-top/kit/.github/workflows/lint.yml@main
+    secrets: inherit

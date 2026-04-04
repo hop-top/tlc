@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -197,9 +198,16 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 		ctx := context.Background()
 		now := time.Now().UTC()
 
-		// Get next ID - simple hack for now
-		tasks, _ := m.service.ListTasks(ctx, core.Query{})
-		id := fmt.Sprintf("T-%04d", len(tasks)+1)
+		proj := core.DetectProject()
+		var projectID string
+		if proj != nil && proj.ProjectID != "" {
+			projectID = proj.ProjectID
+		}
+
+		id, err := m.service.NextTaskID(ctx, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
 
 		task := &core.Task{
 			ID:          id,
@@ -211,14 +219,30 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 			UpdatedAt:   now,
 		}
 
-		// Auto-assign project_id if in a project context
-		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+		if proj != nil && proj.ProjectID != "" {
 			task.ProjectID = &proj.ProjectID
+			task.Reference = fmt.Sprintf("task://%s/%s", proj.ProjectID, id)
 		}
 
-		if err := m.service.CreateTask(ctx, task, core.GetCurrentUser(), "Created via TUI"); err != nil {
-			return fmt.Errorf("failed to create task: %w", err)
+		// Retry with a fresh sequence ID if the generated ID collides (mirrors CLI saveTask).
+		for {
+			if err := m.service.CreateTask(ctx, task, core.GetCurrentUser(), "Created via TUI"); err == nil {
+				break
+			} else if !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+				return fmt.Errorf("failed to create task: %w", err)
+			}
+			id, err = m.service.NextTaskID(ctx, projectID)
+			if err != nil {
+				return fmt.Errorf("failed to create task: %w", err)
+			}
+			task.ID = id
+			if proj != nil && proj.ProjectID != "" {
+				task.Reference = fmt.Sprintf("task://%s/%s", proj.ProjectID, id)
+			} else {
+				task.Reference = fmt.Sprintf("task://%s", id)
+			}
 		}
+
 		return m.fetchTasks()
 	}
 }

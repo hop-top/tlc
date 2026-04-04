@@ -20,11 +20,10 @@ type relatedTaskSummary struct {
 }
 
 var TaskShowCmd = &cobra.Command{
-	Use:   "show <task-id>",
+	Use:   "show <task-id>...",
 	Short: "Show task details",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		s, err := getStorage()
 		if err != nil {
 			return err
@@ -32,39 +31,53 @@ var TaskShowCmd = &cobra.Command{
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveTask(ctx, id)
-		if err != nil {
-			return err
-		}
-		task := res.Task
-		if res.Storage != s {
-			defer func() { _ = res.Storage.Close() }()
+
+		var errs []string
+		for i, id := range args {
+			res, resolveErr := uri.NewResolver(s).ResolveTask(ctx, id)
+			if resolveErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", id, resolveErr))
+				continue
+			}
+			task := res.Task
+			if res.Storage != s {
+				defer func() { _ = res.Storage.Close() }()
+			}
+
+			var logs []*core.LogEntry
+			if taskShowLogs || viper.GetString("output.format") != formatTable {
+				direction := taskShowLogSortDirection
+				if direction == "" {
+					direction = viper.GetString("ui.log_sort_direction")
+				}
+				if direction == "" {
+					direction = "desc"
+				}
+				logs, err = res.Storage.GetLogs(ctx, task.ID, direction)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: failed to get logs: %v", id, err))
+					continue
+				}
+			}
+
+			if i > 0 {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout())
+			}
+
+			format := viper.GetString("output.format")
+			if format == formatJSON || format == formatYAML {
+				printTask(cmd, task, logs, format)
+				continue
+			}
+
+			blockedBy, blocking := collectTaskRelations(ctx, s, res.Storage, task)
+			renderTaskDetail(cmd.OutOrStdout(), task, logs)
+			renderTaskRelations(cmd.OutOrStdout(), blockedBy, blocking)
 		}
 
-		var logs []*core.LogEntry
-		if taskShowLogs || viper.GetString("output.format") != formatTable {
-			direction := taskShowLogSortDirection
-			if direction == "" {
-				direction = viper.GetString("ui.log_sort_direction")
-			}
-			if direction == "" {
-				direction = "desc"
-			}
-			logs, err = res.Storage.GetLogs(ctx, task.ID, direction)
-			if err != nil {
-				return fmt.Errorf("failed to get logs: %w", err)
-			}
+		if len(errs) > 0 {
+			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-
-		format := viper.GetString("output.format")
-		if format == formatJSON || format == formatYAML {
-			printTask(cmd, task, logs, format)
-			return nil
-		}
-
-		blockedBy, blocking := collectTaskRelations(ctx, s, res.Storage, task)
-		renderTaskDetail(cmd.OutOrStdout(), task, logs)
-		renderTaskRelations(cmd.OutOrStdout(), blockedBy, blocking)
 		return nil
 	},
 }
