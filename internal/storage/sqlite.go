@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,24 @@ import (
 	"hop.top/tlc/internal/core"
 	_ "modernc.org/sqlite"
 )
+
+// project calls projector.ProjectTask if a projector is set, logging errors.
+func (s *SQLiteStorage) project(task *core.Task) {
+	if s.projector != nil {
+		if err := s.projector.ProjectTask(task); err != nil {
+			log.Printf("projector: failed to project task %s: %v", task.ID, err)
+		}
+	}
+}
+
+// unproject calls projector.RemoveTask if a projector is set, logging errors.
+func (s *SQLiteStorage) unproject(taskID string) {
+	if s.projector != nil {
+		if err := s.projector.RemoveTask(taskID); err != nil {
+			log.Printf("projector: failed to remove task %s: %v", taskID, err)
+		}
+	}
+}
 
 // Compile-time check: SQLiteStorage implements core.TaskReader.
 var _ core.TaskReader = (*SQLiteStorage)(nil)
@@ -26,6 +45,13 @@ const (
 type SQLiteStorage struct {
 	db        *sql.DB
 	writeLock sync.Mutex
+	projector Projector
+}
+
+// SetProjector attaches an optional Projector for filesystem projection.
+// Nil projector = no-op (zero overhead when disabled).
+func (s *SQLiteStorage) SetProjector(p Projector) {
+	s.projector = p
 }
 
 func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
@@ -77,7 +103,7 @@ func (s *SQLiteStorage) withWriteTransaction(ctx context.Context, fn func(*sql.T
 }
 
 func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		metaJSON, _ := json.Marshal(task.Meta)
 		tagsJSON, _ := json.Marshal(task.Tags)
 
@@ -117,7 +143,12 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			return fmt.Errorf("failed to insert task: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.project(task)
+	return nil
 }
 
 func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, error) {
@@ -262,7 +293,7 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 }
 
 func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		metaJSON, _ := json.Marshal(task.Meta)
 		tagsJSON, _ := json.Marshal(task.Tags)
 
@@ -314,11 +345,16 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 			// row exists, values were unchanged — not an error
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.project(task)
+	return nil
 }
 
 func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, entry *core.LogEntry) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		// Update Task
 		metaJSON, _ := json.Marshal(task.Meta)
 		tagsJSON, _ := json.Marshal(task.Tags)
@@ -382,7 +418,12 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			return fmt.Errorf("failed to insert log entry: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.project(task)
+	return nil
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
@@ -593,7 +634,7 @@ func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirectio
 }
 
 func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		proj := core.DetectProject()
 		if proj != nil && proj.InProject && proj.ProjectID != "" {
 			_, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
@@ -607,7 +648,12 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 			return fmt.Errorf("failed to delete task: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.unproject(id)
+	return nil
 }
 
 func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID string) (*core.Task, error) {
