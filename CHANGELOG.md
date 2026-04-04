@@ -4,6 +4,23 @@
 
 ### Added
 
+- **Track registry** — first-class work stream entity grouping tasks with
+  lifecycle management, computed health state, and phase progress:
+  - `tlc track create/list/show/update/archive/abandon/delete` commands
+  - `tlc track summary` project health pulse view
+  - Track status machine: pending → active → completed/abandoned → archived
+  - Computed state flags: stale, unlinked, blocked, healthy
+  - Phase progress from task `phase:N` tags (format: `5/8 (P2/3)`)
+  - `--track` flag on `tlc task create/update/list` for linking
+  - Auto-transition: pending → active on first linked task claim
+  - `--add-plan` flag with frontmatter task extraction and blocked-by
+    resolution
+  - Configurable plan-extractor command support
+  - Cross-project qualified track IDs (`org_repo--track-id`)
+  - `--all-projects` flag on `tlc track list`
+  - Health thresholds in config: `tracks.stale_threshold`,
+    `tracks.health.max_active`, `tracks.health.min_progress_to_start`
+  - Overcommit warning when active tracks exceed threshold
 - `--blocked <reason>` on `tlc task update`: set blocked reason on a task.
 - `--unblock` on `tlc task update`: clear blocked reason.
 - `--timeout <duration>` on `tlc task update` and `tlc task create`: set per-task

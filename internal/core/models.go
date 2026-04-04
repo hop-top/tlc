@@ -72,6 +72,7 @@ type Task struct {
 	StaleTimeout  *time.Duration         `json:"stale_timeout,omitempty" yaml:"stale_timeout,omitempty"`
 	BlockedReason *string                `json:"blocked_reason,omitempty" yaml:"blocked_reason,omitempty"`
 	StaleFiredAt  *time.Time             `json:"stale_fired_at,omitempty" yaml:"stale_fired_at,omitempty"`
+	TrackID       *string                `json:"track_id,omitempty" yaml:"track_id,omitempty"`
 }
 
 type RegisteredProject struct {

@@ -32,11 +32,57 @@ type SpaceConfig struct {
 	Options map[string]string `yaml:"options,omitempty"`
 }
 
+// TrackHealthConfig holds thresholds for project-level health checks.
+type TrackHealthConfig struct {
+	MaxActive          int `yaml:"max_active"`
+	MinProgressToStart int `yaml:"min_progress_to_start"`
+}
+
+// TrackConfig holds track-related configuration.
+type TrackConfig struct {
+	StaleThreshold time.Duration    `yaml:"stale_threshold"`
+	Health         TrackHealthConfig `yaml:"health"`
+	PlanExtractor  string           `yaml:"plan_extractor,omitempty"`
+}
+
+// Validate validates the track configuration.
+func (tc *TrackConfig) Validate() error {
+	if tc.StaleThreshold < 0 {
+		return fmt.Errorf(
+			"tracks.stale_threshold must be >= 0, got %s",
+			tc.StaleThreshold,
+		)
+	}
+	if tc.StaleThreshold == 0 {
+		tc.StaleThreshold = 48 * time.Hour
+	}
+	if tc.Health.MaxActive == 0 {
+		tc.Health.MaxActive = 3
+	}
+	if tc.Health.MinProgressToStart == 0 {
+		tc.Health.MinProgressToStart = 50
+	}
+	if tc.Health.MaxActive < 0 {
+		return fmt.Errorf(
+			"tracks.health.max_active must be > 0, got %d",
+			tc.Health.MaxActive,
+		)
+	}
+	if tc.Health.MinProgressToStart < 0 || tc.Health.MinProgressToStart > 100 {
+		return fmt.Errorf(
+			"tracks.health.min_progress_to_start must be 0-100, got %d",
+			tc.Health.MinProgressToStart,
+		)
+	}
+	return nil
+}
+
 type Config struct {
 	Version    string            `yaml:"version"`
 	Project    ProjectConfig     `yaml:"project"`
 	Output     OutputConfig      `yaml:"output"`
 	Task       TaskConfig        `yaml:"task"`
+	Tracks     TrackConfig       `yaml:"tracks"`
 	Git        GitConfig         `yaml:"git"`
 	Sync       SyncConfig        `yaml:"sync"`
 	Storage    StorageConfig     `yaml:"storage"`
@@ -69,6 +115,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := c.Project.Validate(); err != nil {
+		return err
+	}
+	if err := c.Tracks.Validate(); err != nil {
 		return err
 	}
 	if err := c.Sync.Validate(); err != nil {

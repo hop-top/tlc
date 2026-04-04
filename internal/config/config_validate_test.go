@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 )
 
 const (
@@ -190,6 +191,69 @@ func TestTaskConfig_StateMachineUnknownTargetStatusRejected(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil {
 		t.Error("expected error for state machine rule referencing unknown target status, got nil")
+	}
+}
+
+func TestTrackConfig_DefaultsApplied(t *testing.T) {
+	cfg := DefaultConfig()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Tracks.StaleThreshold != 48*time.Hour {
+		t.Errorf("expected 48h stale threshold, got %v", cfg.Tracks.StaleThreshold)
+	}
+	if cfg.Tracks.Health.MaxActive != 3 {
+		t.Errorf("expected max_active=3, got %d", cfg.Tracks.Health.MaxActive)
+	}
+	if cfg.Tracks.Health.MinProgressToStart != 50 {
+		t.Errorf("expected min_progress_to_start=50, got %d",
+			cfg.Tracks.Health.MinProgressToStart)
+	}
+}
+
+func TestTrackConfig_NegativeMaxActiveRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Tracks.Health.MaxActive = -1
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for negative max_active, got nil")
+	}
+}
+
+func TestTrackConfig_MinProgressOutOfRange(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Tracks.Health.MinProgressToStart = 101
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for min_progress_to_start > 100, got nil")
+	}
+}
+
+func TestTrackConfig_MinProgressNegativeRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Tracks.Health.MinProgressToStart = -5
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected error for negative min_progress_to_start, got nil")
+	}
+}
+
+func TestTrackConfig_CustomValuesPreserved(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Tracks.StaleThreshold = 72 * time.Hour
+	cfg.Tracks.Health.MaxActive = 5
+	cfg.Tracks.Health.MinProgressToStart = 80
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Tracks.StaleThreshold != 72*time.Hour {
+		t.Errorf("expected 72h, got %v", cfg.Tracks.StaleThreshold)
+	}
+	if cfg.Tracks.Health.MaxActive != 5 {
+		t.Errorf("expected 5, got %d", cfg.Tracks.Health.MaxActive)
+	}
+	if cfg.Tracks.Health.MinProgressToStart != 80 {
+		t.Errorf("expected 80, got %d", cfg.Tracks.Health.MinProgressToStart)
 	}
 }
 

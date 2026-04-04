@@ -82,6 +82,10 @@ var (
 	taskListBlockedBy []string
 
 	taskNoPrompt bool
+
+	taskTrack       string
+	taskListTrack   string
+	taskUpdateTrack string
 )
 
 // appendNote appends a note to the task's description, separated by a newline.

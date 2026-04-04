@@ -39,6 +39,10 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 - **Workspace Model**: Organize multiple projects into workspaces
   and spaces. Query tasks across projects with `--workspace` and
   `--space` flags, or get a summary view with `--summary`.
+- **Track Registry**: First-class work streams that group related
+  tasks with lifecycle management, computed health state, and phase
+  progress. Auto-transition from pending to active on first task
+  claim. Project health pulse with overcommit warnings.
 - **Modern TUI & CLI**: A keyboard-driven Terminal User Interface
   built with Bubble Tea, featuring a Kanban board, dashboard, and
   real-time flow monitoring.
@@ -180,6 +184,11 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Assign: `tlc task assign T-0042 codex`
 - Claim: `tlc task claim T-0042`
 - View logs: `tlc log T-0042`
+- Track create: `tlc track create "Title" --type feature`
+- Track list: `tlc track list --status active`
+- Track show: `tlc track show <id>`
+- Track summary: `tlc track summary`
+- Link task to track: `tlc task create "Title" --track <track-id>`
 
 **Tool definition:** Run `tlc help llm --format mcp` for MCP tool schema.
 ```
@@ -284,6 +293,59 @@ tlc task list --workspace myws --space labs
 
 # Summary view (grouped counts by status)
 tlc task list --summary
+```
+
+### Tracks
+
+Organize related tasks into tracks — cohesive work streams with
+their own lifecycle, progress, and health state:
+
+```bash
+# Create a feature track
+tlc track create "Browser rendering" --type feature
+
+# Link tasks to the track
+tlc task create "Parse HTML" --track browser-rendering --tag phase:1
+tlc task create "Render DOM" --track browser-rendering --tag phase:1
+tlc task create "CSS engine" --track browser-rendering --tag phase:2
+
+# View track progress with phase breakdown
+tlc track show browser-rendering
+# Output:
+#   Track: browser-rendering
+#   Progress: 1/3 tasks (33%)
+#   Phase 1 — 1/2
+#   Phase 2 — 0/1
+
+# List tracks with state and progress
+tlc track list --status active
+# Output: ID, Title, Type, Status, State, Progress, Assignee
+
+# Project health pulse
+tlc track summary
+# Shows: status counts, overcommit warning, active track table
+
+# Link a plan with automatic task extraction
+tlc track update browser-rendering \
+  --add-plan docs/plans/rendering.md
+
+# Lifecycle commands
+tlc track update browser-rendering --status completed
+tlc track archive browser-rendering
+```
+
+Track statuses: `pending` -> `active` -> `completed`/`abandoned`
+-> `archived`. A pending track auto-transitions to active when a
+linked task is claimed.
+
+Configure health thresholds in `.tlc/config.yaml`:
+
+```yaml
+tracks:
+  stale_threshold: 48h
+  health:
+    max_active: 3
+    min_progress_to_start: 50
 ```
 
 ### Flows & Assignees
@@ -454,6 +516,9 @@ Detailed specifications can be found in the `docs/` directory:
 - [Development Setup](docs/development-setup.md) - Development workflow and watch modes
 - [Editor Setup](docs/editor-setup.md) - IDE/editor integration
 - [Docker Usage](docs/docker.md) - Container deployment
+
+**Plans:**
+- [Track Registry Design](docs/plans/2026-04-03-track-registry-design.md)
 
 **Specifications:**
 - [Task CRUD Spec](docs/task-crud-spec-0.1.md)

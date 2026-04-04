@@ -107,10 +107,33 @@ var migrations = []migration{
 		ALTER TABLE tasks ADD COLUMN stale_fired_at TEXT;
 		`,
 	},
+	{
+		version: 6,
+		query: `
+		CREATE TABLE IF NOT EXISTS tracks (
+			id          TEXT NOT NULL,
+			title       TEXT NOT NULL,
+			type        TEXT NOT NULL,
+			status      TEXT NOT NULL DEFAULT 'pending',
+			assigned_to TEXT,
+			created_at  TEXT NOT NULL,
+			updated_at  TEXT NOT NULL,
+			project_id  TEXT NOT NULL DEFAULT '',
+			meta        TEXT,
+			PRIMARY KEY (project_id, id)
+		);
+
+		ALTER TABLE tasks ADD COLUMN track_id TEXT;
+
+		CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status);
+		CREATE INDEX IF NOT EXISTS idx_tracks_project_id ON tracks(project_id);
+		CREATE INDEX IF NOT EXISTS idx_tasks_track_id ON tasks(track_id);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 5
+const LatestMigrationVersion = 6
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

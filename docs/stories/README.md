@@ -42,8 +42,19 @@ User stories organized by feature area, persona, and priority. Each story define
 #### Error UX (065-069)
 - [065 - Actionable Error Messages](065-actionable-error-messages.md) — Agent-first errors with next steps
 
+#### Track Management (070-079)
+- [070 - Track Creation & Lifecycle](070-track-creation-lifecycle.md)
+  — Create, update, archive, abandon, delete tracks
+- [071 - Track Listing & Detail](071-track-listing-detail.md)
+  — Query and inspect tracks
+- [072 - Task-Track Integration](072-task-track-integration.md)
+  — Link tasks to tracks, auto-transitions
+- [073 - Project Health & Plan Linkage](073-project-health-plan-linkage.md)
+  — Health metrics, plan extraction
+
 #### Specialized Topics
-- [user-stories-taskflow-0.1.md](user-stories-taskflow-0.1.md) — Flow execution semantics and edge cases
+- [user-stories-taskflow-0.1.md](user-stories-taskflow-0.1.md)
+  — Flow execution semantics and edge cases
 
 ### By Persona
 
@@ -55,6 +66,8 @@ User stories organized by feature area, persona, and priority. Each story define
 - [006 - Task Deletion](006-task-deletion.md)
 - [020 - Flow Execution](020-flow-execution.md)
 - [030 - TUI Navigation](030-tui-navigation.md)
+- [070 - Track Creation & Lifecycle](070-track-creation-lifecycle.md)
+- [071 - Track Listing & Detail](071-track-listing-detail.md)
 
 #### [AI Agent](../personas/ai-agent.md)
 - [001 - Task Creation](001-task-creation.md) (task data available for claiming)
@@ -68,6 +81,9 @@ User stories organized by feature area, persona, and priority. Each story define
 - [020 - Flow Execution](020-flow-execution.md) (agent orchestrates flow steps)
 - [040 - MCP Integration & Tool Use](040-mcp-integration-tool-use.md) (planned)
 - [042 - CLI Command Integration](042-cli-command-integration.md) (planned)
+- [070 - Track Creation & Lifecycle](070-track-creation-lifecycle.md)
+- [071 - Track Listing & Detail](071-track-listing-detail.md)
+- [072 - Task-Track Integration](072-task-track-integration.md)
 
 #### [Team Lead](../personas/team-lead.md)
 - [002 - Task Listing](002-task-listing.md) (filtering and reporting)
@@ -80,6 +96,10 @@ User stories organized by feature area, persona, and priority. Each story define
 - [013 - Team Task Assignment](013-team-task-assignment.md) (planned)
 - [020 - Flow Execution](020-flow-execution.md) (flow governance)
 - [041 - Team Visibility Dashboard](041-team-visibility-dashboard.md) (planned)
+- [070 - Track Creation & Lifecycle](070-track-creation-lifecycle.md)
+- [071 - Track Listing & Detail](071-track-listing-detail.md)
+- [072 - Task-Track Integration](072-task-track-integration.md)
+- [073 - Project Health & Plan Linkage](073-project-health-plan-linkage.md)
 
 #### [Test Engineer](../personas/test-engineer.md)
 - [001 - Task Creation](001-task-creation.md) (E2E validation)
@@ -118,6 +138,7 @@ User stories organized by feature area, persona, and priority. Each story define
 | [062](062-storage-location-validation.md) | | |
 | [063](063-hierarchical-config-discovery.md) | | |
 | [065](065-actionable-error-messages.md) | | |
+| [070](070-track-creation-lifecycle.md) | | |
 
 ## Story Format
 

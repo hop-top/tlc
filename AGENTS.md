@@ -72,6 +72,37 @@ Conventions:
   2. `tlc task update <id> -d "<existing>\n\nSessions:\n- <session-id> (<agent>)"`
   3. `tlc task complete <id>`
 
+### `tlc track` — Track Management
+
+```bash
+tlc track create "Title" --type feature         # create track (type required)
+tlc track create "Title" --type bug --id slug    # custom ID
+tlc track list                                   # list with progress/state
+tlc track list --status active --type feature    # filtered
+tlc track show <id>                              # detail + phase breakdown
+tlc track update <id> --title "..."              # update fields
+tlc track update <id> --status completed         # transition (validated)
+tlc track update <id> --add-plan plan.md         # link plan + extract tasks
+tlc track archive <id>                           # completed/abandoned → archived
+tlc track abandon <id>                           # active → abandoned
+tlc track delete <id>                            # fails if linked tasks
+tlc track summary                                # project health pulse
+```
+
+Track statuses: `pending` · `active` · `completed` · `abandoned` · `archived`
+Types: `feature` · `bug` · `refactor`
+
+Task-track integration:
+```bash
+tlc task create "..." --track <track-id>         # link on create
+tlc task update <id> --track <track-id>          # link existing
+tlc task update <id> --track -                   # unlink
+tlc task list --track <track-id>                 # filter by track
+```
+
+Auto-transition: when a linked task is claimed (→ IN_PROGRESS), a pending
+track auto-transitions to active.
+
 ### `git hop` — Worktree Management
 
 NEVER run `git worktree`, `git branch`, or `git checkout -b` directly.

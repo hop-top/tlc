@@ -230,6 +230,24 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		task.ProjectID = &proj.ProjectID
 	}
 
+	// Link to track if specified.
+	if taskTrack != "" {
+		track, trackErr := s.GetTrack(ctx, taskTrack)
+		if trackErr != nil {
+			return fmt.Errorf(
+				"failed to look up track %q: %v; run 'tlc track list' to see available tracks",
+				taskTrack, trackErr,
+			)
+		}
+		if track == nil {
+			return fmt.Errorf(
+				"track %q not found; run 'tlc track list' to see available tracks",
+				taskTrack,
+			)
+		}
+		task.TrackID = &taskTrack
+	}
+
 	if task.Reference == "" {
 		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
@@ -293,4 +311,5 @@ func init() {
 	TaskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
 	TaskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
 	TaskCreateCmd.Flags().StringVar(&taskCreateTimeout, "timeout", "", "Stale timeout (e.g. 2h)")
+	TaskCreateCmd.Flags().StringVar(&taskTrack, "track", "", "Link task to a track ID")
 }

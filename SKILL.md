@@ -25,6 +25,10 @@ coordination, and declarative flow execution.
 - Query what's active → `tlc task list`
 - Finish work → `tlc task complete`
 - Orchestrate multi-step workflows → `tlc flow run`
+- Group tasks into work streams → `tlc track create`
+- Monitor work stream progress → `tlc track list`
+- View phase breakdown → `tlc track show`
+- Check project health → `tlc track summary`
 
 **Do not use:** built-in TaskCreate/TaskUpdate/TaskGet/TaskList tools.
 Use `tlc` exclusively for all task operations.
@@ -47,6 +51,28 @@ Use `tlc` exclusively for all task operations.
 | `tlc task assign <assignee> <id> [<id>...]` | Assign to someone (assignee first) |
 | `tlc task unassign <id> [<id>...] --note "reason"` | Remove assignee |
 | `tlc task delete <id> [<id>...] --yes` | Delete (skip prompt) |
+
+### Track lifecycle
+
+| Command | Effect |
+|---------|--------|
+| `tlc track create "title" --type feature` | New track, status=pending |
+| `tlc track list [--status active] [--type feature]` | List with progress/state |
+| `tlc track show <id>` | Detail view with phase breakdown |
+| `tlc track update <id> [flags]` | Mutate fields, validate transitions |
+| `tlc track archive <id>` | completed/abandoned → archived |
+| `tlc track abandon <id>` | active → abandoned |
+| `tlc track delete <id>` | Delete (fails if linked tasks) |
+| `tlc track summary` | Project pulse: health + status counts |
+
+### Track status machine
+
+```
+pending → active → completed → archived
+                 → abandoned → archived
+```
+
+Auto-transition: pending → active on first linked task claim.
 
 ### State machine
 
@@ -155,6 +181,27 @@ tlc flow status <run-id>
 tlc flow import <uri>                        # import from GitHub or URI
 ```
 
+### 9 · Manage tracks
+
+```bash
+# Create a feature track
+tlc track create "Browser rendering" --type feature
+
+# Link tasks to the track
+tlc task create "Parse HTML" --track browser-rendering
+tlc task create "Render DOM" --track browser-rendering --tag phase:1
+
+# View progress
+tlc track show browser-rendering
+tlc track list --status active
+
+# Link a plan with automatic task extraction
+tlc track update browser-rendering --add-plan docs/plans/rendering.md
+
+# Project health
+tlc track summary
+```
+
 ---
 
 ## task create — flags reference
@@ -169,6 +216,7 @@ tlc flow import <uri>                        # import from GitHub or URI
 | `--status` | `-s` | Initial status (default: TODO) |
 | `--blocked-by` | | Blocking task ID (repeatable; local ID or cross-project `project/task`) |
 | `--reference` | `-r` | Reference pointer (URL or path) |
+| `--track` | | Link task to a track |
 
 ### task update — blocker flags
 
@@ -190,6 +238,34 @@ tlc flow import <uri>                        # import from GitHub or URI
 | `--summary` | | Status counts only |
 | `--all-projects` | | Cross-project query |
 | `--workspace` | | Query across workspace projects |
+| `--track` | | Filter by track ID |
+
+### track create — flags reference
+
+| Flag | Description |
+|------|-------------|
+| `--type` | Track type: feature, bug, refactor (required) |
+| `--id` | Custom ID slug (derived from title if omitted) |
+| `--assigned-to` | Assignee |
+
+### track update — flags reference
+
+| Flag | Description |
+|------|-------------|
+| `--title` | Update title |
+| `--status` | Transition status (validated) |
+| `--type` | Update type |
+| `--assigned-to` | Update assignee |
+| `--add-plan` | Link plan file + extract tasks |
+
+### track list — flags reference
+
+| Flag | Description |
+|------|-------------|
+| `--status` | Filter: pending, active, completed, abandoned, archived |
+| `--state` | Filter: stale, unlinked, blocked, healthy |
+| `--type` | Filter by type |
+| `--all-projects` | Cross-project query |
 
 ---
 
@@ -225,6 +301,7 @@ tlc -c /path/to/.tlc/config.yaml task list
 | `tlc task reopen T-0046` | `tlc task reopen T-0046 --note "reason"` |
 | `tlc task assign T-0046 alice` | `tlc task assign alice T-0046` (assignee first) |
 | `tlc task delete T-0046 T-0047` (no flag) | `tlc task delete T-0046 T-0047 --no-prompt` |
+| Delete track with linked tasks | Unlink tasks first: `tlc task update <id> --track -` |
 
 ---
 
