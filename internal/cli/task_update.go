@@ -164,22 +164,14 @@ var TaskUpdateCmd = &cobra.Command{
 				if taskUpdateTrack == "-" || taskUpdateTrack == "" {
 					task.TrackID = nil
 				} else {
-					track, trackErr := s.GetTrack(ctx, taskUpdateTrack)
+					resolved, trackErr := resolveTrackID(ctx, res.Storage, taskUpdateTrack)
 					if trackErr != nil {
 						errs = append(errs, fmt.Sprintf(
-							"%s: failed to look up track %q: %v; run 'tlc track list' to see available tracks",
-							task.ID, taskUpdateTrack, trackErr,
+							"%s: %v", task.ID, trackErr,
 						))
 						continue
 					}
-					if track == nil {
-						errs = append(errs, fmt.Sprintf(
-							"%s: track %q not found; run 'tlc track list' to see available tracks",
-							task.ID, taskUpdateTrack,
-						))
-						continue
-					}
-					task.TrackID = &taskUpdateTrack
+					task.TrackID = &resolved
 				}
 				changed = true
 			}

@@ -14,16 +14,19 @@ var trackUpdateCmd = &cobra.Command{
 	Short: "Update a track",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
-
 		s, err := getStorageRaw()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
 
-		svc := core.NewTrackService(s, s)
 		ctx := context.Background()
+		id, err := resolveTrackID(ctx, s, args[0])
+		if err != nil {
+			return err
+		}
+
+		svc := core.NewTrackService(s, s)
 
 		titleChanged := cmd.Flags().Changed("title")
 		statusChanged := cmd.Flags().Changed("status")

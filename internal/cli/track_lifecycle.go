@@ -13,17 +13,19 @@ var trackArchiveCmd = &cobra.Command{
 	Short: "Archive a completed or abandoned track",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
-
 		s, err := getStorageRaw()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
 
-		svc := core.NewTrackService(s, s)
 		ctx := context.Background()
+		id, err := resolveTrackID(ctx, s, args[0])
+		if err != nil {
+			return err
+		}
 
+		svc := core.NewTrackService(s, s)
 		if err := svc.ArchiveTrack(ctx, id); err != nil {
 			return err
 		}
@@ -39,17 +41,19 @@ var trackAbandonCmd = &cobra.Command{
 	Short: "Abandon an active track",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
-
 		s, err := getStorageRaw()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
 
-		svc := core.NewTrackService(s, s)
 		ctx := context.Background()
+		id, err := resolveTrackID(ctx, s, args[0])
+		if err != nil {
+			return err
+		}
 
+		svc := core.NewTrackService(s, s)
 		if err := svc.AbandonTrack(ctx, id); err != nil {
 			return err
 		}
@@ -65,17 +69,19 @@ var trackDeleteCmd = &cobra.Command{
 	Short: "Delete a track (fails if tasks are linked)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
-
 		s, err := getStorageRaw()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = s.Close() }()
 
-		svc := core.NewTrackService(s, s)
 		ctx := context.Background()
+		id, err := resolveTrackID(ctx, s, args[0])
+		if err != nil {
+			return err
+		}
 
+		svc := core.NewTrackService(s, s)
 		if err := svc.DeleteTrack(ctx, id); err != nil {
 			return err
 		}

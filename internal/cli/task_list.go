@@ -85,20 +85,45 @@ var TaskListCmd = &cobra.Command{
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: normalized})
 		}
 
-		// Multi-track filter: parse comma-separated qualified IDs.
+		// Resolve --track IDs via fuzzy match before building
+		// query filters. Uses a temporary storage handle so the
+		// workspace branch is not forced to open local storage.
 		var trackQIDs []core.QualifiedTrackID
 		if taskListTrack != "" {
 			trackQIDs = core.ParseMultiTrackIDs(taskListTrack)
+			hasLocal := false
+			for _, q := range trackQIDs {
+				if q.IsLocal() {
+					hasLocal = true
+					break
+				}
+			}
+			if hasLocal {
+				rs, rsErr := getStorageRaw()
+				if rsErr != nil {
+					return rsErr
+				}
+				for i, q := range trackQIDs {
+					if q.IsLocal() {
+						resolved, rErr := resolveTrackID(
+							ctx, rs, q.TrackID,
+						)
+						if rErr != nil {
+							_ = rs.Close()
+							return rErr
+						}
+						trackQIDs[i].TrackID = resolved
+					}
+				}
+				_ = rs.Close()
+			}
 			if len(trackQIDs) == 1 && trackQIDs[0].IsLocal() {
-				// Single local track ID: exact match via SQL.
 				query.Filters = append(query.Filters, core.FieldFilter{
 					Field: "track_id", Operator: core.OpEq,
 					Value: trackQIDs[0].TrackID,
 				})
-				trackQIDs = nil // no post-query filter needed
+				trackQIDs = nil
 			} else if len(trackQIDs) > 0 {
-				// Multiple or qualified IDs: pre-filter by track IDs via IN,
-				// then post-filter by project for qualified entries.
 				var ids []string
 				for _, q := range trackQIDs {
 					ids = append(ids, q.TrackID)
