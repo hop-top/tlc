@@ -231,6 +231,95 @@ func TestInitCmd(t *testing.T) {
 	}
 }
 
+// TestInitCmd_InnerGitignore verifies .tlc/.gitignore contains tasks/ after init.
+func TestInitCmd_InnerGitignore(t *testing.T) {
+	tests := []struct {
+		name              string
+		setupGit          bool
+		existingInner     string // pre-existing .tlc/.gitignore content
+		args              []string
+		wantInInner       []string
+		wantNoDuplicates  bool
+	}{
+		{
+			name:         "creates .tlc/.gitignore with tasks/",
+			setupGit:     false,
+			args:         []string{"init"},
+			wantInInner:  []string{"tasks/"},
+		},
+		{
+			name:             "does not duplicate tasks/ if already present",
+			setupGit:         false,
+			existingInner:    "tasks/\n",
+			args:             []string{"init", "--force"},
+			wantInInner:      []string{"tasks/"},
+			wantNoDuplicates: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir, err := os.MkdirTemp("", "tlc-init-inner-gi-*")
+			if err != nil {
+				t.Fatalf("failed to create temp dir: %v", err)
+			}
+			defer os.RemoveAll(tmpDir)
+
+			oldWd, _ := os.Getwd()
+			os.Chdir(tmpDir)
+			defer os.Chdir(oldWd)
+
+			viper.Reset()
+			isolateInitTest(t)
+
+			if tt.setupGit {
+				if err := os.Mkdir(".git", 0o755); err != nil {
+					t.Fatalf("failed to create .git: %v", err)
+				}
+			}
+
+			if tt.existingInner != "" {
+				if err := os.MkdirAll(".tlc", 0o755); err != nil {
+					t.Fatalf("failed to create .tlc: %v", err)
+				}
+				if err := os.WriteFile(".tlc/.gitignore", []byte(tt.existingInner), 0o644); err != nil {
+					t.Fatalf("failed to write .tlc/.gitignore: %v", err)
+				}
+			}
+
+			cmd := newTestCmd()
+			cmd.AddCommand(newTestInitCmd())
+			buf := new(strings.Builder)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs(tt.args)
+
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+
+			content, err := os.ReadFile(".tlc/.gitignore")
+			if err != nil {
+				t.Fatalf("failed to read .tlc/.gitignore: %v", err)
+			}
+			contentStr := string(content)
+
+			for _, want := range tt.wantInInner {
+				if !strings.Contains(contentStr, want) {
+					t.Errorf(".tlc/.gitignore missing %q; got: %q", want, contentStr)
+				}
+			}
+
+			if tt.wantNoDuplicates {
+				count := strings.Count(contentStr, "tasks/")
+				if count > 1 {
+					t.Errorf("tasks/ appears %d times in .tlc/.gitignore; expected 1", count)
+				}
+			}
+		})
+	}
+}
+
 // TestInitCmd_ExistingTLC tests init command when .tlc directory already exists
 // Verifies behavior with existing TLC directory and --force flag.
 func TestInitCmd_ExistingTLC(t *testing.T) {
