@@ -183,7 +183,11 @@ func (p *FilesystemProjector) createGroupSymlinks(
 		values = []string{"_unset"}
 	}
 	for _, val := range values {
-		dir := filepath.Join(p.cfg.BaseDir, "by-"+group, Slug(val))
+		dirName := val
+		if val != "_unset" {
+			dirName = Slug(val)
+		}
+		dir := filepath.Join(p.cfg.BaseDir, "by-"+group, dirName)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
