@@ -43,6 +43,7 @@ var RootCmd = &cobra.Command{
 			// but we can't setup completion without it.
 			return nil
 		}
+		autoProcessInbox(cmd)
 		return setupURICompletion(s)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
