@@ -444,5 +444,6 @@ func getStorage() (*storage.SQLiteStorage, error) {
 
 	ensureDBSynced(s)
 	touchProjectIfNeeded(s)
+	SetupProjector(s)
 	return s, nil
 }
