@@ -232,20 +232,11 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 
 	// Link to track if specified.
 	if taskTrack != "" {
-		track, trackErr := s.GetTrack(ctx, taskTrack)
+		resolved, trackErr := resolveTrackID(ctx, s, taskTrack)
 		if trackErr != nil {
-			return fmt.Errorf(
-				"failed to look up track %q: %v; run 'tlc track list' to see available tracks",
-				taskTrack, trackErr,
-			)
+			return trackErr
 		}
-		if track == nil {
-			return fmt.Errorf(
-				"track %q not found; run 'tlc track list' to see available tracks",
-				taskTrack,
-			)
-		}
-		task.TrackID = &taskTrack
+		task.TrackID = &resolved
 	}
 
 	if task.Reference == "" {

@@ -24,13 +24,17 @@ var trackShowCmd = &cobra.Command{
 
 func runTrackShow(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
-	id := args[0]
 
 	s, err := getStorage()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = s.Close() }()
+
+	id, err := resolveTrackID(ctx, s, args[0])
+	if err != nil {
+		return err
+	}
 
 	svc := core.NewTrackService(s, s)
 	staleThreshold := viper.GetDuration("tracks.stale_threshold")

@@ -85,20 +85,37 @@ var TaskListCmd = &cobra.Command{
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: normalized})
 		}
 
-		// Multi-track filter: parse comma-separated qualified IDs.
+		// Default: single-project query.
+		// Open storage early so track ID resolution can fuzzy-match.
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
+		// Multi-track filter: parse comma-separated qualified IDs,
+		// resolving local IDs via prefix/fuzzy match.
 		var trackQIDs []core.QualifiedTrackID
 		if taskListTrack != "" {
 			trackQIDs = core.ParseMultiTrackIDs(taskListTrack)
+			for i, q := range trackQIDs {
+				if q.IsLocal() {
+					resolved, rErr := resolveTrackID(
+						ctx, s, q.TrackID,
+					)
+					if rErr != nil {
+						return rErr
+					}
+					trackQIDs[i].TrackID = resolved
+				}
+			}
 			if len(trackQIDs) == 1 && trackQIDs[0].IsLocal() {
-				// Single local track ID: exact match via SQL.
 				query.Filters = append(query.Filters, core.FieldFilter{
 					Field: "track_id", Operator: core.OpEq,
 					Value: trackQIDs[0].TrackID,
 				})
-				trackQIDs = nil // no post-query filter needed
+				trackQIDs = nil
 			} else if len(trackQIDs) > 0 {
-				// Multiple or qualified IDs: pre-filter by track IDs via IN,
-				// then post-filter by project for qualified entries.
 				var ids []string
 				for _, q := range trackQIDs {
 					ids = append(ids, q.TrackID)
@@ -115,13 +132,6 @@ var TaskListCmd = &cobra.Command{
 		if cmd.Flags().Changed("workspace") {
 			return runTaskListWorkspace(cmd, ctx, query)
 		}
-
-		// Default: single-project query.
-		s, err := getStorage()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = s.Close() }()
 
 		tasks, err := s.ListTasks(ctx, query)
 		if err != nil {
