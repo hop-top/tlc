@@ -34,8 +34,8 @@ func resolveTrackID(
 		return track.ID, nil
 	}
 
-	// Load all track IDs for prefix + fuzzy.
-	all, err := s.ListTracks(ctx, core.TrackQuery{Limit: 500})
+	// Load all track IDs for prefix + fuzzy (no limit).
+	all, err := s.ListTracks(ctx, core.TrackQuery{})
 	if err != nil {
 		return "", fmt.Errorf(
 			"track list failed: %w", err,
@@ -49,9 +49,15 @@ func resolveTrackID(
 		)
 	}
 
-	ids := make([]string, len(all))
-	for i, t := range all {
-		ids[i] = t.ID
+	// Deduplicate IDs (tracks may appear per-project).
+	seen := make(map[string]struct{}, len(all))
+	var ids []string
+	for _, t := range all {
+		if _, ok := seen[t.ID]; ok {
+			continue
+		}
+		seen[t.ID] = struct{}{}
+		ids = append(ids, t.ID)
 	}
 
 	// 2. Prefix match.

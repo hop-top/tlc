@@ -164,7 +164,7 @@ var TaskUpdateCmd = &cobra.Command{
 				if taskUpdateTrack == "-" || taskUpdateTrack == "" {
 					task.TrackID = nil
 				} else {
-					resolved, trackErr := resolveTrackID(ctx, s, taskUpdateTrack)
+					resolved, trackErr := resolveTrackID(ctx, res.Storage, taskUpdateTrack)
 					if trackErr != nil {
 						errs = append(errs, fmt.Sprintf(
 							"%s: %v", task.ID, trackErr,
