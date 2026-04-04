@@ -192,7 +192,11 @@ func (p *FilesystemProjector) createGroupSymlinks(
 			return err
 		}
 
+		// Avoid duplicate ID in filename when sort_by includes "id"
 		linkName := filepath.Join(dir, prefix+"-"+task.ID+".json")
+		if strings.HasSuffix(prefix, task.ID) {
+			linkName = filepath.Join(dir, prefix+".json")
+		}
 
 		// Compute relative path from link directory to canonical file
 		relTarget, err := filepath.Rel(dir, p.canonicalPath(task.ID))

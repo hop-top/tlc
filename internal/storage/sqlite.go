@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,24 @@ import (
 	"hop.top/tlc/internal/core"
 	_ "modernc.org/sqlite"
 )
+
+// project calls projector.ProjectTask if a projector is set, logging errors.
+func (s *SQLiteStorage) project(task *core.Task) {
+	if s.projector != nil {
+		if err := s.projector.ProjectTask(task); err != nil {
+			log.Printf("projector: failed to project task %s: %v", task.ID, err)
+		}
+	}
+}
+
+// unproject calls projector.RemoveTask if a projector is set, logging errors.
+func (s *SQLiteStorage) unproject(taskID string) {
+	if s.projector != nil {
+		if err := s.projector.RemoveTask(taskID); err != nil {
+			log.Printf("projector: failed to remove task %s: %v", taskID, err)
+		}
+	}
+}
 
 // Compile-time check: SQLiteStorage implements core.TaskReader.
 var _ core.TaskReader = (*SQLiteStorage)(nil)
@@ -128,9 +147,7 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 		return err
 	}
 
-	if s.projector != nil {
-		_ = s.projector.ProjectTask(task)
-	}
+	s.project(task)
 	return nil
 }
 
@@ -332,9 +349,7 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 		return err
 	}
 
-	if s.projector != nil {
-		_ = s.projector.ProjectTask(task)
-	}
+	s.project(task)
 	return nil
 }
 
@@ -407,9 +422,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 		return err
 	}
 
-	if s.projector != nil {
-		_ = s.projector.ProjectTask(task)
-	}
+	s.project(task)
 	return nil
 }
 
@@ -639,9 +652,7 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 		return err
 	}
 
-	if s.projector != nil {
-		_ = s.projector.RemoveTask(id)
-	}
+	s.unproject(id)
 	return nil
 }
 

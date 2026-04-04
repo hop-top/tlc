@@ -89,11 +89,17 @@ func runTasksSync(cmd *cobra.Command, _ []string) error {
 
 // filesystemConfigFromViper reads filesystem projection config from viper.
 func filesystemConfigFromViper() filesystemCfg {
-	enabled := viper.GetBool("storage.filesystem.enabled")
-	if !enabled {
-		// Check if set as bare bool (storage.filesystem: true)
-		if viper.GetBool("storage.filesystem") {
+	enabled := false
+	if viper.IsSet("storage.filesystem.enabled") {
+		enabled = viper.GetBool("storage.filesystem.enabled")
+	} else if viper.IsSet("storage.filesystem") {
+		switch viper.Get("storage.filesystem").(type) {
+		case map[string]interface{}, map[interface{}]interface{}:
+			// Object form implies enabled
 			enabled = true
+		default:
+			// Bare bool form
+			enabled = viper.GetBool("storage.filesystem")
 		}
 	}
 
@@ -152,8 +158,12 @@ func SetupProjector(s *storage.SQLiteStorage) bool {
 			AllProjects:     true,
 			Limit:           0,
 		})
-		if listErr == nil && len(tasks) > 0 {
-			_ = p.RebuildAll(tasks)
+		if listErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to auto-sync task projection: %v\n", listErr)
+		} else if len(tasks) > 0 {
+			if err := p.RebuildAll(tasks); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to rebuild task projection: %v\n", err)
+			}
 		}
 	}
 

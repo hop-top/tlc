@@ -296,8 +296,14 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	innerContent, _ := os.ReadFile(innerGitignore)
 	if !strings.Contains(string(innerContent), "tasks/") {
 		igf, err := os.OpenFile(innerGitignore, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err == nil {
-			if _, err := igf.WriteString("tasks/\n"); err != nil {
+		if err != nil {
+			log.Warn("Failed to open inner .gitignore", "error", err)
+		} else {
+			entry := "tasks/\n"
+			if len(innerContent) > 0 && !strings.HasSuffix(string(innerContent), "\n") {
+				entry = "\n" + entry
+			}
+			if _, err := igf.WriteString(entry); err != nil {
 				log.Warn("Failed to update inner .gitignore", "error", err)
 			}
 			_ = igf.Close()

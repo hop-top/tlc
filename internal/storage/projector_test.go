@@ -155,7 +155,7 @@ func TestProjectorSortPrefix(t *testing.T) {
 	}
 
 	name := entries[0].Name()
-	want := "P0-T-0004-T-0004.json"
+	want := "P0-T-0004.json"
 	if name != want {
 		t.Errorf("symlink name = %q, want %q", name, want)
 	}
