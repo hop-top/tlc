@@ -66,3 +66,27 @@ type TaskFilter struct {
 	Offset     int
 	Limit      int
 }
+
+// TrackRepository defines the interface for track persistence.
+type TrackRepository interface {
+	// CreateTrack persists a new track.
+	CreateTrack(ctx context.Context, track *Track) error
+	// GetTrack retrieves a track by its ID. Returns nil, nil if not found.
+	GetTrack(ctx context.Context, id string) (*Track, error)
+	// UpdateTrack updates an existing track.
+	UpdateTrack(ctx context.Context, track *Track) error
+	// DeleteTrack removes a track by its ID. Fails if tasks reference this track.
+	DeleteTrack(ctx context.Context, id string) error
+	// ListTracks returns a list of tracks matching the query parameters.
+	ListTracks(ctx context.Context, query TrackQuery) ([]*Track, error)
+}
+
+// TrackQuery defines filters for listing tracks.
+type TrackQuery struct {
+	Status      []TrackStatus
+	Type        string
+	ProjectID   *string
+	Limit       int
+	Offset      int
+	AllProjects bool // If true, don't filter by current project
+}

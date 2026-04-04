@@ -64,6 +64,16 @@ var TaskClaimCmd = &cobra.Command{
 				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
 				continue
 			}
+
+			// Auto-transition track pending → active on claim.
+			if task.TrackID != nil && *task.TrackID != "" {
+				svc := core.NewTrackService(res.Storage, res.Storage)
+				if transErr := svc.AutoTransitionOnTaskClaim(ctx, *task.TrackID); transErr != nil {
+					_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+						"Warning: track auto-transition failed: %v\n", transErr)
+				}
+			}
+
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", task.ID)
 		}
 		if len(errs) > 0 {

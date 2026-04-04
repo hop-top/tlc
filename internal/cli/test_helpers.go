@@ -286,6 +286,10 @@ func resetTaskFlags() {
 	taskUpdateAddTags = []string{}
 	taskUpdateRemoveTags = []string{}
 
+	taskTrack = ""
+	taskListTrack = ""
+	taskUpdateTrack = ""
+
 	taskDeleteYes = false
 	taskGraphFormat = ""
 	taskClaimNote = ""
@@ -311,6 +315,9 @@ func resetTaskFlags() {
 	logSortDirection = ""
 	logAll = false
 
+	// Reset track flags.
+	resetTrackFlags()
+
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
 		TaskCreateCmd, TaskListCmd, TaskGraphCmd, TaskStaleCmd, TaskShowCmd,
@@ -320,6 +327,8 @@ func resetTaskFlags() {
 		TagCmd, TagListCmd,
 		logCmd,
 		aliasAddCmd, aliasRemoveCmd,
+		trackCreateCmd, trackUpdateCmd, trackArchiveCmd, trackAbandonCmd, trackDeleteCmd,
+		trackListCmd, trackShowCmd, trackSummaryCmd,
 	} {
 		if cmd != nil {
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {

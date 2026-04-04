@@ -160,6 +160,30 @@ var TaskUpdateCmd = &cobra.Command{
 				changed = true
 			}
 
+			if cmd.Flags().Changed("track") {
+				if taskUpdateTrack == "-" || taskUpdateTrack == "" {
+					task.TrackID = nil
+				} else {
+					track, trackErr := s.GetTrack(ctx, taskUpdateTrack)
+					if trackErr != nil {
+						errs = append(errs, fmt.Sprintf(
+							"%s: failed to look up track %q: %v; run 'tlc track list' to see available tracks",
+							task.ID, taskUpdateTrack, trackErr,
+						))
+						continue
+					}
+					if track == nil {
+						errs = append(errs, fmt.Sprintf(
+							"%s: track %q not found; run 'tlc track list' to see available tracks",
+							task.ID, taskUpdateTrack,
+						))
+						continue
+					}
+					task.TrackID = &taskUpdateTrack
+				}
+				changed = true
+			}
+
 			if !changed {
 				continue
 			}
@@ -316,6 +340,7 @@ func init() {
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateBlocked, "blocked", "", "Set blocked reason")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateUnblock, "unblock", false, "Clear blocked reason")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateTimeout, "timeout", "", "Stale timeout (e.g. 2h, 30m)")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateTrack, "track", "", "Link to track ID (use '-' to unlink)")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 }

@@ -85,6 +85,32 @@ var TaskListCmd = &cobra.Command{
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: normalized})
 		}
 
+		// Multi-track filter: parse comma-separated qualified IDs.
+		var trackQIDs []core.QualifiedTrackID
+		if taskListTrack != "" {
+			trackQIDs = core.ParseMultiTrackIDs(taskListTrack)
+			if len(trackQIDs) == 1 && trackQIDs[0].IsLocal() {
+				// Single local track ID: exact match via SQL.
+				query.Filters = append(query.Filters, core.FieldFilter{
+					Field: "track_id", Operator: core.OpEq,
+					Value: trackQIDs[0].TrackID,
+				})
+				trackQIDs = nil // no post-query filter needed
+			} else if len(trackQIDs) > 0 {
+				// Multiple or qualified IDs: pre-filter by track IDs via IN,
+				// then post-filter by project for qualified entries.
+				var ids []string
+				for _, q := range trackQIDs {
+					ids = append(ids, q.TrackID)
+				}
+				query.Filters = append(query.Filters, core.FieldFilter{
+					Field:    "track_id",
+					Operator: core.OpIn,
+					Value:    strings.Join(ids, ","),
+				})
+			}
+		}
+
 		// Workspace mode: query across workspace projects.
 		if cmd.Flags().Changed("workspace") {
 			return runTaskListWorkspace(cmd, ctx, query)
@@ -143,6 +169,11 @@ var TaskListCmd = &cobra.Command{
 				filtered = append(filtered, t)
 			}
 			tasks = filtered
+		}
+
+		// Post-query filter for qualified track IDs (project-scoped).
+		if len(trackQIDs) > 0 {
+			tasks = filterByQualifiedTracks(tasks, trackQIDs)
 		}
 
 		if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
@@ -301,6 +332,7 @@ func init() {
 	TaskListCmd.Flags().BoolVar(&taskListBlocked, "blocked", false, "Show only blocked tasks")
 	TaskListCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority (P0, P1, P2, P3)")
 	TaskListCmd.Flags().StringSliceVar(&taskListBlockedBy, "blocked-by", []string{}, "Show only tasks blocked by the given task IDs")
+	TaskListCmd.Flags().StringVar(&taskListTrack, "track", "", "Filter by track ID")
 }
 
 // taskBlockedByAny reports whether t is blocked by any of the given IDs.
@@ -314,4 +346,32 @@ func taskBlockedByAny(t *core.Task, ids []string) bool {
 		}
 	}
 	return false
+}
+
+// filterByQualifiedTracks returns tasks matching any of the qualified track IDs.
+// Local QIDs match any task with that track_id regardless of project.
+// Qualified QIDs match only tasks whose track_id and project_id both match.
+func filterByQualifiedTracks(tasks []*core.Task, qids []core.QualifiedTrackID) []*core.Task {
+	filtered := tasks[:0]
+	for _, t := range tasks {
+		if t.TrackID == nil || *t.TrackID == "" {
+			continue
+		}
+		for _, q := range qids {
+			if *t.TrackID != q.TrackID {
+				continue
+			}
+			if q.IsLocal() {
+				filtered = append(filtered, t)
+				break
+			}
+			// Qualified: must also match project.
+			projID := q.ProjectID()
+			if t.ProjectID != nil && *t.ProjectID == projID {
+				filtered = append(filtered, t)
+				break
+			}
+		}
+	}
+	return filtered
 }

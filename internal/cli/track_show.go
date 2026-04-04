@@ -1,0 +1,272 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/core"
+)
+
+var trackShowCmd = &cobra.Command{
+	Use:   "show <id>",
+	Short: "Show track details",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runTrackShow,
+}
+
+func runTrackShow(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	id := args[0]
+
+	s, err := getStorage()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = s.Close() }()
+
+	svc := core.NewTrackService(s, s)
+	staleThreshold := viper.GetDuration("tracks.stale_threshold")
+	if staleThreshold == 0 {
+		staleThreshold = 48 * time.Hour
+	}
+	track, flags, progress, err := svc.GetTrackWithState(ctx, id, staleThreshold)
+	if err != nil {
+		return err
+	}
+
+	// Fetch linked tasks for phase breakdown display.
+	tasks, err := s.ListTasks(ctx, core.Query{
+		Filters: []core.FieldFilter{
+			{Field: "track_id", Operator: core.OpEq, Value: id},
+		},
+		AllProjects: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list linked tasks: %w", err)
+	}
+
+	format := viper.GetString("output.format")
+	switch format {
+	case formatJSON:
+		return renderTrackShowJSON(cmd.OutOrStdout(), track, flags, progress, tasks)
+	case formatYAML:
+		return renderTrackShowYAML(cmd.OutOrStdout(), track, flags, progress, tasks)
+	default:
+		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks)
+	}
+	return nil
+}
+
+// trackShowOutput is the structured output for JSON/YAML rendering.
+type trackShowOutput struct {
+	ID        string              `json:"id" yaml:"id"`
+	Title     string              `json:"title" yaml:"title"`
+	Type      string              `json:"type" yaml:"type"`
+	Status    string              `json:"status" yaml:"status"`
+	State     []string            `json:"state" yaml:"state"`
+	Assignee  string              `json:"assignee" yaml:"assignee"`
+	CreatedAt string              `json:"created_at" yaml:"created_at"`
+	UpdatedAt string              `json:"updated_at" yaml:"updated_at"`
+	Progress  *core.TrackProgress `json:"progress" yaml:"progress"`
+}
+
+func buildTrackShowOutput(
+	t *core.Track,
+	flags []core.TrackStateFlag,
+	progress *core.TrackProgress,
+) trackShowOutput {
+	stateStrs := make([]string, len(flags))
+	for i, f := range flags {
+		stateStrs[i] = string(f)
+	}
+	assignee := "-"
+	if t.AssignedTo != nil && *t.AssignedTo != "" {
+		assignee = "@" + *t.AssignedTo
+	}
+	return trackShowOutput{
+		ID:        t.ID,
+		Title:     t.Title,
+		Type:      t.Type,
+		Status:    string(t.Status),
+		State:     stateStrs,
+		Assignee:  assignee,
+		CreatedAt: t.CreatedAt.Format("2006-01-02"),
+		UpdatedAt: t.UpdatedAt.Format("2006-01-02"),
+		Progress:  progress,
+	}
+}
+
+func renderTrackShowJSON(
+	w io.Writer,
+	t *core.Track,
+	flags []core.TrackStateFlag,
+	progress *core.TrackProgress,
+	_ []*core.Task,
+) error {
+	out := buildTrackShowOutput(t, flags, progress)
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal track to JSON: %w", err)
+	}
+	_, _ = fmt.Fprintln(w, string(data))
+	return nil
+}
+
+func renderTrackShowYAML(
+	w io.Writer,
+	t *core.Track,
+	flags []core.TrackStateFlag,
+	progress *core.TrackProgress,
+	_ []*core.Task,
+) error {
+	out := buildTrackShowOutput(t, flags, progress)
+	data, err := yaml.Marshal(out)
+	if err != nil {
+		return fmt.Errorf("failed to marshal track to YAML: %w", err)
+	}
+	_, _ = fmt.Fprintln(w, string(data))
+	return nil
+}
+
+func renderTrackShowDetail(
+	w io.Writer,
+	t *core.Track,
+	flags []core.TrackStateFlag,
+	progress *core.TrackProgress,
+	tasks []*core.Task,
+) {
+	// Header
+	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", t.ID)))
+	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)
+
+	stateStrs := make([]string, len(flags))
+	for i, f := range flags {
+		stateStrs[i] = string(f)
+	}
+	assignee := "-"
+	if t.AssignedTo != nil && *t.AssignedTo != "" {
+		assignee = "@" + *t.AssignedTo
+	}
+
+	_, _ = fmt.Fprintf(w, "%s %s    %s %s    %s %s    %s %s\n",
+		labelStyle.Render("Type:"), t.Type,
+		lipgloss.NewStyle().Foreground(mutedColor).Render("Status:"),
+		string(t.Status),
+		lipgloss.NewStyle().Foreground(mutedColor).Render("State:"),
+		strings.Join(stateStrs, ","),
+		lipgloss.NewStyle().Foreground(mutedColor).Render("Assignee:"),
+		assignee,
+	)
+
+	_, _ = fmt.Fprintf(w, "%s %s    %s %s\n",
+		labelStyle.Render("Created:"), t.CreatedAt.Format("2006-01-02"),
+		lipgloss.NewStyle().Foreground(mutedColor).Render("Updated:"),
+		t.UpdatedAt.Format("2006-01-02"),
+	)
+
+	// Progress summary
+	if progress.TotalTasks > 0 {
+		pct := 0
+		if progress.TotalTasks > 0 {
+			pct = progress.CompletedTasks * 100 / progress.TotalTasks
+		}
+		_, _ = fmt.Fprintf(w, "\nProgress: %d/%d tasks (%d%%)\n",
+			progress.CompletedTasks, progress.TotalTasks, pct,
+		)
+	} else {
+		_, _ = fmt.Fprintln(w, "\nProgress: no tasks linked")
+	}
+
+	// Phase breakdown
+	if len(progress.Phases) > 0 {
+		// Build phase -> tasks map
+		phaseTasks := buildPhaseTasks(tasks)
+
+		for _, phase := range progress.Phases {
+			checkmark := ""
+			if phase.Total > 0 && phase.Completed == phase.Total {
+				checkmark = " " + doneStyle.Render("\u2713")
+			}
+			label := phase.Label
+			if label == "" {
+				label = fmt.Sprintf("Phase %d", phase.Phase)
+			}
+			_, _ = fmt.Fprintf(w, "\n%s %d \u2014 %-18s %d/%d%s\n",
+				lipgloss.NewStyle().Bold(true).Render("Phase"),
+				phase.Phase, label,
+				phase.Completed, phase.Total, checkmark,
+			)
+
+			// Show tasks in this phase.
+			for _, task := range phaseTasks[phase.Phase] {
+				renderPhaseTask(w, task)
+			}
+		}
+	}
+
+	// Unphased tasks
+	_, _ = fmt.Fprintln(w, "\nUnphased")
+	if len(progress.Unphased) == 0 {
+		_, _ = fmt.Fprintln(w, "  (none)")
+	} else {
+		for _, task := range progress.Unphased {
+			renderPhaseTask(w, task)
+		}
+	}
+}
+
+// renderPhaseTask renders a single task line within a phase/unphased section.
+func renderPhaseTask(w io.Writer, task *core.Task) {
+	statusStr := string(task.Status)
+	styled := statusStr
+	switch task.Status {
+	case core.StatusDone:
+		styled = doneStyle.Render("[DONE]")
+	case core.StatusInProgress:
+		styled = inProgressStyle.Render("[IN_PROGRESS]")
+	case core.StatusSkipped:
+		styled = skippedStyle.Render("[SKIPPED]")
+	default:
+		styled = fmt.Sprintf("[%s]", statusStr)
+	}
+	_, _ = fmt.Fprintf(w, "  %-10s %-15s %s\n", task.ID, styled, task.Title)
+}
+
+// buildPhaseTasks groups tasks by their phase tag number.
+func buildPhaseTasks(tasks []*core.Task) map[int][]*core.Task {
+	result := make(map[int][]*core.Task)
+	for _, t := range tasks {
+		phase, ok := extractPhaseNum(t.Tags)
+		if !ok {
+			continue
+		}
+		result[phase] = append(result[phase], t)
+	}
+	return result
+}
+
+// extractPhaseNum extracts the phase number from a task's tags.
+func extractPhaseNum(tags []string) (int, bool) {
+	for _, tag := range tags {
+		if !strings.HasPrefix(tag, "phase:") {
+			continue
+		}
+		var n int
+		if _, err := fmt.Sscanf(tag, "phase:%d", &n); err == nil && n > 0 {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func init() {
+	TrackCmd.AddCommand(trackShowCmd)
+}
