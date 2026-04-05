@@ -38,7 +38,5 @@ resolve correctly so typos don't force LLM escalation.
 - `internal/cli/prompt_fuzzy_test.go`
   - `TestFuzzyMatchNoun_*`
   - `TestLevenshteinDistance_*`
-- `internal/cli/prompt_fuzzy_test.go`
-  - `TestFuzzyMatchNoun`
 - `internal/cli/task_prompt_e2e_test.go`
   - `TestCrossDomainE2E_FuzzyTypoNoLLM`

@@ -7,7 +7,7 @@
   - Keyword tokenizer + vocabulary layer (verbs, nouns, modifiers)
   - Fuzzy noun/verb matching via Levenshtein distance (typo-tolerant, distance ≤2)
   - Confidence scoring: exact match=1.0, distance-1=0.9, distance-2=0.8
-  - Aggregate patterns: "count active tracks" → `track list --status active --counters`
+  - Aggregate patterns: "count active tracks" → `track list --status active`
   - Pipeline: regex classifier → cross-domain classifier → LLM (LLM only as last resort)
 
 ### Added
