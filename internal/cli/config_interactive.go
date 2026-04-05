@@ -40,6 +40,12 @@ func runWizard(
 		if err != nil {
 			return nil, err
 		}
+		if val != "" && kh.PostValidate != nil {
+			val, err = kh.PostValidate(val, w)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if val != "" && val != current {
 			changes[kh.Key] = val
 		}

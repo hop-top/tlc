@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"sort"
 	"strings"
 
@@ -13,15 +14,21 @@ type suggestion struct {
 	Value string
 }
 
+// postValidateFunc validates a chosen value after selection.
+// Returns (final value, error). May prompt user for remediation.
+// w is the output writer for interactive remediation.
+type postValidateFunc func(value string, w io.Writer) (string, error)
+
 // keyHint describes a single config key for the interactive wizard.
 type keyHint struct {
-	Key         string
-	Description string
-	Enum        []string     // nil = free text
-	Suggestions []suggestion // shown as huh.Select options + "Custom..."
-	IsBool      bool
-	IsDuration  bool
-	IsMap       bool // skipped in wizard
+	Key          string
+	Description  string
+	Enum         []string        // nil = free text
+	Suggestions  []suggestion    // shown as huh.Select options + "Custom..."
+	PostValidate postValidateFunc // optional; runs after value selected
+	IsBool       bool
+	IsDuration   bool
+	IsMap        bool // skipped in wizard
 }
 
 // groupEntry describes a named group of config keys.
@@ -251,6 +258,7 @@ func defaultKeyHints() map[string]keyHint {
 				{"OpenAI — o3", "openai://o3"},
 				{"Anthropic — Claude Sonnet 4", "anthropic://claude-sonnet-4-20250514"},
 			},
+			PostValidate: validateLLMProvider,
 		},
 		"tracks.stale_threshold": {
 			Key:         "tracks.stale_threshold",
