@@ -29,6 +29,8 @@ coordination, and declarative flow execution.
 - Monitor work stream progress → `tlc track list`
 - View phase breakdown → `tlc track show`
 - Check project health → `tlc track summary`
+- Use natural language → `tlc task "complete the auth task"`
+- Get enriched context for LLM → `tlc task prompt <id>`
 
 **Do not use:** built-in TaskCreate/TaskUpdate/TaskGet/TaskList tools.
 Use `tlc` exclusively for all task operations.
@@ -51,6 +53,8 @@ Use `tlc` exclusively for all task operations.
 | `tlc task assign <assignee> <id> [<id>...]` | Assign to someone (assignee first) |
 | `tlc task unassign <id> [<id>...] --note "reason"` | Remove assignee |
 | `tlc task delete <id> [<id>...] --yes` | Delete (skip prompt) |
+| `tlc task "<prompt>"` | NL → classify → route → execute |
+| `tlc task prompt <id>` | Enriched context dump (markdown/JSON) |
 
 ### Track lifecycle
 
@@ -201,6 +205,38 @@ tlc track update browser-rendering --add-plan docs/plans/rendering.md
 # Project health
 tlc track summary
 ```
+
+---
+
+### 10 · Natural language prompt
+
+```bash
+# Classifier handles common patterns (confidence 1.0)
+tlc task "complete T-42"
+tlc task "list my tasks"
+tlc task "show T-42"
+tlc task "assign T-42 to alice"
+
+# Complex prompts route to LLM (needs TLC_PROMPT_LLM)
+tlc task "create 3 tasks for auth: login, logout, refresh"
+
+# Flags
+tlc task "..." --dry-run    # preview resolved commands
+tlc task "..." --execute    # skip confirmation
+tlc task "..." --json       # output as JSON
+```
+
+Configure: `export TLC_PROMPT_LLM="ollama://llama3.2"`
+
+### 11 · Context dump for agents
+
+```bash
+tlc task prompt T-0042           # markdown (default)
+tlc task prompt T-0042 --json    # structured JSON
+```
+
+Includes: task fields, blocked-by/blocking, track + phase,
+description (audit block stripped), recent activity log.
 
 ---
 
