@@ -1,13 +1,13 @@
 package cli
 
-// VerbClass is the semantic class for a verb.
-type VerbClass string
+// VerbCategory is the semantic class for a verb.
+type VerbCategory string
 
 const (
-	VerbQuery    VerbClass = "query"
-	VerbCreate   VerbClass = "create"
-	VerbComplete VerbClass = "complete"
-	VerbDestroy  VerbClass = "destroy"
+	VerbQuery    VerbCategory = "query"
+	VerbCreate   VerbCategory = "create"
+	VerbComplete VerbCategory = "complete"
+	VerbDestroy  VerbCategory = "destroy"
 )
 
 // NounDomain is the CLI domain for a noun.
@@ -23,8 +23,8 @@ const (
 // ModifierFlag is the CLI flag/modifier for a modifier word.
 type ModifierFlag string
 
-// verbVocab maps raw verb strings to VerbClass.
-var verbVocab = map[string]VerbClass{
+// VerbAliases maps raw verb strings to VerbCategory.
+var VerbAliases = map[string]VerbCategory{
 	"list":  VerbQuery,
 	"show":  VerbQuery,
 	"count": VerbQuery,
@@ -43,8 +43,8 @@ var verbVocab = map[string]VerbClass{
 	"drop":   VerbDestroy,
 }
 
-// nounVocab maps raw noun strings to NounDomain.
-var nounVocab = map[string]NounDomain{
+// NounAliases maps raw noun strings to NounDomain.
+var NounAliases = map[string]NounDomain{
 	"task":     DomainTask,
 	"tasks":    DomainTask,
 	"todo":     DomainTask,
@@ -62,8 +62,8 @@ var nounVocab = map[string]NounDomain{
 	"projects": DomainProject,
 }
 
-// modifierVocab maps raw modifier strings to ModifierFlag.
-var modifierVocab = map[string]ModifierFlag{
+// ModifierAliases maps raw modifier strings to ModifierFlag.
+var ModifierAliases = map[string]ModifierFlag{
 	"active":    "status:active",
 	"wip":       "status:active",
 	"blocked":   "blocked",
@@ -76,20 +76,20 @@ var modifierVocab = map[string]ModifierFlag{
 	"completed": "status:done",
 }
 
-// LookupVerb returns the VerbClass for a raw verb string.
-func LookupVerb(word string) (VerbClass, bool) {
-	v, ok := verbVocab[word]
+// LookupVerb returns the VerbCategory for a raw verb string.
+func LookupVerb(word string) (VerbCategory, bool) {
+	v, ok := VerbAliases[word]
 	return v, ok
 }
 
 // LookupNoun returns the NounDomain for a raw noun string.
 func LookupNoun(word string) (NounDomain, bool) {
-	n, ok := nounVocab[word]
+	n, ok := NounAliases[word]
 	return n, ok
 }
 
 // LookupModifier returns the ModifierFlag for a raw modifier string.
 func LookupModifier(word string) (ModifierFlag, bool) {
-	m, ok := modifierVocab[word]
+	m, ok := ModifierAliases[word]
 	return m, ok
 }

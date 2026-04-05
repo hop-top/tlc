@@ -5,7 +5,7 @@ import "testing"
 func TestVocabVerbLookup(t *testing.T) {
 	tests := []struct {
 		word string
-		want VerbClass
+		want VerbCategory
 		ok   bool
 	}{
 		{"list", VerbQuery, true},

@@ -7,50 +7,44 @@ import (
 
 // PromptTokens holds the structured result of tokenizing a prompt.
 type PromptTokens struct {
-	Verb      string       // raw verb word matched (e.g. "count")
-	VerbClass VerbClass    // semantic class (e.g. VerbQuery)
-	Noun      string       // raw noun word matched (e.g. "tracks")
-	Domain    NounDomain   // domain class (e.g. DomainTrack)
-	Modifiers []string     // canonical modifier flags (e.g. ["status:active"])
-	Remaining string       // leftover tokens not matched to any category
+	Verb      string   // raw verb word matched (e.g. "count")
+	Noun      string   // raw noun word matched (e.g. "tracks")
+	Modifiers []string // canonical modifier flags (e.g. ["status:active"])
+	Rest      []string // unrecognized words not matched to any category
 }
 
 // TokenizePrompt splits prompt into structured tokens.
 // Word order is flexible — verb, noun, and modifiers are detected positionally.
-// Returns nil if no noun is found (noun is required for a valid result).
-func TokenizePrompt(prompt string) *PromptTokens {
+// Returns zero-value PromptTokens with empty Noun if no noun is found.
+func TokenizePrompt(prompt string) PromptTokens {
 	text := strings.TrimSpace(prompt)
 	if text == "" {
-		return nil
+		return PromptTokens{}
 	}
 
 	words := strings.Fields(strings.ToLower(text))
 	if len(words) == 0 {
-		return nil
+		return PromptTokens{}
 	}
 
 	var verbWord string
-	var verbClass VerbClass
 	var nounWord string
-	var domain NounDomain
 	var modifiers []string
-	var remaining []string
+	var rest []string
 	used := make([]bool, len(words))
 
 	// First pass: find verb and noun (take first match for each)
 	for i, w := range words {
 		if verbWord == "" {
-			if vc, ok := LookupVerb(w); ok {
+			if _, ok := LookupVerb(w); ok {
 				verbWord = w
-				verbClass = vc
 				used[i] = true
 				continue
 			}
 		}
 		if nounWord == "" {
-			if nd, ok := LookupNoun(w); ok {
+			if _, ok := LookupNoun(w); ok {
 				nounWord = w
-				domain = nd
 				used[i] = true
 			}
 		}
@@ -70,29 +64,22 @@ func TokenizePrompt(prompt string) *PromptTokens {
 	// Collect remaining unused words
 	for i, w := range words {
 		if !used[i] {
-			remaining = append(remaining, w)
+			rest = append(rest, w)
 		}
 	}
 
-	// Require at least a noun to return a result
+	// Require at least a noun to return a meaningful result
 	if nounWord == "" {
-		return nil
+		return PromptTokens{}
 	}
 
 	// Sort modifiers for deterministic output
 	sort.Strings(modifiers)
 
-	var rem string
-	if len(remaining) > 0 {
-		rem = strings.Join(remaining, " ")
-	}
-
-	return &PromptTokens{
+	return PromptTokens{
 		Verb:      verbWord,
-		VerbClass: verbClass,
 		Noun:      nounWord,
-		Domain:    domain,
 		Modifiers: modifiers,
-		Remaining: rem,
+		Rest:      rest,
 	}
 }

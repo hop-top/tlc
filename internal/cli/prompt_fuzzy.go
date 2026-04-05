@@ -63,63 +63,59 @@ func confidenceForDistance(d int) float64 {
 }
 
 // FuzzyMatchVerb finds the best verb match within Levenshtein distance ≤2.
-// Returns (matched word, VerbClass, confidence) or ("", "", 0) if no match.
-func FuzzyMatchVerb(word string) (string, VerbClass, float64) {
+// Returns (VerbCategory, confidence) or ("", 0) if no match.
+func FuzzyMatchVerb(word string) (VerbCategory, float64) {
 	if word == "" {
-		return "", "", 0
+		return "", 0
 	}
 	// Try exact first
 	if vc, ok := LookupVerb(word); ok {
-		return word, vc, 1.0
+		return vc, 1.0
 	}
 
-	bestWord := ""
-	var bestClass VerbClass
+	var bestClass VerbCategory
 	bestDist := 3 // >2 means no match
 
-	for candidate, vc := range verbVocab {
+	for candidate, vc := range VerbAliases {
 		d := LevenshteinDistance(word, candidate)
 		if d < bestDist {
 			bestDist = d
-			bestWord = candidate
 			bestClass = vc
 		}
 	}
 
 	conf := confidenceForDistance(bestDist)
 	if conf == 0 {
-		return "", "", 0
+		return "", 0
 	}
-	return bestWord, bestClass, conf
+	return bestClass, conf
 }
 
 // FuzzyMatchNoun finds the best noun match within Levenshtein distance ≤2.
-// Returns (matched word, NounDomain, confidence) or ("", "", 0) if no match.
-func FuzzyMatchNoun(word string) (string, NounDomain, float64) {
+// Returns (NounDomain, confidence) or ("", 0) if no match.
+func FuzzyMatchNoun(word string) (NounDomain, float64) {
 	if word == "" {
-		return "", "", 0
+		return "", 0
 	}
 	// Try exact first
 	if nd, ok := LookupNoun(word); ok {
-		return word, nd, 1.0
+		return nd, 1.0
 	}
 
-	bestWord := ""
 	var bestDomain NounDomain
 	bestDist := 3 // >2 means no match
 
-	for candidate, nd := range nounVocab {
+	for candidate, nd := range NounAliases {
 		d := LevenshteinDistance(word, candidate)
 		if d < bestDist {
 			bestDist = d
-			bestWord = candidate
 			bestDomain = nd
 		}
 	}
 
 	conf := confidenceForDistance(bestDist)
 	if conf == 0 {
-		return "", "", 0
+		return "", 0
 	}
-	return bestWord, bestDomain, conf
+	return bestDomain, conf
 }
