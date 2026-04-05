@@ -30,6 +30,13 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 - **Multi-Agent Collaboration**: Safe coordination between humans and AI agents using task claiming, responsibility transfer, delegation protocols, and time-bounded ownership leases (TTL).
 - **Deterministic Task Execution**: Robust execution contract with stdout/stderr capture, error normalization, and configurable timeouts.
 - **Audit-Ready Logging**: A canonical, reverse-chronological `CHANGELOG` capturing every state transition, collaboration action, and execution attempt.
+- **Natural Language Interface**: Type `tlc task "complete the auth task"`
+  instead of memorizing exact syntax. Local classifier handles common
+  patterns instantly; LLM router (via `hop.top/kit/llm`) resolves complex
+  prompts with confidence-gated execution and clarification.
+- **Agent Context Dump**: `tlc task prompt <id>` renders enriched task
+  context (deps, track info, audit log) in markdown or JSON optimized
+  for LLM consumption.
 - **Advanced Query Engine**: Power-user filtering with intuitive shorthands (`@me`, `#tag`), logical operators (AND/OR/NOT), and metadata-aware searching.
 - **External System Sync**: Bidirectional integration with GitHub Issues, Jira, and Linear while maintaining a strict boundary for internal agent tasks.
 - **Auto-Archiving**: Automatically clean up your workspace by archiving completed tasks after a configurable duration (default: 7 days), keeping your active list focused and high-performance.
@@ -205,6 +212,42 @@ This project uses TLC for task tracking.
 Setup: `tlc init`
 Tool definition: `tlc help llm` (or `--format openai` for OpenAI platforms)
 ```
+
+**Natural language prompts:**
+
+Use freeform text instead of exact CLI syntax:
+
+```bash
+# Classifier handles common patterns instantly (confidence 1.0)
+tlc task "complete T-42"
+tlc task "list my tasks"
+tlc task "show T-42"
+
+# Complex prompts route to LLM (requires LLM provider config)
+tlc task "create 3 tasks for auth: login, logout, refresh"
+
+# Flags
+tlc task "mark the auth task done" --dry-run   # preview only
+tlc task "delete T-42" --execute               # skip confirmation
+tlc task "list blocked tasks" --json           # JSON output
+```
+
+Configure the LLM provider:
+```bash
+export TLC_PROMPT_LLM="ollama://llama3.2"  # or anthropic://, openai://
+```
+
+**Agent context dump:**
+
+Get enriched task context for LLM consumption:
+
+```bash
+tlc task prompt T-0042           # markdown (default)
+tlc task prompt T-0042 --json    # structured JSON
+```
+
+Output includes: task fields, blocked-by/blocking summaries, track
+details with phase, and recent audit log entries.
 
 ### Managing Tasks
 List active tasks (IN_PROGRESS first, then TODO):
@@ -519,6 +562,7 @@ Detailed specifications can be found in the `docs/` directory:
 
 **Plans:**
 - [Track Registry Design](docs/plans/2026-04-03-track-registry-design.md)
+- [Task Prompt Design](docs/plans/2026-04-04-task-prompt-design.md)
 
 **Specifications:**
 - [Task CRUD Spec](docs/task-crud-spec-0.1.md)
