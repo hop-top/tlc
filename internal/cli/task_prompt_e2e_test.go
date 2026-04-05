@@ -381,3 +381,125 @@ func TestTaskPromptE2E_DestructiveGuardReject(t *testing.T) {
 		}
 	})
 }
+
+// noLLMRoutePromptFn is a routePromptFn replacement that panics if called,
+// ensuring the cross-domain classifier handled the prompt without LLM.
+func noLLMRoutePromptFn(_ context.Context, prompt string, _ []byte) ([]ResolvedCommand, string, error) {
+	panic("routePromptFn called unexpectedly for prompt: " + prompt)
+}
+
+// TestCrossDomainE2E_TrackQueryNoLLM verifies that "list active tracks"
+// resolves via ClassifyPromptCrossDomain with confidence ≥ 0.9, no LLM call.
+func TestCrossDomainE2E_TrackQueryNoLLM(t *testing.T) {
+	origRoute := routePromptFn
+	routePromptFn = noLLMRoutePromptFn
+	defer func() { routePromptFn = origRoute }()
+
+	cmds := ClassifyPromptCrossDomain("list active tracks")
+	if len(cmds) == 0 {
+		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'list active tracks'")
+	}
+	rc := cmds[0]
+	if rc.Cmd != "track" {
+		t.Errorf("expected Cmd 'track', got %q", rc.Cmd)
+	}
+	if len(rc.Args) == 0 || rc.Args[0] != "list" {
+		t.Errorf("expected args[0] 'list', got %v", rc.Args)
+	}
+	foundStatus := false
+	for i, a := range rc.Args {
+		if a == "--status" && i+1 < len(rc.Args) && rc.Args[i+1] == "active" {
+			foundStatus = true
+		}
+	}
+	if !foundStatus {
+		t.Errorf("expected '--status active' in args, got %v", rc.Args)
+	}
+	if rc.Confidence < 0.9 {
+		t.Errorf("expected confidence ≥ 0.9, got %f", rc.Confidence)
+	}
+}
+
+// TestCrossDomainE2E_FuzzyTypoNoLLM verifies that "list trakcs" resolves via
+// fuzzy match (noun distance 1, confidence ~0.9), no LLM call.
+func TestCrossDomainE2E_FuzzyTypoNoLLM(t *testing.T) {
+	origRoute := routePromptFn
+	routePromptFn = noLLMRoutePromptFn
+	defer func() { routePromptFn = origRoute }()
+
+	cmds := ClassifyPromptCrossDomain("list trakcs")
+	if len(cmds) == 0 {
+		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'list trakcs'")
+	}
+	rc := cmds[0]
+	if rc.Cmd != "track" {
+		t.Errorf("expected Cmd 'track', got %q", rc.Cmd)
+	}
+	if len(rc.Args) == 0 || rc.Args[0] != "list" {
+		t.Errorf("expected args[0] 'list', got %v", rc.Args)
+	}
+	// Fuzzy noun match: "trakcs"→"tracks" is Levenshtein distance 2 (transposition
+	// counts as 2 in standard Levenshtein) → conf 0.8; exact verb → 1.0; product 0.8.
+	if rc.Confidence < 0.75 {
+		t.Errorf("expected confidence ≥ 0.75 (fuzzy), got %f", rc.Confidence)
+	}
+}
+
+// TestCrossDomainE2E_FlowRunNoLLM verifies that "run deploy flow" resolves to
+// flow run deploy, no LLM call.
+func TestCrossDomainE2E_FlowRunNoLLM(t *testing.T) {
+	origRoute := routePromptFn
+	routePromptFn = noLLMRoutePromptFn
+	defer func() { routePromptFn = origRoute }()
+
+	cmds := ClassifyPromptCrossDomain("run deploy flow")
+	if len(cmds) == 0 {
+		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'run deploy flow'")
+	}
+	rc := cmds[0]
+	if rc.Cmd != "flow" {
+		t.Errorf("expected Cmd 'flow', got %q", rc.Cmd)
+	}
+	if len(rc.Args) < 2 || rc.Args[0] != "run" || rc.Args[1] != "deploy" {
+		t.Errorf("expected args ['run', 'deploy', ...], got %v", rc.Args)
+	}
+	if rc.Confidence < 0.9 {
+		t.Errorf("expected confidence ≥ 0.9, got %f", rc.Confidence)
+	}
+}
+
+// TestCrossDomainE2E_CountActiveTracksNoLLM verifies that "count active tracks"
+// resolves to track list --status active --counters, no LLM call.
+func TestCrossDomainE2E_CountActiveTracksNoLLM(t *testing.T) {
+	origRoute := routePromptFn
+	routePromptFn = noLLMRoutePromptFn
+	defer func() { routePromptFn = origRoute }()
+
+	cmds := ClassifyPromptCrossDomain("count active tracks")
+	if len(cmds) == 0 {
+		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'count active tracks'")
+	}
+	rc := cmds[0]
+	if rc.Cmd != "track" {
+		t.Errorf("expected Cmd 'track', got %q", rc.Cmd)
+	}
+	foundCounters := false
+	foundStatus := false
+	for i, a := range rc.Args {
+		if a == "--counters" {
+			foundCounters = true
+		}
+		if a == "--status" && i+1 < len(rc.Args) && rc.Args[i+1] == "active" {
+			foundStatus = true
+		}
+	}
+	if !foundCounters {
+		t.Errorf("expected '--counters' in args, got %v", rc.Args)
+	}
+	if !foundStatus {
+		t.Errorf("expected '--status active' in args, got %v", rc.Args)
+	}
+	if rc.Confidence < 0.9 {
+		t.Errorf("expected confidence ≥ 0.9, got %f", rc.Confidence)
+	}
+}

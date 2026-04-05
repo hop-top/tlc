@@ -23,6 +23,10 @@ func init() {
 	TaskCmd.Flags().BoolVar(&taskNLJSON, "json", false, "Output resolved commands as JSON")
 }
 
+// routePromptFn is the function used to call the LLM router.
+// Package-level variable so tests can replace it.
+var routePromptFn = routePrompt
+
 // runTaskNLPrompt is the RunE handler for TaskCmd. It intercepts args that
 // don't match any subcommand and treats them as a natural-language prompt,
 // running the classify -> route -> execute pipeline.
@@ -33,19 +37,25 @@ func runTaskNLPrompt(cmd *cobra.Command, args []string) error {
 
 	prompt := strings.Join(args, " ")
 
-	// Stage 1: regex-based classifier (fast, deterministic).
+	// Stage 1: regex-based classifier (fast, deterministic, task-domain only).
 	cmds := ClassifyPrompt(prompt)
 	if cmds != nil {
 		return handleResolvedCommands(cmd, cmds, prompt)
 	}
 
-	// Stage 2: LLM-backed router (slower, requires schema).
+	// Stage 2: cross-domain NLP classifier (no LLM).
+	cmds = ClassifyPromptCrossDomain(prompt)
+	if cmds != nil {
+		return handleResolvedCommands(cmd, cmds, prompt)
+	}
+
+	// Stage 3: LLM-backed router (slower, requires schema).
 	schemaJSON, err := GenerateTaskSchemaJSON()
 	if err != nil {
 		return fmt.Errorf("failed to generate task schema: %w", err)
 	}
 
-	cmds, clarification, err := routePrompt(cmd.Context(), prompt, schemaJSON)
+	cmds, clarification, err := routePromptFn(cmd.Context(), prompt, schemaJSON)
 	if err != nil {
 		return fmt.Errorf("could not resolve prompt %q; %s", prompt, err)
 	}

@@ -222,7 +222,13 @@ func ClassifyPromptCrossDomain(prompt string) []ResolvedCommand {
 
 	tokens := TokenizePrompt(text)
 
-	// If no noun, we cannot route.
+	// If tokenizer returned nothing (no exact noun), attempt fuzzy noun
+	// recovery directly on the raw words.
+	if tokens.Noun == "" {
+		tokens = fuzzyRecoverFromRaw(text, tokens)
+	}
+
+	// If no noun (exact or fuzzy), we cannot route.
 	if tokens.Noun == "" {
 		return nil
 	}
@@ -307,4 +313,122 @@ func containsString(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// fuzzyRecoverFromRaw re-tokenizes raw text by scanning all words for fuzzy
+// noun matches when exact tokenization found no noun. Returns a PromptTokens
+// with the best fuzzy noun promoted and verb extracted from remaining words.
+func fuzzyRecoverFromRaw(text string, orig PromptTokens) PromptTokens {
+	words := strings.Fields(strings.ToLower(text))
+
+	bestDist := 3
+	bestIdx := -1
+	bestWord := ""
+
+	for i, w := range words {
+		// Skip words that are exact verb or modifier matches — handled by tokenizer.
+		if _, ok := LookupVerb(w); ok {
+			continue
+		}
+		if _, ok := LookupModifier(w); ok {
+			continue
+		}
+		_, conf := FuzzyMatchNoun(w)
+		if conf == 0 {
+			continue
+		}
+		var d int
+		switch conf {
+		case 1.0:
+			d = 0
+		case 0.9:
+			d = 1
+		default:
+			d = 2
+		}
+		if d < bestDist || (d == bestDist && w < bestWord) {
+			bestDist = d
+			bestIdx = i
+			bestWord = w
+		}
+	}
+
+	if bestIdx < 0 {
+		return orig
+	}
+
+	// Re-tokenize with the fuzzy noun word treated as the noun.
+	// Build a synthetic prompt where the fuzzy word is replaced by a known noun
+	// so TokenizePrompt can route it properly. Instead, construct tokens manually.
+	var verbWord string
+	var modifiers []string
+	var rest []string
+
+	for i, w := range words {
+		if i == bestIdx {
+			continue // this is our fuzzy noun
+		}
+		if verbWord == "" {
+			if _, ok := LookupVerb(w); ok {
+				verbWord = w
+				continue
+			}
+		}
+		if mf, ok := LookupModifier(w); ok {
+			modifiers = append(modifiers, string(mf))
+			continue
+		}
+		rest = append(rest, w)
+	}
+
+	return PromptTokens{
+		Verb:      verbWord,
+		Noun:      bestWord,
+		Modifiers: modifiers,
+		Rest:      rest,
+	}
+}
+
+// fuzzyRecoverNoun scans Rest words for a fuzzy noun match (distance ≤2).
+// When found, promotes the best candidate to tokens.Noun and removes it from Rest.
+// The caller is responsible for then using RouteNounToDomain which will pick
+// up the fuzzy conf via FuzzyMatchNoun.
+func fuzzyRecoverNoun(tokens PromptTokens) PromptTokens {
+	bestDist := 3
+	bestIdx := -1
+	bestWord := ""
+
+	for i, w := range tokens.Rest {
+		_, conf := FuzzyMatchNoun(w)
+		if conf == 0 {
+			continue
+		}
+		// Map confidence back to distance for comparison.
+		var d int
+		switch conf {
+		case 1.0:
+			d = 0
+		case 0.9:
+			d = 1
+		default:
+			d = 2
+		}
+		if d < bestDist || (d == bestDist && w < bestWord) {
+			bestDist = d
+			bestIdx = i
+			bestWord = w
+		}
+	}
+
+	if bestIdx < 0 {
+		return tokens
+	}
+
+	// Promote the fuzzy noun word and remove from Rest.
+	tokens.Noun = bestWord
+	rest := make([]string, 0, len(tokens.Rest)-1)
+	rest = append(rest, tokens.Rest[:bestIdx]...)
+	rest = append(rest, tokens.Rest[bestIdx+1:]...)
+	tokens.Rest = rest
+	return tokens
 }
