@@ -7,7 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"hop.top/kit/llm"
+
+	// Register adapters for resolvePromptLLM tests.
+	_ "hop.top/kit/llm/anthropic"
+	_ "hop.top/kit/llm/ollama"
+	_ "hop.top/kit/llm/openai"
 )
 
 // ---------------------------------------------------------------------------
@@ -269,6 +275,88 @@ func TestResolvePromptLLM_NoProvider(t *testing.T) {
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// resolvePromptLLM: env var → provider auth
+// ---------------------------------------------------------------------------
+
+// TestResolvePromptLLM_ViperURI_UsesLoadConfig verifies that when
+// prompt.llm_provider is a full URI (e.g. "openai://gpt-4o"), the
+// resolver uses llm.LoadConfig to merge env var API keys — not just
+// llm.Resolve which ignores env vars.
+func TestResolvePromptLLM_ViperURI_UsesLoadConfig(t *testing.T) {
+	// Set a full URI in viper + API key in env.
+	viper.Set("prompt.llm_provider", "openai://gpt-4o")
+	t.Setenv("OPENAI_API_KEY", "sk-test-key-for-tdd")
+	t.Setenv("TLC_PROMPT_LLM", "")
+	t.Setenv("LLM_PROVIDER", "")
+	defer viper.Set("prompt.llm_provider", "")
+
+	provider, err := resolvePromptLLM()
+	if err != nil {
+		t.Fatalf("resolvePromptLLM failed: %v", err)
+	}
+	defer provider.Close()
+
+	// If the provider resolved without auth error, the API key
+	// was picked up from the env var via LoadConfig.
+	// (anthropic would fail at New() if key missing; openai
+	// succeeds at New() but we can at least confirm no error.)
+}
+
+// TestResolvePromptLLM_BareScheme_NormalizesToURI verifies that a
+// bare scheme name like "openai" (without "://") stored in config
+// is normalized to a valid URI before resolution.
+func TestResolvePromptLLM_BareScheme_NormalizesToURI(t *testing.T) {
+	viper.Set("prompt.llm_provider", "openai")
+	t.Setenv("OPENAI_API_KEY", "sk-test-key-for-tdd")
+	t.Setenv("TLC_PROMPT_LLM", "")
+	t.Setenv("LLM_PROVIDER", "")
+	defer viper.Set("prompt.llm_provider", "")
+
+	provider, err := resolvePromptLLM()
+	if err != nil {
+		// Currently fails: "missing scheme in URI "openai""
+		t.Fatalf("resolvePromptLLM should handle bare scheme: %v", err)
+	}
+	defer provider.Close()
+}
+
+// TestResolvePromptLLM_EnvOverride_UsesLoadConfig verifies that
+// TLC_PROMPT_LLM env var also goes through LoadConfig for key merge.
+func TestResolvePromptLLM_EnvOverride_UsesLoadConfig(t *testing.T) {
+	viper.Set("prompt.llm_provider", "")
+	t.Setenv("TLC_PROMPT_LLM", "openai://gpt-4o")
+	t.Setenv("OPENAI_API_KEY", "sk-test-key-for-tdd")
+	t.Setenv("LLM_PROVIDER", "")
+
+	provider, err := resolvePromptLLM()
+	if err != nil {
+		t.Fatalf("resolvePromptLLM with TLC_PROMPT_LLM failed: %v", err)
+	}
+	defer provider.Close()
+}
+
+// TestResolvePromptLLM_Anthropic_EnvKey verifies that anthropic
+// adapter (which checks key at New()) picks up ANTHROPIC_API_KEY.
+// This fails if resolvePromptLLM uses llm.Resolve instead of LoadConfig,
+// because Resolve doesn't read env vars.
+func TestResolvePromptLLM_Anthropic_EnvKey(t *testing.T) {
+	viper.Set("prompt.llm_provider", "anthropic://claude-sonnet-4-20250514")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+	t.Setenv("TLC_PROMPT_LLM", "")
+	t.Setenv("LLM_PROVIDER", "")
+	t.Setenv("LLM_API_KEY", "")
+	defer viper.Set("prompt.llm_provider", "")
+
+	provider, err := resolvePromptLLM()
+	if err != nil {
+		// Anthropic New() requires API key. If this fails with
+		// "API key required", LoadConfig isn't being used.
+		t.Fatalf("resolvePromptLLM should pick up ANTHROPIC_API_KEY: %v", err)
+	}
+	defer provider.Close()
 }
 
 // ---------------------------------------------------------------------------
