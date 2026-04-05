@@ -278,15 +278,16 @@ func ClassifyPromptCrossDomain(prompt string) []ResolvedCommand {
 		tokens.Verb = extractSpecialVerb(tokens.Rest)
 	}
 
-	// When no verb is found but there are modifiers or a noun, default to
-	// an implicit list/query (e.g., "active tracks", "blocked tasks").
-	if tokens.Verb == "" && len(tokens.Modifiers) > 0 {
-		tokens.Verb = "list"
-	}
-
 	// "run" in Rest means flow run; promote it to Verb and strip from Rest.
 	if tokens.Verb == "" {
 		tokens.Verb, tokens.Rest = extractRunVerb(tokens.Rest)
+	}
+
+	// When no verb is found but there are modifiers or a noun, default to
+	// an implicit list/query (e.g., "active tracks", "blocked tasks",
+	// "incomplete tasks", bare "tasks").
+	if tokens.Verb == "" && (len(tokens.Modifiers) > 0 || tokens.Noun != "") {
+		tokens.Verb = "list"
 	}
 
 	if tokens.Verb == "" {

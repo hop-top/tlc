@@ -390,6 +390,110 @@ func TestBuildCommand_TrackStatusDoneModifier(t *testing.T) {
 	}
 }
 
+// --- New modifier aliases + implicit verb ---
+
+func TestClassifyPromptCrossDomain_IncompleteTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("incomplete tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'incomplete tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+	if cmds[0].Args[0] != "list" {
+		t.Errorf("expected subcommand=list, got %q", cmds[0].Args[0])
+	}
+}
+
+func TestClassifyPromptCrossDomain_IncompletedTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("incompleted tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'incompleted tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+}
+
+func TestClassifyPromptCrossDomain_OpenTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("open tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'open tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+}
+
+func TestClassifyPromptCrossDomain_PendingTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("pending tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'pending tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+}
+
+func TestClassifyPromptCrossDomain_RemainingTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("remaining tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'remaining tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+}
+
+func TestClassifyPromptCrossDomain_UnfinishedTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("unfinished tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'unfinished tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+}
+
+func TestClassifyPromptCrossDomain_OverdueTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("overdue tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'overdue tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+	if !containsArg(cmds[0].Args, "--stale") {
+		t.Errorf("expected --stale in args, got %v", cmds[0].Args)
+	}
+}
+
+func TestClassifyPromptCrossDomain_AverageAgeOfIncompletedTasks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("average age of incompleted tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for 'average age of incompleted tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+	if cmds[0].Args[0] != "list" {
+		t.Errorf("expected subcommand=list, got %q", cmds[0].Args[0])
+	}
+}
+
+func TestClassifyPromptCrossDomain_NounOnlyDefaultsList(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("tasks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result for bare 'tasks'")
+	}
+	if cmds[0].Cmd != "task" {
+		t.Errorf("expected cmd=task, got %q", cmds[0].Cmd)
+	}
+	if cmds[0].Args[0] != "list" {
+		t.Errorf("expected subcommand=list, got %q", cmds[0].Args[0])
+	}
+}
+
 // --- ClassifyPromptCrossDomain nil returns ---
 
 func TestClassifyPromptCrossDomain_Empty(t *testing.T) {

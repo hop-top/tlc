@@ -71,8 +71,15 @@ var modifierAliases = map[string]ModifierFlag{
 	"old":       "stale",
 	"my":        "mine",
 	"mine":      "mine",
-	"done":      "status:done",
-	"completed": "status:done",
+	"done":        "status:done",
+	"completed":   "status:done",
+	"incomplete":  "status:active",
+	"incompleted": "status:active",
+	"open":        "status:active",
+	"pending":     "status:active",
+	"remaining":   "status:active",
+	"unfinished":  "status:active",
+	"overdue":     "stale",
 }
 
 // LookupVerb returns the VerbCategory for a raw verb string.

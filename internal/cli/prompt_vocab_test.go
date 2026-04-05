@@ -82,6 +82,14 @@ func TestVocabModifierLookup(t *testing.T) {
 		{"mine", "mine", true},
 		{"done", "status:done", true},
 		{"completed", "status:done", true},
+		// New modifier aliases for incomplete/open/pending/etc.
+		{"incomplete", "status:active", true},
+		{"incompleted", "status:active", true},
+		{"open", "status:active", true},
+		{"pending", "status:active", true},
+		{"remaining", "status:active", true},
+		{"unfinished", "status:active", true},
+		{"overdue", "stale", true},
 		{"random", "", false},
 	}
 	for _, tc := range tests {
