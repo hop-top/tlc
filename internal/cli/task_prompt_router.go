@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/viper"
 
 	"hop.top/kit/llm"
-	_ "hop.top/kit/llm/anthropic" // register adapter
-	_ "hop.top/kit/llm/ollama"    // register adapter
-	_ "hop.top/kit/llm/openai"    // register adapter
+	_ "hop.top/kit/llm/anthropic"
+	_ "hop.top/kit/llm/ollama"
+	_ "hop.top/kit/llm/openai"
 )
 
 // systemPromptTemplate is the instruction set sent to the LLM for command
@@ -31,6 +31,14 @@ Rules:
 - confidence <0.7 = uncertain, include "clarification" field with a question
 - For task IDs, normalize to T-NNNN format (4-digit, zero-padded)
 - For destructive commands (delete, unclaim, unassign), always set confidence <= 0.9`
+
+// destructiveSubcommands are task subcommands that should never have
+// confidence above the destructive cap.
+var destructiveSubcommands = map[string]bool{
+	"delete":   true,
+	"unclaim":  true,
+	"unassign": true,
+}
 
 // destructiveConfidenceCap is the maximum confidence allowed for destructive
 // commands. The LLM is instructed to respect this, but we enforce it too.
@@ -157,17 +165,13 @@ func stripCodeFence(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// isDestructiveArgs returns true if args represent a destructive operation
-// (delete, unclaim, unassign). Used by both the router and the executor.
+// isDestructiveArgs checks whether the command args indicate a destructive
+// operation.
 func isDestructiveArgs(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
-	switch args[0] {
-	case "delete", "unclaim", "unassign":
-		return true
-	}
-	return false
+	return destructiveSubcommands[args[0]]
 }
 
 // capConfidence returns the lower of c and cap.
