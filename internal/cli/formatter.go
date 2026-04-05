@@ -186,7 +186,45 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		})
 	}
 
-	renderTTYTable(w, headers, rows, termWidth())
+	// Color is a pure function of status + state:
+	//   DONE / SKIPPED → white (terminal, always)
+	//   IN_PROGRESS → green
+	//   blocker (ID in another task's blocked-by) → pink
+	//   blocked (has BlockedReason) → muted
+	//   everything else → white
+	blockerIDs := make(map[string]bool)
+	for _, t := range tasks {
+		for _, dep := range t.BlockedBy() {
+			blockerIDs[dep] = true
+		}
+	}
+
+	primary := make(map[int]bool)
+	blockers := make(map[int]bool)
+	blocked := make(map[int]bool)
+	for i, t := range tasks {
+		switch {
+		case t.Status == core.StatusDone,
+			t.Status == core.StatusSkipped:
+			// White — terminal statuses stay neutral.
+		case t.Status == core.StatusInProgress:
+			primary[i] = true
+		case blockerIDs[t.ID]:
+			blockers[i] = true
+		case t.IsBlocked():
+			blocked[i] = true
+		}
+	}
+
+	var opts []TableOption
+	if len(primary) > 0 || len(blockers) > 0 || len(blocked) > 0 {
+		opts = append(opts,
+			WithPrimaryRows(primary),
+			WithBlockerRows(blockers),
+			WithBlockedRows(blocked),
+		)
+	}
+	renderTTYTable(w, headers, rows, termWidth(), opts...)
 }
 
 // renderWorkspaceTable renders a task table with an additional Project column.
