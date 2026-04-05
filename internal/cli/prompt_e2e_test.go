@@ -147,17 +147,17 @@ func TestTaskPromptE2E_ContextDumpMarkdown(t *testing.T) {
 			t.Fatalf("task create failed: %v", err)
 		}
 
-		// Run task prompt for the created task.
+		// Run prompt task for the created task.
 		resetTaskFlags()
 		taskNLJSON = false
 		cmd2 := newTestCmd()
-		cmd2.AddCommand(TaskCmd)
+		cmd2.AddCommand(PromptCmd)
 		buf2 := new(bytes.Buffer)
 		cmd2.SetOut(buf2)
 		cmd2.SetErr(buf2)
-		cmd2.SetArgs([]string{"task", "prompt", "T-0001"})
+		cmd2.SetArgs([]string{"prompt", "task", "T-0001"})
 		if err := cmd2.Execute(); err != nil {
-			t.Fatalf("task prompt failed: %v", err)
+			t.Fatalf("prompt task failed: %v", err)
 		}
 
 		output := buf2.String()
@@ -201,17 +201,17 @@ func TestTaskPromptE2E_ContextDumpJSON(t *testing.T) {
 			t.Fatalf("task create failed: %v", err)
 		}
 
-		// Run task prompt with --json.
+		// Run prompt task with --json.
 		resetTaskFlags()
 		taskNLJSON = false // reset; the flag will be set by cobra
 		cmd2 := newTestCmd()
-		cmd2.AddCommand(TaskCmd)
+		cmd2.AddCommand(PromptCmd)
 		buf2 := new(bytes.Buffer)
 		cmd2.SetOut(buf2)
 		cmd2.SetErr(buf2)
-		cmd2.SetArgs([]string{"task", "prompt", "T-0001", "--json"})
+		cmd2.SetArgs([]string{"prompt", "task", "T-0001", "--json"})
 		if err := cmd2.Execute(); err != nil {
-			t.Fatalf("task prompt --json failed: %v", err)
+			t.Fatalf("prompt task --json failed: %v", err)
 		}
 
 		// Verify valid JSON.
@@ -248,11 +248,11 @@ func TestTaskPromptE2E_ContextDumpNotFound(t *testing.T) {
 
 		taskNLJSON = false
 		cmd := newTestCmd()
-		cmd.AddCommand(TaskCmd)
+		cmd.AddCommand(PromptCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "prompt", "T-9999"})
+		cmd.SetArgs([]string{"prompt", "task", "T-9999"})
 
 		err := cmd.Execute()
 		if err == nil {
