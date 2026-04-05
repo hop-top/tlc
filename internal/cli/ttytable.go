@@ -16,32 +16,33 @@ const defaultTermWidth = 100
 
 // tableOpts holds optional rendering hints for renderTTYTable.
 type tableOpts struct {
-	// primaryRows marks row indices that match the first filter value.
-	// When non-nil, enables row-emphasis mode: primary rows render green,
-	// non-primary rows render white (or pink/muted if blocker/blocked).
+	// primaryRows marks row indices that should receive primary emphasis
+	// using the theme accent color.
 	primaryRows map[int]bool
-	// blockerRows marks tasks that block other tasks (render in pink).
-	blockerRows map[int]bool
-	// blockedRows marks tasks that are themselves blocked (render muted).
-	blockedRows map[int]bool
+	// secondaryRows marks row indices that should receive secondary emphasis
+	// using the theme secondary color.
+	secondaryRows map[int]bool
+	// mutedRows marks row indices that should render in a muted style
+	// using the theme muted color.
+	mutedRows map[int]bool
 }
 
 // TableOption configures renderTTYTable.
 type TableOption func(*tableOpts)
 
-// WithPrimaryRows marks the given row indices as primary (emphasized).
+// WithPrimaryRows marks the given row indices for primary emphasis.
 func WithPrimaryRows(indices map[int]bool) TableOption {
 	return func(o *tableOpts) { o.primaryRows = indices }
 }
 
-// WithBlockerRows marks rows that are blocking other tasks (pink).
-func WithBlockerRows(indices map[int]bool) TableOption {
-	return func(o *tableOpts) { o.blockerRows = indices }
+// WithSecondaryRows marks the given row indices for secondary emphasis.
+func WithSecondaryRows(indices map[int]bool) TableOption {
+	return func(o *tableOpts) { o.secondaryRows = indices }
 }
 
-// WithBlockedRows marks rows that are themselves blocked (muted).
-func WithBlockedRows(indices map[int]bool) TableOption {
-	return func(o *tableOpts) { o.blockedRows = indices }
+// WithMutedRows marks the given row indices to render in a muted style.
+func WithMutedRows(indices map[int]bool) TableOption {
+	return func(o *tableOpts) { o.mutedRows = indices }
 }
 
 // renderTTYTable renders rows using lipgloss/v2/table with
@@ -70,10 +71,10 @@ func renderTTYTable(w io.Writer, headers []string, rows [][]string, width int, o
 			if o.primaryRows[row] {
 				return lipgloss.NewStyle().Foreground(theme.Accent)
 			}
-			if o.blockerRows[row] {
+			if o.secondaryRows[row] {
 				return lipgloss.NewStyle().Foreground(theme.Secondary)
 			}
-			if o.blockedRows[row] {
+			if o.mutedRows[row] {
 				return lipgloss.NewStyle().Foreground(theme.Muted)
 			}
 			return lipgloss.NewStyle()

@@ -220,8 +220,8 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 	if len(primary) > 0 || len(blockers) > 0 || len(blocked) > 0 {
 		opts = append(opts,
 			WithPrimaryRows(primary),
-			WithBlockerRows(blockers),
-			WithBlockedRows(blocked),
+			WithSecondaryRows(blockers),
+			WithMutedRows(blocked),
 		)
 	}
 	renderTTYTable(w, headers, rows, termWidth(), opts...)

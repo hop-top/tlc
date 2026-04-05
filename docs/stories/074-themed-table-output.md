@@ -113,8 +113,8 @@ Now all four colors are visible.
 `tlc task list --status TODO`
 
 **Then** no primary-row emphasis is applied (single filter
-value). Per-column coloring applies instead: ID in pink,
-Title in green, rest in white.
+value). Blocker and blocked coloring still applies: blockers
+render pink, blocked tasks render muted, all others white.
 
 ### Scenario 4: Headers and borders
 

@@ -74,16 +74,14 @@ Priority when multiple conditions apply:
 | legacy   | muted | abandoned                    |
 | old-api  | muted | abandoned                    |
 
-### Scenario 2: Single-status filter — per-column coloring
+### Scenario 2: Single-status filter — row coloring preserved
 
 **Given** the same tracks, **When** I run
 `tlc track list --status active`
 
-**Then** all rows are active. If all are healthy → all green.
-If mixed healthy/stale → green for healthy, pink for stale.
-Per-column coloring (pink IDs, green titles) applies only
-when no row emphasis is active (i.e., no active tracks at
-all in results).
+**Then** all rows are active. Healthy tracks render green,
+stale/blocked tracks render pink. Row-level coloring still
+applies based on health state.
 
 ### Scenario 3: Headers and borders
 

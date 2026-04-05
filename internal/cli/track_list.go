@@ -269,8 +269,8 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 	if len(primary) > 0 || len(flagged) > 0 || len(faded) > 0 {
 		opts = append(opts,
 			WithPrimaryRows(primary),
-			WithBlockerRows(flagged),
-			WithBlockedRows(faded),
+			WithSecondaryRows(flagged),
+			WithMutedRows(faded),
 		)
 	}
 
