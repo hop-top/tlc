@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -47,7 +48,9 @@ func runWizard(
 			fmt.Fprint(w, prompt)
 
 			if !scanner.Scan() {
-				// EOF or Ctrl-C
+				if err := scanner.Err(); err != nil {
+					return nil, fmt.Errorf("reading input: %w", err)
+				}
 				return nil, fmt.Errorf("aborted")
 			}
 
@@ -90,6 +93,14 @@ func runWizard(
 					line = "false"
 				default:
 					fmt.Fprintf(w, "  invalid: enter y or n\n")
+					continue
+				}
+			}
+
+			// Validate duration
+			if kh.IsDuration {
+				if _, err := time.ParseDuration(line); err != nil {
+					fmt.Fprintf(w, "  invalid duration: %s (e.g. 72h, 24h30m)\n", err)
 					continue
 				}
 			}
@@ -179,7 +190,7 @@ func showGroupMenu(
 
 		if g == nil {
 			return nil, fmt.Errorf(
-				"key %q not found; "+
+				"group %q not found; "+
 					"run 'tlc config interactive' to see available groups", p)
 		}
 
@@ -219,12 +230,18 @@ func init() {
 }
 
 func runConfigInteractive(cmd *cobra.Command, args []string) error {
-	// TTY check
-	if !isatty.IsTerminal(os.Stdin.Fd()) &&
-		!isatty.IsCygwinTerminal(os.Stdin.Fd()) {
-		return fmt.Errorf(
-			"interactive mode requires a terminal; " +
-				"use 'tlc config set <key> <value>' instead")
+	// Resolve input/output streams from cobra for testability.
+	in := cmd.InOrStdin()
+	out := cmd.OutOrStdout()
+
+	// TTY check — only when input is an *os.File.
+	if f, ok := in.(*os.File); ok {
+		if !isatty.IsTerminal(f.Fd()) &&
+			!isatty.IsCygwinTerminal(f.Fd()) {
+			return fmt.Errorf(
+				"interactive mode requires a terminal; " +
+					"use 'tlc config set <key> <value>' instead")
+		}
 	}
 
 	noColor := viper.GetBool("no-color")
@@ -250,7 +267,7 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 		// Show group menu
 		var err error
 		keys, err = showGroupMenu(
-			os.Stdin, cmd.OutOrStdout(), hints, noColor)
+			in, out, hints, noColor)
 		if err != nil {
 			return err
 		}
@@ -266,7 +283,7 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 	}
 
 	changes, err := runWizard(
-		keys, os.Stdin, cmd.OutOrStdout(), noColor)
+		keys, in, out, noColor)
 	if err != nil {
 		return err
 	}

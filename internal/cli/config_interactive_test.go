@@ -317,6 +317,31 @@ func TestWizard_Duration(t *testing.T) {
 	}
 }
 
+func TestWizard_Duration_InvalidThenValid(t *testing.T) {
+	setTestViperDefaults(t)
+	viper.Set("task.archive_threshold", "168h0m0s")
+
+	keys := []keyHint{
+		{Key: "task.archive_threshold", Description: "Archive threshold",
+			IsDuration: true},
+	}
+
+	input := "notaduration\n72h\n"
+	out := &bytes.Buffer{}
+	changes, err := runWizard(keys, strings.NewReader(input), out, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if changes["task.archive_threshold"] != "72h" {
+		t.Errorf("expected 72h after retry, got %q",
+			changes["task.archive_threshold"])
+	}
+	if !strings.Contains(strings.ToLower(out.String()), "invalid") {
+		t.Errorf("expected invalid duration message in output, got %q",
+			out.String())
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ExpandAliases seeded alias test
 // ---------------------------------------------------------------------------
