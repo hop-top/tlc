@@ -24,52 +24,70 @@ type CommandSchema struct {
 	Flags       []FlagSchema `json:"flags,omitempty"`
 }
 
-// GenerateSchema introspects all top-level subcommands of root and returns
-// a structured slice describing each nested subcommand as "top sub".
+// GenerateSchema introspects the command tree rooted at root and returns
+// a structured slice describing each runnable command using its full path.
 func GenerateSchema(root *cobra.Command) []CommandSchema {
 	var schemas []CommandSchema
-	for _, top := range root.Commands() {
-		if top.Hidden {
-			continue
-		}
-		for _, sub := range top.Commands() {
-			if sub.Hidden {
-				continue
-			}
-			cs := CommandSchema{
-				Name:        top.Name() + " " + sub.Name(),
-				Description: sub.Short,
-				Args:        sub.Use,
-			}
-			sub.Flags().VisitAll(func(f *pflag.Flag) {
-				if f.Hidden {
-					return
-				}
-				cs.Flags = append(cs.Flags, FlagSchema{
-					Name:        f.Name,
-					Shorthand:   f.Shorthand,
-					Description: f.Usage,
-					Type:        f.Value.Type(),
-					Default:     f.DefValue,
-				})
-			})
-			// Include persistent flags from the parent (top-level cmd).
-			top.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-				if f.Hidden {
-					return
-				}
-				cs.Flags = append(cs.Flags, FlagSchema{
-					Name:        f.Name,
-					Shorthand:   f.Shorthand,
-					Description: f.Usage,
-					Type:        f.Value.Type(),
-					Default:     f.DefValue,
-				})
-			})
-			schemas = append(schemas, cs)
-		}
+	for _, cmd := range root.Commands() {
+		walkSchema(cmd, cmd.Name(), &schemas)
 	}
 	return schemas
+}
+
+// walkSchema recursively visits cmd and its descendants, appending a
+// CommandSchema for every runnable (non-hidden) command. fullName is the
+// space-joined path from root, e.g. "task list" or "sync pull".
+func walkSchema(cmd *cobra.Command, fullName string, schemas *[]CommandSchema) {
+	if cmd.Hidden {
+		return
+	}
+
+	if cmd.Runnable() {
+		cs := CommandSchema{
+			Name:        fullName,
+			Description: cmd.Short,
+			Args:        cmd.Use,
+			Flags:       collectSchemaFlags(cmd),
+		}
+		*schemas = append(*schemas, cs)
+	}
+
+	for _, sub := range cmd.Commands() {
+		walkSchema(sub, fullName+" "+sub.Name(), schemas)
+	}
+}
+
+// collectSchemaFlags returns flag schemas for cmd, including its own flags
+// and inherited persistent flags from ancestors.
+func collectSchemaFlags(cmd *cobra.Command) []FlagSchema {
+	seen := make(map[string]struct{})
+	var flags []FlagSchema
+
+	addFlag := func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
+		if _, ok := seen[f.Name]; ok {
+			return
+		}
+		seen[f.Name] = struct{}{}
+		flags = append(flags, FlagSchema{
+			Name:        f.Name,
+			Shorthand:   f.Shorthand,
+			Description: f.Usage,
+			Type:        f.Value.Type(),
+			Default:     f.DefValue,
+		})
+	}
+
+	cmd.Flags().VisitAll(addFlag)
+
+	// Walk up the parent chain collecting persistent flags.
+	for p := cmd.Parent(); p != nil; p = p.Parent() {
+		p.PersistentFlags().VisitAll(addFlag)
+	}
+
+	return flags
 }
 
 // GenerateSchemaJSON returns indented JSON of the full CLI subcommand schema.

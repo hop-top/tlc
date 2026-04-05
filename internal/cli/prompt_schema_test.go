@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 )
 
@@ -125,11 +124,10 @@ func TestGenerateSchema_RootCoversAllTopLevel(t *testing.T) {
 		t.Fatal("expected entries from GenerateSchema(RootCmd)")
 	}
 
-	// Name format must be "top sub" (two words).
+	// Name must be non-empty; may be 1 word (leaf) or 2+ words (nested).
 	for _, s := range schemas {
-		parts := strings.Fields(s.Name)
-		if len(parts) != 2 {
-			t.Errorf("schema Name %q should be 'top sub' (2 words), got %d", s.Name, len(parts))
+		if s.Name == "" {
+			t.Error("schema entry has empty Name")
 		}
 	}
 }
