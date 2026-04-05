@@ -20,27 +20,57 @@ func RouteNounToDomain(tokens PromptTokens) (NounDomain, float64) {
 	return nd, conf
 }
 
-// modifierFlags converts canonical modifier strings to CLI flag args.
-// "status:active" → ["--status", "active"]
-// "status:done"   → ["--status", "DONE"]
-// "blocked"       → ["--blocked"]
-// "stale"         → ["--stale"]
-// "mine"          → ["--mine"]
-func modifierFlags(modifiers []string) []string {
+// buildModifierArgs converts canonical modifier strings to CLI flag args,
+// using domain-specific flag mappings.
+//
+// Task domain:
+//   - "status:active" → ["--status", "active"]
+//   - "status:done"   → ["--status", "DONE"]
+//   - "blocked"       → ["--blocked"]
+//   - "stale"         → ["--stale"]
+//   - "mine"          → ["--mine"]
+//
+// Track domain:
+//   - "status:active" → ["--status", "active"]
+//   - "status:done"   → ["--status", "completed"]
+//   - "blocked"       → ["--state", "blocked"]
+//   - "stale"         → ["--state", "stale"]
+//   - "mine"          → (skipped — no --mine on track)
+//
+// Flow/Project domains: no modifier flags (returns empty).
+func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 	var out []string
-	for _, m := range modifiers {
-		switch m {
-		case "status:active":
-			out = append(out, "--status", "active")
-		case "status:done":
-			out = append(out, "--status", "DONE")
-		case "blocked":
-			out = append(out, "--blocked")
-		case "stale":
-			out = append(out, "--stale")
-		case "mine":
-			out = append(out, "--mine")
+	switch domain {
+	case DomainTask:
+		for _, m := range modifiers {
+			switch m {
+			case "status:active":
+				out = append(out, "--status", "active")
+			case "status:done":
+				out = append(out, "--status", "DONE")
+			case "blocked":
+				out = append(out, "--blocked")
+			case "stale":
+				out = append(out, "--stale")
+			case "mine":
+				out = append(out, "--mine")
+			}
 		}
+	case DomainTrack:
+		for _, m := range modifiers {
+			switch m {
+			case "status:active":
+				out = append(out, "--status", "active")
+			case "status:done":
+				out = append(out, "--status", "completed")
+			case "blocked":
+				out = append(out, "--state", "blocked")
+			case "stale":
+				out = append(out, "--state", "stale")
+			// "mine" is not supported on track — skip
+			}
+		}
+	// Flow and Project domains: no modifier flags
 	}
 	return out
 }
@@ -98,10 +128,6 @@ func resolveVerbCategory(verb string) (VerbCategory, float64) {
 	if verb == "run" {
 		return VerbCreate, 1.0
 	}
-	if verb == "switch" {
-		// treat as a special query/navigate — use VerbQuery placeholder
-		return VerbQuery, 1.0
-	}
 	if vc, ok := LookupVerb(verb); ok {
 		return vc, 1.0
 	}
@@ -133,7 +159,7 @@ func buildTaskCommand(tokens PromptTokens, vc VerbCategory, confidence float64) 
 	}
 
 	args := []string{subCmd}
-	args = append(args, modifierFlags(tokens.Modifiers)...)
+	args = append(args, buildModifierArgs(tokens.Modifiers, DomainTask)...)
 	args = appendCountSummaryFlags(args, tokens.Verb)
 	return []ResolvedCommand{{Cmd: "task", Args: args, Confidence: confidence}}
 }
@@ -148,8 +174,11 @@ func buildTrackCommand(tokens PromptTokens, vc VerbCategory, confidence float64)
 		return nil
 	}
 	args := []string{"list"}
-	args = append(args, modifierFlags(tokens.Modifiers)...)
+	args = append(args, buildModifierArgs(tokens.Modifiers, DomainTrack)...)
+	// Track domain: --counters is task-only; drop it by using base args only.
 	args = appendCountSummaryFlags(args, tokens.Verb)
+	// Filter out --counters: track list has no --counters flag.
+	args = filterArg(args, "--counters")
 	return []ResolvedCommand{{Cmd: "track", Args: args, Confidence: confidence}}
 }
 
@@ -158,33 +187,33 @@ func buildFlowCommand(tokens PromptTokens, vc VerbCategory, confidence float64) 
 	switch vc {
 	case VerbQuery:
 		return []ResolvedCommand{{Cmd: "flow", Args: []string{"list"}, Confidence: confidence}}
-	case VerbCreate:
-		// VerbCreate maps to "run"; flow name comes from Rest[0] if present.
-		args := []string{"run"}
-		if len(tokens.Rest) > 0 {
-			args = append(args, tokens.Rest[0])
+	case VerbCreate: // "run"
+		// flow run requires a concrete flow name — cobra.ExactArgs(1).
+		// Scan Rest for a word that isn't a generic verb/noun placeholder.
+		var flowRef string
+		for _, w := range tokens.Rest {
+			switch w {
+			case "", "run", "flow", "pipeline", "workflow":
+				continue
+			default:
+				flowRef = w
+			}
+			if flowRef != "" {
+				break
+			}
 		}
-		return []ResolvedCommand{{Cmd: "flow", Args: args, Confidence: confidence}}
+		if flowRef == "" {
+			return nil
+		}
+		return []ResolvedCommand{{Cmd: "flow", Args: []string{"run", flowRef}, Confidence: confidence}}
 	}
 	return nil
 }
 
 // buildProjectCommand produces project sub-commands.
+// Supported subcommands: list (VerbQuery). All others return nil.
+// "project switch" does not exist — return nil for any other verb.
 func buildProjectCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
-	// "switch" verb: project switch <name>
-	if tokens.Verb == "switch" {
-		args := []string{"switch"}
-		if len(tokens.Rest) > 0 {
-			// Use first Rest word as project name (skip "switch" if it appears there).
-			for _, w := range tokens.Rest {
-				if w != "switch" && w != "to" {
-					args = append(args, w)
-					break
-				}
-			}
-		}
-		return []ResolvedCommand{{Cmd: "project", Args: args, Confidence: confidence}}
-	}
 	if vc != VerbQuery {
 		return nil
 	}
@@ -303,6 +332,17 @@ func extractRunVerb(rest []string) (string, []string) {
 		}
 	}
 	return "", rest
+}
+
+// filterArg removes all occurrences of flag from args.
+func filterArg(args []string, flag string) []string {
+	out := args[:0:0]
+	for _, a := range args {
+		if a != flag {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // containsString returns true if s is in slice.

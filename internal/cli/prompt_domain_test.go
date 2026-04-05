@@ -184,8 +184,9 @@ func TestClassifyPromptCrossDomain_BlockedTracks(t *testing.T) {
 	if len(cmds) == 0 {
 		t.Fatal("expected result")
 	}
-	if !containsArg(cmds[0].Args, "--blocked") {
-		t.Errorf("expected --blocked, got %v", cmds[0].Args)
+	// Track domain: --blocked not supported; maps to --state blocked.
+	if !containsSequence(cmds[0].Args, "--state", "blocked") {
+		t.Errorf("expected --state blocked, got %v", cmds[0].Args)
 	}
 }
 
@@ -194,8 +195,9 @@ func TestClassifyPromptCrossDomain_StaleTracks(t *testing.T) {
 	if len(cmds) == 0 {
 		t.Fatal("expected result")
 	}
-	if !containsArg(cmds[0].Args, "--stale") {
-		t.Errorf("expected --stale, got %v", cmds[0].Args)
+	// Track domain: --stale not supported; maps to --state stale.
+	if !containsSequence(cmds[0].Args, "--state", "stale") {
+		t.Errorf("expected --state stale, got %v", cmds[0].Args)
 	}
 }
 
@@ -208,8 +210,9 @@ func TestClassifyPromptCrossDomain_CountActiveTracks(t *testing.T) {
 	if !containsSequence(args, "--status", "active") {
 		t.Errorf("expected --status active, got %v", args)
 	}
-	if !containsArg(args, "--counters") {
-		t.Errorf("expected --counters, got %v", args)
+	// Track domain: --counters is task-only; must NOT be present.
+	if containsArg(args, "--counters") {
+		t.Errorf("--counters must not appear for track domain, got %v", args)
 	}
 }
 
@@ -275,18 +278,10 @@ func TestClassifyPromptCrossDomain_ListProjects(t *testing.T) {
 }
 
 func TestClassifyPromptCrossDomain_SwitchProject(t *testing.T) {
+	// "project switch" does not exist; classifier must return nil and let LLM handle it.
 	cmds := ClassifyPromptCrossDomain("switch to auth project")
-	if len(cmds) == 0 {
-		t.Fatal("expected result")
-	}
-	if cmds[0].Cmd != "project" {
-		t.Errorf("expected cmd=project, got %q", cmds[0].Cmd)
-	}
-	if cmds[0].Args[0] != "switch" {
-		t.Errorf("expected subcommand=switch, got %q", cmds[0].Args[0])
-	}
-	if len(cmds[0].Args) < 2 || cmds[0].Args[1] != "auth" {
-		t.Errorf("expected project name=auth, got args %v", cmds[0].Args)
+	if cmds != nil {
+		t.Errorf("expected nil for 'switch to auth project' (no project switch subcommand), got %+v", cmds)
 	}
 }
 
@@ -389,8 +384,9 @@ func TestBuildCommand_TrackStatusDoneModifier(t *testing.T) {
 	if cmds[0].Cmd != "track" {
 		t.Errorf("expected cmd=track, got %q", cmds[0].Cmd)
 	}
-	if !containsSequence(cmds[0].Args, "--status", "DONE") {
-		t.Errorf("expected --status DONE in args, got %v", cmds[0].Args)
+	// Track uses "completed" not "DONE" for status:done.
+	if !containsSequence(cmds[0].Args, "--status", "completed") {
+		t.Errorf("expected --status completed in args, got %v", cmds[0].Args)
 	}
 }
 
