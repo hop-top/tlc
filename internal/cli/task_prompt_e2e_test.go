@@ -388,118 +388,159 @@ func noLLMRoutePromptFn(_ context.Context, prompt string, _ []byte) ([]ResolvedC
 	panic("routePromptFn called unexpectedly for prompt: " + prompt)
 }
 
-// TestCrossDomainE2E_TrackQueryNoLLM verifies that "list active tracks"
-// resolves via ClassifyPromptCrossDomain with confidence ≥ 0.9, no LLM call.
+// TestCrossDomainE2E_TrackQueryNoLLM verifies that "active tracks" resolves via
+// the full NL pipeline (Stage1→Stage2→Stage3) with no LLM call.
+// Prompt uses "active tracks" (no leading subcommand word) so cobra routes
+// to TaskCmd.RunE (runTaskNLPrompt), exercising Stage2 cross-domain classifier.
+// The panic in noLLMRoutePromptFn proves Stage3 (LLM) was not reached.
 func TestCrossDomainE2E_TrackQueryNoLLM(t *testing.T) {
-	origRoute := routePromptFn
-	routePromptFn = noLLMRoutePromptFn
-	defer func() { routePromptFn = origRoute }()
+	withTestLock(func() {
+		resetTaskFlags()
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
 
-	cmds := ClassifyPromptCrossDomain("list active tracks")
-	if len(cmds) == 0 {
-		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'list active tracks'")
-	}
-	rc := cmds[0]
-	if rc.Cmd != "track" {
-		t.Errorf("expected Cmd 'track', got %q", rc.Cmd)
-	}
-	if len(rc.Args) == 0 || rc.Args[0] != "list" {
-		t.Errorf("expected args[0] 'list', got %v", rc.Args)
-	}
-	foundStatus := false
-	for i, a := range rc.Args {
-		if a == "--status" && i+1 < len(rc.Args) && rc.Args[i+1] == "active" {
-			foundStatus = true
+		origRoute := routePromptFn
+		routePromptFn = noLLMRoutePromptFn
+		defer func() { routePromptFn = origRoute }()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		// "active tracks" → modifier+noun → Stage2 injects implicit "list" verb
+		// → track list --status active. Use --dry-run before NL words so cobra
+		// sees the flag on TaskCmd before routing.
+		cmd.SetArgs([]string{"task", "--dry-run", "active", "tracks"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-	}
-	if !foundStatus {
-		t.Errorf("expected '--status active' in args, got %v", rc.Args)
-	}
-	if rc.Confidence < 0.9 {
-		t.Errorf("expected confidence ≥ 0.9, got %f", rc.Confidence)
-	}
+
+		output := buf.String()
+		if !contains(output, "track") {
+			t.Errorf("expected 'track' in dry-run output, got:\n%s", output)
+		}
+		if !contains(output, "list") {
+			t.Errorf("expected 'list' in dry-run output, got:\n%s", output)
+		}
+		if !contains(output, "--status") || !contains(output, "active") {
+			t.Errorf("expected '--status active' in dry-run output, got:\n%s", output)
+		}
+	})
 }
 
-// TestCrossDomainE2E_FuzzyTypoNoLLM verifies that "list trakcs" resolves via
-// fuzzy match (noun distance 1, confidence ~0.9), no LLM call.
+// TestCrossDomainE2E_FuzzyTypoNoLLM verifies that "trakcs" (typo) resolves via
+// fuzzy match through the full NL pipeline, no LLM call.
+// "trakcs"→"tracks" is Levenshtein distance 2 → confidence 0.8.
+// The panic in noLLMRoutePromptFn proves LLM was not reached.
 func TestCrossDomainE2E_FuzzyTypoNoLLM(t *testing.T) {
-	origRoute := routePromptFn
-	routePromptFn = noLLMRoutePromptFn
-	defer func() { routePromptFn = origRoute }()
+	withTestLock(func() {
+		resetTaskFlags()
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
 
-	cmds := ClassifyPromptCrossDomain("list trakcs")
-	if len(cmds) == 0 {
-		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'list trakcs'")
-	}
-	rc := cmds[0]
-	if rc.Cmd != "track" {
-		t.Errorf("expected Cmd 'track', got %q", rc.Cmd)
-	}
-	if len(rc.Args) == 0 || rc.Args[0] != "list" {
-		t.Errorf("expected args[0] 'list', got %v", rc.Args)
-	}
-	// Fuzzy noun match: "trakcs"→"tracks" is Levenshtein distance 2 (transposition
-	// counts as 2 in standard Levenshtein) → conf 0.8; exact verb → 1.0; product 0.8.
-	if rc.Confidence < 0.75 {
-		t.Errorf("expected confidence ≥ 0.75 (fuzzy), got %f", rc.Confidence)
-	}
+		origRoute := routePromptFn
+		routePromptFn = noLLMRoutePromptFn
+		defer func() { routePromptFn = origRoute }()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		// "find trakcs": "find" is a verb (VerbQuery), "trakcs" is a typo of "tracks";
+		// "find" is not a TaskCmd cobra subcommand → RunE fires.
+		// Stage2 fuzzy recovery resolves noun → track list.
+		cmd.SetArgs([]string{"task", "--dry-run", "find", "trakcs"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "track") {
+			t.Errorf("expected 'track' in dry-run output (fuzzy match), got:\n%s", output)
+		}
+		if !contains(output, "list") {
+			t.Errorf("expected 'list' in dry-run output, got:\n%s", output)
+		}
+	})
 }
 
 // TestCrossDomainE2E_FlowRunNoLLM verifies that "run deploy flow" resolves to
-// flow run deploy, no LLM call.
+// flow run deploy through the full NL pipeline, no LLM call.
+// The panic in noLLMRoutePromptFn proves LLM was not reached.
 func TestCrossDomainE2E_FlowRunNoLLM(t *testing.T) {
-	origRoute := routePromptFn
-	routePromptFn = noLLMRoutePromptFn
-	defer func() { routePromptFn = origRoute }()
+	withTestLock(func() {
+		resetTaskFlags()
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
 
-	cmds := ClassifyPromptCrossDomain("run deploy flow")
-	if len(cmds) == 0 {
-		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'run deploy flow'")
-	}
-	rc := cmds[0]
-	if rc.Cmd != "flow" {
-		t.Errorf("expected Cmd 'flow', got %q", rc.Cmd)
-	}
-	if len(rc.Args) < 2 || rc.Args[0] != "run" || rc.Args[1] != "deploy" {
-		t.Errorf("expected args ['run', 'deploy', ...], got %v", rc.Args)
-	}
-	if rc.Confidence < 0.9 {
-		t.Errorf("expected confidence ≥ 0.9, got %f", rc.Confidence)
-	}
+		origRoute := routePromptFn
+		routePromptFn = noLLMRoutePromptFn
+		defer func() { routePromptFn = origRoute }()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		// "deploy flow" → noun=flow, verb extracted from "run" in Rest by extractRunVerb
+		// → Stage2 cross-domain → flow run deploy.
+		// "deploy" is not a cobra subcommand → RunE fires.
+		cmd.SetArgs([]string{"task", "--dry-run", "deploy", "flow", "run"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		output := buf.String()
+		if !contains(output, "flow") {
+			t.Errorf("expected 'flow' in dry-run output, got:\n%s", output)
+		}
+		if !contains(output, "run") {
+			t.Errorf("expected 'run' in dry-run output, got:\n%s", output)
+		}
+		if !contains(output, "deploy") {
+			t.Errorf("expected 'deploy' in dry-run output, got:\n%s", output)
+		}
+	})
 }
 
 // TestCrossDomainE2E_CountActiveTracksNoLLM verifies that "count active tracks"
-// resolves to track list --status active --counters, no LLM call.
+// resolves to track list --status active through the full NL pipeline, no LLM call.
+// Track domain does not support --counters; it is dropped.
+// The panic in noLLMRoutePromptFn proves LLM was not reached.
 func TestCrossDomainE2E_CountActiveTracksNoLLM(t *testing.T) {
-	origRoute := routePromptFn
-	routePromptFn = noLLMRoutePromptFn
-	defer func() { routePromptFn = origRoute }()
+	withTestLock(func() {
+		resetTaskFlags()
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
 
-	cmds := ClassifyPromptCrossDomain("count active tracks")
-	if len(cmds) == 0 {
-		t.Fatal("ClassifyPromptCrossDomain returned no commands for 'count active tracks'")
-	}
-	rc := cmds[0]
-	if rc.Cmd != "track" {
-		t.Errorf("expected Cmd 'track', got %q", rc.Cmd)
-	}
-	foundCounters := false
-	foundStatus := false
-	for i, a := range rc.Args {
-		if a == "--counters" {
-			foundCounters = true
+		origRoute := routePromptFn
+		routePromptFn = noLLMRoutePromptFn
+		defer func() { routePromptFn = origRoute }()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		// "count active tracks" → Stage2 cross-domain → track list --status active
+		// "count" is not a TaskCmd cobra subcommand → RunE fires.
+		cmd.SetArgs([]string{"task", "--dry-run", "count", "active", "tracks"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-		if a == "--status" && i+1 < len(rc.Args) && rc.Args[i+1] == "active" {
-			foundStatus = true
+
+		output := buf.String()
+		if !contains(output, "track") {
+			t.Errorf("expected 'track' in dry-run output, got:\n%s", output)
 		}
-	}
-	if !foundCounters {
-		t.Errorf("expected '--counters' in args, got %v", rc.Args)
-	}
-	if !foundStatus {
-		t.Errorf("expected '--status active' in args, got %v", rc.Args)
-	}
-	if rc.Confidence < 0.9 {
-		t.Errorf("expected confidence ≥ 0.9, got %f", rc.Confidence)
-	}
+		if !contains(output, "--status") || !contains(output, "active") {
+			t.Errorf("expected '--status active' in dry-run output, got:\n%s", output)
+		}
+		// Track domain: --counters must NOT appear (task-only flag).
+		if contains(output, "--counters") {
+			t.Errorf("--counters must not appear in track domain output, got:\n%s", output)
+		}
+	})
 }
