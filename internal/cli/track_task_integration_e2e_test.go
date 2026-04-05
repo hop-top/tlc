@@ -246,9 +246,9 @@ func TestTaskTrackIntegration_E2E_InvalidTrack(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for nonexistent track")
 		}
-		if !contains(err.Error(), "not found") {
+		if !contains(err.Error(), "does not exist") {
 			t.Errorf(
-				"expected 'not found' in error; got: %v", err,
+				"expected 'does not exist' in error; got: %v", err,
 			)
 		}
 	})

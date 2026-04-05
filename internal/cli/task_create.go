@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -233,7 +234,15 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	// Link to track if specified.
 	if taskTrack != "" {
 		resolved, trackErr := resolveTrackID(ctx, s, taskTrack)
-		if trackErr != nil {
+		if trackErr != nil && errors.Is(trackErr, ErrTrackNotFound) {
+			created, createErr := maybeAutoCreateTrackFromWriter(
+				ctx, w, s, taskTrack,
+			)
+			if createErr != nil {
+				return createErr
+			}
+			resolved = created
+		} else if trackErr != nil {
 			return trackErr
 		}
 		task.TrackID = &resolved

@@ -81,8 +81,8 @@ func TestTaskCreateWithInvalidTrack(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for nonexistent track")
 		}
-		if !contains(err.Error(), "not found") {
-			t.Errorf("expected 'not found' in error, got: %v", err)
+		if !contains(err.Error(), "does not exist") {
+			t.Errorf("expected 'does not exist' in error, got: %v", err)
 		}
 	})
 }

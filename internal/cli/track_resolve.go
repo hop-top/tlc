@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,10 @@ import (
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
+
+// ErrTrackNotFound is returned when no track matches and zero fuzzy
+// candidates exist — the caller may offer to auto-create.
+var ErrTrackNotFound = errors.New("track not found")
 
 // resolveTrackID resolves a possibly-partial track ID to an exact
 // match. Resolution order: exact → prefix → fuzzy.
@@ -43,9 +48,9 @@ func resolveTrackID(
 	}
 	if len(all) == 0 {
 		return "", fmt.Errorf(
-			"track %q not found; no tracks exist; "+
+			"track %q: %w; no tracks exist; "+
 				"run 'tlc track create' first",
-			input,
+			input, ErrTrackNotFound,
 		)
 	}
 
@@ -82,9 +87,9 @@ func resolveTrackID(
 	results := fuzzy.Find(lower, ids)
 	if len(results) == 0 {
 		return "", fmt.Errorf(
-			"track %q not found; run 'tlc track list' "+
+			"track %q: %w; run 'tlc track list' "+
 				"to see available tracks",
-			input,
+			input, ErrTrackNotFound,
 		)
 	}
 	if len(results) == 1 || results[0].Score > results[1].Score {
