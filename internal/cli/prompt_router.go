@@ -95,27 +95,84 @@ func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]Resol
 //  2. Env TLC_PROMPT_LLM override
 //  3. llm.LoadConfig("") default (LLM_PROVIDER env / config file)
 //  4. All unavailable: return specific error
+//
+// All paths go through llm.LoadConfig to merge env var API keys
+// (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY) with the URI.
 func resolvePromptLLM() (llm.Provider, error) {
 	// 1. Viper config key.
 	if uri := viper.GetString("prompt.llm_provider"); uri != "" {
-		return llm.Resolve(uri)
+		return resolveViaLoadConfig(uri)
 	}
 
 	// 2. Env override.
 	if uri := os.Getenv("TLC_PROMPT_LLM"); uri != "" {
-		return llm.Resolve(uri)
+		return resolveViaLoadConfig(uri)
 	}
 
 	// 3. Kit default config (reads LLM_PROVIDER env / config file).
 	cfg, err := llm.LoadConfig("")
 	if err == nil {
-		return llm.Resolve(cfg.URI.Scheme + "://" + cfg.URI.Model)
+		return resolveFromConfig(cfg)
 	}
 
 	// 4. Nothing configured.
 	return nil, fmt.Errorf(
 		"no LLM provider configured; set TLC_PROMPT_LLM (e.g. ollama://llama3.2)",
 	)
+}
+
+// normalizeURI ensures a bare scheme (e.g. "openai") becomes a
+// valid URI ("openai://"). Preserves already-valid URIs.
+func normalizeURI(uri string) string {
+	if !strings.Contains(uri, "://") {
+		return uri + "://"
+	}
+	return uri
+}
+
+// providerEnvVars maps URI schemes to provider-specific API key env vars.
+// LoadConfig only reads LLM_API_KEY; this fills the gap until kit adds
+// per-provider env var support.
+var providerEnvVars = map[string]string{
+	"openai":     "OPENAI_API_KEY",
+	"anthropic":  "ANTHROPIC_API_KEY",
+	"openrouter": "OPENROUTER_API_KEY",
+	"xai":        "XAI_API_KEY",
+}
+
+// resolveViaLoadConfig normalizes the URI, loads the full config
+// (merging env vars), and creates the provider.
+func resolveViaLoadConfig(uri string) (llm.Provider, error) {
+	uri = normalizeURI(uri)
+	cfg, err := llm.LoadConfig(uri)
+	if err != nil {
+		return nil, fmt.Errorf("llm config failed for %q: %w", uri, err)
+	}
+
+	// Fill API key from provider-specific env var if LoadConfig
+	// didn't find one (LoadConfig only reads LLM_API_KEY).
+	if cfg.Provider.APIKey == "" {
+		if envVar, ok := providerEnvVars[cfg.URI.Scheme]; ok {
+			if v := os.Getenv(envVar); v != "" {
+				cfg.Provider.APIKey = v
+			}
+		}
+	}
+
+	return resolveFromConfig(cfg)
+}
+
+// resolveFromConfig creates a provider from a fully resolved config.
+func resolveFromConfig(cfg llm.ResolvedConfig) (llm.Provider, error) {
+	uri := cfg.URI.Scheme + "://"
+	if cfg.URI.Host != "" {
+		uri += cfg.URI.Host + "/"
+	}
+	uri += cfg.Provider.Model
+	if cfg.Provider.APIKey != "" {
+		uri += "?api_key=" + cfg.Provider.APIKey
+	}
+	return llm.Resolve(uri)
 }
 
 // parseRouterResponse extracts []ResolvedCommand and any clarification text
