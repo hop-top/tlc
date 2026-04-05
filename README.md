@@ -237,6 +237,11 @@ Configure the LLM provider:
 export TLC_PROMPT_LLM="ollama://llama3.2"  # or anthropic://, openai://
 ```
 
+**Cross-domain resolution (no LLM):** Common track, flow, and project queries resolve
+deterministically without LLM. Examples: `"list active tracks"`, `"run deploy flow"`,
+`"count active tracks"` → `track list --status active`. Typo-tolerant:
+`"list trakcs"` resolves to `track list` (fuzzy match, confidence 0.8).
+
 **Agent context dump:**
 
 Get enriched task context for LLM consumption:
