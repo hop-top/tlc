@@ -115,3 +115,67 @@ func TestGenerateTaskSchema_PersistentFlags(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateSchema_RootCoversAllTopLevel verifies GenerateSchema covers
+// subcommands from multiple top-level commands (task, track, flow, etc.).
+func TestGenerateSchema_RootCoversAllTopLevel(t *testing.T) {
+	schemas := GenerateSchema(RootCmd)
+	if len(schemas) == 0 {
+		t.Fatal("expected entries from GenerateSchema(RootCmd)")
+	}
+
+	// Name must be non-empty; may be 1 word (leaf) or 2+ words (nested).
+	for _, s := range schemas {
+		if s.Name == "" {
+			t.Error("schema entry has empty Name")
+		}
+	}
+}
+
+// TestGenerateSchema_IncludesTaskAndTrack verifies multi-domain coverage.
+func TestGenerateSchema_IncludesTaskAndTrack(t *testing.T) {
+	schemas := GenerateSchema(RootCmd)
+	index := make(map[string]bool, len(schemas))
+	for _, s := range schemas {
+		index[s.Name] = true
+	}
+
+	required := []string{"task list", "task create", "track list", "track create"}
+	for _, name := range required {
+		if !index[name] {
+			t.Errorf("missing expected command %q in GenerateSchema(RootCmd)", name)
+		}
+	}
+}
+
+// TestGenerateSchema_NonEmptyFields verifies all entries have name + description.
+func TestGenerateSchema_NonEmptyFields(t *testing.T) {
+	schemas := GenerateSchema(RootCmd)
+	for _, s := range schemas {
+		if s.Name == "" {
+			t.Error("GenerateSchema entry has empty Name")
+		}
+		if s.Description == "" {
+			t.Errorf("GenerateSchema %q has empty Description", s.Name)
+		}
+	}
+}
+
+// TestGenerateSchemaJSON_ValidJSON verifies GenerateSchemaJSON returns valid JSON.
+func TestGenerateSchemaJSON_ValidJSON(t *testing.T) {
+	data, err := GenerateSchemaJSON(RootCmd)
+	if err != nil {
+		t.Fatalf("GenerateSchemaJSON returned error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("GenerateSchemaJSON returned empty bytes")
+	}
+
+	var parsed []CommandSchema
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON output is not parseable: %v", err)
+	}
+	if len(parsed) == 0 {
+		t.Error("parsed JSON has zero entries")
+	}
+}

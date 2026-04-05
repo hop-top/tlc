@@ -9,7 +9,7 @@
 ## Story
 
 As a Solo Developer, I want ambiguous prompts like
-`tlc task "mark the auth task done"` to trigger inline
+`tlc "mark the auth task done"` to trigger inline
 clarification with candidate tasks, so that I resolve
 the right task without re-typing the command.
 
@@ -17,7 +17,7 @@ the right task without re-typing the command.
 
 1. **Given** tasks T-0042 (JWT refresh) and T-0068 (login
    page) both match "auth",
-   **When** I run `tlc task "mark the auth task done"`,
+   **When** I run `tlc "mark the auth task done"`,
    **Then** classifier returns low confidence, inline
    clarifier prompts a follow-up question and waits for
    user input.
@@ -48,9 +48,9 @@ the right task without re-typing the command.
   - `TestNLPromptDestructiveGuard`
 
 ### Unit
-- `internal/cli/task_prompt_clarify_test.go`
+- `internal/cli/prompt_clarify_test.go`
   - `TestClarify_InlineDisambiguation`
   - `TestClarify_REPLMode`
-- `internal/cli/task_prompt_exec_test.go`
+- `internal/cli/prompt_exec_test.go`
   - `TestExecutor_LowConfidence_Clarify`
   - `TestExecutor_DestructiveAlwaysConfirm`

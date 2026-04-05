@@ -75,11 +75,11 @@ func TestTaskPrompt_MarkdownAllFields(t *testing.T) {
 	})
 
 	cmd := newTestCmd()
-	cmd.AddCommand(TaskCmd)
+	cmd.AddCommand(PromptCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "prompt", "T-0042"})
+	cmd.SetArgs([]string{"prompt", "task", "T-0042"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("task prompt failed: %v", err)
@@ -161,11 +161,11 @@ func TestTaskPrompt_MarkdownMinimalFields(t *testing.T) {
 	})
 
 	cmd := newTestCmd()
-	cmd.AddCommand(TaskCmd)
+	cmd.AddCommand(PromptCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "prompt", "T-0001"})
+	cmd.SetArgs([]string{"prompt", "task", "T-0001"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("task prompt failed: %v", err)
@@ -220,11 +220,11 @@ func TestTaskPrompt_JSONOutput(t *testing.T) {
 	})
 
 	cmd := newTestCmd()
-	cmd.AddCommand(TaskCmd)
+	cmd.AddCommand(PromptCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "prompt", "T-0010", "--json"})
+	cmd.SetArgs([]string{"prompt", "task", "T-0010", "--json"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("task prompt --json failed: %v", err)
@@ -268,11 +268,11 @@ func TestTaskPrompt_NotFound(t *testing.T) {
 	defer cleanup()
 
 	cmd := newTestCmd()
-	cmd.AddCommand(TaskCmd)
+	cmd.AddCommand(PromptCmd)
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "prompt", "T-9999"})
+	cmd.SetArgs([]string{"prompt", "task", "T-9999"})
 
 	err := cmd.Execute()
 	if err == nil {

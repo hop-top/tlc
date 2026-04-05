@@ -15,11 +15,18 @@ import (
 	"hop.top/tlc/internal/uri"
 )
 
-var taskPromptJSON bool
+var promptJSON bool
 
-// TaskPromptCmd renders an enriched context dump for agent consumption.
-var TaskPromptCmd = &cobra.Command{
-	Use:   "prompt <id>",
+// PromptCmd is the top-level command group for context dumps and enriched
+// agent output under `tlc prompt`.
+var PromptCmd = &cobra.Command{
+	Use:   "prompt",
+	Short: "Context dump and enriched output for agent consumption",
+}
+
+// PromptTaskCmd renders an enriched context dump for a task.
+var PromptTaskCmd = &cobra.Command{
+	Use:   "task <id>",
 	Short: "Render enriched task context for agent consumption",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runTaskPrompt,
@@ -45,7 +52,7 @@ func runTaskPrompt(cmd *cobra.Command, args []string) error {
 
 	data := buildPromptContext(ctx, s, res.Storage, task)
 
-	if taskPromptJSON {
+	if promptJSON {
 		return renderPromptJSON(cmd.OutOrStdout(), data)
 	}
 	renderPromptMarkdown(cmd.OutOrStdout(), data)
@@ -273,6 +280,7 @@ type promptJSONOutput struct {
 }
 
 func init() {
-	TaskPromptCmd.Flags().BoolVar(&taskPromptJSON, "json", false, "Output as JSON")
-	TaskCmd.AddCommand(TaskPromptCmd)
+	PromptTaskCmd.Flags().BoolVar(&promptJSON, "json", false, "Output as JSON")
+	PromptCmd.AddCommand(PromptTaskCmd)
+	RootCmd.AddCommand(PromptCmd)
 }

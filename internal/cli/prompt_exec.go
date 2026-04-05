@@ -132,11 +132,18 @@ func executeCommands(ctx context.Context, cmds []ResolvedCommand, opts ExecuteOp
 	return ExecuteResult{Executed: executed}
 }
 
-// runCommand executes a single resolved command via the TaskCmd cobra tree.
-func runCommand(_ context.Context, cmd ResolvedCommand) error {
+// resetAllFlags resets all CLI flag state before dispatching a resolved command.
+// It calls resetTaskFlags for task-domain flags; extend here for future domains.
+func resetAllFlags() {
 	resetTaskFlags()
-	TaskCmd.SetArgs(cmd.Args)
-	return TaskCmd.Execute()
+}
+
+// runCommand executes a single resolved command via the RootCmd cobra tree,
+// so any subcommand (task, track, flow, …) can be dispatched.
+func runCommand(_ context.Context, cmd ResolvedCommand) error {
+	resetAllFlags()
+	RootCmd.SetArgs(append([]string{cmd.Cmd}, cmd.Args...))
+	return RootCmd.Execute()
 }
 
 // formatCmd returns a human-readable representation of a resolved command.

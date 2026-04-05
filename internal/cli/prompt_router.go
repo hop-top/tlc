@@ -14,7 +14,7 @@ import (
 
 // systemPromptTemplate is the instruction set sent to the LLM for command
 // routing. The {schema} placeholder is replaced with the task schema JSON.
-const systemPromptTemplate = `You are a CLI command router for ` + "`tlc task`" + `. Given a user's natural language
+const systemPromptTemplate = `You are a CLI command router for ` + "`tlc`" + `. Given a user's natural language
 request, return a JSON object with resolved commands.
 
 Available commands (JSON schema):
@@ -22,6 +22,7 @@ Available commands (JSON schema):
 
 Return ONLY valid JSON in this format:
 {"commands": [{"cmd": "task", "args": ["subcommand", "arg1", ...]}], "confidence": 0.0-1.0}
+where "cmd" is any top-level tlc command (e.g. "task", "prompt", "track")
 
 Rules:
 - confidence 1.0 = certain the mapping is correct
@@ -90,13 +91,13 @@ func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]Resol
 }
 
 // resolvePromptLLM resolves the LLM provider using the following precedence:
-//  1. Config key task_prompt.llm_provider via viper
+//  1. Config key prompt.llm_provider via viper
 //  2. Env TLC_PROMPT_LLM override
 //  3. llm.LoadConfig("") default (LLM_PROVIDER env / config file)
 //  4. All unavailable: return specific error
 func resolvePromptLLM() (llm.Provider, error) {
 	// 1. Viper config key.
-	if uri := viper.GetString("task_prompt.llm_provider"); uri != "" {
+	if uri := viper.GetString("prompt.llm_provider"); uri != "" {
 		return llm.Resolve(uri)
 	}
 

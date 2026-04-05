@@ -15,22 +15,20 @@ var (
 )
 
 func init() {
-	TaskCmd.Args = cobra.ArbitraryArgs
-	TaskCmd.RunE = runTaskNLPrompt
-
-	TaskCmd.Flags().BoolVarP(&taskNLExecute, "execute", "x", false, "Execute resolved commands without confirmation")
-	TaskCmd.Flags().BoolVar(&taskNLDryRun, "dry-run", false, "Show resolved commands without executing")
-	TaskCmd.Flags().BoolVar(&taskNLJSON, "json", false, "Output resolved commands as JSON")
+	// NL flags live on RootCmd so `tlc "complete T-42"` works.
+	RootCmd.Flags().BoolVarP(&taskNLExecute, "execute", "x", false, "Execute resolved commands without confirmation")
+	RootCmd.Flags().BoolVar(&taskNLDryRun, "dry-run", false, "Show resolved commands without executing")
+	RootCmd.Flags().BoolVar(&taskNLJSON, "json", false, "Output resolved commands as JSON")
 }
 
 // routePromptFn is the function used to call the LLM router.
 // Package-level variable so tests can replace it.
 var routePromptFn = routePrompt
 
-// runTaskNLPrompt is the RunE handler for TaskCmd. It intercepts args that
-// don't match any subcommand and treats them as a natural-language prompt,
-// running the classify -> route -> execute pipeline.
-func runTaskNLPrompt(cmd *cobra.Command, args []string) error {
+// runNLPrompt is the RunE handler wired to RootCmd when args are present.
+// It treats the args as a natural-language prompt and runs the
+// classify -> route -> execute pipeline.
+func runNLPrompt(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
 	}
@@ -50,9 +48,9 @@ func runTaskNLPrompt(cmd *cobra.Command, args []string) error {
 	}
 
 	// Stage 3: LLM-backed router (slower, requires schema).
-	schemaJSON, err := GenerateTaskSchemaJSON()
+	schemaJSON, err := GenerateSchemaJSON(RootCmd)
 	if err != nil {
-		return fmt.Errorf("failed to generate task schema: %w", err)
+		return fmt.Errorf("failed to generate schema: %w", err)
 	}
 
 	cmds, clarification, err := routePromptFn(cmd.Context(), prompt, schemaJSON)

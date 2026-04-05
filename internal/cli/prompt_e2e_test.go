@@ -147,17 +147,17 @@ func TestTaskPromptE2E_ContextDumpMarkdown(t *testing.T) {
 			t.Fatalf("task create failed: %v", err)
 		}
 
-		// Run task prompt for the created task.
+		// Run prompt task for the created task.
 		resetTaskFlags()
-		taskPromptJSON = false
+		taskNLJSON = false
 		cmd2 := newTestCmd()
-		cmd2.AddCommand(TaskCmd)
+		cmd2.AddCommand(PromptCmd)
 		buf2 := new(bytes.Buffer)
 		cmd2.SetOut(buf2)
 		cmd2.SetErr(buf2)
-		cmd2.SetArgs([]string{"task", "prompt", "T-0001"})
+		cmd2.SetArgs([]string{"prompt", "task", "T-0001"})
 		if err := cmd2.Execute(); err != nil {
-			t.Fatalf("task prompt failed: %v", err)
+			t.Fatalf("prompt task failed: %v", err)
 		}
 
 		output := buf2.String()
@@ -201,17 +201,17 @@ func TestTaskPromptE2E_ContextDumpJSON(t *testing.T) {
 			t.Fatalf("task create failed: %v", err)
 		}
 
-		// Run task prompt with --json.
+		// Run prompt task with --json.
 		resetTaskFlags()
-		taskPromptJSON = false // reset; the flag will be set by cobra
+		taskNLJSON = false // reset; the flag will be set by cobra
 		cmd2 := newTestCmd()
-		cmd2.AddCommand(TaskCmd)
+		cmd2.AddCommand(PromptCmd)
 		buf2 := new(bytes.Buffer)
 		cmd2.SetOut(buf2)
 		cmd2.SetErr(buf2)
-		cmd2.SetArgs([]string{"task", "prompt", "T-0001", "--json"})
+		cmd2.SetArgs([]string{"prompt", "task", "T-0001", "--json"})
 		if err := cmd2.Execute(); err != nil {
-			t.Fatalf("task prompt --json failed: %v", err)
+			t.Fatalf("prompt task --json failed: %v", err)
 		}
 
 		// Verify valid JSON.
@@ -246,13 +246,13 @@ func TestTaskPromptE2E_ContextDumpNotFound(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		taskPromptJSON = false
+		taskNLJSON = false
 		cmd := newTestCmd()
-		cmd.AddCommand(TaskCmd)
+		cmd.AddCommand(PromptCmd)
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"task", "prompt", "T-9999"})
+		cmd.SetArgs([]string{"prompt", "task", "T-9999"})
 
 		err := cmd.Execute()
 		if err == nil {
@@ -391,7 +391,7 @@ func noLLMRoutePromptFn(_ context.Context, prompt string, _ []byte) ([]ResolvedC
 // TestCrossDomainE2E_TrackQueryNoLLM verifies that "active tracks" resolves via
 // the full NL pipeline (Stage1→Stage2→Stage3) with no LLM call.
 // Prompt uses "active tracks" (no leading subcommand word) so cobra routes
-// to TaskCmd.RunE (runTaskNLPrompt), exercising Stage2 cross-domain classifier.
+// to RootCmd.RunE (runNLPrompt), exercising Stage2 cross-domain classifier.
 // The panic in noLLMRoutePromptFn proves Stage3 (LLM) was not reached.
 func TestCrossDomainE2E_TrackQueryNoLLM(t *testing.T) {
 	withTestLock(func() {
@@ -403,15 +403,13 @@ func TestCrossDomainE2E_TrackQueryNoLLM(t *testing.T) {
 		routePromptFn = noLLMRoutePromptFn
 		defer func() { routePromptFn = origRoute }()
 
-		cmd := newTestCmd()
-		cmd.AddCommand(TaskCmd)
+		cmd := newTestNLRootCmd()
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
 		// "active tracks" → modifier+noun → Stage2 injects implicit "list" verb
-		// → track list --status active. Use --dry-run before NL words so cobra
-		// sees the flag on TaskCmd before routing.
-		cmd.SetArgs([]string{"task", "--dry-run", "active", "tracks"})
+		// → track list --status active. NL args go directly to root.
+		cmd.SetArgs([]string{"--dry-run", "active", "tracks"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -443,15 +441,13 @@ func TestCrossDomainE2E_FuzzyTypoNoLLM(t *testing.T) {
 		routePromptFn = noLLMRoutePromptFn
 		defer func() { routePromptFn = origRoute }()
 
-		cmd := newTestCmd()
-		cmd.AddCommand(TaskCmd)
+		cmd := newTestNLRootCmd()
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
 		// "find trakcs": "find" is a verb (VerbQuery), "trakcs" is a typo of "tracks";
-		// "find" is not a TaskCmd cobra subcommand → RunE fires.
-		// Stage2 fuzzy recovery resolves noun → track list.
-		cmd.SetArgs([]string{"task", "--dry-run", "find", "trakcs"})
+		// Stage2 fuzzy recovery resolves noun → track list. NL args go to root.
+		cmd.SetArgs([]string{"--dry-run", "find", "trakcs"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -479,15 +475,13 @@ func TestCrossDomainE2E_FlowRunNoLLM(t *testing.T) {
 		routePromptFn = noLLMRoutePromptFn
 		defer func() { routePromptFn = origRoute }()
 
-		cmd := newTestCmd()
-		cmd.AddCommand(TaskCmd)
+		cmd := newTestNLRootCmd()
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
 		// "deploy flow" → noun=flow, verb extracted from "run" in Rest by extractRunVerb
-		// → Stage2 cross-domain → flow run deploy.
-		// "deploy" is not a cobra subcommand → RunE fires.
-		cmd.SetArgs([]string{"task", "--dry-run", "deploy", "flow", "run"})
+		// → Stage2 cross-domain → flow run deploy. NL args go to root.
+		cmd.SetArgs([]string{"--dry-run", "deploy", "flow", "run"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -519,14 +513,13 @@ func TestCrossDomainE2E_CountActiveTracksNoLLM(t *testing.T) {
 		routePromptFn = noLLMRoutePromptFn
 		defer func() { routePromptFn = origRoute }()
 
-		cmd := newTestCmd()
-		cmd.AddCommand(TaskCmd)
+		cmd := newTestNLRootCmd()
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		// "count active tracks" → Stage2 cross-domain → track list --status active
-		// "count" is not a TaskCmd cobra subcommand → RunE fires.
-		cmd.SetArgs([]string{"task", "--dry-run", "count", "active", "tracks"})
+		// "count active tracks" → Stage2 cross-domain → track list --status active.
+		// NL args go directly to root.
+		cmd.SetArgs([]string{"--dry-run", "count", "active", "tracks"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

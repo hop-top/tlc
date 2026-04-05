@@ -96,14 +96,21 @@ func kitRoot() *kitcli.Root {
 		return setupURICompletion(s)
 	}
 
-	// TUI fallback when no subcommand is given. Version is handled by fang.
-	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return tuiCmd.RunE(c, args)
-	}
-
 	cobra.OnInitialize(initConfig)
 
 	return root
+}
+
+func init() {
+	// Wire NL prompt handler after all package vars are initialized to avoid
+	// an init cycle: kitRoot() → runNLPrompt → runCommand → RootCmd → kitRoot().
+	RootCmd.Args = cobra.ArbitraryArgs
+	RootCmd.RunE = func(c *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return runNLPrompt(c, args)
+		}
+		return tuiCmd.RunE(c, args)
+	}
 }
 
 // Execute runs the root command and handles any errors.

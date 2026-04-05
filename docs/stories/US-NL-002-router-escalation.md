@@ -9,7 +9,7 @@
 ## Story
 
 As a Solo Developer, I want to type a complex natural language
-prompt like `tlc task "create 3 tasks for auth: login, logout,
+prompt like `tlc "create 3 tasks for auth: login, logout,
 refresh"` and have the LLM router resolve it to multiple
 commands, so that I can batch-create tasks without manual
 repetition.
@@ -18,7 +18,7 @@ repetition.
 
 1. **Given** TLC is initialized and LLM provider configured,
    **When** I run
-   `tlc task "create 3 tasks for auth: login, logout, refresh"`,
+   `tlc "create 3 tasks for auth: login, logout, refresh"`,
    **Then** classifier misses, kit/llm router resolves 3 create
    commands with confidence >= 0.9, executor auto-runs all,
    and output lists:
@@ -56,10 +56,10 @@ repetition.
   - `TestNLPromptNoLLMProvider`
 
 ### Unit
-- `internal/cli/task_prompt_router_test.go`
+- `internal/cli/prompt_router_test.go`
   - `TestRouter_MultiCommandParsing`
   - `TestRouter_MalformedJSON`
   - `TestRouter_NoProvider`
-- `internal/cli/task_prompt_exec_test.go`
+- `internal/cli/prompt_exec_test.go`
   - `TestExecutor_MidConfidence_Confirm`
   - `TestExecutor_PartialFailure`

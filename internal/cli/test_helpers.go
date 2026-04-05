@@ -320,6 +320,14 @@ func resetTaskFlags() {
 
 	tasksSyncDryRun = false
 
+	// Reset prompt flags.
+	promptJSON = false
+
+	// Reset NL prompt flags (live on RootCmd).
+	taskNLExecute = false
+	taskNLDryRun = false
+	taskNLJSON = false
+
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
 		TaskCreateCmd, TaskListCmd, TaskGraphCmd, TaskStaleCmd, TaskShowCmd,
@@ -332,6 +340,7 @@ func resetTaskFlags() {
 		trackCreateCmd, trackUpdateCmd, trackArchiveCmd, trackAbandonCmd, trackDeleteCmd,
 		trackListCmd, trackShowCmd, trackSummaryCmd,
 		TasksSyncCmd,
+		PromptTaskCmd,
 	} {
 		if cmd != nil {
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {
@@ -362,6 +371,20 @@ func newTestCmd() *cobra.Command {
 	_ = viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))
 
 	return cmd
+}
+
+// newTestNLRootCmd creates a root command with the NL prompt handler wired,
+// mirroring the production RootCmd setup. Use this for tests that exercise
+// the full NL pipeline via root-level dispatch.
+func newTestNLRootCmd() *cobra.Command {
+	root := newTestCmd()
+	root.Args = cobra.ArbitraryArgs
+	root.RunE = runNLPrompt
+	root.Flags().BoolVarP(&taskNLExecute, "execute", "x", false, "Execute resolved commands without confirmation")
+	root.Flags().BoolVar(&taskNLDryRun, "dry-run", false, "Show resolved commands without executing")
+	root.Flags().BoolVar(&taskNLJSON, "json", false, "Output resolved commands as JSON")
+	root.AddCommand(TaskCmd)
+	return root
 }
 
 // isolateInitTest sets up an isolated SQLite database for tests that call
