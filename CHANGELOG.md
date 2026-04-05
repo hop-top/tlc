@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### feat
+- Cross-domain NL classifier: track/flow/project prompts now resolve without LLM
+  - Keyword tokenizer + vocabulary layer (verbs, nouns, modifiers)
+  - Fuzzy noun/verb matching via Levenshtein distance (typo-tolerant, distance ≤2)
+  - Confidence scoring: exact match=1.0, distance-1=0.9, distance-2=0.8
+  - Aggregate patterns: "count active tracks" → `track list --status active --counters`
+  - Pipeline: regex classifier → cross-domain classifier → LLM (LLM only as last resort)
+
 ### Added
 
 - **Track registry** — first-class work stream entity grouping tasks with
