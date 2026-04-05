@@ -239,7 +239,42 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 		tableRows = append(tableRows, row)
 	}
 
-	renderTTYTable(w, headers, tableRows, termWidth())
+	// Compute row emphasis from track status + state flags.
+	// Green: active + healthy. Pink: active + stale/blocked.
+	// Muted: abandoned. White: everything else.
+	primary := make(map[int]bool)
+	flagged := make(map[int]bool)
+	faded := make(map[int]bool)
+	for i, r := range rows {
+		switch r.Track.Status {
+		case core.TrackStatusActive:
+			hasFlag := false
+			for _, f := range r.State {
+				if f == core.TrackStateStale || f == core.TrackStateBlocked {
+					hasFlag = true
+					break
+				}
+			}
+			if hasFlag {
+				flagged[i] = true
+			} else {
+				primary[i] = true
+			}
+		case core.TrackStatusAbandoned:
+			faded[i] = true
+		}
+	}
+
+	var opts []TableOption
+	if len(primary) > 0 || len(flagged) > 0 || len(faded) > 0 {
+		opts = append(opts,
+			WithPrimaryRows(primary),
+			WithBlockerRows(flagged),
+			WithBlockedRows(faded),
+		)
+	}
+
+	renderTTYTable(w, headers, tableRows, termWidth(), opts...)
 }
 
 // resetTrackListFlags clears track list flag state between tests.

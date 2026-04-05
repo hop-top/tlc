@@ -31,7 +31,7 @@ var (
 	skippedStyle    = lipgloss.NewStyle().Foreground(warningColor)
 )
 
-func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
+func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, filters ...core.FieldFilter) {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON:
@@ -49,7 +49,7 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 	case formatCounters:
 		renderCounters(out, tasks)
 	default: // table
-		renderTable(out, tasks)
+		renderTable(out, tasks, filters...)
 	}
 }
 
@@ -154,7 +154,7 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
-func renderTable(w io.Writer, tasks []*core.Task) {
+func renderTable(w io.Writer, tasks []*core.Task, filters ...core.FieldFilter) {
 	headers := []string{"ID", "Title", "Status", "Assigned", "Stale", "Blocked"}
 
 	rows := make([][]string, 0, len(tasks))
@@ -186,7 +186,39 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		})
 	}
 
-	renderTTYTable(w, headers, rows, termWidth())
+	var opts []TableOption
+	if pr := primaryRowsFromFilters(headers, rows, filters); pr != nil {
+		opts = append(opts, WithPrimaryRows(pr))
+
+		// Blockers: non-primary tasks referenced in other tasks' blocked-by.
+		blockerIDs := make(map[string]bool)
+		for _, t := range tasks {
+			for _, dep := range t.BlockedBy() {
+				blockerIDs[dep] = true
+			}
+		}
+		blockers := make(map[int]bool)
+		for i, t := range tasks {
+			if !pr[i] && blockerIDs[t.ID] {
+				blockers[i] = true
+			}
+		}
+		if len(blockers) > 0 {
+			opts = append(opts, WithBlockerRows(blockers))
+		}
+
+		// Blocked: tasks that are themselves blocked.
+		blocked := make(map[int]bool)
+		for i, t := range tasks {
+			if t.IsBlocked() {
+				blocked[i] = true
+			}
+		}
+		if len(blocked) > 0 {
+			opts = append(opts, WithBlockedRows(blocked))
+		}
+	}
+	renderTTYTable(w, headers, rows, termWidth(), opts...)
 }
 
 // renderWorkspaceTable renders a task table with an additional Project column.

@@ -216,7 +216,7 @@ var TaskListCmd = &cobra.Command{
 		if taskListCounters {
 			format = formatCounters
 		}
-		formatTasks(cmd, tasks, format)
+		formatTasks(cmd, tasks, format, query.Filters...)
 		return nil
 	},
 }
