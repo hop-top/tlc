@@ -1,0 +1,338 @@
+package cli
+
+import (
+	"strings"
+)
+
+// RouteNounToDomain returns the CLI domain for the noun token, or "" if unrecognized.
+// Uses exact lookup first, then fuzzy if no exact match.
+func RouteNounToDomain(tokens PromptTokens) (NounDomain, float64) {
+	noun := tokens.Noun
+	if noun == "" {
+		return "", 0
+	}
+	// Exact lookup.
+	if nd, ok := LookupNoun(noun); ok {
+		return nd, 1.0
+	}
+	// Fuzzy fallback.
+	nd, conf := FuzzyMatchNoun(noun)
+	return nd, conf
+}
+
+// verbConfidence returns 1.0 for an exact verb match, 0.9/0.8 for fuzzy, 0 for unknown.
+func verbConfidence(verb string) float64 {
+	if verb == "" {
+		return 0
+	}
+	if _, ok := LookupVerb(verb); ok {
+		return 1.0
+	}
+	// "summary" and "how" are not in the vocab alias map — treat as query-adjacent.
+	if verb == "summary" || verb == "how" {
+		return 1.0
+	}
+	_, conf := FuzzyMatchVerb(verb)
+	return conf
+}
+
+// modifierFlags converts canonical modifier strings to CLI flag args.
+// "status:active" → ["--status", "active"]
+// "status:done"   → ["--status", "DONE"]
+// "blocked"       → ["--blocked"]
+// "stale"         → ["--stale"]
+// "mine"          → ["--mine"]
+func modifierFlags(modifiers []string) []string {
+	var out []string
+	for _, m := range modifiers {
+		switch m {
+		case "status:active":
+			out = append(out, "--status", "active")
+		case "status:done":
+			out = append(out, "--status", "DONE")
+		case "blocked":
+			out = append(out, "--blocked")
+		case "stale":
+			out = append(out, "--stale")
+		case "mine":
+			out = append(out, "--mine")
+		}
+	}
+	return out
+}
+
+// isCountVerb returns true when the raw verb word signals a count query.
+func isCountVerb(verb string) bool {
+	return verb == "count"
+}
+
+// isSummaryVerb returns true when the raw verb word signals a summary query.
+func isSummaryVerb(verb string) bool {
+	return verb == "summary"
+}
+
+// isHowManyPrompt returns true when prompt starts with "how many".
+func isHowManyPrompt(prompt string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "how many")
+}
+
+// BuildCommand assembles the full CLI command from verb + domain + modifiers.
+// domainConf is the confidence from RouteNounToDomain; verbConf is derived internally.
+// Returns nil when the verb+domain combination is not supported.
+func BuildCommand(tokens PromptTokens, domain NounDomain, domainConf float64) []ResolvedCommand {
+	verb := tokens.Verb
+
+	// Determine verb category and confidence.
+	vc, vcConf := resolveVerbCategory(verb)
+	if vc == "" && !isSummaryVerb(verb) {
+		return nil
+	}
+	if vcConf == 0 {
+		vcConf = verbConfidence(verb)
+	}
+
+	confidence := domainConf * vcConf
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+
+	switch domain {
+	case DomainTask:
+		return buildTaskCommand(tokens, vc, confidence)
+	case DomainTrack:
+		return buildTrackCommand(tokens, vc, confidence)
+	case DomainFlow:
+		return buildFlowCommand(tokens, vc, confidence)
+	case DomainProject:
+		return buildProjectCommand(tokens, vc, confidence)
+	}
+	return nil
+}
+
+// resolveVerbCategory maps a raw verb word to (VerbCategory, confidence).
+// "summary" is treated as VerbQuery with conf=1.0.
+// Returns ("", 0) when no match.
+func resolveVerbCategory(verb string) (VerbCategory, float64) {
+	if verb == "" {
+		return "", 0
+	}
+	// Special cases not in alias map.
+	if verb == "summary" {
+		return VerbQuery, 1.0
+	}
+	if verb == "run" {
+		return VerbCreate, 1.0
+	}
+	if verb == "switch" {
+		// treat as a special query/navigate — use VerbQuery placeholder
+		return VerbQuery, 1.0
+	}
+	if vc, ok := LookupVerb(verb); ok {
+		return vc, 1.0
+	}
+	vc, conf := FuzzyMatchVerb(verb)
+	if conf == 0 {
+		return "", 0
+	}
+	return vc, conf
+}
+
+// buildTaskCommand produces task sub-commands.
+func buildTaskCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
+	var subCmd string
+	switch vc {
+	case VerbQuery:
+		subCmd = "list"
+	case VerbCreate:
+		subCmd = "create"
+	case VerbComplete:
+		subCmd = "complete"
+	case VerbDestroy:
+		subCmd = "delete"
+	default:
+		return nil
+	}
+
+	args := []string{subCmd}
+	args = append(args, modifierFlags(tokens.Modifiers)...)
+	args = appendCountSummaryFlags(args, tokens.Verb, "")
+	return []ResolvedCommand{{Cmd: "task", Args: args, Confidence: confidence}}
+}
+
+// buildTrackCommand produces track sub-commands.
+func buildTrackCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
+	if vc != VerbQuery {
+		return nil
+	}
+	args := []string{"list"}
+	args = append(args, modifierFlags(tokens.Modifiers)...)
+	args = appendCountSummaryFlags(args, tokens.Verb, "")
+	return []ResolvedCommand{{Cmd: "track", Args: args, Confidence: confidence}}
+}
+
+// buildFlowCommand produces flow sub-commands.
+func buildFlowCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
+	switch vc {
+	case VerbQuery:
+		return []ResolvedCommand{{Cmd: "flow", Args: []string{"list"}, Confidence: confidence}}
+	case VerbCreate:
+		// VerbCreate maps to "run"; flow name comes from Rest[0] if present.
+		args := []string{"run"}
+		if len(tokens.Rest) > 0 {
+			args = append(args, tokens.Rest[0])
+		}
+		return []ResolvedCommand{{Cmd: "flow", Args: args, Confidence: confidence}}
+	}
+	return nil
+}
+
+// buildProjectCommand produces project sub-commands.
+func buildProjectCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
+	// "switch" verb: project switch <name>
+	if tokens.Verb == "switch" {
+		args := []string{"switch"}
+		if len(tokens.Rest) > 0 {
+			// Use first Rest word as project name (skip "switch" if it appears there).
+			for _, w := range tokens.Rest {
+				if w != "switch" && w != "to" {
+					args = append(args, w)
+					break
+				}
+			}
+		}
+		return []ResolvedCommand{{Cmd: "project", Args: args, Confidence: confidence}}
+	}
+	if vc != VerbQuery {
+		return nil
+	}
+	return []ResolvedCommand{{Cmd: "project", Args: []string{"list"}, Confidence: confidence}}
+}
+
+// containsRest checks whether a word appears in the rest slice.
+func containsRest(rest []string, word string) bool {
+	for _, w := range rest {
+		if w == word {
+			return true
+		}
+	}
+	return false
+}
+
+// appendCountSummaryFlags appends --counters or --summary based on raw verb.
+// prompt is the original prompt (lowercased) checked for "how many".
+func appendCountSummaryFlags(args []string, verb, prompt string) []string {
+	if isCountVerb(verb) || isHowManyPrompt(prompt) {
+		args = append(args, "--counters")
+	} else if isSummaryVerb(verb) {
+		args = append(args, "--summary")
+	}
+	return args
+}
+
+// ClassifyPromptCrossDomain is the cross-domain NLP classifier.
+// It tokenizes the prompt, routes the noun to a domain, and builds a command.
+// Returns nil when no domain or verb can be resolved.
+func ClassifyPromptCrossDomain(prompt string) []ResolvedCommand {
+	text := strings.TrimSpace(prompt)
+	if text == "" {
+		return nil
+	}
+
+	lower := strings.ToLower(text)
+	howMany := strings.HasPrefix(lower, "how many")
+
+	// Handle "how many" prefix: inject a synthetic "count" verb by rewriting
+	// the prompt before tokenizing.
+	if howMany {
+		// strip "how many" and re-tokenize
+		text = strings.TrimSpace(lower[len("how many"):])
+	}
+
+	tokens := TokenizePrompt(text)
+
+	// If no noun, we cannot route.
+	if tokens.Noun == "" {
+		return nil
+	}
+
+	domain, domainConf := RouteNounToDomain(tokens)
+	if domain == "" {
+		return nil
+	}
+
+	// Inject count verb when "how many" prefix was detected.
+	if howMany && tokens.Verb == "" {
+		tokens.Verb = "count"
+	}
+
+	// "switch" can appear as a Rest word (e.g., "switch to auth project" →
+	// tokenizer doesn't know "switch"; it ends up in Rest).
+	if tokens.Verb == "" {
+		tokens.Verb = extractSpecialVerb(tokens.Rest)
+	}
+
+	// When no verb is found but there are modifiers or a noun, default to
+	// an implicit list/query (e.g., "active tracks", "blocked tasks").
+	if tokens.Verb == "" && len(tokens.Modifiers) > 0 {
+		tokens.Verb = "list"
+	}
+
+	// "run" in Rest means flow run; promote it to Verb and strip from Rest.
+	if tokens.Verb == "" {
+		tokens.Verb, tokens.Rest = extractRunVerb(tokens.Rest)
+	}
+
+	if tokens.Verb == "" {
+		return nil
+	}
+
+	cmds := BuildCommand(tokens, domain, domainConf)
+	if len(cmds) == 0 {
+		return nil
+	}
+
+	// For "how many" prompts, ensure --counters is appended if not already present.
+	if howMany {
+		for i := range cmds {
+			if !containsString(cmds[i].Args, "--counters") {
+				cmds[i].Args = append(cmds[i].Args, "--counters")
+			}
+		}
+	}
+
+	return cmds
+}
+
+// extractSpecialVerb returns a special verb ("switch") if found in rest, otherwise "".
+func extractSpecialVerb(rest []string) string {
+	for _, w := range rest {
+		if w == "switch" {
+			return "switch"
+		}
+	}
+	return ""
+}
+
+// extractRunVerb returns ("run", remaining_rest) if "run" is in rest.
+// Otherwise returns ("", original_rest).
+func extractRunVerb(rest []string) (string, []string) {
+	for i, w := range rest {
+		if w == "run" {
+			remaining := make([]string, 0, len(rest)-1)
+			remaining = append(remaining, rest[:i]...)
+			remaining = append(remaining, rest[i+1:]...)
+			return "run", remaining
+		}
+	}
+	return "", rest
+}
+
+// containsString returns true if s is in slice.
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}

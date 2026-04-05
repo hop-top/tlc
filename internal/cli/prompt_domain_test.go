@@ -1,0 +1,397 @@
+package cli
+
+import (
+	"reflect"
+	"testing"
+)
+
+// --- RouteNounToDomain ---
+
+func TestRouteNounToDomain_ExactMatch(t *testing.T) {
+	tests := []struct {
+		noun       string
+		wantDomain NounDomain
+		wantConf   float64
+	}{
+		{"tasks", DomainTask, 1.0},
+		{"task", DomainTask, 1.0},
+		{"track", DomainTrack, 1.0},
+		{"tracks", DomainTrack, 1.0},
+		{"flow", DomainFlow, 1.0},
+		{"flows", DomainFlow, 1.0},
+		{"project", DomainProject, 1.0},
+		{"projects", DomainProject, 1.0},
+	}
+	for _, tc := range tests {
+		tokens := PromptTokens{Noun: tc.noun}
+		got, conf := RouteNounToDomain(tokens)
+		if got != tc.wantDomain {
+			t.Errorf("RouteNounToDomain(%q): domain = %q, want %q", tc.noun, got, tc.wantDomain)
+		}
+		if conf != tc.wantConf {
+			t.Errorf("RouteNounToDomain(%q): conf = %v, want %v", tc.noun, conf, tc.wantConf)
+		}
+	}
+}
+
+func TestRouteNounToDomain_FuzzyMatch(t *testing.T) {
+	// "tack" is 1 edit from "task" — should fuzzy-match
+	tokens := PromptTokens{Noun: "tack"}
+	got, conf := RouteNounToDomain(tokens)
+	if got != DomainTask {
+		t.Errorf("RouteNounToDomain(tack): domain = %q, want %q", got, DomainTask)
+	}
+	if conf != 0.9 {
+		t.Errorf("RouteNounToDomain(tack): conf = %v, want 0.9", conf)
+	}
+}
+
+func TestRouteNounToDomain_NoMatch(t *testing.T) {
+	tokens := PromptTokens{Noun: "zzz"}
+	got, conf := RouteNounToDomain(tokens)
+	if got != "" {
+		t.Errorf("RouteNounToDomain(zzz): expected empty domain, got %q", got)
+	}
+	if conf != 0 {
+		t.Errorf("RouteNounToDomain(zzz): expected conf=0, got %v", conf)
+	}
+}
+
+func TestRouteNounToDomain_EmptyNoun(t *testing.T) {
+	tokens := PromptTokens{}
+	got, conf := RouteNounToDomain(tokens)
+	if got != "" || conf != 0 {
+		t.Errorf("RouteNounToDomain(empty): want (\"\",0), got (%q,%v)", got, conf)
+	}
+}
+
+// --- Task domain ---
+
+func TestBuildCommand_TaskList(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	want := ResolvedCommand{Cmd: "task", Args: []string{"list"}, Confidence: 1.0}
+	if !reflect.DeepEqual(cmds[0], want) {
+		t.Errorf("got %+v, want %+v", cmds[0], want)
+	}
+}
+
+func TestBuildCommand_TaskCreate(t *testing.T) {
+	tokens := PromptTokens{Verb: "create", Noun: "task"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	if cmds[0].Args[0] != "create" {
+		t.Errorf("expected subcommand 'create', got %q", cmds[0].Args[0])
+	}
+}
+
+func TestBuildCommand_TaskComplete(t *testing.T) {
+	tokens := PromptTokens{Verb: "complete", Noun: "task"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	if cmds[0].Args[0] != "complete" {
+		t.Errorf("expected 'complete', got %q", cmds[0].Args[0])
+	}
+}
+
+func TestBuildCommand_TaskDelete(t *testing.T) {
+	tokens := PromptTokens{Verb: "delete", Noun: "task"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	if cmds[0].Args[0] != "delete" {
+		t.Errorf("expected 'delete', got %q", cmds[0].Args[0])
+	}
+}
+
+// --- T-0302: Aggregate query patterns ---
+
+func TestBuildCommand_CountTasks(t *testing.T) {
+	tokens := PromptTokens{Verb: "count", Noun: "tasks"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	args := cmds[0].Args
+	if !containsArg(args, "--counters") {
+		t.Errorf("expected --counters in args, got %v", args)
+	}
+}
+
+func TestBuildCommand_TaskSummary(t *testing.T) {
+	tokens := PromptTokens{Verb: "summary", Noun: "tasks"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	if !containsArg(cmds[0].Args, "--summary") {
+		t.Errorf("expected --summary in args, got %v", cmds[0].Args)
+	}
+}
+
+func TestClassifyPromptCrossDomain_HowManyTasksBlocked(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("how many tasks are blocked")
+	if len(cmds) == 0 {
+		t.Fatal("expected at least one command")
+	}
+	args := cmds[0].Args
+	if !containsArg(args, "--counters") {
+		t.Errorf("expected --counters in args, got %v", args)
+	}
+	if !containsArg(args, "--blocked") {
+		t.Errorf("expected --blocked in args, got %v", args)
+	}
+}
+
+// --- T-0303: Track domain ---
+
+func TestBuildCommand_TrackList(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tracks"}
+	cmds := BuildCommand(tokens, DomainTrack, 1.0)
+	if len(cmds) != 1 {
+		t.Fatalf("want 1 cmd, got %d", len(cmds))
+	}
+	want := ResolvedCommand{Cmd: "track", Args: []string{"list"}, Confidence: 1.0}
+	if !reflect.DeepEqual(cmds[0], want) {
+		t.Errorf("got %+v, want %+v", cmds[0], want)
+	}
+}
+
+func TestClassifyPromptCrossDomain_ActiveTracks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("active tracks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	args := cmds[0].Args
+	if cmds[0].Cmd != "track" {
+		t.Errorf("expected cmd=track, got %q", cmds[0].Cmd)
+	}
+	if !containsSequence(args, "--status", "active") {
+		t.Errorf("expected --status active in args, got %v", args)
+	}
+}
+
+func TestClassifyPromptCrossDomain_BlockedTracks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("blocked tracks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsArg(cmds[0].Args, "--blocked") {
+		t.Errorf("expected --blocked, got %v", cmds[0].Args)
+	}
+}
+
+func TestClassifyPromptCrossDomain_StaleTracks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("stale tracks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsArg(cmds[0].Args, "--stale") {
+		t.Errorf("expected --stale, got %v", cmds[0].Args)
+	}
+}
+
+func TestClassifyPromptCrossDomain_CountActiveTracks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("count active tracks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	args := cmds[0].Args
+	if !containsSequence(args, "--status", "active") {
+		t.Errorf("expected --status active, got %v", args)
+	}
+	if !containsArg(args, "--counters") {
+		t.Errorf("expected --counters, got %v", args)
+	}
+}
+
+func TestClassifyPromptCrossDomain_ListTracks(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("list tracks")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	want := ResolvedCommand{Cmd: "track", Args: []string{"list"}, Confidence: 1.0}
+	if !reflect.DeepEqual(cmds[0], want) {
+		t.Errorf("got %+v, want %+v", cmds[0], want)
+	}
+}
+
+// --- T-0304: Flow domain ---
+
+func TestClassifyPromptCrossDomain_ListFlows(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("list flows")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if cmds[0].Cmd != "flow" || cmds[0].Args[0] != "list" {
+		t.Errorf("expected flow list, got %+v", cmds[0])
+	}
+}
+
+func TestClassifyPromptCrossDomain_ShowFlows(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("show flows")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if cmds[0].Cmd != "flow" || cmds[0].Args[0] != "list" {
+		t.Errorf("expected flow list, got %+v", cmds[0])
+	}
+}
+
+func TestClassifyPromptCrossDomain_RunDeployFlow(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("run deploy flow")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if cmds[0].Cmd != "flow" {
+		t.Errorf("expected cmd=flow, got %q", cmds[0].Cmd)
+	}
+	if cmds[0].Args[0] != "run" {
+		t.Errorf("expected subcommand=run, got %q", cmds[0].Args[0])
+	}
+	if len(cmds[0].Args) < 2 || cmds[0].Args[1] != "deploy" {
+		t.Errorf("expected flow name=deploy, got args %v", cmds[0].Args)
+	}
+}
+
+// --- T-0305: Project domain ---
+
+func TestClassifyPromptCrossDomain_ListProjects(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("list projects")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if cmds[0].Cmd != "project" || cmds[0].Args[0] != "list" {
+		t.Errorf("expected project list, got %+v", cmds[0])
+	}
+}
+
+func TestClassifyPromptCrossDomain_SwitchProject(t *testing.T) {
+	cmds := ClassifyPromptCrossDomain("switch to auth project")
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if cmds[0].Cmd != "project" {
+		t.Errorf("expected cmd=project, got %q", cmds[0].Cmd)
+	}
+	if cmds[0].Args[0] != "switch" {
+		t.Errorf("expected subcommand=switch, got %q", cmds[0].Args[0])
+	}
+	if len(cmds[0].Args) < 2 || cmds[0].Args[1] != "auth" {
+		t.Errorf("expected project name=auth, got args %v", cmds[0].Args)
+	}
+}
+
+// --- Modifier flag mapping ---
+
+func TestBuildCommand_ModifierStatusActive(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks", Modifiers: []string{"status:active"}}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsSequence(cmds[0].Args, "--status", "active") {
+		t.Errorf("expected --status active in args, got %v", cmds[0].Args)
+	}
+}
+
+func TestBuildCommand_ModifierStatusDone(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks", Modifiers: []string{"status:done"}}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsSequence(cmds[0].Args, "--status", "DONE") {
+		t.Errorf("expected --status DONE in args, got %v", cmds[0].Args)
+	}
+}
+
+func TestBuildCommand_ModifierBlocked(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks", Modifiers: []string{"blocked"}}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsArg(cmds[0].Args, "--blocked") {
+		t.Errorf("expected --blocked, got %v", cmds[0].Args)
+	}
+}
+
+func TestBuildCommand_ModifierStale(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks", Modifiers: []string{"stale"}}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsArg(cmds[0].Args, "--stale") {
+		t.Errorf("expected --stale, got %v", cmds[0].Args)
+	}
+}
+
+func TestBuildCommand_ModifierMine(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks", Modifiers: []string{"mine"}}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if !containsArg(cmds[0].Args, "--mine") {
+		t.Errorf("expected --mine, got %v", cmds[0].Args)
+	}
+}
+
+// --- Confidence calculation ---
+
+func TestBuildCommand_ConfidenceMultiplied(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tasks"}
+	// domainConf = 0.9 (fuzzy noun), verbConf derived from exact verb
+	cmds := BuildCommand(tokens, DomainTask, 0.9)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	// verb "list" is exact → verbConf=1.0; 1.0 * 0.9 = 0.9
+	if cmds[0].Confidence != 0.9 {
+		t.Errorf("expected confidence=0.9, got %v", cmds[0].Confidence)
+	}
+}
+
+// --- ClassifyPromptCrossDomain nil returns ---
+
+func TestClassifyPromptCrossDomain_Empty(t *testing.T) {
+	if ClassifyPromptCrossDomain("") != nil {
+		t.Error("expected nil for empty prompt")
+	}
+}
+
+func TestClassifyPromptCrossDomain_NoMatch(t *testing.T) {
+	if ClassifyPromptCrossDomain("zzz qqq xxx") != nil {
+		t.Error("expected nil for unrecognized prompt")
+	}
+}
+
+// --- helpers ---
+
+func containsArg(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSequence(args []string, a, b string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == a && args[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
