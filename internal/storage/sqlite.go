@@ -481,11 +481,11 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 				continue
 			}
 
-			if field == "assigned_to" && f.Value == nil {
+			if f.Value == nil {
 				if op == "=" {
-					groupClauses = append(groupClauses, "assigned_to IS NULL")
+					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NULL OR %s = '')", field, field))
 				} else {
-					groupClauses = append(groupClauses, "assigned_to IS NOT NULL")
+					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field))
 				}
 			} else {
 				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))
@@ -1269,11 +1269,11 @@ func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, 
 				continue
 			}
 
-			if field == "assigned_to" && f.Value == nil {
+			if f.Value == nil {
 				if op == "=" {
-					groupClauses = append(groupClauses, "assigned_to IS NULL")
+					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NULL OR %s = '')", field, field))
 				} else {
-					groupClauses = append(groupClauses, "assigned_to IS NOT NULL")
+					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field))
 				}
 			} else {
 				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))

@@ -89,7 +89,13 @@ var TaskListCmd = &cobra.Command{
 		// query filters. Uses a temporary storage handle so the
 		// workspace branch is not forced to open local storage.
 		var trackQIDs []core.QualifiedTrackID
-		if taskListTrack != "" {
+		if taskListTrack == "-" || taskListTrack == "null" ||
+			(cmd.Flags().Changed("track") && taskListTrack == "") {
+			// --track - / --track null / --track "" → untracked tasks only.
+			query.Filters = append(query.Filters, core.FieldFilter{
+				Field: "track_id", Operator: core.OpEq, Value: nil,
+			})
+		} else if taskListTrack != "" {
 			trackQIDs = core.ParseMultiTrackIDs(taskListTrack)
 			hasLocal := false
 			for _, q := range trackQIDs {
