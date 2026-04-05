@@ -10,8 +10,8 @@
 - [ ] Inline clarification: single question for disambiguation
 - [ ] REPL clarification: multi-turn for complex generative prompts
 - [ ] Destructive command guard: always confirm delete/unclaim/unassign
-- [ ] `task prompt <id>`: enriched context dump (markdown + `--json`)
-- [ ] `task <prompt>`: NL entry point wiring into cobra
+- [ ] `tlc prompt task <id>`: enriched context dump (markdown + `--json`)
+- [ ] `tlc <prompt>`: NL entry point wired into RootCmd
 - [ ] Story: NL prompt happy path (classifier hit)
 - [ ] Story: NL prompt with router escalation
 - [ ] Story: NL prompt with clarification
@@ -39,14 +39,14 @@ Two gaps exist:
 
 ## Command Surface
 
-### `tlc task <prompt>`
+### `tlc <prompt>`
 
 Natural language to command(s). Prompt is a freeform string.
 
 ```
-tlc task "mark T-42 done"
-tlc task "create 3 tasks for auth: login, logout, refresh"
-tlc task "what tasks are blocked?"
+tlc "mark T-42 done"
+tlc "create 3 tasks for auth: login, logout, refresh"
+tlc "what tasks are blocked?"
 ```
 
 Flags:
@@ -55,13 +55,13 @@ Flags:
 - `--dry-run` — show resolved commands, never execute
 - `--json` — output resolved commands as JSON
 
-### `tlc task prompt <id>`
+### `tlc prompt task <id>`
 
 Enriched context dump for agent consumption.
 
 ```
-tlc task prompt T-0042
-tlc task prompt T-0042 --json
+tlc prompt task T-0042
+tlc prompt task T-0042 --json
 ```
 
 Flags:
@@ -77,7 +77,7 @@ Output includes:
 ## Architecture
 
 ```
-tlc task <prompt>
+tlc <prompt>
        │
   ┌────▼─────┐
   │Classifier │  Local regex/keyword matching
@@ -101,7 +101,7 @@ tlc task <prompt>
 
 ### Components
 
-**Classifier** (`internal/cli/task_prompt_classify.go`)
+**Classifier** (`internal/cli/prompt_classify.go`)
 
 Regex and keyword patterns for obvious mappings. Handles:
 - `"complete T-42"` → `task complete T-0042`
@@ -111,20 +111,20 @@ Regex and keyword patterns for obvious mappings. Handles:
 
 Returns `[]ResolvedCommand` with confidence 1.0 on match, nil on miss.
 
-**kit/llm router** (`internal/cli/task_prompt_router.go`)
+**kit/llm router** (`internal/cli/prompt_router.go`)
 
 Uses `hop.top/kit/llm` for prompts the classifier cannot handle.
 Provider-agnostic: works with any registered adapter (ollama, anthropic,
 openai, etc.) via URI-based config.
 
 Provider resolution:
-1. Config key `task_prompt.llm_provider` (e.g. `ollama://llama3.2`)
+1. Config key `prompt.llm_provider` (e.g. `ollama://llama3.2`)
 2. Env `TLC_PROMPT_LLM` override
 3. Falls back to `kit/llm.LoadConfig("")` default
 4. All unavailable → classifier-only mode with error message
 
 Uses `kit/llm.Client.Complete()` with system prompt containing:
-- Available command schema (from `GenerateTaskSchemaJSON()`)
+- Available command schema (from `GenerateSchemaJSON(RootCmd)`)
 - Xray root chunk (cached `.xray_*.md` or JIT-generated)
 - Task description content when prompt references a task
 - User prompt
@@ -148,7 +148,7 @@ Enriches router calls with repo-aware context:
 - Root chunk only (≈2k tokens) for file/directory awareness
 - Hardcoded 4096 token cap on xray content sent to router
 
-**Executor** (`internal/cli/task_prompt_exec.go`)
+**Executor** (`internal/cli/prompt_exec.go`)
 
 Confidence-gated command runner:
 - **High (≥0.9):** auto-execute
@@ -165,7 +165,7 @@ confirmation regardless of confidence. `--no-prompt` overrides this.
 Multi-command execution: sequential, stop on first error. Output shows
 completed commands, the failure, and remaining unexecuted commands.
 
-**Clarifier** (`internal/cli/task_prompt_clarify.go`)
+**Clarifier** (`internal/cli/prompt_clarify.go`)
 
 Two modes based on router response metadata:
 
@@ -183,7 +183,7 @@ Two modes based on router response metadata:
 ### NL prompt (classifier hit)
 
 ```
-1. tlc task "complete T-42"
+1. tlc "complete T-42"
 2. Classifier matches: task complete T-0042 (confidence 1.0)
 3. Executor: 1.0 ≥ 0.9 → auto-execute
 4. Output: Completed task T-0042
@@ -192,7 +192,7 @@ Two modes based on router response metadata:
 ### NL prompt (router escalation)
 
 ```
-1. tlc task "create 3 tasks for auth: login, logout, refresh"
+1. tlc "create 3 tasks for auth: login, logout, refresh"
 2. Classifier: no match
 3. kit/llm call with command schema + xray context
 4. LLM returns 3 create commands, confidence 0.92
@@ -206,7 +206,7 @@ Two modes based on router response metadata:
 ### NL prompt (clarification)
 
 ```
-1. tlc task "mark the auth task done"
+1. tlc "mark the auth task done"
 2. Classifier: no exact match (ambiguous "auth task")
 3. LLM returns confidence 0.55 + disambiguation candidates
 4. Executor: 0.55 < 0.7 → clarify
@@ -219,7 +219,7 @@ Two modes based on router response metadata:
 ### Context dump
 
 ```
-1. tlc task prompt T-0042
+1. tlc prompt task T-0042
 2. Load task T-0042 from storage
 3. Load related:
    - blocked-by T-0038 [DONE]: Add token storage
@@ -284,15 +284,20 @@ If all providers exhausted, fail fast. Suggest explicit commands.
 
 ```
 internal/cli/
-  task_prompt.go              # cobra wiring: `task <prompt>` + `task prompt <id>`
-  task_prompt_classify.go     # local regex/keyword classifier
-  task_prompt_classify_test.go
-  task_prompt_router.go       # routellm HTTP + shell client
-  task_prompt_router_test.go
-  task_prompt_exec.go         # confidence-gated executor
-  task_prompt_exec_test.go
-  task_prompt_clarify.go      # inline + REPL clarification
-  task_prompt_clarify_test.go
-  task_prompt_context.go      # `task prompt <id>` context dump
-  task_prompt_context_test.go
+  prompt.go              # cobra wiring: RootCmd NL handler
+  prompt_classify.go     # local regex/keyword classifier
+  prompt_classify_test.go
+  prompt_router.go       # kit/llm HTTP + shell client
+  prompt_router_test.go
+  prompt_exec.go         # confidence-gated executor
+  prompt_exec_test.go
+  prompt_clarify.go      # inline + REPL clarification
+  prompt_clarify_test.go
+  prompt_context.go      # `tlc prompt task <id>` context dump
+  prompt_context_test.go
+  prompt_schema.go       # schema generator (all top-level commands)
+  prompt_schema_test.go
+  prompt_xray.go         # xray context injection
+  prompt_xray_test.go
+  prompt_e2e_test.go     # E2E tests
 ```
