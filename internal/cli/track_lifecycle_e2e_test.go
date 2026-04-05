@@ -132,7 +132,7 @@ func TestTrackLifecycle_E2E_CreateInvalidType(t *testing.T) {
 		if !contains(err.Error(), `track type "invalid" invalid`) {
 			t.Errorf("unexpected error: %v", err)
 		}
-		if !contains(err.Error(), "feature, bug, refactor") {
+		if !contains(err.Error(), "valid types:") {
 			t.Errorf("error should list valid types: %v", err)
 		}
 	})

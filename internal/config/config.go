@@ -43,6 +43,8 @@ type TrackConfig struct {
 	StaleThreshold time.Duration    `yaml:"stale_threshold"`
 	Health         TrackHealthConfig `yaml:"health"`
 	PlanExtractor  string           `yaml:"plan_extractor,omitempty"`
+	Types          []string         `yaml:"types,omitempty"`
+	DefaultType    string           `yaml:"default_type,omitempty"`
 }
 
 // Validate validates the track configuration.
@@ -73,6 +75,23 @@ func (tc *TrackConfig) Validate() error {
 			"tracks.health.min_progress_to_start must be 0-100, got %d",
 			tc.Health.MinProgressToStart,
 		)
+	}
+	if tc.DefaultType != "" {
+		if len(tc.Types) > 0 {
+			found := false
+			for _, t := range tc.Types {
+				if t == tc.DefaultType {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf(
+					"tracks.default_type %q not in tracks.types",
+					tc.DefaultType,
+				)
+			}
+		}
 	}
 	return nil
 }

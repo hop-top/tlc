@@ -32,17 +32,50 @@ func ValidTrackStatus(s TrackStatus) bool {
 // TrackType constants for categorising tracks.
 const (
 	TrackTypeFeature  = "feature"
+	TrackTypeFix      = "fix"
 	TrackTypeBug      = "bug"
 	TrackTypeRefactor = "refactor"
+	TrackTypeChore    = "chore"
+	TrackTypeCI       = "ci"
+	TrackTypeDocs     = "docs"
+	TrackTypeStyle    = "style"
+	TrackTypePerf     = "perf"
+	TrackTypeTest     = "test"
+	TrackTypeBuild    = "build"
 )
 
+// DefaultTrackTypes is the built-in set of allowed track types.
+var DefaultTrackTypes = []string{
+	TrackTypeFeature, TrackTypeFix, TrackTypeBug, TrackTypeRefactor,
+	TrackTypeChore, TrackTypeCI, TrackTypeDocs, TrackTypeStyle,
+	TrackTypePerf, TrackTypeTest, TrackTypeBuild,
+}
+
 // ValidTrackType returns true if t is a recognised track type (or empty).
-func ValidTrackType(t string) bool {
-	switch t {
-	case "", TrackTypeFeature, TrackTypeBug, TrackTypeRefactor:
+// When configTypes is non-empty, it overrides the default set.
+func ValidTrackType(t string, configTypes ...[]string) bool {
+	if t == "" {
 		return true
 	}
+	types := DefaultTrackTypes
+	if len(configTypes) > 0 && len(configTypes[0]) > 0 {
+		types = configTypes[0]
+	}
+	for _, allowed := range types {
+		if t == allowed {
+			return true
+		}
+	}
 	return false
+}
+
+// TrackTypeList returns a comma-separated string of allowed types.
+func TrackTypeList(configTypes ...[]string) string {
+	types := DefaultTrackTypes
+	if len(configTypes) > 0 && len(configTypes[0]) > 0 {
+		types = configTypes[0]
+	}
+	return strings.Join(types, ", ")
 }
 
 // Track represents a grouping of related tasks toward a deliverable.

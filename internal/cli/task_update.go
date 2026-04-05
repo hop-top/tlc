@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -165,7 +166,18 @@ var TaskUpdateCmd = &cobra.Command{
 					task.TrackID = nil
 				} else {
 					resolved, trackErr := resolveTrackID(ctx, res.Storage, taskUpdateTrack)
-					if trackErr != nil {
+					if trackErr != nil && errors.Is(trackErr, ErrTrackNotFound) {
+						created, createErr := maybeAutoCreateTrack(
+							ctx, cmd, res.Storage, taskUpdateTrack,
+						)
+						if createErr != nil {
+							errs = append(errs, fmt.Sprintf(
+								"%s: %v", task.ID, createErr,
+							))
+							continue
+						}
+						resolved = created
+					} else if trackErr != nil {
 						errs = append(errs, fmt.Sprintf(
 							"%s: %v", task.ID, trackErr,
 						))
