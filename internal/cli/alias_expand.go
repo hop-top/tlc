@@ -18,8 +18,15 @@ const aliasConfigKey = "aliases"
 // aliasMap is a map of alias name → expansion string.
 type aliasMap map[string]string
 
+// seededAliases are built-in aliases shipped with TLC. User-defined
+// aliases (global or local) override seeded ones.
+var seededAliases = aliasMap{
+	"setup": "config interactive",
+}
+
 // loadAliases loads aliases from both global and local config files.
-// Local aliases take precedence over global ones.
+// Local aliases take precedence over global ones, and both override
+// seeded (built-in) aliases.
 func loadAliases() (aliasMap, error) {
 	global, err := loadAliasesFrom(globalAliasPath())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -31,10 +38,16 @@ func loadAliases() (aliasMap, error) {
 		return nil, fmt.Errorf("load local aliases: %w", err)
 	}
 
-	merged := make(aliasMap, len(global)+len(local))
+	merged := make(aliasMap, len(seededAliases)+len(global)+len(local))
+	// Lowest priority: seeded
+	for k, v := range seededAliases {
+		merged[k] = v
+	}
+	// Mid priority: global
 	for k, v := range global {
 		merged[k] = v
 	}
+	// Highest priority: local
 	for k, v := range local {
 		merged[k] = v
 	}
@@ -116,7 +129,11 @@ func ExpandAliases(args []string) ([]string, bool) {
 	}
 
 	aliases, err := loadAliases()
-	if err != nil || len(aliases) == 0 {
+	if err != nil {
+		// Fall back to seeded aliases if config loading fails.
+		aliases = seededAliases
+	}
+	if len(aliases) == 0 {
 		return args, false
 	}
 
