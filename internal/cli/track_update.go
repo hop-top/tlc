@@ -42,10 +42,11 @@ var trackUpdateCmd = &cobra.Command{
 			)
 		}
 
-		if typeChanged && !core.ValidTrackType(trackUpdateType) {
+		cfgTypes := getConfigTrackTypes()
+		if typeChanged && !core.ValidTrackType(trackUpdateType, cfgTypes) {
 			return fmt.Errorf(
-				"track type %q invalid; valid types: feature, bug, refactor",
-				trackUpdateType,
+				"track type %q invalid; valid types: %s",
+				trackUpdateType, core.TrackTypeList(cfgTypes),
 			)
 		}
 
@@ -192,7 +193,7 @@ func init() {
 	)
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateType, "type", "",
-		"New track type (feature, bug, refactor)",
+		"New track type (default: from config or fix)",
 	)
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateAddPlan, "add-plan", "",

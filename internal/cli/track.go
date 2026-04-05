@@ -38,10 +38,14 @@ var trackCreateCmd = &cobra.Command{
 			trackID = core.SlugFromTitle(title)
 		}
 
-		if !core.ValidTrackType(trackCreateType) {
+		if trackCreateType == "" {
+			trackCreateType = getConfigDefaultTrackType()
+		}
+		cfgTypes := getConfigTrackTypes()
+		if !core.ValidTrackType(trackCreateType, cfgTypes) {
 			return fmt.Errorf(
-				"track type %q invalid; valid types: feature, bug, refactor",
-				trackCreateType,
+				"track type %q invalid; valid types: %s",
+				trackCreateType, core.TrackTypeList(cfgTypes),
 			)
 		}
 
@@ -97,9 +101,8 @@ func normalizeAssignee(s string) string {
 func init() {
 	trackCreateCmd.Flags().StringVar(
 		&trackCreateType, "type", "",
-		"Track type (feature, bug, refactor)",
+		"Track type (default: from config or fix)",
 	)
-	_ = trackCreateCmd.MarkFlagRequired("type")
 	trackCreateCmd.Flags().StringVar(
 		&trackCreateID, "id", "",
 		"Custom track ID slug (derived from title if omitted)",

@@ -45,10 +45,11 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 	}
 
 	if trackListType != "" {
-		if !core.ValidTrackType(trackListType) {
+		cfgTypes := getConfigTrackTypes()
+		if !core.ValidTrackType(trackListType, cfgTypes) {
 			return fmt.Errorf(
-				"track type %q invalid; valid types: feature, bug, refactor",
-				trackListType,
+				"track type %q invalid; valid types: %s",
+				trackListType, core.TrackTypeList(cfgTypes),
 			)
 		}
 		query.Type = trackListType
@@ -297,7 +298,7 @@ func init() {
 		&trackListState, "state", "", "Filter by computed state (stale, blocked, unlinked, healthy)",
 	)
 	trackListCmd.Flags().StringVar(
-		&trackListType, "type", "", "Filter by type (feature, bug, refactor)",
+		&trackListType, "type", "", "Filter by track type",
 	)
 	trackListCmd.Flags().IntVarP(
 		&trackListLimit, "limit", "n", 100, "Limit results",

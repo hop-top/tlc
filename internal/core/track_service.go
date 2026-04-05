@@ -27,8 +27,8 @@ func (s *TrackService) CreateTrack(ctx context.Context, track *Track) error {
 	}
 	if !ValidTrackType(track.Type) {
 		return fmt.Errorf(
-			"track type %q invalid; valid types: feature, bug, refactor",
-			track.Type,
+			"track type %q invalid; valid types: %s",
+			track.Type, TrackTypeList(),
 		)
 	}
 
