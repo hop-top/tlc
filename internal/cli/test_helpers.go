@@ -323,6 +323,11 @@ func resetTaskFlags() {
 	// Reset prompt flags.
 	promptJSON = false
 
+	// Reset NL prompt flags (live on RootCmd).
+	taskNLExecute = false
+	taskNLDryRun = false
+	taskNLJSON = false
+
 	// Clear Cobra's "changed" state on all flags
 	for _, cmd := range []*cobra.Command{
 		TaskCreateCmd, TaskListCmd, TaskGraphCmd, TaskStaleCmd, TaskShowCmd,
