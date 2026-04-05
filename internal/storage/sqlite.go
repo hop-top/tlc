@@ -44,6 +44,7 @@ const (
 
 type SQLiteStorage struct {
 	db        *sql.DB
+	dbPath    string
 	writeLock sync.Mutex
 	projector Projector
 }
@@ -73,7 +74,7 @@ func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
-	s := &SQLiteStorage{db: db}
+	s := &SQLiteStorage{db: db, dbPath: path}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("failed to migrate db: %w", err)
 	}

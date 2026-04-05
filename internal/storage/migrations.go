@@ -3,6 +3,9 @@ package storage
 import (
 	"context"
 	"fmt"
+	"log"
+
+	"hop.top/kit/sqlstore"
 )
 
 type migration struct {
@@ -258,6 +261,25 @@ func (s *SQLiteStorage) migrate() error {
 	if err != nil {
 		// Table might not exist yet
 		currentVersion = 0
+	}
+
+	// Check if any migrations are pending.
+	hasPending := false
+	for _, m := range migrations {
+		if m.version > currentVersion {
+			hasPending = true
+			break
+		}
+	}
+
+	// Backup before applying any pending migrations.
+	if hasPending && s.dbPath != "" {
+		nextVersion := currentVersion + 1
+		if bp, err := sqlstore.BackupBeforeMigrate(s.dbPath, nextVersion); err != nil {
+			return fmt.Errorf("pre-migration backup failed: %w", err)
+		} else if bp != "" {
+			log.Printf("backed up database before migration: %s", bp)
+		}
 	}
 
 	for _, m := range migrations {
