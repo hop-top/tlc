@@ -176,10 +176,71 @@ var migrations = []migration{
 		PRAGMA foreign_keys = ON;
 		`,
 	},
+	{
+		version: 8,
+		query: `
+		-- Rebuild tasks table to drop the FK on track_id that referenced
+		-- tracks(id) — no longer valid after v7 changed the tracks PK to
+		-- (project_id, id).  Track integrity is enforced at app level.
+		PRAGMA foreign_keys = OFF;
+
+		DROP TABLE IF EXISTS tasks_new;
+
+		CREATE TABLE tasks_new (
+			project_id    TEXT NOT NULL DEFAULT '',
+			id            TEXT NOT NULL,
+			title         TEXT NOT NULL,
+			description   TEXT,
+			status        TEXT NOT NULL,
+			assigned_to   TEXT,
+			reference     TEXT NOT NULL DEFAULT '',
+			created_at    TEXT NOT NULL,
+			updated_at    TEXT NOT NULL,
+			meta          TEXT,
+			tags          TEXT,
+			origin_system TEXT,
+			last_sync_at  TEXT,
+			archived      INTEGER DEFAULT 0,
+			effort        TEXT NOT NULL DEFAULT '',
+			priority      TEXT NOT NULL DEFAULT '',
+			stale_timeout INTEGER,
+			blocked_reason TEXT,
+			stale_fired_at TEXT,
+			track_id      TEXT,
+			PRIMARY KEY (project_id, id)
+		);
+
+		INSERT INTO tasks_new
+			(project_id, id, title, description, status,
+			 assigned_to, reference, created_at, updated_at,
+			 meta, tags, origin_system, last_sync_at, archived,
+			 effort, priority, stale_timeout, blocked_reason,
+			 stale_fired_at, track_id)
+		SELECT project_id, id, title, description, status,
+			   assigned_to, reference, created_at, updated_at,
+			   meta, tags, origin_system, last_sync_at, archived,
+			   effort, priority, stale_timeout, blocked_reason,
+			   stale_fired_at, track_id
+		FROM tasks;
+
+		DROP TABLE tasks;
+		ALTER TABLE tasks_new RENAME TO tasks;
+
+		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+		CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+		CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
+		CREATE INDEX IF NOT EXISTS idx_tasks_origin_system ON tasks(origin_system);
+		CREATE INDEX IF NOT EXISTS idx_tasks_archived ON tasks(archived);
+		CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+		CREATE INDEX IF NOT EXISTS idx_tasks_track_id ON tasks(track_id);
+
+		PRAGMA foreign_keys = ON;
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 7
+const LatestMigrationVersion = 8
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
