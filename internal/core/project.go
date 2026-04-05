@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 

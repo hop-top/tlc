@@ -9,9 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	kitcli "hop.top/kit/cli"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
@@ -28,32 +29,81 @@ var (
 // SetVersion sets the version string injected at build time.
 func SetVersion(v string) { tlcVersion = v }
 
-var RootCmd = &cobra.Command{
-	Use:   "tlc",
-	Short: "Task Line CLI - Multi-agent task orchestration",
-	Long:  "TLC provides commands for task management, flow execution, and collaboration.",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if cmd.Name() != "upgrade" {
-			upgrade.NotifyIfAvailable(cmd.Context(), newChecker(), os.Stderr)
+// kitRootInstance holds the kit Root so Execute() can call root.Execute().
+// Initialized at var-declaration time so RootCmd is non-nil before any
+// other file's init() calls RootCmd.AddCommand.
+var kitRootInstance = kitRoot()
+
+// RootCmd is the package-level root command reference. Subcommand files
+// use RootCmd.AddCommand in their own init() functions.
+var RootCmd = kitRootInstance.Cmd
+
+// kitRoot constructs the root command using kit/cli.New() and wires up
+// TLC-specific flags, viper bindings, and lifecycle hooks.
+func kitRoot() *kitcli.Root {
+	root := kitcli.New(kitcli.Config{
+		Name:    "tlc",
+		Version: tlcVersion,
+		Short:   "Task Line CLI - Multi-agent task orchestration",
+	})
+
+	cmd := root.Cmd
+	cmd.Long = "TLC provides commands for task management, flow execution, and collaboration."
+
+	// --- TLC-specific persistent flags ---
+	// kit already provides --quiet, --no-color, and --format.
+	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
+	cmd.PersistentFlags().BoolP("verbose", "V", false, "verbose logging")
+
+	// Add -f shorthand to kit's --format flag.
+	if f := cmd.PersistentFlags().Lookup("format"); f != nil {
+		f.Shorthand = "f"
+	}
+
+	// Bind TLC flags to the global viper using namespaced keys.
+	if err := viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format")); err != nil {
+		log.Warn("Failed to bind format flag", "error", err)
+	}
+	if err := viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose")); err != nil {
+		log.Warn("Failed to bind verbose flag", "error", err)
+	}
+
+	// Bridge kit's flat viper keys to TLC's namespaced keys on the global viper.
+	// kit binds --no-color to root.Viper["no-color"] and --quiet to root.Viper["quiet"].
+	// TLC reads "output.color" and "output.quiet" from the global viper.
+	if err := viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color")); err != nil {
+		log.Warn("Failed to bind color flag", "error", err)
+	}
+	if err := viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet")); err != nil {
+		log.Warn("Failed to bind quiet flag", "error", err)
+	}
+
+	// Register aliases so code reading flat keys gets the namespaced values.
+	viper.RegisterAlias("quiet", "output.quiet")
+	viper.RegisterAlias("no-color", "output.color")
+	viper.RegisterAlias("format", "output.format")
+
+	// --- Lifecycle hooks ---
+	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+		if c.Name() != "upgrade" {
+			upgrade.NotifyIfAvailable(c.Context(), newChecker(), os.Stderr)
 		}
-		// Initialize storage early to enable completion and other features
 		s, err := getStorage()
 		if err != nil {
-			// Don't fail if we can't open storage (e.g. for 'init' or 'help' commands)
-			// but we can't setup completion without it.
 			return nil
 		}
-		autoProcessInbox(cmd, s)
+		autoProcessInbox(c, s)
 		return setupURICompletion(s)
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if ok, _ := cmd.Flags().GetBool("version"); ok {
-			fmt.Fprintf(cmd.OutOrStdout(), "tlc version %s\n", tlcVersion)
-			return nil
-		}
-		// If no command is specified, run the TUI
-		return tuiCmd.RunE(cmd, args)
-	},
+	}
+
+	// TUI fallback when no subcommand is given. Version is handled by fang.
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return tuiCmd.RunE(c, args)
+	}
+
+	cobra.OnInitialize(initConfig)
+
+	return root
 }
 
 // Execute runs the root command and handles any errors.
@@ -63,33 +113,8 @@ func Execute() {
 	if ok {
 		os.Args = expanded
 	}
-	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
+	if err := kitRootInstance.Execute(context.Background()); err != nil {
 		os.Exit(1)
-	}
-}
-
-func init() {
-	cobra.OnInitialize(initConfig)
-
-	RootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
-	RootCmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls, summary)")
-	RootCmd.PersistentFlags().Bool("no-color", false, "disable colored output")
-	RootCmd.PersistentFlags().BoolP("verbose", "V", false, "verbose logging")
-	RootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
-	RootCmd.Flags().BoolP("version", "v", false, "print version and exit")
-
-	if err := viper.BindPFlag("output.format", RootCmd.PersistentFlags().Lookup("format")); err != nil {
-		log.Warn("Failed to bind format flag", "error", err)
-	}
-	if err := viper.BindPFlag("output.color", RootCmd.PersistentFlags().Lookup("no-color")); err != nil {
-		log.Warn("Failed to bind color flag", "error", err)
-	}
-	if err := viper.BindPFlag("output.verbose", RootCmd.PersistentFlags().Lookup("verbose")); err != nil {
-		log.Warn("Failed to bind verbose flag", "error", err)
-	}
-	if err := viper.BindPFlag("output.quiet", RootCmd.PersistentFlags().Lookup("quiet")); err != nil {
-		log.Warn("Failed to bind quiet flag", "error", err)
 	}
 }
 

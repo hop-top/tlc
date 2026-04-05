@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/lipgloss"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -222,17 +221,11 @@ func renderProjectTable(cmd *cobra.Command, projects []core.RegisteredProject) {
 		return
 	}
 
-	columns := []table.Column{
-		{Title: "ID", Width: 20},
-		{Title: "Label", Width: 20},
-		{Title: "DB Path", Width: 40},
-		{Title: "Space URI", Width: 30},
-		{Title: "Status", Width: 8},
-	}
+	headers := []string{"ID", "Label", "DB Path", "Space URI", "Status"}
 
-	rows := make([]table.Row, 0, len(projects))
+	rows := make([][]string, 0, len(projects))
 	for _, p := range projects {
-		rows = append(rows, table.Row{
+		rows = append(rows, []string{
 			p.ProjectID,
 			p.Label,
 			p.DBPath,
@@ -241,22 +234,7 @@ func renderProjectTable(cmd *cobra.Command, projects []core.RegisteredProject) {
 		})
 	}
 
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	tbl.SetStyles(s)
-
-	_, _ = fmt.Fprintln(w, tbl.View())
+	renderTTYTable(w, headers, rows, termWidth())
 }
 
 var ProjectPruneCmd = &cobra.Command{

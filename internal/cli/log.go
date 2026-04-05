@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"io"
 
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/lipgloss"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -128,15 +128,9 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 		return
 	}
 
-	columns := []table.Column{
-		{Title: "Timestamp", Width: 20},
-		{Title: "Task ID", Width: 12},
-		{Title: "Action", Width: 18},
-		{Title: "By", Width: 15},
-		{Title: "Note", Width: 50},
-	}
+	headers := []string{"Timestamp", "Task ID", "Action", "By", "Note"}
 
-	rows := []table.Row{}
+	rows := make([][]string, 0, len(logs))
 	for _, l := range logs {
 		timestamp := l.Timestamp.Format("2006-01-02 15:04:05")
 		note := l.Note
@@ -144,7 +138,7 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 			note = note[:47] + "..."
 		}
 
-		rows = append(rows, table.Row{
+		rows = append(rows, []string{
 			timestamp,
 			l.TaskID,
 			formatLogAction(l.Action),
@@ -153,27 +147,12 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 		})
 	}
 
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	tbl.SetStyles(s)
-
-	_, _ = fmt.Fprintln(w, tbl.View())
+	renderTTYTable(w, headers, rows, termWidth())
 	_, _ = fmt.Fprintf(w, "\nShowing %d log entries\n", len(logs))
 }
 
 func formatLogAction(action string) string {
-	actionColors := map[string]lipgloss.Color{
+	actionColors := map[string]color.Color{
 		"CREATED":       lipgloss.Color("42"),  // green
 		"CLAIMED":       lipgloss.Color("39"),  // blue
 		"RELEASED":      lipgloss.Color("214"), // yellow
