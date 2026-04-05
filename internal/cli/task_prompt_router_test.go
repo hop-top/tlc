@@ -40,9 +40,12 @@ func (m *mockProvider) Complete(_ context.Context, _ llm.Request) (llm.Response,
 func TestParseRouterResponse_HappyPath(t *testing.T) {
 	raw := `{"commands": [{"cmd": "task", "args": ["complete", "T-0042"]}], "confidence": 0.95}`
 
-	cmds, err := parseRouterResponse(raw)
+	cmds, clarification, err := parseRouterResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if clarification != "" {
+		t.Errorf("clarification = %q, want empty", clarification)
 	}
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 command, got %d", len(cmds))
@@ -67,7 +70,7 @@ func TestParseRouterResponse_MultipleCommands(t *testing.T) {
 		"confidence": 0.9
 	}`
 
-	cmds, err := parseRouterResponse(raw)
+	cmds, _, err := parseRouterResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +85,7 @@ func TestParseRouterResponse_MultipleCommands(t *testing.T) {
 func TestParseRouterResponse_MalformedJSON(t *testing.T) {
 	raw := `not valid json at all`
 
-	_, err := parseRouterResponse(raw)
+	_, _, err := parseRouterResponse(raw)
 	if err == nil {
 		t.Fatal("expected error for malformed JSON, got nil")
 	}
@@ -94,7 +97,7 @@ func TestParseRouterResponse_MalformedJSON(t *testing.T) {
 func TestParseRouterResponse_EmptyCommands(t *testing.T) {
 	raw := `{"commands": [], "confidence": 0.5}`
 
-	_, err := parseRouterResponse(raw)
+	_, _, err := parseRouterResponse(raw)
 	if err == nil {
 		t.Fatal("expected error for empty commands, got nil")
 	}
@@ -110,7 +113,7 @@ func TestParseRouterResponse_Clarification(t *testing.T) {
 		"clarification": "Did you mean task T-0001 or T-0010?"
 	}`
 
-	cmds, err := parseRouterResponse(raw)
+	cmds, clarification, err := parseRouterResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -119,6 +122,9 @@ func TestParseRouterResponse_Clarification(t *testing.T) {
 	}
 	if cmds[0].Confidence != 0.5 {
 		t.Errorf("confidence = %f, want 0.5", cmds[0].Confidence)
+	}
+	if clarification != "Did you mean task T-0001 or T-0010?" {
+		t.Errorf("clarification = %q, want %q", clarification, "Did you mean task T-0001 or T-0010?")
 	}
 }
 
@@ -161,7 +167,7 @@ func TestParseRouterResponse_DestructiveConfidenceCap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmds, err := parseRouterResponse(tt.raw)
+			cmds, _, err := parseRouterResponse(tt.raw)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -177,7 +183,7 @@ func TestParseRouterResponse_CodeFenceStripping(t *testing.T) {
 		`{"commands": [{"cmd": "task", "args": ["show", "T-0001"]}], "confidence": 0.9}` +
 		"\n```"
 
-	cmds, err := parseRouterResponse(raw)
+	cmds, _, err := parseRouterResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -200,7 +206,7 @@ func TestRoutePrompt_HappyPath(t *testing.T) {
 		},
 	}
 
-	cmds, err := routePromptWithProvider(context.Background(), "finish task 42", []byte(`[]`), mock)
+	cmds, clarification, err := routePromptWithProvider(context.Background(), "finish task 42", []byte(`[]`), mock)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,6 +215,9 @@ func TestRoutePrompt_HappyPath(t *testing.T) {
 	}
 	if cmds[0].Args[1] != "T-0042" {
 		t.Errorf("task ID = %q, want T-0042", cmds[0].Args[1])
+	}
+	if clarification != "" {
+		t.Errorf("clarification = %q, want empty", clarification)
 	}
 	if !mock.closed {
 		t.Error("expected provider to be closed")
@@ -220,7 +229,7 @@ func TestRoutePrompt_LLMError(t *testing.T) {
 		err: errors.New("connection refused"),
 	}
 
-	_, err := routePromptWithProvider(context.Background(), "do something", []byte(`[]`), mock)
+	_, _, err := routePromptWithProvider(context.Background(), "do something", []byte(`[]`), mock)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -234,7 +243,7 @@ func TestRoutePrompt_MalformedResponse(t *testing.T) {
 		response: llm.Response{Content: "I don't understand your request"},
 	}
 
-	_, err := routePromptWithProvider(context.Background(), "do stuff", []byte(`[]`), mock)
+	_, _, err := routePromptWithProvider(context.Background(), "do stuff", []byte(`[]`), mock)
 	if err == nil {
 		t.Fatal("expected error for malformed response, got nil")
 	}
@@ -273,7 +282,7 @@ func routePromptWithProvider(
 	prompt string,
 	schemaJSON []byte,
 	provider llm.Provider,
-) ([]ResolvedCommand, error) {
+) ([]ResolvedCommand, string, error) {
 	defer provider.Close()
 
 	client := llm.NewClient(provider)
@@ -291,7 +300,7 @@ func routePromptWithProvider(
 
 	resp, err := client.Complete(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("llm completion failed: %w", err)
+		return nil, "", fmt.Errorf("llm completion failed: %w", err)
 	}
 
 	return parseRouterResponse(resp.Content)

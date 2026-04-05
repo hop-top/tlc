@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 
 	"hop.top/tlc/internal/core"
@@ -332,11 +333,10 @@ func TestTaskPromptE2E_DryRun(t *testing.T) {
 func TestTaskPromptE2E_DestructiveGuardReject(t *testing.T) {
 	withTestLock(func() {
 		resetTaskFlags()
-		_, cleanup := setupTestDir(t)
+		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
 
 		// Create a task.
-		ctx, _ := setupTestDir(t)
 		s, err := getStorageRaw()
 		if err != nil {
 			t.Fatalf("getStorageRaw: %v", err)
@@ -350,7 +350,7 @@ func TestTaskPromptE2E_DestructiveGuardReject(t *testing.T) {
 
 		// Mock readConfirmFn to reject.
 		origConfirm := readConfirmFn
-		readConfirmFn = func() bool { return false }
+		readConfirmFn = func(_ io.Reader) bool { return false }
 		defer func() { readConfirmFn = origConfirm }()
 
 		// Classify "delete T-0001".

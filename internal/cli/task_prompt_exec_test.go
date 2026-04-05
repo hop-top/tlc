@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 )
@@ -35,7 +36,7 @@ func newStubFailAt(idx int, err error) *stubRunCommand {
 // setConfirmResponse sets readConfirmFn to always return the given value.
 func setConfirmResponse(accept bool) func() {
 	old := readConfirmFn
-	readConfirmFn = func() bool { return accept }
+	readConfirmFn = func(_ io.Reader) bool { return accept }
 	return func() { readConfirmFn = old }
 }
 

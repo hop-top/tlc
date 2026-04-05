@@ -26,8 +26,11 @@ task context into LLM prompts without scraping show output.
 
 2. **Given** task T-0042 exists,
    **When** I run `tlc task prompt T-0042 --json`,
-   **Then** output is structured JSON with fields:
-   `task`, `dependencies`, `track`, `audit`.
+   **Then** output is a flat JSON object with fields:
+   `id`, `title`, `status`, `description`, `assigned_to`,
+   `tags`, `priority`, `effort`, `blocked_by`, `blocking`,
+   `track`, `recent_activity`.
+   Empty/nil fields are omitted (`omitempty`).
 
 3. **Given** task T-9999 does not exist,
    **When** I run `tlc task prompt T-9999`,

@@ -18,20 +18,22 @@ the right task without re-typing the command.
 1. **Given** tasks T-0042 (JWT refresh) and T-0068 (login
    page) both match "auth",
    **When** I run `tlc task "mark the auth task done"`,
-   **Then** router returns confidence < 0.7, clarifier
-   prompts:
-   `Which task? T-0042 (JWT refresh) or T-0068 (login page)`
+   **Then** classifier returns low confidence, inline
+   clarifier prompts a follow-up question and waits for
+   user input.
 
-2. **Given** clarification prompt is shown,
+2. **Given** inline clarification prompt is shown,
    **When** I answer `42`,
-   **Then** combined context re-sent to router, confidence
-   resolves to 1.0, and `task complete T-0042` executes.
+   **Then** combined context (original + answer) is
+   re-classified locally via `ClassifyPrompt`, resolves
+   to `task complete T-0042`, and executes.
 
-3. **Given** a complex generative prompt triggers
-   `multi_turn: true` in router response,
-   **When** clarifier enters REPL mode,
-   **Then** user can refine across multiple turns and exit
-   with `ctrl+c` or `quit`.
+3. **Given** user explicitly enters REPL mode (multi-turn
+   clarification),
+   **When** each turn is entered,
+   **Then** accumulated context is re-classified locally
+   via `ClassifyPrompt`; user exits with `ctrl+c`, `quit`,
+   or `exit`.
 
 4. **Given** destructive command resolved (e.g. delete),
    **When** confidence is 1.0,

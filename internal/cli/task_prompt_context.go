@@ -32,7 +32,7 @@ func runTaskPrompt(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = s.Close() }()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	res, err := uri.NewResolver(s).ResolveTask(ctx, args[0])
 	if err != nil {

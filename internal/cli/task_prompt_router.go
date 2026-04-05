@@ -10,9 +10,6 @@ import (
 	"github.com/spf13/viper"
 
 	"hop.top/kit/llm"
-	_ "hop.top/kit/llm/anthropic"
-	_ "hop.top/kit/llm/ollama"
-	_ "hop.top/kit/llm/openai"
 )
 
 // systemPromptTemplate is the instruction set sent to the LLM for command
@@ -59,16 +56,21 @@ type routerCommand struct {
 
 // routePrompt sends the user prompt to an LLM and returns resolved commands.
 // It is the escalation path when ClassifyPrompt returns nil.
-func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]ResolvedCommand, error) {
+func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]ResolvedCommand, string, error) {
 	provider, err := resolvePromptLLM()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer provider.Close()
 
 	client := llm.NewClient(provider)
 
 	systemMsg := strings.ReplaceAll(systemPromptTemplate, "{schema}", string(schemaJSON))
+
+	// Enrich system message with repository context when available.
+	if xrayCtx := loadXrayContext(); xrayCtx != "" {
+		systemMsg += "\n\nRepository context:\n" + xrayCtx
+	}
 
 	req := llm.Request{
 		Messages: []llm.Message{
@@ -81,7 +83,7 @@ func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]Resol
 
 	resp, err := client.Complete(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("llm completion failed: %w", err)
+		return nil, "", fmt.Errorf("llm completion failed: %w", err)
 	}
 
 	return parseRouterResponse(resp.Content)
@@ -115,21 +117,22 @@ func resolvePromptLLM() (llm.Provider, error) {
 	)
 }
 
-// parseRouterResponse extracts []ResolvedCommand from the LLM's JSON output.
-func parseRouterResponse(raw string) ([]ResolvedCommand, error) {
+// parseRouterResponse extracts []ResolvedCommand and any clarification text
+// from the LLM's JSON output.
+func parseRouterResponse(raw string) ([]ResolvedCommand, string, error) {
 	// Strip markdown fences if present.
 	body := strings.TrimSpace(raw)
 	body = stripCodeFence(body)
 
 	var rr routerResponse
 	if err := json.Unmarshal([]byte(body), &rr); err != nil {
-		return nil, fmt.Errorf(
+		return nil, "", fmt.Errorf(
 			"failed to parse LLM response as JSON: %w; raw: %s", err, truncateStr(raw, 200),
 		)
 	}
 
 	if len(rr.Commands) == 0 {
-		return nil, fmt.Errorf("LLM returned no commands; raw: %s", truncateStr(raw, 200))
+		return nil, "", fmt.Errorf("LLM returned no commands; raw: %s", truncateStr(raw, 200))
 	}
 
 	confidence := rr.Confidence
@@ -146,7 +149,7 @@ func parseRouterResponse(raw string) ([]ResolvedCommand, error) {
 		})
 	}
 
-	return cmds, nil
+	return cmds, rr.Clarification, nil
 }
 
 // stripCodeFence removes ```json ... ``` wrapping from LLM output.

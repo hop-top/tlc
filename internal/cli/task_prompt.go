@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -46,10 +45,13 @@ func runTaskNLPrompt(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to generate task schema: %w", err)
 	}
 
-	ctx := context.Background()
-	cmds, err = routePrompt(ctx, prompt, schemaJSON)
+	cmds, clarification, err := routePrompt(cmd.Context(), prompt, schemaJSON)
 	if err != nil {
 		return fmt.Errorf("could not resolve prompt %q; %s", prompt, err)
+	}
+
+	if clarification != "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Clarification: %s\n", clarification)
 	}
 
 	return handleResolvedCommands(cmd, cmds, prompt)
@@ -67,7 +69,7 @@ func handleResolvedCommands(cmd *cobra.Command, cmds []ResolvedCommand, prompt s
 		return renderResolvedJSON(cmd, cmds)
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	opts := ExecuteOptions{
 		DryRun:   taskNLDryRun,
 		Execute:  taskNLExecute,

@@ -9,13 +9,10 @@ import (
 
 // ResolvedCommand represents a CLI command resolved from natural language input.
 type ResolvedCommand struct {
-	Cmd        string   // e.g. "task"
-	Args       []string // e.g. ["complete", "T-0042"]
-	Confidence float64  // 1.0 for regex match, lower for fuzzy
+	Cmd        string   `json:"cmd"`
+	Args       []string `json:"args"`
+	Confidence float64  `json:"confidence"`
 }
-
-// taskID captures T-prefixed or bare numeric task IDs.
-var reTaskID = regexp.MustCompile(`(?i)(?:T-)?(\d+)`)
 
 // Compiled patterns for ClassifyPrompt. Each entry pairs a regex with a
 // builder function that converts submatches into ResolvedCommand(s).

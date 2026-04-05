@@ -31,6 +31,7 @@ type ExecuteOptions struct {
 	Execute  bool      // force execute (skip confidence confirmation)
 	NoPrompt bool      // skip all confirmation prompts
 	Writer   io.Writer // output destination (defaults to os.Stdout)
+	Reader   io.Reader // input source for confirmations (defaults to os.Stdin)
 }
 
 // runCommandFn is the function used to execute a single resolved command.
@@ -42,6 +43,10 @@ func executeCommands(ctx context.Context, cmds []ResolvedCommand, opts ExecuteOp
 	w := opts.Writer
 	if w == nil {
 		w = os.Stdout
+	}
+	r := opts.Reader
+	if r == nil {
+		r = os.Stdin
 	}
 
 	if len(cmds) == 0 {
@@ -87,7 +92,7 @@ func executeCommands(ctx context.Context, cmds []ResolvedCommand, opts ExecuteOp
 					i+1, cmd.Cmd, strings.Join(cmd.Args, " "), cmd.Confidence*100)
 			}
 			_, _ = fmt.Fprintf(w, "proceed? [y/N] ")
-			if !readConfirm() {
+			if !readConfirm(r) {
 				return ExecuteResult{
 					Error:     fmt.Errorf("aborted by user"),
 					Remaining: cmds,
@@ -103,7 +108,7 @@ func executeCommands(ctx context.Context, cmds []ResolvedCommand, opts ExecuteOp
 		if isDestructiveArgs(cmd.Args) && !opts.NoPrompt {
 			_, _ = fmt.Fprintf(w, "destructive: %s %s — confirm? [y/N] ",
 				cmd.Cmd, strings.Join(cmd.Args, " "))
-			if !readConfirm() {
+			if !readConfirm(r) {
 				return ExecuteResult{
 					Executed:  executed,
 					Failed:    &cmds[i],
@@ -129,6 +134,7 @@ func executeCommands(ctx context.Context, cmds []ResolvedCommand, opts ExecuteOp
 
 // runCommand executes a single resolved command via the TaskCmd cobra tree.
 func runCommand(_ context.Context, cmd ResolvedCommand) error {
+	resetTaskFlags()
 	TaskCmd.SetArgs(cmd.Args)
 	return TaskCmd.Execute()
 }
@@ -138,18 +144,18 @@ func formatCmd(cmd ResolvedCommand) string {
 	return cmd.Cmd + " " + strings.Join(cmd.Args, " ")
 }
 
-// readConfirmFn is the function used to read user confirmation from stdin.
+// readConfirmFn is the function used to read user confirmation.
 // Package-level variable so tests can replace it.
-var readConfirmFn = readConfirmStdin
+var readConfirmFn = readConfirmFromReader
 
-// readConfirm delegates to the replaceable readConfirmFn.
-func readConfirm() bool {
-	return readConfirmFn()
+// readConfirm delegates to the replaceable readConfirmFn with the given reader.
+func readConfirm(r io.Reader) bool {
+	return readConfirmFn(r)
 }
 
-// readConfirmStdin reads a single line from stdin and returns true for "y"/"yes".
-func readConfirmStdin() bool {
-	scanner := bufio.NewScanner(os.Stdin)
+// readConfirmFromReader reads a single line from r and returns true for "y"/"yes".
+func readConfirmFromReader(r io.Reader) bool {
+	scanner := bufio.NewScanner(r)
 	if !scanner.Scan() {
 		return false
 	}
