@@ -76,19 +76,21 @@ func (tc *TrackConfig) Validate() error {
 			tc.Health.MinProgressToStart,
 		)
 	}
-	if tc.DefaultType != "" && len(tc.Types) > 0 {
-		found := false
-		for _, t := range tc.Types {
-			if t == tc.DefaultType {
-				found = true
-				break
+	if tc.DefaultType != "" {
+		if len(tc.Types) > 0 {
+			found := false
+			for _, t := range tc.Types {
+				if t == tc.DefaultType {
+					found = true
+					break
+				}
 			}
-		}
-		if !found {
-			return fmt.Errorf(
-				"tracks.default_type %q not in tracks.types",
-				tc.DefaultType,
-			)
+			if !found {
+				return fmt.Errorf(
+					"tracks.default_type %q not in tracks.types",
+					tc.DefaultType,
+				)
+			}
 		}
 	}
 	return nil

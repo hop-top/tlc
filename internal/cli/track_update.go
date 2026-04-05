@@ -193,7 +193,7 @@ func init() {
 	)
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateType, "type", "",
-		"New track type (default: from config or fix)",
+		"New track type",
 	)
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateAddPlan, "add-plan", "",
