@@ -362,6 +362,38 @@ func TestBuildCommand_ConfidenceMultiplied(t *testing.T) {
 	}
 }
 
+// --- Run verb guard ---
+
+func TestClassifyPromptCrossDomain_RunTasksReturnsNil(t *testing.T) {
+	// "run" is a flow verb; must not leak into task domain.
+	cmds := ClassifyPromptCrossDomain("run tasks")
+	if cmds != nil {
+		t.Errorf("expected nil for 'run tasks', got %+v", cmds)
+	}
+}
+
+func TestBuildCommand_UnknownVerbReturnsNil(t *testing.T) {
+	tokens := PromptTokens{Verb: "zzz", Noun: "tasks"}
+	cmds := BuildCommand(tokens, DomainTask, 1.0)
+	if cmds != nil {
+		t.Errorf("expected nil for unknown verb, got %+v", cmds)
+	}
+}
+
+func TestBuildCommand_TrackStatusDoneModifier(t *testing.T) {
+	tokens := PromptTokens{Verb: "list", Noun: "tracks", Modifiers: []string{"status:done"}}
+	cmds := BuildCommand(tokens, DomainTrack, 1.0)
+	if len(cmds) == 0 {
+		t.Fatal("expected result")
+	}
+	if cmds[0].Cmd != "track" {
+		t.Errorf("expected cmd=track, got %q", cmds[0].Cmd)
+	}
+	if !containsSequence(cmds[0].Args, "--status", "DONE") {
+		t.Errorf("expected --status DONE in args, got %v", cmds[0].Args)
+	}
+}
+
 // --- ClassifyPromptCrossDomain nil returns ---
 
 func TestClassifyPromptCrossDomain_Empty(t *testing.T) {

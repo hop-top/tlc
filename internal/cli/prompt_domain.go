@@ -20,22 +20,6 @@ func RouteNounToDomain(tokens PromptTokens) (NounDomain, float64) {
 	return nd, conf
 }
 
-// verbConfidence returns 1.0 for an exact verb match, 0.9/0.8 for fuzzy, 0 for unknown.
-func verbConfidence(verb string) float64 {
-	if verb == "" {
-		return 0
-	}
-	if _, ok := LookupVerb(verb); ok {
-		return 1.0
-	}
-	// "summary" and "how" are not in the vocab alias map — treat as query-adjacent.
-	if verb == "summary" || verb == "how" {
-		return 1.0
-	}
-	_, conf := FuzzyMatchVerb(verb)
-	return conf
-}
-
 // modifierFlags converts canonical modifier strings to CLI flag args.
 // "status:active" → ["--status", "active"]
 // "status:done"   → ["--status", "DONE"]
@@ -71,11 +55,6 @@ func isSummaryVerb(verb string) bool {
 	return verb == "summary"
 }
 
-// isHowManyPrompt returns true when prompt starts with "how many".
-func isHowManyPrompt(prompt string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "how many")
-}
-
 // BuildCommand assembles the full CLI command from verb + domain + modifiers.
 // domainConf is the confidence from RouteNounToDomain; verbConf is derived internally.
 // Returns nil when the verb+domain combination is not supported.
@@ -87,10 +66,6 @@ func BuildCommand(tokens PromptTokens, domain NounDomain, domainConf float64) []
 	if vc == "" && !isSummaryVerb(verb) {
 		return nil
 	}
-	if vcConf == 0 {
-		vcConf = verbConfidence(verb)
-	}
-
 	confidence := domainConf * vcConf
 	if confidence > 1.0 {
 		confidence = 1.0
@@ -139,6 +114,10 @@ func resolveVerbCategory(verb string) (VerbCategory, float64) {
 
 // buildTaskCommand produces task sub-commands.
 func buildTaskCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
+	// "run" belongs to flow domain only; guard against leakage.
+	if tokens.Verb == "run" {
+		return nil
+	}
 	var subCmd string
 	switch vc {
 	case VerbQuery:
@@ -155,18 +134,22 @@ func buildTaskCommand(tokens PromptTokens, vc VerbCategory, confidence float64) 
 
 	args := []string{subCmd}
 	args = append(args, modifierFlags(tokens.Modifiers)...)
-	args = appendCountSummaryFlags(args, tokens.Verb, "")
+	args = appendCountSummaryFlags(args, tokens.Verb)
 	return []ResolvedCommand{{Cmd: "task", Args: args, Confidence: confidence}}
 }
 
 // buildTrackCommand produces track sub-commands.
 func buildTrackCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
+	// "run" belongs to flow domain only; guard against leakage.
+	if tokens.Verb == "run" {
+		return nil
+	}
 	if vc != VerbQuery {
 		return nil
 	}
 	args := []string{"list"}
 	args = append(args, modifierFlags(tokens.Modifiers)...)
-	args = appendCountSummaryFlags(args, tokens.Verb, "")
+	args = appendCountSummaryFlags(args, tokens.Verb)
 	return []ResolvedCommand{{Cmd: "track", Args: args, Confidence: confidence}}
 }
 
@@ -208,20 +191,9 @@ func buildProjectCommand(tokens PromptTokens, vc VerbCategory, confidence float6
 	return []ResolvedCommand{{Cmd: "project", Args: []string{"list"}, Confidence: confidence}}
 }
 
-// containsRest checks whether a word appears in the rest slice.
-func containsRest(rest []string, word string) bool {
-	for _, w := range rest {
-		if w == word {
-			return true
-		}
-	}
-	return false
-}
-
 // appendCountSummaryFlags appends --counters or --summary based on raw verb.
-// prompt is the original prompt (lowercased) checked for "how many".
-func appendCountSummaryFlags(args []string, verb, prompt string) []string {
-	if isCountVerb(verb) || isHowManyPrompt(prompt) {
+func appendCountSummaryFlags(args []string, verb string) []string {
+	if isCountVerb(verb) {
 		args = append(args, "--counters")
 	} else if isSummaryVerb(verb) {
 		args = append(args, "--summary")
