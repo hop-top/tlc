@@ -36,6 +36,9 @@ so responses are instant and cost-free.
 
 ### Unit
 - `internal/cli/prompt_domain_test.go`
-  - `TestClassifyPromptCrossDomain_TrackList`
+  - `TestClassifyPromptCrossDomain_ListTracks`
   - `TestClassifyPromptCrossDomain_CountActiveTracks`
-  - `TestBuildTrackCommand_*`
+  - `TestClassifyPromptCrossDomain_ActiveTracks`
+  - `TestClassifyPromptCrossDomain_StaleTracks`
+  - `TestBuildCommand_TrackList`
+  - `TestBuildCommand_TrackStatusDoneModifier`

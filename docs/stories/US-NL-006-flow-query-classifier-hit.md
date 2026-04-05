@@ -30,6 +30,6 @@ so flow invocations are instant and cost-free.
 
 ### Unit
 - `internal/cli/prompt_domain_test.go`
-  - `TestClassifyPromptCrossDomain_FlowRun`
-  - `TestClassifyPromptCrossDomain_FlowList`
-  - `TestBuildFlowCommand_*`
+  - `TestClassifyPromptCrossDomain_RunDeployFlow`
+  - `TestClassifyPromptCrossDomain_ListFlows`
+  - `TestClassifyPromptCrossDomain_ShowFlows`
