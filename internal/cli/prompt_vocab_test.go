@@ -17,7 +17,6 @@ func TestVocabVerbLookup(t *testing.T) {
 		{"add", VerbCreate, true},
 		{"complete", VerbComplete, true},
 		{"finish", VerbComplete, true},
-		{"done", VerbComplete, true},
 		{"delete", VerbDestroy, true},
 		{"remove", VerbDestroy, true},
 		{"drop", VerbDestroy, true},

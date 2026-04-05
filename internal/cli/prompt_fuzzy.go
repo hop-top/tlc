@@ -74,12 +74,14 @@ func FuzzyMatchVerb(word string) (VerbCategory, float64) {
 	}
 
 	var bestClass VerbCategory
+	var bestKey string
 	bestDist := 3 // >2 means no match
 
-	for candidate, vc := range VerbAliases {
+	for candidate, vc := range verbAliases {
 		d := LevenshteinDistance(word, candidate)
-		if d < bestDist {
+		if d < bestDist || (d == bestDist && candidate < bestKey) {
 			bestDist = d
+			bestKey = candidate
 			bestClass = vc
 		}
 	}
@@ -103,12 +105,14 @@ func FuzzyMatchNoun(word string) (NounDomain, float64) {
 	}
 
 	var bestDomain NounDomain
+	var bestKey string
 	bestDist := 3 // >2 means no match
 
-	for candidate, nd := range NounAliases {
+	for candidate, nd := range nounAliases {
 		d := LevenshteinDistance(word, candidate)
-		if d < bestDist {
+		if d < bestDist || (d == bestDist && candidate < bestKey) {
 			bestDist = d
+			bestKey = candidate
 			bestDomain = nd
 		}
 	}
