@@ -137,7 +137,11 @@ var migrations = []migration{
 		-- same track ID can exist in different projects.  The original v6
 		-- migration used CREATE TABLE IF NOT EXISTS which was a no-op for
 		-- databases that already had a tracks table with id TEXT PRIMARY KEY.
-		CREATE TABLE IF NOT EXISTS tracks_new (
+
+		-- Clean up leftover from a previously failed run.
+		DROP TABLE IF EXISTS tracks_new;
+
+		CREATE TABLE tracks_new (
 			id          TEXT NOT NULL,
 			title       TEXT NOT NULL,
 			type        TEXT NOT NULL,
@@ -150,7 +154,7 @@ var migrations = []migration{
 			PRIMARY KEY (project_id, id)
 		);
 
-		INSERT OR IGNORE INTO tracks_new
+		INSERT INTO tracks_new
 			(id, title, type, status, assigned_to,
 			 created_at, updated_at, project_id, meta)
 		SELECT id, title, type, status, assigned_to,
