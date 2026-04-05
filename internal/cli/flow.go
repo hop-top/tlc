@@ -8,8 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/lipgloss"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -231,15 +230,9 @@ func formatFlowRuns(cmd *cobra.Command, runs []*core.FlowRun, format string) {
 }
 
 func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
-	columns := []table.Column{
-		{Title: "Run ID", Width: 30},
-		{Title: "Flow ID", Width: 25},
-		{Title: "Status", Width: 15},
-		{Title: "Started", Width: 20},
-		{Title: "Duration", Width: 12},
-	}
+	headers := []string{"Run ID", "Flow ID", "Status", "Started", "Duration"}
 
-	rows := make([]table.Row, 0, len(runs))
+	rows := make([][]string, 0, len(runs))
 	for _, r := range runs {
 		duration := "-"
 		if r.EndedAt != nil {
@@ -247,7 +240,7 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 			duration = d.String()
 		}
 
-		rows = append(rows, table.Row{
+		rows = append(rows, []string{
 			r.ID,
 			r.FlowID,
 			formatFlowStatus(r.Status),
@@ -256,22 +249,7 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 		})
 	}
 
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	tbl.SetStyles(s)
-
-	_, _ = fmt.Fprintln(out, tbl.View())
+	renderTTYTable(out, headers, rows, termWidth())
 	_, _ = fmt.Fprintf(out, "\nShowing %d flow runs\n", len(runs))
 }
 

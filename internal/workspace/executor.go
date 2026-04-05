@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 
 	"hop.top/tlc/internal/core"
 )

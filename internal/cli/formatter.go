@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/kit/markdown"
 	"hop.top/tlc/internal/core"
 )
 
@@ -155,16 +155,9 @@ func formatDuration(d time.Duration) string {
 }
 
 func renderTable(w io.Writer, tasks []*core.Task) {
-	columns := []table.Column{
-		{Title: "ID", Width: 10},
-		{Title: "Title", Width: 40},
-		{Title: "Status", Width: 15},
-		{Title: "Assigned", Width: 15},
-		{Title: "Stale", Width: 8},
-		{Title: "Blocked", Width: 20},
-	}
+	headers := []string{"ID", "Title", "Status", "Assigned", "Stale", "Blocked"}
 
-	rows := make([]table.Row, 0, len(tasks))
+	rows := make([][]string, 0, len(tasks))
 	for _, t := range tasks {
 		assignee := "-"
 		if t.AssignedTo != nil {
@@ -183,7 +176,7 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			blockedCol = *t.BlockedReason
 		}
 
-		rows = append(rows, table.Row{
+		rows = append(rows, []string{
 			t.ID,
 			t.Title,
 			formatStatusPlain(t.Status),
@@ -192,36 +185,15 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			blockedCol,
 		})
 	}
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1),
-	)
 
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = lipgloss.NewStyle() // no highlight — static display, no cursor
-	tbl.SetStyles(s)
-
-	_, _ = fmt.Fprintln(w, tbl.View())
+	renderTTYTable(w, headers, rows, termWidth())
 }
 
 // renderWorkspaceTable renders a task table with an additional Project column.
 func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
-	columns := []table.Column{
-		{Title: "Project", Width: 15},
-		{Title: "ID", Width: 10},
-		{Title: "Title", Width: 35},
-		{Title: "Status", Width: 15},
-		{Title: "Assigned", Width: 15},
-	}
+	headers := []string{"Project", "ID", "Title", "Status", "Assigned"}
 
-	rows := make([]table.Row, 0, len(tasks))
+	rows := make([][]string, 0, len(tasks))
 	for _, t := range tasks {
 		assignee := "-"
 		if t.AssignedTo != nil {
@@ -232,7 +204,7 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 			proj = projectLabel(*t.ProjectID)
 		}
 
-		rows = append(rows, table.Row{
+		rows = append(rows, []string{
 			proj,
 			t.ID,
 			t.Title,
@@ -240,23 +212,8 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 			assignee,
 		})
 	}
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1),
-	)
 
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = lipgloss.NewStyle() // no highlight — static display, no cursor
-	tbl.SetStyles(s)
-
-	_, _ = fmt.Fprintln(w, tbl.View())
+	renderTTYTable(w, headers, rows, termWidth())
 }
 
 // formatStatusPlain returns the human-readable status label without ANSI
@@ -360,11 +317,8 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 
 	if t.Description != "" {
 		_, _ = fmt.Fprintln(w, "\nDescription:")
-		r, _ := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(80),
-		)
-		out, err := r.Render(t.Description)
+		noColor := viper.GetBool("output.color") // true means no-color
+		out, err := markdown.Render(t.Description, noColor)
 		if err != nil {
 			_, _ = fmt.Fprintln(w, t.Description)
 		} else {

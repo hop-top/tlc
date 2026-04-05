@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -204,22 +202,13 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 		return
 	}
 
-	columns := []table.Column{
-		{Title: "ID", Width: 22},
-	}
+	headers := []string{"ID"}
 	if showProject {
-		columns = append(columns, table.Column{Title: "Project", Width: 18})
+		headers = append(headers, "Project")
 	}
-	columns = append(columns,
-		table.Column{Title: "Title", Width: 25},
-		table.Column{Title: "Type", Width: 10},
-		table.Column{Title: "Status", Width: 12},
-		table.Column{Title: "State", Width: 12},
-		table.Column{Title: "Progress", Width: 12},
-		table.Column{Title: "Assignee", Width: 12},
-	)
+	headers = append(headers, "Title", "Type", "Status", "State", "Progress", "Assignee")
 
-	tableRows := make([]table.Row, 0, len(rows))
+	tableRows := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		assignee := "-"
 		if r.Track.AssignedTo != nil && *r.Track.AssignedTo != "" {
@@ -231,7 +220,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 			stateStrs[i] = string(f)
 		}
 
-		row := table.Row{r.Track.ID}
+		row := []string{r.Track.ID}
 		if showProject {
 			proj := "-"
 			if r.Track.ProjectID != nil && *r.Track.ProjectID != "" {
@@ -250,23 +239,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 		tableRows = append(tableRows, row)
 	}
 
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(tableRows),
-		table.WithFocused(false),
-		table.WithHeight(len(tableRows)+1),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = lipgloss.NewStyle()
-	tbl.SetStyles(s)
-
-	_, _ = fmt.Fprintln(w, tbl.View())
+	renderTTYTable(w, headers, tableRows, termWidth())
 }
 
 // resetTrackListFlags clears track list flag state between tests.
