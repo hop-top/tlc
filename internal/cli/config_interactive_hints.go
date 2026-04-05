@@ -7,11 +7,18 @@ import (
 	"github.com/spf13/viper"
 )
 
+// suggestion is a labelled option for huh.NewSelect prompts.
+type suggestion struct {
+	Label string
+	Value string
+}
+
 // keyHint describes a single config key for the interactive wizard.
 type keyHint struct {
 	Key         string
 	Description string
-	Enum        []string // nil = free text
+	Enum        []string     // nil = free text
+	Suggestions []suggestion // shown as huh.Select options + "Custom..."
 	IsBool      bool
 	IsDuration  bool
 	IsMap       bool // skipped in wizard
@@ -234,7 +241,16 @@ func defaultKeyHints() map[string]keyHint {
 		},
 		"prompt.llm_provider": {
 			Key:         "prompt.llm_provider",
-			Description: "LLM provider for NL prompt (e.g. openai, anthropic)",
+			Description: "LLM provider URI for NL prompt routing",
+			Suggestions: []suggestion{
+				{"Ollama — llama3.2 (local, free)", "ollama://llama3.2"},
+				{"Ollama — qwen3 (local, free)", "ollama://qwen3"},
+				{"OpenRouter — DeepSeek V3 (free)", "openrouter://deepseek/deepseek-chat-v3-0324:free"},
+				{"OpenRouter — Qwen3 235B (free)", "openrouter://qwen/qwen3-235b-a22b:free"},
+				{"OpenAI — GPT-4o", "openai://gpt-4o"},
+				{"OpenAI — o3", "openai://o3"},
+				{"Anthropic — Claude Sonnet 4", "anthropic://claude-sonnet-4-20250514"},
+			},
 		},
 		"tracks.stale_threshold": {
 			Key:         "tracks.stale_threshold",

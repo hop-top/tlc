@@ -1,204 +1,264 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
 )
 
-// runWizard runs the interactive prompt loop over the given keys.
-// It reads from r and writes prompts to w. Returns changed key->value pairs.
+const customInputSentinel = "__custom__"
+
+// runWizard runs the interactive prompt loop over the given keys using huh.
+// Returns changed key->value pairs.
 func runWizard(
 	keys []keyHint,
-	r io.Reader,
+	_ io.Reader,
 	w io.Writer,
-	noColor bool,
+	_ bool,
 ) (map[string]string, error) {
-	scanner := bufio.NewScanner(r)
 	changes := map[string]string{}
-
-	bold := "\033[1m"
-	reset := "\033[0m"
-	dim := "\033[2m"
-	if noColor {
-		bold, reset, dim = "", "", ""
-	}
 
 	for _, kh := range keys {
 		if kh.IsMap {
-			fmt.Fprintf(w, "%s%s%s: use 'tlc config set %s.<key> <value>'\n",
-				dim, kh.Key, reset, kh.Key)
+			fmt.Fprintf(w, "\n  %s: use 'tlc config set %s.<key> <value>'\n",
+				kh.Key, kh.Key)
 			continue
 		}
 
 		current := fmt.Sprintf("%v", viper.Get(kh.Key))
-		prompt := formatPrompt(kh, current, bold, reset, dim)
 
-		for {
-			fmt.Fprint(w, prompt)
-
-			if !scanner.Scan() {
-				if err := scanner.Err(); err != nil {
-					return nil, fmt.Errorf("reading input: %w", err)
-				}
-				return nil, fmt.Errorf("aborted")
-			}
-
-			line := strings.TrimSpace(scanner.Text())
-
-			// ? = show description
-			if line == "?" {
-				fmt.Fprintf(w, "  %s%s%s\n", dim, kh.Description, reset)
-				continue
-			}
-
-			// Empty = keep current
-			if line == "" {
-				break
-			}
-
-			// Validate enum
-			if len(kh.Enum) > 0 {
-				valid := false
-				for _, e := range kh.Enum {
-					if strings.EqualFold(line, e) {
-						line = e
-						valid = true
-						break
-					}
-				}
-				if !valid {
-					fmt.Fprintf(w, "  invalid: must be one of %s\n",
-						strings.Join(kh.Enum, "/"))
-					continue
-				}
-			}
-
-			// Validate bool
-			if kh.IsBool {
-				switch strings.ToLower(line) {
-				case "y", "yes", "true":
-					line = "true"
-				case "n", "no", "false":
-					line = "false"
-				default:
-					fmt.Fprintf(w, "  invalid: enter y or n\n")
-					continue
-				}
-			}
-
-			// Validate duration
-			if kh.IsDuration {
-				if _, err := time.ParseDuration(line); err != nil {
-					fmt.Fprintf(w, "  invalid duration: %s (e.g. 72h, 24h30m)\n", err)
-					continue
-				}
-			}
-
-			if line != current {
-				changes[kh.Key] = line
-			}
-			break
+		val, err := promptKey(kh, current, w)
+		if err != nil {
+			return nil, err
+		}
+		if val != "" && val != current {
+			changes[kh.Key] = val
 		}
 	}
 
 	return changes, nil
 }
 
-// formatPrompt builds the prompt string for a single key.
-func formatPrompt(kh keyHint, current, bold, reset, _ string) string {
-	var hint string
+// promptKey dispatches to the right huh field for a keyHint.
+func promptKey(kh keyHint, current string, w io.Writer) (string, error) {
 	switch {
+	case len(kh.Suggestions) > 0:
+		return promptSuggestions(kh, current, w)
 	case len(kh.Enum) > 0:
-		hint = " (" + strings.Join(kh.Enum, "/") + ")"
+		return promptEnum(kh, current, w)
 	case kh.IsBool:
-		hint = " (y/n)"
+		return promptBool(kh, current, w)
 	case kh.IsDuration:
-		hint = " (e.g. 72h, 24h30m)"
+		return promptDuration(kh, current, w)
+	default:
+		return promptInput(kh, current, w)
 	}
-	return fmt.Sprintf("%s%s%s [%s]%s: ", bold, kh.Key, reset, current, hint)
 }
 
-// showGroupMenu displays the named groups and returns selected keyHints.
+// promptEnum presents a huh.Select with enum options + keep current.
+func promptEnum(kh keyHint, current string, w io.Writer) (string, error) {
+	opts := make([]huh.Option[string], 0, len(kh.Enum)+1)
+	opts = append(opts, huh.NewOption[string](
+		fmt.Sprintf("Keep current (%s)", current), ""))
+	for _, e := range kh.Enum {
+		label := e
+		if e == current {
+			label = e + " (current)"
+		}
+		opts = append(opts, huh.NewOption[string](label, e))
+	}
+
+	var selected string
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(kh.Key).
+				Description(kh.Description).
+				Options(opts...).
+				Value(&selected),
+		),
+	).WithOutput(w).Run()
+	if err != nil {
+		return "", fmt.Errorf("aborted")
+	}
+	return selected, nil
+}
+
+// promptBool presents a huh.Confirm.
+func promptBool(kh keyHint, current string, w io.Writer) (string, error) {
+	val := strings.EqualFold(current, "true")
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title(kh.Key).
+				Description(kh.Description).
+				Value(&val),
+		),
+	).WithOutput(w).Run()
+	if err != nil {
+		return "", fmt.Errorf("aborted")
+	}
+	result := "false"
+	if val {
+		result = "true"
+	}
+	if result == current {
+		return "", nil
+	}
+	return result, nil
+}
+
+// promptDuration presents a huh.NewInput with duration validation.
+func promptDuration(kh keyHint, current string, w io.Writer) (string, error) {
+	val := current
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title(kh.Key).
+				Description(kh.Description).
+				Placeholder("e.g. 72h, 24h30m").
+				Value(&val).
+				Validate(func(s string) error {
+					if s == "" {
+						return nil
+					}
+					_, err := time.ParseDuration(s)
+					return err
+				}),
+		),
+	).WithOutput(w).Run()
+	if err != nil {
+		return "", fmt.Errorf("aborted")
+	}
+	if val == "" || val == current {
+		return "", nil
+	}
+	return val, nil
+}
+
+// promptInput presents a huh.NewInput for free text.
+func promptInput(kh keyHint, current string, w io.Writer) (string, error) {
+	val := current
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title(kh.Key).
+				Description(kh.Description).
+				Value(&val),
+		),
+	).WithOutput(w).Run()
+	if err != nil {
+		return "", fmt.Errorf("aborted")
+	}
+	if val == current {
+		return "", nil
+	}
+	return val, nil
+}
+
+// promptSuggestions presents a huh.Select with curated options + "Custom...".
+func promptSuggestions(kh keyHint, current string, w io.Writer) (string, error) {
+	opts := make([]huh.Option[string], 0, len(kh.Suggestions)+2)
+	opts = append(opts, huh.NewOption[string](
+		fmt.Sprintf("Keep current (%s)", current), ""))
+	for _, s := range kh.Suggestions {
+		opts = append(opts, huh.NewOption[string](s.Label, s.Value))
+	}
+	opts = append(opts, huh.NewOption[string]("Custom URI...", customInputSentinel))
+
+	var selected string
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(kh.Key).
+				Description(kh.Description).
+				Options(opts...).
+				Value(&selected),
+		),
+	).WithOutput(w).Run()
+	if err != nil {
+		return "", fmt.Errorf("aborted")
+	}
+
+	if selected == "" {
+		return "", nil
+	}
+	if selected != customInputSentinel {
+		return selected, nil
+	}
+
+	var custom string
+	err = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title(kh.Key).
+				Placeholder("scheme://model").
+				Value(&custom),
+		),
+	).WithOutput(w).Run()
+	if err != nil || custom == "" {
+		return "", nil
+	}
+	return custom, nil
+}
+
+// showGroupMenu displays the named groups as a huh.MultiSelect.
 func showGroupMenu(
-	r io.Reader,
+	_ io.Reader,
 	w io.Writer,
 	hints map[string]keyHint,
-	noColor bool,
+	_ bool,
 ) ([]keyHint, error) {
 	groups := defaultGroups()
 	allKeys := viper.AllKeys()
 
-	bold := "\033[1m"
-	reset := "\033[0m"
-	if noColor {
-		bold, reset = "", ""
-	}
-
-	fmt.Fprintf(w, "\n%sConfig groups:%s\n\n", bold, reset)
-	for i, g := range groups {
+	opts := make([]huh.Option[string], 0, len(groups))
+	for _, g := range groups {
 		expanded := resolveGroupKeys(g, allKeys)
-		fmt.Fprintf(w, "  %d) %-6s  %s (%d keys)\n",
-			i+1, g.Name, g.Description, len(expanded))
+		label := fmt.Sprintf("%-6s  %s (%d keys)",
+			g.Name, g.Description, len(expanded))
+		opts = append(opts, huh.NewOption[string](label, g.Name))
 	}
-	fmt.Fprintf(w, "\nSelect groups (numbers or names, comma-separated): ")
 
-	scanner := bufio.NewScanner(r)
-	if !scanner.Scan() {
+	var selected []string
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Config groups").
+				Description("Select groups to configure").
+				Options(opts...).
+				Value(&selected),
+		),
+	).WithOutput(w).Run()
+	if err != nil {
 		return nil, fmt.Errorf("aborted")
 	}
-
-	line := strings.TrimSpace(scanner.Text())
-	if line == "" {
+	if len(selected) == 0 {
 		return nil, nil
 	}
 
 	seen := map[string]bool{}
 	var result []keyHint
-	parts := strings.Split(line, ",")
-
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-
-		var g *groupEntry
-
-		// Try number first
-		if n, err := strconv.Atoi(p); err == nil && n >= 1 && n <= len(groups) {
-			g = &groups[n-1]
-		} else {
-			// Try name
-			for i := range groups {
-				if strings.EqualFold(groups[i].Name, p) {
-					g = &groups[i]
-					break
+	for _, name := range selected {
+		for _, g := range groups {
+			if g.Name == name {
+				expanded := resolveGroupKeys(g, allKeys)
+				for _, h := range keysToHints(expanded, hints) {
+					if !seen[h.Key] {
+						seen[h.Key] = true
+						result = append(result, h)
+					}
 				}
-			}
-		}
-
-		if g == nil {
-			return nil, fmt.Errorf(
-				"group %q not found; "+
-					"run 'tlc config interactive' to see available groups", p)
-		}
-
-		expanded := resolveGroupKeys(*g, allKeys)
-		for _, h := range keysToHints(expanded, hints) {
-			if !seen[h.Key] {
-				seen[h.Key] = true
-				result = append(result, h)
+				break
 			}
 		}
 	}
@@ -230,11 +290,9 @@ func init() {
 }
 
 func runConfigInteractive(cmd *cobra.Command, args []string) error {
-	// Resolve input/output streams from cobra for testability.
 	in := cmd.InOrStdin()
 	out := cmd.OutOrStdout()
 
-	// TTY check — only when input is an *os.File.
 	if f, ok := in.(*os.File); ok {
 		if !isatty.IsTerminal(f.Fd()) &&
 			!isatty.IsCygwinTerminal(f.Fd()) {
@@ -249,7 +307,6 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 
 	var keys []keyHint
 
-	// If --key provided via flag or trailing args from alias
 	keyFilter := configInteractiveKey
 	if keyFilter == "" && len(args) > 0 {
 		keyFilter = strings.Join(args, ",")
@@ -264,10 +321,8 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 				keyFilter)
 		}
 	} else {
-		// Show group menu
 		var err error
-		keys, err = showGroupMenu(
-			in, out, hints, noColor)
+		keys, err = showGroupMenu(in, out, hints, noColor)
 		if err != nil {
 			return err
 		}
@@ -276,29 +331,25 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Capture old values before wizard
 	oldValues := map[string]string{}
 	for _, k := range keys {
 		oldValues[k.Key] = fmt.Sprintf("%v", viper.Get(k.Key))
 	}
 
-	changes, err := runWizard(
-		keys, in, out, noColor)
+	changes, err := runWizard(keys, in, out, noColor)
 	if err != nil {
 		return err
 	}
 
 	if len(changes) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "\nNo changes.")
+		fmt.Fprintln(out, "\nNo changes.")
 		return nil
 	}
 
-	// Apply changes
 	for k, v := range changes {
 		viper.Set(k, v)
 	}
 
-	// Write config
 	if _, err := config.PrepareViperForWrite(
 		viper.GetViper()); err != nil {
 		return fmt.Errorf("cannot write config: %w", err)
@@ -311,9 +362,8 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Print summary
-	fmt.Fprintln(cmd.OutOrStdout())
-	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(out)
+	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "KEY\tOLD\tNEW\n")
 	for _, kh := range keys {
 		if newVal, ok := changes[kh.Key]; ok {
