@@ -1,0 +1,380 @@
+flow_id: "flow:track-ship:1.0"
+name: "Track Ship"
+version: "1.0"
+description: |
+  End-to-end track delivery: create worktree, implement all tasks,
+  push, PR, wait for review, apply feedback, merge, cleanup.
+  Single input: track ID. Derives branch, plan, tasks automatically.
+entry_step: "create-worktree"
+agent: claude
+
+config:
+  category: "delivery"
+  triggers:
+    - "track ready to implement"
+    - "ship track"
+    - "deliver track end-to-end"
+
+  inputs:
+    track:
+      description: "Track ID (e.g. config-interactive)"
+      required: true
+
+  procedure: |
+    ## Track Ship
+
+    Autonomous end-to-end delivery of a tlc track.
+
+    ### Derived values
+
+    - Branch: `feat/<track-id>` (from track type + ID)
+    - Plan: `.tlc/tracks/<track-id>/plan.md`
+    - Target branch: `main`
+    - Tasks: `tlc task list --track <track-id> --status TODO`
+
+    ### Phases
+
+    ```
+    create-worktree
+        ↓
+    implement-track     ← retry each task 3x; skip on exhaust
+        ↓
+    merge-gate          ← halt if any tasks skipped
+        ↓
+    push-and-pr
+        ↓
+    wait-for-review     ← delay 5m, poll 30s for GH review
+        ↓
+    apply-review        ← /superpowers:receiving-code-review
+        ↓
+    push-review-fixes   ← loops to wait-for-review if changes made
+        ↓
+    merge-pr
+        ↓
+    cleanup             ← remove worktree, pull main, complete track
+    ```
+
+    ### Failure handling
+
+    | Situation                  | Behavior                                      |
+    |----------------------------|-----------------------------------------------|
+    | Task fails                 | Retry 3x, then skip + mark SKIPPED            |
+    | Any task skipped           | Halt at merge gate; worktree stays; exit 1    |
+    | Review timeout (5h)        | Halt; worktree stays; exit 2                  |
+    | Worktree/setup failure     | Halt immediately; exit 3                      |
+
+    ### Exit codes
+
+    | Code | Meaning                                    |
+    |------|--------------------------------------------|
+    | 0    | Track shipped: all tasks done, PR merged   |
+    | 1    | Halted at merge gate: skipped tasks        |
+    | 2    | Review timeout: 600 polls exhausted        |
+    | 3    | Worktree/setup failure                     |
+
+steps:
+
+  # ── Phase 1: setup ──────────────────────────────────────────────────────────
+
+  create-worktree:
+    step_id: "create-worktree"
+    type: "task"
+    title: "Create worktree for track implementation"
+    task_template:
+      title: "Create worktree for {{track}}"
+      description: |
+        Validate track exists and create isolated worktree.
+
+        ```bash
+        # Validate track
+        tlc track show {{track}}
+
+        # Create worktree + branch
+        /usr/bin/git hop add feat/{{track}}
+        ```
+
+        Change working directory to the new worktree.
+        Read `.tlc/tracks/{{track}}/plan.md` to understand scope.
+        List tasks: `tlc task list --track {{track}} --status TODO`
+
+        Save task list to `/tmp/track-ship-tasks.json` for reference.
+      requirements:
+        tools: ["tlc", "git"]
+
+  # ── Phase 2: implement ──────────────────────────────────────────────────────
+
+  implement-track:
+    step_id: "implement-track"
+    type: "task"
+    title: "Implement all tasks in the track"
+    depends_on: ["create-worktree"]
+    retry:
+      max_attempts: 3
+      on: "exit_code != 0"
+    task_template:
+      title: "Implement track {{track}} tasks"
+      description: |
+        For each task in `tlc task list --track {{track}} --status TODO`
+        (ordered by dependency):
+
+        1. `tlc task claim <id>`
+        2. Read task description for implementation instructions
+        3. Implement: code changes, write tests, run tests
+        4. Commit with conventional commit message
+        5. `tlc task complete <id>`
+
+        ## Per-task failure handling
+
+        - If tests fail or build breaks: retry up to 3 times
+        - After 3 failures: skip the task
+          - `tlc task update <id> --status SKIPPED --force`
+          - Append to `/tmp/track-ship-skipped.json`:
+            `{"id": "<id>", "reason": "failed after 3 attempts", "error": "<last error>"}`
+        - Continue with remaining tasks (respecting dependency order;
+          skip dependents of skipped tasks too)
+
+        ## Commit pattern
+
+        ```bash
+        git add <files>
+        git commit -m "<type>(<scope>): <description>"
+        ```
+
+        ## Verification
+
+        After all tasks processed, run full test suite:
+        ```bash
+        just check   # or: go test -buildvcs=false ./...
+        ```
+      requirements:
+        capabilities: ["code-modification", "testing"]
+        tools: ["tlc", "git", "go", "just"]
+
+  # ── Phase 3: merge gate ─────────────────────────────────────────────────────
+
+  merge-gate:
+    step_id: "merge-gate"
+    type: "branch"
+    title: "Check if all tasks completed; halt if any skipped"
+    depends_on: ["implement-track"]
+    cases:
+      - when: "skipped_count == 0"
+        next: "push-and-pr"
+      - when: "skipped_count > 0"
+        next: "halt-skipped"
+    default_next: "push-and-pr"
+    meta:
+      guidance: |
+        Read `/tmp/track-ship-skipped.json`.
+        If file is empty or missing: all tasks passed → push-and-pr.
+        If file has entries: halt with exit 1.
+
+        ```bash
+        if [ -s /tmp/track-ship-skipped.json ]; then
+          echo "Halted: skipped tasks found"
+          cat /tmp/track-ship-skipped.json
+          exit 1
+        fi
+        ```
+
+  halt-skipped:
+    step_id: "halt-skipped"
+    type: "task"
+    title: "Halt — skipped tasks require investigation"
+    task_template:
+      title: "Track {{track}}: halted at merge gate"
+      description: |
+        One or more tasks were skipped after exhausting retries.
+        Worktree remains at `feat/{{track}}` for investigation.
+
+        Skipped tasks: see `/tmp/track-ship-skipped.json`
+
+        To resume after fixing:
+        ```bash
+        tlc flow run track-ship.yaml --input track={{track}}
+        ```
+
+        Exit code: 1
+      requirements:
+        tools: ["tlc"]
+
+  # ── Phase 4: push + PR ─────────────────────────────────────────────────────
+
+  push-and-pr:
+    step_id: "push-and-pr"
+    type: "task"
+    title: "Push branch and create pull request"
+    depends_on: ["merge-gate"]
+    task_template:
+      title: "Push and open PR for {{track}}"
+      description: |
+        ```bash
+        git push -u origin feat/{{track}}
+
+        PR_URL=$(gh pr create \
+          --title "feat({{track}}): $(tlc track show {{track}} --format json | jq -r .title)" \
+          --body "$(cat <<'BODY'
+        ## Summary
+
+        Track: {{track}}
+        Tasks completed: $(tlc task list --track {{track}} --status DONE --format json | jq length)
+
+        ## Test plan
+
+        - [ ] All track tasks pass
+        - [ ] Full test suite green
+        - [ ] No regressions
+
+        BODY
+        )")
+
+        # Extract PR number
+        PR_NUMBER=$(gh pr view --json number --jq .number)
+        echo "$PR_NUMBER" > /tmp/track-ship-pr-number.txt
+        echo "$PR_URL" > /tmp/track-ship-pr-url.txt
+        ```
+
+        Save PR number for subsequent steps.
+      requirements:
+        tools: ["git", "gh", "tlc", "jq"]
+
+  # ── Phase 5: review loop ────────────────────────────────────────────────────
+
+  wait-for-review:
+    step_id: "wait-for-review"
+    type: "task"
+    title: "Wait for PR review on GitHub"
+    depends_on: ["push-and-pr"]
+    delay: 5m
+    retry:
+      interval: 30s
+      max_attempts: 600
+      on: "no_review"
+    task_template:
+      title: "Poll for PR review"
+      description: |
+        Wait for a human review (APPROVED or CHANGES_REQUESTED)
+        on the pull request.
+
+        ```bash
+        PR_NUMBER=$(cat /tmp/track-ship-pr-number.txt)
+
+        REVIEWS=$(gh pr view "$PR_NUMBER" --json reviews \
+          --jq '[.reviews[] | select(.state != "COMMENTED")] | length')
+
+        if [ "$REVIEWS" -eq 0 ]; then
+          exit 1   # no review yet → triggers retry
+        fi
+
+        # Capture review state
+        gh pr view "$PR_NUMBER" --json reviews \
+          --jq '.reviews[-1]' > /tmp/track-ship-review.json
+        ```
+
+        Exit 0 = review received.
+        Exit 1 = no review yet (retry).
+      requirements:
+        tools: ["gh", "jq"]
+
+  apply-review:
+    step_id: "apply-review"
+    type: "branch"
+    title: "Route based on review outcome"
+    depends_on: ["wait-for-review"]
+    cases:
+      - when: "review_state == 'APPROVED'"
+        next: "merge-pr"
+      - when: "review_state == 'CHANGES_REQUESTED'"
+        next: "address-feedback"
+    default_next: "address-feedback"
+    meta:
+      guidance: |
+        ```bash
+        STATE=$(jq -r .state /tmp/track-ship-review.json)
+        ```
+
+        APPROVED → skip to merge-pr.
+        CHANGES_REQUESTED → address-feedback.
+
+  address-feedback:
+    step_id: "address-feedback"
+    type: "task"
+    title: "Apply review feedback"
+    task_template:
+      title: "Address PR review feedback for {{track}}"
+      description: |
+        Run the receiving-code-review skill:
+
+        ```bash
+        PR_NUMBER=$(cat /tmp/track-ship-pr-number.txt)
+        ```
+
+        Invoke: `/superpowers:receiving-code-review $PR_NUMBER`
+
+        The skill reads review comments, applies fixes with
+        technical rigor, and commits changes.
+
+        After applying feedback, proceed to push-review-fixes.
+      requirements:
+        capabilities: ["code-modification", "code-review"]
+        tools: ["git", "gh"]
+
+  push-review-fixes:
+    step_id: "push-review-fixes"
+    type: "task"
+    title: "Push review fixes and re-enter review loop"
+    depends_on: ["address-feedback"]
+    task_template:
+      title: "Push fixes and wait for re-review"
+      description: |
+        ```bash
+        git push
+        ```
+
+        After pushing, loop back to wait-for-review to poll
+        for the next review round.
+
+        The flow loops: push-review-fixes → wait-for-review →
+        apply-review until APPROVED.
+      requirements:
+        tools: ["git"]
+
+  # ── Phase 6: merge + cleanup ────────────────────────────────────────────────
+
+  merge-pr:
+    step_id: "merge-pr"
+    type: "task"
+    title: "Merge the approved PR"
+    task_template:
+      title: "Merge PR for {{track}}"
+      description: |
+        ```bash
+        PR_NUMBER=$(cat /tmp/track-ship-pr-number.txt)
+        gh pr merge "$PR_NUMBER" --squash --delete-branch
+        ```
+      requirements:
+        tools: ["gh"]
+
+  cleanup:
+    step_id: "cleanup"
+    type: "task"
+    title: "Remove worktree, pull main, complete track"
+    depends_on: ["merge-pr"]
+    task_template:
+      title: "Cleanup after shipping {{track}}"
+      description: |
+        ```bash
+        # Remove worktree
+        echo "y" | /usr/bin/git hop remove feat/{{track}}
+
+        # Pull target branch
+        git checkout main
+        git pull
+
+        # Mark track completed
+        tlc track update {{track}} --status completed
+        ```
+
+        Flow complete. Exit code: 0.
+      requirements:
+        tools: ["git", "tlc"]
