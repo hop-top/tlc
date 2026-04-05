@@ -130,10 +130,50 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_tasks_track_id ON tasks(track_id);
 		`,
 	},
+	{
+		version: 7,
+		query: `
+		-- Rebuild tracks table with composite PK (project_id, id) so the
+		-- same track ID can exist in different projects.  The original v6
+		-- migration used CREATE TABLE IF NOT EXISTS which was a no-op for
+		-- databases that already had a tracks table with id TEXT PRIMARY KEY.
+
+		-- Clean up leftover from a previously failed run.
+		DROP TABLE IF EXISTS tracks_new;
+
+		CREATE TABLE tracks_new (
+			id          TEXT NOT NULL,
+			title       TEXT NOT NULL,
+			type        TEXT NOT NULL,
+			status      TEXT NOT NULL DEFAULT 'pending',
+			assigned_to TEXT,
+			created_at  TEXT NOT NULL,
+			updated_at  TEXT NOT NULL,
+			project_id  TEXT NOT NULL DEFAULT '',
+			meta        TEXT,
+			PRIMARY KEY (project_id, id)
+		);
+
+		INSERT INTO tracks_new
+			(id, title, type, status, assigned_to,
+			 created_at, updated_at, project_id, meta)
+		SELECT id, title, type, status, assigned_to,
+			   created_at, updated_at,
+			   COALESCE(project_id, ''),
+			   meta
+		FROM tracks;
+
+		DROP TABLE tracks;
+		ALTER TABLE tracks_new RENAME TO tracks;
+
+		CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status);
+		CREATE INDEX IF NOT EXISTS idx_tracks_project_id ON tracks(project_id);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 6
+const LatestMigrationVersion = 7
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
