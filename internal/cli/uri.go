@@ -2,10 +2,28 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+	hopuri "hop.top/uri"
+
 	"hop.top/tlc/internal/storage"
 	"hop.top/tlc/internal/uri"
-	"hop.top/uri/completions"
 )
+
+// cobraCompleter adapts a hop.top/uri Registry to cobra ValidArgsFunction.
+type cobraCompleter struct {
+	reg *hopuri.Registry
+}
+
+func (c *cobraCompleter) Complete(typeName string) func(
+	cmd *cobra.Command, args []string, toComplete string,
+) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		vals, err := c.reg.Complete(cmd.Context(), typeName, toComplete)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		return vals, cobra.ShellCompDirectiveNoFileComp
+	}
+}
 
 // setupURICompletion wires URI-aware completion into the CLI.
 func setupURICompletion(s *storage.SQLiteStorage) error {
@@ -14,7 +32,7 @@ func setupURICompletion(s *storage.SQLiteStorage) error {
 		return err
 	}
 
-	completer := completions.NewCobraCompleter(reg)
+	completer := &cobraCompleter{reg: reg}
 
 	// Task commands
 	taskComp := completer.Complete("task")
