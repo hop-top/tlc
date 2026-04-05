@@ -138,6 +138,10 @@ var migrations = []migration{
 		-- migration used CREATE TABLE IF NOT EXISTS which was a no-op for
 		-- databases that already had a tracks table with id TEXT PRIMARY KEY.
 
+		-- Disable FK checks — tasks.track_id references tracks(id) and
+		-- would block the DROP.  Re-enabled after the swap.
+		PRAGMA foreign_keys = OFF;
+
 		-- Clean up leftover from a previously failed run.
 		DROP TABLE IF EXISTS tracks_new;
 
@@ -168,6 +172,8 @@ var migrations = []migration{
 
 		CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status);
 		CREATE INDEX IF NOT EXISTS idx_tracks_project_id ON tracks(project_id);
+
+		PRAGMA foreign_keys = ON;
 		`,
 	},
 }
