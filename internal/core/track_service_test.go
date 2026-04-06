@@ -87,9 +87,25 @@ func (r *stubTaskRepo) CreateTask(_ context.Context, _ *Task) error { return nil
 func (r *stubTaskRepo) GetTask(_ context.Context, _ string) (*Task, error) {
 	return nil, nil
 }
-func (r *stubTaskRepo) UpdateTask(_ context.Context, _ *Task) error { return nil }
-func (r *stubTaskRepo) UpdateTaskWithLog(_ context.Context, _ *Task, _ *LogEntry) error {
-	return nil
+func (r *stubTaskRepo) UpdateTask(_ context.Context, task *Task) error {
+	for i, t := range r.tasks {
+		if t.ID == task.ID {
+			cp := *task
+			r.tasks[i] = &cp
+			return nil
+		}
+	}
+	return fmt.Errorf("task %q not found", task.ID)
+}
+func (r *stubTaskRepo) UpdateTaskWithLog(_ context.Context, task *Task, _ *LogEntry) error {
+	for i, t := range r.tasks {
+		if t.ID == task.ID {
+			cp := *task
+			r.tasks[i] = &cp
+			return nil
+		}
+	}
+	return fmt.Errorf("task %q not found", task.ID)
 }
 func (r *stubTaskRepo) DeleteTask(_ context.Context, _ string) error { return nil }
 func (r *stubTaskRepo) GetTasksNeedingPush(_ context.Context) ([]*Task, error) {
@@ -293,7 +309,7 @@ func TestTrackService_AbandonTrack(t *testing.T) {
 	}
 }
 
-func TestTrackService_AbandonTrack_InvalidTransition(t *testing.T) {
+func TestTrackService_AbandonTrack_FromPending(t *testing.T) {
 	repo := newStubTrackRepo()
 	svc := NewTrackService(repo, &stubTaskRepo{})
 	ctx := context.Background()
@@ -304,9 +320,104 @@ func TestTrackService_AbandonTrack_InvalidTransition(t *testing.T) {
 		Status: TrackStatusPending, CreatedAt: now, UpdatedAt: now,
 	}
 
-	err := svc.AbandonTrack(ctx, "aaa")
-	if err == nil {
-		t.Fatal("expected error for pending->abandoned transition")
+	if err := svc.AbandonTrack(ctx, "aaa"); err != nil {
+		t.Fatalf("pending → abandoned should be allowed, got: %v", err)
+	}
+	if repo.tracks["aaa"].Status != TrackStatusAbandoned {
+		t.Errorf("expected abandoned, got %s", repo.tracks["aaa"].Status)
+	}
+}
+
+func TestTrackService_AbandonTrack_FromArchived(t *testing.T) {
+	repo := newStubTrackRepo()
+	svc := NewTrackService(repo, &stubTaskRepo{})
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	repo.tracks["aaa"] = &Track{
+		ID: "aaa", Title: "A", Type: "feature",
+		Status: TrackStatusArchived, CreatedAt: now, UpdatedAt: now,
+	}
+
+	if err := svc.AbandonTrack(ctx, "aaa"); err == nil {
+		t.Fatal("expected error for archived → abandoned transition")
+	}
+}
+
+func TestTrackService_LinkedNonTerminalTasks(t *testing.T) {
+	trackID := "tr-1"
+	taskRepo := &stubTaskRepo{tasks: []*Task{
+		{ID: "T-0001", Status: StatusTodo, TrackID: &trackID},
+		{ID: "T-0002", Status: StatusInProgress, TrackID: &trackID},
+		{ID: "T-0003", Status: StatusDone, TrackID: &trackID},
+		{ID: "T-0004", Status: StatusSkipped, TrackID: &trackID},
+	}}
+	svc := NewTrackService(newStubTrackRepo(), taskRepo)
+	ctx := context.Background()
+
+	tasks, err := svc.LinkedNonTerminalTasks(ctx, trackID)
+	if err != nil {
+		t.Fatalf("LinkedNonTerminalTasks failed: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 non-terminal tasks, got %d", len(tasks))
+	}
+	ids := map[string]bool{}
+	for _, task := range tasks {
+		ids[task.ID] = true
+	}
+	if !ids["T-0001"] || !ids["T-0002"] {
+		t.Errorf("expected T-0001 and T-0002, got %v", ids)
+	}
+}
+
+func TestTrackService_AbandonTrackWithTasks(t *testing.T) {
+	repo := newStubTrackRepo()
+	trackID := "tr-abandon"
+	taskRepo := &stubTaskRepo{tasks: []*Task{
+		{ID: "T-0001", Status: StatusTodo, TrackID: &trackID},
+		{ID: "T-0002", Status: StatusInProgress, TrackID: &trackID},
+		{ID: "T-0003", Status: StatusDone, TrackID: &trackID},
+	}}
+	svc := NewTrackService(repo, taskRepo)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	repo.tracks[trackID] = &Track{
+		ID: trackID, Title: "Abandon me", Type: "feature",
+		Status: TrackStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+
+	skipped, err := svc.AbandonTrackWithTasks(ctx, trackID)
+	if err != nil {
+		t.Fatalf("AbandonTrackWithTasks failed: %v", err)
+	}
+
+	// Track should be abandoned.
+	if repo.tracks[trackID].Status != TrackStatusAbandoned {
+		t.Errorf("expected track abandoned, got %s",
+			repo.tracks[trackID].Status)
+	}
+
+	// 2 non-terminal tasks should have been skipped.
+	if len(skipped) != 2 {
+		t.Fatalf("expected 2 skipped tasks, got %d", len(skipped))
+	}
+
+	// Verify task statuses in repo.
+	for _, task := range taskRepo.tasks {
+		switch task.ID {
+		case "T-0001", "T-0002":
+			if task.Status != StatusSkipped {
+				t.Errorf("task %s: expected SKIPPED, got %s",
+					task.ID, task.Status)
+			}
+		case "T-0003":
+			if task.Status != StatusDone {
+				t.Errorf("task %s: should remain DONE, got %s",
+					task.ID, task.Status)
+			}
+		}
 	}
 }
 

@@ -58,6 +58,22 @@ func TestValidateTrackTransition_ActiveToCompleted(t *testing.T) {
 	}
 }
 
+func TestValidateTrackTransition_PendingToAbandoned(t *testing.T) {
+	if err := core.ValidateTrackTransition(
+		core.TrackStatusPending, core.TrackStatusAbandoned, 0, false,
+	); err != nil {
+		t.Fatalf("pending → abandoned should be allowed, got: %v", err)
+	}
+}
+
+func TestValidateTrackTransition_CompletedToAbandoned(t *testing.T) {
+	if err := core.ValidateTrackTransition(
+		core.TrackStatusCompleted, core.TrackStatusAbandoned, 5, true,
+	); err != nil {
+		t.Fatalf("completed → abandoned should be allowed, got: %v", err)
+	}
+}
+
 func TestValidateTrackTransition_ActiveToAbandoned(t *testing.T) {
 	if err := core.ValidateTrackTransition(
 		core.TrackStatusActive, core.TrackStatusAbandoned, 3, false,
@@ -104,7 +120,6 @@ func TestValidateTrackTransition_DisallowedTransitions(t *testing.T) {
 		to   core.TrackStatus
 	}{
 		{core.TrackStatusPending, core.TrackStatusCompleted},
-		{core.TrackStatusPending, core.TrackStatusAbandoned},
 		{core.TrackStatusPending, core.TrackStatusArchived},
 		{core.TrackStatusActive, core.TrackStatusPending},
 		{core.TrackStatusCompleted, core.TrackStatusActive},

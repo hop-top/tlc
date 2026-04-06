@@ -24,9 +24,9 @@ func (e ErrInvalidTrackTransition) Error() string {
 // trackTransitionRules defines the allowed status transitions.
 // Each key maps to the set of statuses reachable from it.
 var trackTransitionRules = map[TrackStatus][]TrackStatus{
-	TrackStatusPending:   {TrackStatusActive},
+	TrackStatusPending:   {TrackStatusActive, TrackStatusAbandoned},
 	TrackStatusActive:    {TrackStatusCompleted, TrackStatusAbandoned},
-	TrackStatusCompleted: {TrackStatusArchived},
+	TrackStatusCompleted: {TrackStatusArchived, TrackStatusAbandoned},
 	TrackStatusAbandoned: {TrackStatusArchived},
 	// archived is terminal — no outgoing transitions
 }
@@ -35,8 +35,10 @@ var trackTransitionRules = map[TrackStatus][]TrackStatus{
 //
 // Business rules enforced:
 //   - pending → active: requires linkedTaskCount > 0
+//   - pending → abandoned: always allowed
 //   - active → completed: requires allTasksTerminal == true
 //   - active → abandoned: always allowed
+//   - completed → abandoned: always allowed
 //   - completed/abandoned → archived: always allowed
 //   - archived: terminal, no outgoing transitions
 func ValidateTrackTransition(

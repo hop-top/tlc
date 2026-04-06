@@ -161,12 +161,87 @@ func (s *TrackService) AutoTransitionOnTaskClaim(ctx context.Context, trackID st
 	})
 }
 
-// AbandonTrack transitions an active track to abandoned.
+// AbandonTrack transitions a track to abandoned without touching linked tasks.
 func (s *TrackService) AbandonTrack(ctx context.Context, id string) error {
 	return s.UpdateTrack(ctx, id, func(t *Track) error {
 		t.Status = TrackStatusAbandoned
 		return nil
 	})
+}
+
+// LinkedNonTerminalTasks returns tasks linked to a track that are not in a
+// terminal state (DONE or SKIPPED).
+func (s *TrackService) LinkedNonTerminalTasks(
+	ctx context.Context,
+	trackID string,
+) ([]*Task, error) {
+	tasks, err := s.linkedTasks(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	wm := DefaultWorkflow()
+	var result []*Task
+	for _, t := range tasks {
+		if !wm.IsTerminal(t.Status) {
+			result = append(result, t)
+		}
+	}
+	return result, nil
+}
+
+// AbandonTrackWithTasks abandons the track and transitions all linked
+// non-terminal tasks to SKIPPED. Returns the list of tasks that were
+// skipped. The caller is responsible for confirming with the user
+// before calling this method.
+func (s *TrackService) AbandonTrackWithTasks(
+	ctx context.Context,
+	trackID string,
+) ([]*Task, error) {
+	// Validate track transition before touching tasks to avoid partial
+	// state if the track itself can't be abandoned (e.g. archived).
+	track, err := s.GetTrack(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	linkedCount, allTerminal, err := s.linkedTaskStats(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateTrackTransition(
+		track.Status, TrackStatusAbandoned, linkedCount, allTerminal,
+	); err != nil {
+		return nil, err
+	}
+
+	nonTerminal, err := s.LinkedNonTerminalTasks(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip all non-terminal tasks, then abandon the track.
+	wm := DefaultWorkflow()
+	for _, task := range nonTerminal {
+		logEntry, err := task.TransitionWithWorkflow(
+			StatusSkipped, "track-abandon", "track abandoned",
+			wm, true,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to skip task %s: %w", task.ID, err,
+			)
+		}
+		if err := s.taskRepo.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
+			return nil, fmt.Errorf(
+				"failed to persist task %s: %w", task.ID, err,
+			)
+		}
+	}
+
+	if err := s.AbandonTrack(ctx, trackID); err != nil {
+		return nil, err
+	}
+
+	return nonTerminal, nil
 }
 
 // ArchiveTrack transitions a completed or abandoned track to archived.
