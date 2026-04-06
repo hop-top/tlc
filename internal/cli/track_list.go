@@ -55,16 +55,24 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		query.Type = trackListType
 	}
 
-	for _, st := range trackListStatus {
-		ts := core.TrackStatus(strings.ToLower(st))
-		if !core.ValidTrackStatus(ts) {
-			return fmt.Errorf(
-				"track status %q invalid; valid: pending, active, completed, "+
-					"abandoned, archived",
-				st,
-			)
+	if len(trackListStatus) > 0 {
+		for _, st := range trackListStatus {
+			ts := core.TrackStatus(strings.ToLower(st))
+			if !core.ValidTrackStatus(ts) {
+				return fmt.Errorf(
+					"track status %q invalid; valid: pending, active, completed, "+
+						"abandoned, archived",
+					st,
+				)
+			}
+			query.Status = append(query.Status, ts)
 		}
-		query.Status = append(query.Status, ts)
+	} else {
+		// Default: show pending + active (in-progress) tracks.
+		query.Status = []core.TrackStatus{
+			core.TrackStatusPending,
+			core.TrackStatusActive,
+		}
 	}
 
 	svc := core.NewTrackService(s, s)

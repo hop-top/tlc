@@ -119,6 +119,63 @@ func TestTrackList_FilterByStatus(t *testing.T) {
 	})
 }
 
+func TestTrackList_DefaultFilterExcludesTerminal(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		resetTrackListFlags()
+		resetTrackFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		svc := core.NewTrackService(s, s)
+		for _, tr := range []*core.Track{
+			{ID: "tr-pending", Title: "Pending", Type: "feature",
+				Status: core.TrackStatusPending},
+			{ID: "tr-active", Title: "Active", Type: "feature",
+				Status: core.TrackStatusActive},
+			{ID: "tr-completed", Title: "Completed", Type: "feature",
+				Status: core.TrackStatusCompleted},
+			{ID: "tr-abandoned", Title: "Abandoned", Type: "feature",
+				Status: core.TrackStatusAbandoned},
+		} {
+			if err := svc.CreateTrack(ctx, tr); err != nil {
+				t.Fatalf("create track: %v", err)
+			}
+		}
+
+		// Default: no --status flag → should show pending + active only.
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "list"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track list failed: %v", err)
+		}
+
+		out := buf.String()
+		if !contains(out, "tr-pending") {
+			t.Errorf("expected pending track in default output, got:\n%s", out)
+		}
+		if !contains(out, "tr-active") {
+			t.Errorf("expected active track in default output, got:\n%s", out)
+		}
+		if contains(out, "tr-completed") {
+			t.Errorf("did not expect completed track in default output, got:\n%s", out)
+		}
+		if contains(out, "tr-abandoned") {
+			t.Errorf("did not expect abandoned track in default output, got:\n%s", out)
+		}
+	})
+}
+
 func TestTrackList_FilterByType(t *testing.T) {
 	withTestLock(func() {
 		ctx, cleanup := setupTestDir(t)

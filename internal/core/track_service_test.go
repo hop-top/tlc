@@ -293,7 +293,7 @@ func TestTrackService_AbandonTrack(t *testing.T) {
 	}
 }
 
-func TestTrackService_AbandonTrack_InvalidTransition(t *testing.T) {
+func TestTrackService_AbandonTrack_FromPending(t *testing.T) {
 	repo := newStubTrackRepo()
 	svc := NewTrackService(repo, &stubTaskRepo{})
 	ctx := context.Background()
@@ -304,9 +304,27 @@ func TestTrackService_AbandonTrack_InvalidTransition(t *testing.T) {
 		Status: TrackStatusPending, CreatedAt: now, UpdatedAt: now,
 	}
 
-	err := svc.AbandonTrack(ctx, "aaa")
-	if err == nil {
-		t.Fatal("expected error for pending->abandoned transition")
+	if err := svc.AbandonTrack(ctx, "aaa"); err != nil {
+		t.Fatalf("pending → abandoned should be allowed, got: %v", err)
+	}
+	if repo.tracks["aaa"].Status != TrackStatusAbandoned {
+		t.Errorf("expected abandoned, got %s", repo.tracks["aaa"].Status)
+	}
+}
+
+func TestTrackService_AbandonTrack_FromArchived(t *testing.T) {
+	repo := newStubTrackRepo()
+	svc := NewTrackService(repo, &stubTaskRepo{})
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	repo.tracks["aaa"] = &Track{
+		ID: "aaa", Title: "A", Type: "feature",
+		Status: TrackStatusArchived, CreatedAt: now, UpdatedAt: now,
+	}
+
+	if err := svc.AbandonTrack(ctx, "aaa"); err == nil {
+		t.Fatal("expected error for archived → abandoned transition")
 	}
 }
 
