@@ -130,5 +130,6 @@ func resetTrackFlags() {
 	trackUpdateAssignedTo = ""
 	trackUpdateType = ""
 	trackUpdateAddPlan = ""
+	trackAbandonNoPrompt = false
 	resetTrackListFlags()
 }
