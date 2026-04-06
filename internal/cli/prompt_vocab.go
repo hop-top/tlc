@@ -76,7 +76,7 @@ var modifierAliases = map[string]ModifierFlag{
 	"incomplete":  "status:active",
 	"incompleted": "status:active",
 	"open":        "status:active",
-	"pending":     "status:active",
+	"pending":     "status:pending",
 	"remaining":   "status:active",
 	"unfinished":  "status:active",
 	"overdue":     "stale",

@@ -86,7 +86,7 @@ func TestVocabModifierLookup(t *testing.T) {
 		{"incomplete", "status:active", true},
 		{"incompleted", "status:active", true},
 		{"open", "status:active", true},
-		{"pending", "status:active", true},
+		{"pending", "status:pending", true},
 		{"remaining", "status:active", true},
 		{"unfinished", "status:active", true},
 		{"overdue", "stale", true},

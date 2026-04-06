@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
@@ -84,7 +83,7 @@ func runTrackAbandon(cmd *cobra.Command, args []string) error {
 				t.ID, t.Title, t.Status)
 		}
 		_, _ = fmt.Fprint(w, "Continue? [y/N] ")
-		if !readConfirm(os.Stdin) {
+		if !readConfirm(cmd.InOrStdin()) {
 			return fmt.Errorf("aborted; track %s not abandoned", id)
 		}
 	}

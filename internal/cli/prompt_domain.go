@@ -46,6 +46,8 @@ func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 			switch m {
 			case "status:active":
 				out = append(out, "--status", "active")
+			case "status:pending":
+				out = append(out, "--status", "TODO")
 			case "status:done":
 				out = append(out, "--status", "DONE")
 			case "blocked":
@@ -61,6 +63,8 @@ func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 			switch m {
 			case "status:active":
 				out = append(out, "--status", "active")
+			case "status:pending":
+				out = append(out, "--status", "pending")
 			case "status:done":
 				out = append(out, "--status", "completed")
 			case "blocked":

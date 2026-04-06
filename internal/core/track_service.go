@@ -197,12 +197,28 @@ func (s *TrackService) AbandonTrackWithTasks(
 	ctx context.Context,
 	trackID string,
 ) ([]*Task, error) {
+	// Validate track transition before touching tasks to avoid partial
+	// state if the track itself can't be abandoned (e.g. archived).
+	track, err := s.GetTrack(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	linkedCount, allTerminal, err := s.linkedTaskStats(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateTrackTransition(
+		track.Status, TrackStatusAbandoned, linkedCount, allTerminal,
+	); err != nil {
+		return nil, err
+	}
+
 	nonTerminal, err := s.LinkedNonTerminalTasks(ctx, trackID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Skip all non-terminal tasks first.
+	// Skip all non-terminal tasks, then abandon the track.
 	wm := DefaultWorkflow()
 	for _, task := range nonTerminal {
 		logEntry, err := task.TransitionWithWorkflow(
@@ -221,7 +237,6 @@ func (s *TrackService) AbandonTrackWithTasks(
 		}
 	}
 
-	// Abandon the track.
 	if err := s.AbandonTrack(ctx, trackID); err != nil {
 		return nil, err
 	}
