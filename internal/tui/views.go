@@ -14,7 +14,6 @@ import (
 
 const (
 	headerSpacing      = 2
-	viewportOffset     = 6
 	searchInputPadding = 10
 	kanbanMinColWidth  = 20
 	kanbanColCount     = 3
@@ -151,16 +150,10 @@ func (m Model) viewString() string {
 
 	m.viewport.SetContent(content)
 
-	// Calculate available height for viewport
-	headerHeight := lipgloss.Height(header)
-	footerHeight := lipgloss.Height(footer)
-	occupiedHeight := headerHeight + footerHeight + headerSpacing
-
-	vh := m.height - occupiedHeight
-	if vh < 1 {
-		vh = 1
-	}
-	m.viewport.SetHeight(vh)
+	// Note: viewport height is computed centrally in Update() via
+	// effectiveViewportHeight(). We don't set it here because View() has a
+	// value receiver — any mutation would be discarded, causing syncViewport()
+	// to read a stale stored height. See Model.effectiveViewportHeight().
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -170,6 +163,22 @@ func (m Model) viewString() string {
 		"", // Spacer
 		footer,
 	)
+}
+
+// effectiveViewportHeight computes the viewport height available after
+// subtracting rendered header + footer + spacing. This is the single source
+// of truth used by Update() on WindowSizeMsg to keep the stored viewport
+// height in sync with what View() will actually render. Requires m.width
+// and m.height to be set before calling (headerView() depends on m.width).
+func (m Model) effectiveViewportHeight() int {
+	headerHeight := lipgloss.Height(m.headerView())
+	footerHeight := lipgloss.Height(m.helpView())
+	occupied := headerHeight + footerHeight + headerSpacing
+	vh := m.height - occupied
+	if vh < 1 {
+		vh = 1
+	}
+	return vh
 }
 
 func (m Model) headerView() string {
