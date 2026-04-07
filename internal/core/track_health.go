@@ -73,7 +73,7 @@ func (s *TrackService) CheckOvercommitWarning(
 
 	taskMap := make(map[string][]*Task, len(tracks))
 	for _, t := range tracks {
-		linked, err := s.linkedTasks(ctx, t.ID)
+		linked, err := s.linkedTasks(ctx, t)
 		if err != nil {
 			return "", fmt.Errorf(
 				"failed to list tasks for track %q: %w", t.ID, err,

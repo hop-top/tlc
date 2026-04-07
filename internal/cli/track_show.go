@@ -47,9 +47,21 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Fetch linked tasks for phase breakdown display.
+	//
+	// Track IDs are unique only within a (project_id, id) composite, so we
+	// must scope the task lookup by the track's owning project. Otherwise a
+	// task from a different project that happens to share the same track_id
+	// string leaks into this track's display. AllProjects:true bypasses the
+	// auto-scope by current cwd; the explicit project_id filter below is
+	// what enforces the correct boundary.
+	var trackProjectID string
+	if track.ProjectID != nil {
+		trackProjectID = *track.ProjectID
+	}
 	tasks, err := s.ListTasks(ctx, core.Query{
 		Filters: []core.FieldFilter{
 			{Field: "track_id", Operator: core.OpEq, Value: id},
+			{Field: "project_id", Operator: core.OpEq, Value: trackProjectID},
 		},
 		AllProjects: true,
 	})

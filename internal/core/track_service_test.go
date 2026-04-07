@@ -352,7 +352,12 @@ func TestTrackService_LinkedNonTerminalTasks(t *testing.T) {
 		{ID: "T-0003", Status: StatusDone, TrackID: &trackID},
 		{ID: "T-0004", Status: StatusSkipped, TrackID: &trackID},
 	}}
-	svc := NewTrackService(newStubTrackRepo(), taskRepo)
+	trackRepo := newStubTrackRepo()
+	trackRepo.tracks[trackID] = &Track{
+		ID: trackID, Title: "T", Type: "feature",
+		Status: TrackStatusActive,
+	}
+	svc := NewTrackService(trackRepo, taskRepo)
 	ctx := context.Background()
 
 	tasks, err := svc.LinkedNonTerminalTasks(ctx, trackID)
