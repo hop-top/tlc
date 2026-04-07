@@ -108,7 +108,7 @@ func (s *TrackService) UpdateTrack(
 
 	// Validate status transition if status changed.
 	if track.Status != oldStatus {
-		linkedCount, allTerminal, err := s.linkedTaskStats(ctx, id)
+		linkedCount, allTerminal, err := s.linkedTaskStats(ctx, track)
 		if err != nil {
 			return err
 		}
@@ -147,7 +147,7 @@ func (s *TrackService) AutoTransitionOnTaskClaim(ctx context.Context, trackID st
 		return nil
 	}
 
-	linkedCount, _, err := s.linkedTaskStats(ctx, trackID)
+	linkedCount, _, err := s.linkedTaskStats(ctx, track)
 	if err != nil {
 		return fmt.Errorf("failed to get linked task stats: %w", err)
 	}
@@ -175,7 +175,11 @@ func (s *TrackService) LinkedNonTerminalTasks(
 	ctx context.Context,
 	trackID string,
 ) ([]*Task, error) {
-	tasks, err := s.linkedTasks(ctx, trackID)
+	track, err := s.GetTrack(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := s.linkedTasks(ctx, track)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +207,7 @@ func (s *TrackService) AbandonTrackWithTasks(
 	if err != nil {
 		return nil, err
 	}
-	linkedCount, allTerminal, err := s.linkedTaskStats(ctx, trackID)
+	linkedCount, allTerminal, err := s.linkedTaskStats(ctx, track)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +268,7 @@ func (s *TrackService) GetTrackWithState(
 		return nil, nil, nil, err
 	}
 
-	tasks, err := s.linkedTasks(ctx, id)
+	tasks, err := s.linkedTasks(ctx, track)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -275,11 +279,19 @@ func (s *TrackService) GetTrackWithState(
 	return track, flags, &progress, nil
 }
 
-// linkedTasks returns all tasks linked to a track via track_id filter.
-func (s *TrackService) linkedTasks(ctx context.Context, trackID string) ([]*Task, error) {
+// linkedTasks returns all tasks linked to a track, scoped by both track_id
+// AND the track's owning project_id. Track IDs are unique only within a
+// (project_id, id) composite, so a bare track_id filter would merge tasks
+// from other projects that happen to share the same track_id string.
+func (s *TrackService) linkedTasks(ctx context.Context, track *Track) ([]*Task, error) {
+	var projectID string
+	if track.ProjectID != nil {
+		projectID = *track.ProjectID
+	}
 	tasks, err := s.taskRepo.ListTasks(ctx, Query{
 		Filters: []FieldFilter{
-			{Field: "track_id", Operator: OpEq, Value: trackID},
+			{Field: "track_id", Operator: OpEq, Value: track.ID},
+			{Field: "project_id", Operator: OpEq, Value: projectID},
 		},
 		AllProjects: true,
 	})
@@ -292,9 +304,9 @@ func (s *TrackService) linkedTasks(ctx context.Context, trackID string) ([]*Task
 // linkedTaskStats returns the count of linked tasks and whether all are terminal.
 func (s *TrackService) linkedTaskStats(
 	ctx context.Context,
-	trackID string,
+	track *Track,
 ) (int, bool, error) {
-	tasks, err := s.linkedTasks(ctx, trackID)
+	tasks, err := s.linkedTasks(ctx, track)
 	if err != nil {
 		return 0, false, err
 	}
