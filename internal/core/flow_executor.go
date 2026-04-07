@@ -475,6 +475,9 @@ func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by st
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 	}
+	if proj := DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
+		task.ProjectID = &proj.ProjectID
+	}
 	if err := e.repo.CreateTask(ctx, task); err != nil {
 		return nil, fmt.Errorf("flow template step %q: create task: %w", step.ID, err)
 	}
@@ -574,6 +577,10 @@ func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string
 			"requirements": step.TaskTemplate.Requirements,
 			"context":      step.TaskTemplate.Context,
 		},
+	}
+
+	if proj := DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
+		task.ProjectID = &proj.ProjectID
 	}
 
 	return task
