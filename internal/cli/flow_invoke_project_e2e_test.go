@@ -71,6 +71,8 @@ func TestFlowInvoke_ProjectScoped_CreatesTasksWithoutError(t *testing.T) {
 			cfgFile = ""
 			viper.Reset()
 			core.ResetDetectionCache()
+			dbSyncOnce = sync.Once{}
+			touchOnce = sync.Once{}
 		})
 
 		// Write a minimal flow yaml with one task template.
