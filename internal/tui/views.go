@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	glamour "charm.land/glamour/v2"
+	glamourstyles "charm.land/glamour/v2/styles"
+	"charm.land/lipgloss/v2"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 )
@@ -40,7 +42,7 @@ func (m Model) renderMarkdown(content string) string {
 		}
 		var err error
 		r, err = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStyles(glamourstyles.DarkStyleConfig),
 			glamour.WithWordWrap(w),
 		)
 		if err != nil {
@@ -105,7 +107,17 @@ func (m Model) getTagStyle(tag string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	view := tea.NewView(m.viewString())
+	view.AltScreen = true
+	return view
+}
+
+// viewString returns the rendered string content, wrapped by View() into a
+// tea.View. Helper view methods (headerView, helpView, dashboardContent,
+// detailView, kanbanView, flowsContent) keep returning string and are
+// composed here.
+func (m Model) viewString() string {
 	if m.err != nil {
 		return styles.Current.Error.Render(fmt.Sprintf("Error: %v", m.err))
 	}
@@ -123,7 +135,10 @@ func (m Model) View() string {
 	var content string
 	switch m.view {
 	case viewThemePicker:
-		return m.themePicker.View()
+		// themePicker.View() returns tea.View; extract its string content
+		// since themepicker is embedded in this Model and inherits our View
+		// options (AltScreen, etc.) from the parent.
+		return m.themePicker.View().Content
 	case viewDetail:
 		content = m.detailView()
 	case viewKanban:
@@ -145,7 +160,7 @@ func (m Model) View() string {
 	if vh < 1 {
 		vh = 1
 	}
-	m.viewport.Height = vh
+	m.viewport.SetHeight(vh)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -171,7 +186,7 @@ func (m Model) headerView() string {
 	titleRendered := styles.Current.Title.MaxWidth(m.width).Render(title)
 
 	if m.view == viewSearch {
-		m.searchInput.Width = m.width - searchInputPadding
+		m.searchInput.SetWidth(m.width - searchInputPadding)
 		searchRendered := styles.Current.Muted.Render("Search: ") + m.searchInput.View()
 		return lipgloss.JoinVertical(lipgloss.Left, titleRendered, searchRendered)
 	}

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/log"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"

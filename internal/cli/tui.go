@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui"
@@ -23,7 +23,7 @@ var tuiCmd = &cobra.Command{
 
 		service := core.NewTaskService(store, store)
 
-		p := tea.NewProgram(tui.NewModel(service), tea.WithAltScreen())
+		p := tea.NewProgram(tui.NewModel(service))
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error running TUI: %v", err)
 			os.Exit(1)

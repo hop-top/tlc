@@ -1,11 +1,12 @@
 package themepicker
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Theme represents a color palette interface for the picker.
@@ -14,14 +15,14 @@ type Theme interface {
 	Desc() string
 
 	// Colors for preview
-	GetPrimary() lipgloss.Color
-	GetSecondary() lipgloss.Color
-	GetSuccess() lipgloss.Color
-	GetWarning() lipgloss.Color
-	GetError() lipgloss.Color
-	GetMuted() lipgloss.Color
-	GetBackground() lipgloss.Color
-	GetForeground() lipgloss.Color
+	GetPrimary() color.Color
+	GetSecondary() color.Color
+	GetSuccess() color.Color
+	GetWarning() color.Color
+	GetError() color.Color
+	GetMuted() color.Color
+	GetBackground() color.Color
+	GetForeground() color.Color
 }
 
 type ThemeSelectedMsg struct {
@@ -89,7 +90,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetWidth(listWidth)
 		m.list.SetHeight(m.height - 2) // Account for borders/padding
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.list.FilterState() == list.Filtering {
 			break
 		}
@@ -144,15 +145,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if m.width == 0 {
-		return "Initializing..."
+		return tea.NewView("Initializing...")
 	}
 
 	listView := m.list.View()
 	previewView := m.renderPreview()
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, listView, previewView)
+	return tea.NewView(lipgloss.JoinHorizontal(lipgloss.Top, listView, previewView))
 }
 
 func (m Model) renderPreview() string {
