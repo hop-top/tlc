@@ -3,9 +3,9 @@ package tui
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/log"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/tui/styles"
@@ -23,7 +23,7 @@ const (
 
 func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", keyCtrlC:
 			return m, tea.Quit
@@ -114,7 +114,7 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 func handleDetailUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", keyCtrlC:
 			return m, tea.Quit
@@ -157,7 +157,7 @@ func handleDetailUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", keyCtrlC:
 			return m, tea.Quit
@@ -223,7 +223,7 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 func handleFlowsUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", keyCtrlC:
 			return m, tea.Quit
@@ -261,7 +261,7 @@ func handleFlowsUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 func handleSearchUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case keyEnter, keyEsc:
 			m.view = viewDashboard
@@ -292,7 +292,7 @@ func handleFormUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 func handleThemePickerUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == keyEsc {
 			m.view = viewDashboard
 			return m, nil

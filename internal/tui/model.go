@@ -1,11 +1,12 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/huh"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	glamour "charm.land/glamour/v2"
+	glamourstyles "charm.land/glamour/v2/styles"
+	"charm.land/huh/v2"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
@@ -50,7 +51,7 @@ func NewModel(service *core.TaskService) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search tasks..."
 
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 
 	direction := viper.GetString("ui.log_sort_direction")
 	if direction == "" {
@@ -81,7 +82,7 @@ func NewModel(service *core.TaskService) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.WindowSize(), m.fetchTasks)
+	return tea.Batch(tea.RequestWindowSize, m.fetchTasks)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -90,15 +91,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - viewportOffset
+		m.viewport.SetWidth(msg.Width)
+		m.viewport.SetHeight(msg.Height - viewportOffset)
 
 		// Rebuild cached markdown renderer when width changes.
 		wrapWidth := msg.Width - 10
 		if wrapWidth != m.mdRenderWidth || m.mdRenderer == nil {
 			m.mdRenderWidth = wrapWidth
 			if r, err := glamour.NewTermRenderer(
-				glamour.WithAutoStyle(),
+				glamour.WithStyles(glamourstyles.DarkStyleConfig),
 				glamour.WithWordWrap(wrapWidth),
 			); err == nil {
 				m.mdRenderer = r
@@ -111,10 +112,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tm, cmd = m.themePicker.Update(msg)
 		m.themePicker = tm.(themepicker.Model)
 		return m, cmd
-	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && m.view == "dashboard" { //nolint:staticcheck // SA1019: using new mouse API
-			// Basic selection on click (not fully implemented)
-		}
 	case error:
 		m.err = msg
 		return m, nil
@@ -173,10 +170,10 @@ func (m Model) addFilter(field, value string) Model {
 
 func (m Model) syncViewport() Model {
 	line := m.getLineOfSelected()
-	if line < m.viewport.YOffset {
-		m.viewport.YOffset = line
-	} else if line >= m.viewport.YOffset+m.viewport.Height {
-		m.viewport.YOffset = line - m.viewport.Height + 1
+	if line < m.viewport.YOffset() {
+		m.viewport.SetYOffset(line)
+	} else if line >= m.viewport.YOffset()+m.viewport.Height() {
+		m.viewport.SetYOffset(line - m.viewport.Height() + 1)
 	}
 	return m
 }

@@ -1,32 +1,36 @@
 package styles
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Theme defines the color palette.
 type Theme struct {
 	Name       string
-	Primary    lipgloss.Color
-	Secondary  lipgloss.Color
-	Success    lipgloss.Color
-	Warning    lipgloss.Color
-	Error      lipgloss.Color
-	Muted      lipgloss.Color
-	Background lipgloss.Color
-	Foreground lipgloss.Color
+	Primary    color.Color
+	Secondary  color.Color
+	Success    color.Color
+	Warning    color.Color
+	Error      color.Color
+	Muted      color.Color
+	Background color.Color
+	Foreground color.Color
 	TagColors  []string
 }
 
 // Methods to satisfy themepicker.Theme interface.
-func (t Theme) DisplayName() string           { return t.Name }
-func (t Theme) Desc() string                  { return "Internal Theme" }
-func (t Theme) GetPrimary() lipgloss.Color    { return t.Primary }
-func (t Theme) GetSecondary() lipgloss.Color  { return t.Secondary }
-func (t Theme) GetSuccess() lipgloss.Color    { return t.Success }
-func (t Theme) GetWarning() lipgloss.Color    { return t.Warning }
-func (t Theme) GetError() lipgloss.Color      { return t.Error }
-func (t Theme) GetMuted() lipgloss.Color      { return t.Muted }
-func (t Theme) GetBackground() lipgloss.Color { return t.Background }
-func (t Theme) GetForeground() lipgloss.Color { return t.Foreground }
+func (t Theme) DisplayName() string        { return t.Name }
+func (t Theme) Desc() string               { return "Internal Theme" }
+func (t Theme) GetPrimary() color.Color    { return t.Primary }
+func (t Theme) GetSecondary() color.Color  { return t.Secondary }
+func (t Theme) GetSuccess() color.Color    { return t.Success }
+func (t Theme) GetWarning() color.Color    { return t.Warning }
+func (t Theme) GetError() color.Color      { return t.Error }
+func (t Theme) GetMuted() color.Color      { return t.Muted }
+func (t Theme) GetBackground() color.Color { return t.Background }
+func (t Theme) GetForeground() color.Color { return t.Foreground }
 
 // Styles contains all application styles derived from a Theme.
 type Styles struct {
