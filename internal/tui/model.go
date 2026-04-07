@@ -86,13 +86,23 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := m.updateInner(msg)
+	// Recompute viewport height after every Update so view/filter/search
+	// transitions that change header/footer height stay in sync. The
+	// calculation is cheap (two lipgloss.Height calls). WindowSizeMsg also
+	// runs this via its own SetHeight call, which is redundant but harmless.
+	m.viewport.SetHeight(m.effectiveViewportHeight())
+	return m, cmd
+}
+
+func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 	// 1. Handle common messages first
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.SetWidth(msg.Width)
-		m.viewport.SetHeight(msg.Height - viewportOffset)
+		m.viewport.SetHeight(m.effectiveViewportHeight())
 
 		// Rebuild cached markdown renderer when width changes.
 		wrapWidth := msg.Width - 10
