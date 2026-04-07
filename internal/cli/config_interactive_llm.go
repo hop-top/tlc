@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 
 	"hop.top/kit/llm"
 	llmerrors "hop.top/kit/llm/errors"

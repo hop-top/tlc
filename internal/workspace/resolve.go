@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
