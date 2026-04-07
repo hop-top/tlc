@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/log"
+	"charm.land/huh/v2"
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"

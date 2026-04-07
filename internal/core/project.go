@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
