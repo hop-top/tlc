@@ -372,7 +372,6 @@ func generateID() string {
 
 func init() {
 	FlowRunCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor executing the flow (default: current user)")
-	FlowRunCmd.Flags().StringSliceVar(&flowRunVars, "var", nil, "Flow input variable as key=value (repeatable)")
 	FlowInvokeCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor invoking the flow (default: current user)")
 	FlowInvokeCmd.Flags().StringSliceVar(&flowRunVars, "var", nil, "Flow input variable as key=value (repeatable)")
 

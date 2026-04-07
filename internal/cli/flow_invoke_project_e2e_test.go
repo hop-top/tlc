@@ -9,11 +9,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
-
-	"github.com/spf13/viper"
-	"hop.top/tlc/internal/core"
 )
 
 // TestFlowInvoke_ProjectScoped_CreatesTasksWithoutError reproduces the bug
@@ -30,50 +26,7 @@ import (
 // no row — and returns sql.ErrNoRows.
 func TestFlowInvoke_ProjectScoped_CreatesTasksWithoutError(t *testing.T) {
 	withTestLock(func() {
-		tmpDir, err := os.MkdirTemp("", "tlc-flow-invoke-project-*")
-		if err != nil {
-			t.Fatalf("MkdirTemp: %v", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		origDir, _ := os.Getwd()
-		if err := os.Chdir(tmpDir); err != nil {
-			t.Fatalf("Chdir: %v", err)
-		}
-		defer os.Chdir(origDir)
-
-		// Write .tlc/config.yaml with a project.id — mirrors real project layout.
-		tlcDir := filepath.Join(tmpDir, ".tlc")
-		if err := os.MkdirAll(tlcDir, 0o755); err != nil {
-			t.Fatalf("MkdirAll .tlc: %v", err)
-		}
-		projectCfgPath := filepath.Join(tlcDir, "config.yaml")
-		dbPath := filepath.Join(tmpDir, "test.sqlite")
-		projectCfg := "project:\n  id: test/project\nstorage:\n  backend: sqlite\n  db_path: " + dbPath + "\n"
-		if err := os.WriteFile(projectCfgPath, []byte(projectCfg), 0o600); err != nil {
-			t.Fatalf("WriteFile config.yaml: %v", err)
-		}
-
-		// Set up viper to look like a real `tlc -c .tlc/config.yaml` invocation.
-		// detectProjectOnce reads viper.GetString("config") to find the config file;
-		// setting it here makes DetectProject() return InProject=true with the
-		// project.id we wrote above.
-		viper.Reset()
-		core.ResetDetectionCache()
-		dbSyncOnce = sync.Once{}
-		touchOnce = sync.Once{}
-		cfgFile = projectCfgPath
-		viper.Set("config", projectCfgPath)
-		viper.Set("storage.backend", "sqlite")
-		viper.Set("storage.db_path", dbPath)
-		resetTaskFlags()
-		t.Cleanup(func() {
-			cfgFile = ""
-			viper.Reset()
-			core.ResetDetectionCache()
-			dbSyncOnce = sync.Once{}
-			touchOnce = sync.Once{}
-		})
+		tmpDir, _ := setupProjectScopedTestDir(t, "tlc-flow-invoke-project-", "test/project")
 
 		// Write a minimal flow yaml with one task template.
 		flowPath := filepath.Join(tmpDir, "test-flow.yaml")

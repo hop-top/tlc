@@ -15,10 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
-	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 )
 
@@ -27,7 +25,7 @@ import (
 // title/description has {{track_id}} replaced with "my-track".
 func TestFlowInvoke_VarInputs_SubstitutesTemplatePlaceholders(t *testing.T) {
 	withTestLock(func() {
-		tmpDir, dbPath := setupProjectScopedTmpDir(t, "tlc-flow-var-inputs-")
+		tmpDir, _ := setupProjectScopedTestDir(t, "tlc-flow-var-inputs-", "test/project")
 
 		flowPath := filepath.Join(tmpDir, "track-flow.yaml")
 		flowYAML := `flow_id: "flow:track-test:1.0"
@@ -95,9 +93,6 @@ steps:
 		if !strings.Contains(got.Description, "my-track") {
 			t.Errorf("task description missing substituted value 'my-track': %q", got.Description)
 		}
-
-		_ = tmpDir
-		_ = dbPath
 	})
 }
 
@@ -106,7 +101,7 @@ steps:
 // — not crash deep in the executor with a "{{track_id}}" literal somewhere.
 func TestFlowInvoke_VarInputs_MissingRequiredFails(t *testing.T) {
 	withTestLock(func() {
-		tmpDir, _ := setupProjectScopedTmpDir(t, "tlc-flow-var-required-")
+		tmpDir, _ := setupProjectScopedTestDir(t, "tlc-flow-var-required-", "test/project")
 
 		flowPath := filepath.Join(tmpDir, "needs-input.yaml")
 		flowYAML := `flow_id: "flow:needs-input:1.0"
@@ -146,58 +141,4 @@ steps:
 			t.Errorf("expected error to mention missing input 'track_id'; got: %v", err)
 		}
 	})
-}
-
-// setupProjectScopedTmpDir mirrors the project-scoped setup used by
-// TestFlowInvoke_ProjectScoped_CreatesTasksWithoutError: chdirs to a fresh
-// tmpDir, writes .tlc/config.yaml with project.id, and wires viper so
-// DetectProject() returns InProject=true.
-//
-// Returns (tmpDir, dbPath). Cleanup is registered via t.Cleanup.
-func setupProjectScopedTmpDir(t *testing.T, prefix string) (string, string) {
-	t.Helper()
-
-	tmpDir, err := os.MkdirTemp("", prefix+"*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
-
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Chdir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
-	tlcDir := filepath.Join(tmpDir, ".tlc")
-	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll .tlc: %v", err)
-	}
-	projectCfgPath := filepath.Join(tlcDir, "config.yaml")
-	dbPath := filepath.Join(tmpDir, "test.sqlite")
-	projectCfg := "project:\n  id: test/project\nstorage:\n  backend: sqlite\n  db_path: " + dbPath + "\n"
-	if err := os.WriteFile(projectCfgPath, []byte(projectCfg), 0o600); err != nil {
-		t.Fatalf("WriteFile config.yaml: %v", err)
-	}
-
-	viper.Reset()
-	core.ResetDetectionCache()
-	dbSyncOnce = sync.Once{}
-	touchOnce = sync.Once{}
-	cfgFile = projectCfgPath
-	flowRunVars = nil
-	viper.Set("config", projectCfgPath)
-	viper.Set("storage.backend", "sqlite")
-	viper.Set("storage.db_path", dbPath)
-	resetTaskFlags()
-	t.Cleanup(func() {
-		cfgFile = ""
-		flowRunVars = nil
-		viper.Reset()
-		core.ResetDetectionCache()
-		dbSyncOnce = sync.Once{}
-		touchOnce = sync.Once{}
-	})
-
-	return tmpDir, dbPath
 }

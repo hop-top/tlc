@@ -318,6 +318,9 @@ func resetTaskFlags() {
 	// Reset track flags.
 	resetTrackFlags()
 
+	// Reset flow flags.
+	resetFlowFlags()
+
 	tasksSyncDryRun = false
 
 	// Reset prompt flags.
@@ -351,6 +354,79 @@ func resetTaskFlags() {
 	TaskCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
 		f.Changed = false
 	})
+}
+
+// resetFlowFlags clears the package-level state bound to flow.go's Cobra
+// flags. Without this, --var values (and --by) leak between tests because
+// FlowRunCmd / FlowInvokeCmd are package globals shared across test commands.
+func resetFlowFlags() {
+	flowRunBy = ""
+	flowRunVars = nil
+	flowStatusAll = false
+
+	for _, cmd := range []*cobra.Command{
+		FlowRunCmd, FlowInvokeCmd, FlowStatusCmd, FlowListCmd,
+	} {
+		if cmd != nil {
+			cmd.Flags().VisitAll(func(f *pflag.Flag) {
+				f.Changed = false
+			})
+		}
+	}
+}
+
+// setupProjectScopedTestDir creates a fresh tmpDir, chdirs into it, writes
+// a minimal .tlc/config.yaml with the given project ID, and wires viper so
+// DetectProject() returns InProject=true with that ID. Used by flow tests
+// that need to exercise the project-scoped path of CreateTask + AddLog.
+//
+// Returns (tmpDir, dbPath). All cleanup is registered via t.Cleanup.
+func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, string) {
+	t.Helper()
+
+	tmpDir, err := os.MkdirTemp("", prefix+"*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	tlcDir := filepath.Join(tmpDir, ".tlc")
+	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll .tlc: %v", err)
+	}
+	projectCfgPath := filepath.Join(tlcDir, "config.yaml")
+	dbPath := filepath.Join(tmpDir, "test.sqlite")
+	projectCfg := "project:\n  id: " + projectID +
+		"\nstorage:\n  backend: sqlite\n  db_path: " + dbPath + "\n"
+	if err := os.WriteFile(projectCfgPath, []byte(projectCfg), 0o600); err != nil {
+		t.Fatalf("WriteFile config.yaml: %v", err)
+	}
+
+	viper.Reset()
+	core.ResetDetectionCache()
+	dbSyncOnce = sync.Once{}
+	touchOnce = sync.Once{}
+	cfgFile = projectCfgPath
+	viper.Set("config", projectCfgPath)
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbPath)
+	resetTaskFlags() // also resets flow flags via resetFlowFlags()
+	t.Cleanup(func() {
+		cfgFile = ""
+		viper.Reset()
+		core.ResetDetectionCache()
+		dbSyncOnce = sync.Once{}
+		touchOnce = sync.Once{}
+		resetFlowFlags()
+	})
+
+	return tmpDir, dbPath
 }
 
 func newTestCmd() *cobra.Command {
