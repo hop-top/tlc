@@ -542,12 +542,16 @@ func (e *FlowExecutor) executeBranchStep(_ context.Context, flow *Flow, step Ste
 
 // ExtractTasksFromFlow generates tasks from flow steps with task templates.
 // This enables flows to coordinate task creation for assignee execution.
-func (e *FlowExecutor) ExtractTasksFromFlow(_ context.Context, flow *Flow, runID string) ([]*Task, error) {
+//
+// inputs holds the resolved flow input variables (see ResolveFlowInputs);
+// {{name}} placeholders inside task template fields are substituted with
+// their values before the tasks are returned.
+func (e *FlowExecutor) ExtractTasksFromFlow(_ context.Context, flow *Flow, runID string, inputs map[string]any) ([]*Task, error) {
 	tasks := []*Task{}
 
 	for stepID, step := range flow.Steps {
 		if step.Type == StepTypeTask && step.TaskTemplate != nil {
-			task := e.generateTaskFromTemplate(flow, runID, stepID, step)
+			task := e.generateTaskFromTemplate(flow, runID, stepID, step, inputs)
 			tasks = append(tasks, task)
 		}
 	}
@@ -555,8 +559,9 @@ func (e *FlowExecutor) ExtractTasksFromFlow(_ context.Context, flow *Flow, runID
 	return tasks, nil
 }
 
-// generateTaskFromTemplate creates a task from a step's task template.
-func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string, step Step) *Task {
+// generateTaskFromTemplate creates a task from a step's task template,
+// substituting any {{var}} placeholders using the resolved inputs.
+func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string, step Step, inputs map[string]any) *Task {
 	taskID := generateTaskID()
 
 	wm := DefaultWorkflow()
@@ -564,8 +569,8 @@ func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string
 
 	task := &Task{
 		ID:          taskID,
-		Title:       step.TaskTemplate.Title,
-		Description: step.TaskTemplate.Description,
+		Title:       SubstituteFlowInputs(step.TaskTemplate.Title, inputs),
+		Description: SubstituteFlowInputs(step.TaskTemplate.Description, inputs),
 		Status:      initialStatus,
 		Reference:   flow.ID,
 		CreatedAt:   time.Now().UTC(),
