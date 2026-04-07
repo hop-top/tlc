@@ -19,6 +19,7 @@ import (
 var (
 	flowRunBy     string
 	flowStatusAll bool
+	flowRunVars   []string
 )
 
 var FlowCmd = &cobra.Command{
@@ -305,7 +306,16 @@ Example:
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Invoking flow: %s (ID: %s)\n", flow.Name, flow.ID)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Run ID: %s\n\n", runID)
 
-		tasks, err := executor.ExtractTasksFromFlow(ctx, flow, runID)
+		providedVars, err := core.ParseFlowVarFlags(flowRunVars)
+		if err != nil {
+			return err
+		}
+		inputs, err := core.ResolveFlowInputs(flow, providedVars)
+		if err != nil {
+			return err
+		}
+
+		tasks, err := executor.ExtractTasksFromFlow(ctx, flow, runID, inputs)
 		if err != nil {
 			return fmt.Errorf("failed to extract tasks from flow: %w", err)
 		}
@@ -362,7 +372,9 @@ func generateID() string {
 
 func init() {
 	FlowRunCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor executing the flow (default: current user)")
+	FlowRunCmd.Flags().StringSliceVar(&flowRunVars, "var", nil, "Flow input variable as key=value (repeatable)")
 	FlowInvokeCmd.Flags().StringVar(&flowRunBy, "by", "", "Actor invoking the flow (default: current user)")
+	FlowInvokeCmd.Flags().StringSliceVar(&flowRunVars, "var", nil, "Flow input variable as key=value (repeatable)")
 
 	FlowStatusCmd.Flags().BoolVar(&flowStatusAll, "all", false, "List all flow runs")
 
