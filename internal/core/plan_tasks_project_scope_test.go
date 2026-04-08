@@ -92,7 +92,7 @@ func TestResolveCrossTrackRef_ScopesByProjectID(t *testing.T) {
 	// the filter *composition*: the resolver must ask the
 	// repository for project_id = target.ProjectID. A real sqlite
 	// repository would then return exactly one row.
-	_, _ = svc.resolveCrossTrackRef(ctx, &CrossTrackRef{
+	_, _, _ = svc.resolveCrossTrackRef(ctx, &CrossTrackRef{
 		TrackID: "alpha", TaskNum: 1,
 	})
 
