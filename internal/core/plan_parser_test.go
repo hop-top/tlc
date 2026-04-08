@@ -73,12 +73,16 @@ tasks:
 	}
 
 	task1 := fm.Tasks[1]
-	if len(task1.BlockedBy) != 1 || task1.BlockedBy[0] != 0 {
+	if len(task1.BlockedBy) != 1 ||
+		!task1.BlockedBy[0].IsIndex() ||
+		task1.BlockedBy[0].Index != 0 {
 		t.Errorf("task[1].BlockedBy = %v, want [0]", task1.BlockedBy)
 	}
 
 	task2 := fm.Tasks[2]
-	if len(task2.BlockedBy) != 1 || task2.BlockedBy[0] != 1 {
+	if len(task2.BlockedBy) != 1 ||
+		!task2.BlockedBy[0].IsIndex() ||
+		task2.BlockedBy[0].Index != 1 {
 		t.Errorf("task[2].BlockedBy = %v, want [1]", task2.BlockedBy)
 	}
 }

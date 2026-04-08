@@ -122,19 +122,33 @@ var trackUpdateCmd = &cobra.Command{
 				projectID = proj.ProjectID
 			}
 
-			ids, createErr := svc.CreateTasksFromPlan(
+			result, createErr := svc.CreateTasksFromPlan(
 				ctx, id, taskSpecs, projectID, s,
 			)
 			if createErr != nil {
 				return fmt.Errorf(
-					"plan linked but task creation failed: %w; "+
-						"created %d of %d tasks",
-					createErr, len(ids), len(taskSpecs),
+					"plan linked but task creation failed: %w",
+					createErr,
 				)
+			}
+			// If any cross-track refs were resolved, rewrite the
+			// plan.md on disk so subsequent ingestions see stable
+			// T-NNNN references instead of "<track>#<N>" strings.
+			if len(result.ResolvedRefs) > 0 {
+				if rwErr := core.RewritePlanBlockedByRefs(
+					trackUpdateAddPlan, result.ResolvedRefs,
+				); rwErr != nil {
+					_, _ = fmt.Fprintf(
+						w,
+						"Warning: failed to rewrite plan %s with "+
+							"resolved refs: %v\n",
+						trackUpdateAddPlan, rwErr,
+					)
+				}
 			}
 			_, _ = fmt.Fprintf(
 				w, "Linked plan %s, created %d tasks\n",
-				trackUpdateAddPlan, len(ids),
+				trackUpdateAddPlan, len(result.CreatedIDs),
 			)
 		} else if addPlanChanged && trackUpdateAddPlan != "" {
 			_, _ = fmt.Fprintf(

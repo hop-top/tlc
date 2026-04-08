@@ -47,18 +47,19 @@ func TestCreateTasksFromPlan_Basic(t *testing.T) {
 			Effort:     "M",
 			Priority:   "P2",
 			AssignedTo: "@me",
-			BlockedBy:  []int{0},
+			BlockedBy:  []BlockedByRef{{Index: 0}},
 		},
 		{
 			Title:     "Third task",
-			BlockedBy: []int{0, 1},
+			BlockedBy: []BlockedByRef{{Index: 0}, {Index: 1}},
 		},
 	}
 
-	ids, err := svc.CreateTasksFromPlan(ctx, "test-track", specs, "proj1", idGen)
+	result, err := svc.CreateTasksFromPlan(ctx, "test-track", specs, "proj1", idGen)
 	if err != nil {
 		t.Fatalf("CreateTasksFromPlan failed: %v", err)
 	}
+	ids := result.CreatedIDs
 	if len(ids) != 3 {
 		t.Fatalf("ids len = %d, want 3", len(ids))
 	}
@@ -88,13 +89,14 @@ func TestCreateTasksFromPlan_BlockedByResolution(t *testing.T) {
 
 	specs := []PlanTaskSpec{
 		{Title: "A"},
-		{Title: "B", BlockedBy: []int{0}},
+		{Title: "B", BlockedBy: []BlockedByRef{{Index: 0}}},
 	}
 
-	ids, err := svc.CreateTasksFromPlan(ctx, "trk", specs, "", idGen)
+	result, err := svc.CreateTasksFromPlan(ctx, "trk", specs, "", idGen)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	ids := result.CreatedIDs
 
 	// Verify task B has blocked_by referencing task A's ID.
 	taskB := taskRepo.created[1]
@@ -111,12 +113,12 @@ func TestCreateTasksFromPlan_EmptySpecs(t *testing.T) {
 	svc := NewTrackService(newStubTrackRepo(), &stubTaskRepo{})
 	ctx := context.Background()
 
-	ids, err := svc.CreateTasksFromPlan(ctx, "trk", nil, "", &stubIDGen{})
+	result, err := svc.CreateTasksFromPlan(ctx, "trk", nil, "", &stubIDGen{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ids != nil {
-		t.Errorf("expected nil, got %v", ids)
+	if result == nil || len(result.CreatedIDs) != 0 {
+		t.Errorf("expected empty result, got %v", result)
 	}
 }
 
@@ -126,7 +128,7 @@ func TestCreateTasksFromPlan_InvalidBlockedByIndex(t *testing.T) {
 
 	specs := []PlanTaskSpec{
 		{Title: "A"},
-		{Title: "B", BlockedBy: []int{1}}, // self-ref, invalid
+		{Title: "B", BlockedBy: []BlockedByRef{{Index: 1}}}, // self-ref, invalid
 	}
 
 	_, err := svc.CreateTasksFromPlan(ctx, "trk", specs, "", &stubIDGen{next: 1})
@@ -140,7 +142,7 @@ func TestCreateTasksFromPlan_NegativeBlockedByIndex(t *testing.T) {
 	ctx := context.Background()
 
 	specs := []PlanTaskSpec{
-		{Title: "A", BlockedBy: []int{-1}},
+		{Title: "A", BlockedBy: []BlockedByRef{{Index: -1}}},
 	}
 
 	_, err := svc.CreateTasksFromPlan(ctx, "trk", specs, "", &stubIDGen{next: 1})

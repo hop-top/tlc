@@ -377,6 +377,13 @@ tlc track summary
 tlc track update browser-rendering \
   --add-plan docs/plans/rendering.md
 
+# A plan's frontmatter may express blocked-by as:
+#   - 0           # intra-track 0-based index into this plan
+#   - "T-0001"    # an existing concrete task ID
+#   - "other-track#2"  # cross-track ref: task #2 in "other-track"'s plan
+# Cross-track refs require the target track to already be ingested;
+# resolved refs are rewritten back into plan.md on disk.
+
 # Lifecycle commands
 tlc track update browser-rendering --status completed
 tlc track archive browser-rendering

@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### feat
+- Plan ingestion: `blocked-by` frontmatter now accepts mixed entries:
+  integer indices (intra-track, existing behaviour), concrete
+  `"T-NNNN"` task IDs, and `"<track-id>#<N>"` cross-track refs
+  (1-based into target track's linked plan). Cross-track refs
+  require the target track and its plan to be ingested first;
+  otherwise ingestion fails cleanly with no partial state. On
+  success the source plan.md is rewritten on disk so subsequent
+  ingestions read stable `T-NNNN` IDs. (T-0434, story 076)
 - Cross-domain NL classifier: track/flow/project prompts now resolve without LLM
   - Keyword tokenizer + vocabulary layer (verbs, nouns, modifiers)
   - Fuzzy noun/verb matching via Levenshtein distance (typo-tolerant, distance ≤2)
