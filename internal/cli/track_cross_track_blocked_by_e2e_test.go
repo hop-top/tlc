@@ -165,15 +165,18 @@ tasks:
 	})
 }
 
-// TestTrackPlan_E2E_CrossTrackBlockedBy_MissingTrack verifies that
-// ingestion fails cleanly when a cross-track reference points at a
-// track that has not been created yet.
-func TestTrackPlan_E2E_CrossTrackBlockedBy_MissingTrack(t *testing.T) {
+// TestTrackPlan_E2E_CrossTrackBlockedBy_MissingTrack_Defers
+// verifies that a cross-track ref to a track that has not been
+// created yet is DEFERRED (not a hard failure, per T-0435):
+// the ingest succeeds, beta's tasks exist, the unresolved ref
+// is recorded, a warning is emitted, and the plan is left
+// untouched so a later ingest of alpha can resolve it.
+func TestTrackPlan_E2E_CrossTrackBlockedBy_MissingTrack_Defers(t *testing.T) {
 	withTestLock(func() {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		// Only create beta; alpha is the missing prerequisite.
+		// Only create beta; alpha is the deferred target.
 		s, err := getStorageRaw()
 		if err != nil {
 			t.Fatalf("getStorageRaw: %v", err)
@@ -209,31 +212,43 @@ tasks:
 		cmd.SetArgs([]string{
 			"track", "update", "beta", "--add-plan", planPath,
 		})
-		err = cmd.Execute()
-		if err == nil {
+		if err := cmd.Execute(); err != nil {
 			t.Fatalf(
-				"expected error for missing prerequisite track; got nil\n%s",
-				buf.String(),
+				"ingest should succeed with deferred ref; got %v\n%s",
+				err, buf.String(),
 			)
 		}
-		if !strings.Contains(err.Error(), "alpha") {
-			t.Errorf("error should mention missing track 'alpha'; got %v", err)
+
+		out := buf.String()
+		if !strings.Contains(out, "alpha#1") ||
+			!strings.Contains(strings.ToLower(out), "unresolved") {
+			t.Errorf(
+				"expected warning mentioning unresolved alpha#1; got:\n%s",
+				out,
+			)
 		}
 
-		// Verify nothing was created for beta.
+		// Task was created with the ref in blocked_by_unresolved.
 		s2, _ := getStorageRaw()
 		defer s2.Close()
 		tasks, _ := s2.ListTasks(ctx, core.Query{AllProjects: true})
-		if len(tasks) != 0 {
+		if len(tasks) != 1 {
+			t.Fatalf("expected 1 beta task, got %d", len(tasks))
+		}
+		if _, ok := tasks[0].Meta["blocked_by_unresolved"]; !ok {
 			t.Errorf(
-				"expected 0 tasks after failed ingest; got %d", len(tasks),
+				"missing blocked_by_unresolved in meta: %+v",
+				tasks[0].Meta,
 			)
 		}
 
-		// Plan file on disk should be unchanged.
+		// Plan file on disk should be unchanged (deferred, not
+		// yet resolved).
 		raw, _ := os.ReadFile(planPath)
 		if !strings.Contains(string(raw), `"alpha#1"`) {
-			t.Errorf("plan should be untouched on failure:\n%s", raw)
+			t.Errorf(
+				"plan should be untouched while ref deferred:\n%s", raw,
+			)
 		}
 	})
 }

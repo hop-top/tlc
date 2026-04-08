@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -131,25 +132,60 @@ var trackUpdateCmd = &cobra.Command{
 					createErr,
 				)
 			}
-			// If any cross-track refs were resolved, rewrite the
-			// plan.md on disk so subsequent ingestions see stable
-			// T-NNNN references instead of "<track>#<N>" strings.
-			if len(result.ResolvedRefs) > 0 {
-				if rwErr := core.RewritePlanBlockedByRefs(
-					trackUpdateAddPlan, result.ResolvedRefs,
-				); rwErr != nil {
-					_, _ = fmt.Fprintf(
-						w,
-						"Warning: failed to rewrite plan %s with "+
-							"resolved refs: %v\n",
-						trackUpdateAddPlan, rwErr,
-					)
-				}
-			}
 			_, _ = fmt.Fprintf(
 				w, "Linked plan %s, created %d tasks\n",
 				trackUpdateAddPlan, len(result.CreatedIDs),
 			)
+
+			// Phase 2: resolve any pending cross-track refs
+			// project-wide (including any promoted by this
+			// ingest that unblock earlier deferred tasks) and
+			// rewrite plan.md files whose refs are now fully
+			// resolved. Seed with the refs this ingest already
+			// resolved so the current plan gets rewritten when
+			// all of its refs are concrete.
+			seed := map[string]map[string]string{
+				trackUpdateAddPlan: result.ResolvedRefs,
+			}
+			phase2, p2Err := svc.ResolvePendingCrossTrackRefs(
+				ctx, projectID, seed,
+			)
+			if p2Err != nil {
+				return fmt.Errorf("phase 2 resolution: %w", p2Err)
+			}
+			if phase2.PromotedTasks > 0 {
+				_, _ = fmt.Fprintf(
+					w, "Resolved deferred refs on %d tasks\n",
+					phase2.PromotedTasks,
+				)
+			}
+			for _, p := range phase2.PlansRewritten {
+				_, _ = fmt.Fprintf(
+					w, "Rewrote plan %s with resolved refs\n", p,
+				)
+			}
+			// Any refs this ingest itself left unresolved.
+			if len(result.UnresolvedRefs) > 0 {
+				_, _ = fmt.Fprintf(
+					w,
+					"Warning: %d unresolved cross-track refs in "+
+						"%s (will retry on next ingest): %s\n",
+					len(result.UnresolvedRefs),
+					trackUpdateAddPlan,
+					strings.Join(result.UnresolvedRefs, ", "),
+				)
+			}
+			// Any still-unresolved refs on other tasks in the
+			// project (from earlier ingests).
+			if len(phase2.StillUnresolved) > 0 {
+				for _, u := range phase2.StillUnresolved {
+					_, _ = fmt.Fprintf(
+						w,
+						"Warning: task %s still waiting on %q\n",
+						u.TaskID, u.Ref,
+					)
+				}
+			}
 		} else if addPlanChanged && trackUpdateAddPlan != "" {
 			_, _ = fmt.Fprintf(
 				w, "Linked plan %s (no tasks extracted)\n",
