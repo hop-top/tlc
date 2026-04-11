@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -223,5 +224,106 @@ func TestSQLiteStorage_TouchProject(t *testing.T) {
 	}
 	if after.LastSeenAt.Before(before.LastSeenAt) {
 		t.Errorf("expected last_seen_at to not go backwards")
+	}
+}
+
+// TestResolveProjectByShortname_ExactMatch verifies exact project_id match.
+func TestResolveProjectByShortname_ExactMatch(t *testing.T) {
+	s, err := NewSQLiteStorage(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	s.RegisterProject(ctx, "hop-top/tlc", "/tlc.db", "", "TLC")
+
+	p, err := s.ResolveProjectByShortname(ctx, "hop-top/tlc")
+	if err != nil {
+		t.Fatalf("ResolveProjectByShortname failed: %v", err)
+	}
+	if p == nil || p.ProjectID != "hop-top/tlc" {
+		t.Fatalf("expected hop-top/tlc, got %v", p)
+	}
+}
+
+// TestResolveProjectByShortname_SuffixMatch verifies suffix match.
+func TestResolveProjectByShortname_SuffixMatch(t *testing.T) {
+	s, err := NewSQLiteStorage(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	s.RegisterProject(ctx, "hop-top/tlc", "/tlc.db", "", "TLC")
+
+	p, err := s.ResolveProjectByShortname(ctx, "tlc")
+	if err != nil {
+		t.Fatalf("ResolveProjectByShortname failed: %v", err)
+	}
+	if p == nil || p.ProjectID != "hop-top/tlc" {
+		t.Fatalf("expected hop-top/tlc via suffix, got %v", p)
+	}
+}
+
+// TestResolveProjectByShortname_NoMatch verifies nil for unknown.
+func TestResolveProjectByShortname_NoMatch(t *testing.T) {
+	s, err := NewSQLiteStorage(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	p, err := s.ResolveProjectByShortname(ctx, "nope")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p != nil {
+		t.Fatalf("expected nil, got %v", p)
+	}
+}
+
+// TestResolveProjectByShortname_Ambiguous verifies error on multiple matches.
+func TestResolveProjectByShortname_Ambiguous(t *testing.T) {
+	s, err := NewSQLiteStorage(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	s.RegisterProject(ctx, "org-a/kit", "/a.db", "", "A")
+	s.RegisterProject(ctx, "org-b/kit", "/b.db", "", "B")
+
+	_, err = s.ResolveProjectByShortname(ctx, "kit")
+	if err == nil {
+		t.Fatal("expected ambiguity error, got nil")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected 'ambiguous' in error, got: %v", err)
+	}
+}
+
+// TestResolveProjectByShortname_ExactTakesPriority verifies exact
+// match wins even when suffix matches also exist.
+func TestResolveProjectByShortname_ExactTakesPriority(t *testing.T) {
+	s, err := NewSQLiteStorage(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	s.RegisterProject(ctx, "tlc", "/exact.db", "", "Exact")
+	s.RegisterProject(ctx, "hop-top/tlc", "/suffix.db", "", "Suffix")
+
+	p, err := s.ResolveProjectByShortname(ctx, "tlc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p == nil || p.ProjectID != "tlc" {
+		t.Fatalf("expected exact match 'tlc', got %v", p)
 	}
 }

@@ -133,11 +133,13 @@ func initConfig() {
 	// defaults are present; then we merge the explicit file on top.
 	normalizedCfgFile := ""
 	if cfgFile != "" {
-		// If cfgFile is a directory, resolve to <dir>/<localConfigDir>/config.yaml.
-		if info, err := os.Stat(cfgFile); err == nil && info.IsDir() {
-			cfgFile = filepath.Join(cfgFile, config.LocalConfigDir(config.DetectMode()), "config.yaml")
+		resolved, err := resolveConfigFlag(cfgFile)
+		if err != nil {
+			// Hard fail: shortname not found as file or registry project.
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
 		}
-		normalizedCfgFile = cfgFile
+		normalizedCfgFile = resolved
 	}
 
 	{
