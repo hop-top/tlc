@@ -151,6 +151,17 @@ func findBlockingTasks(ctx context.Context, registryStorage *storage.SQLiteStora
 		}
 	}
 
+	// Build a project-qualified-only subset of candidates for
+	// cross-project matching. Bare task IDs (e.g. "T-0001") must
+	// only match within the same project; cross-project refs must
+	// use the "project/T-NNNN" form.
+	qualifiedOnly := make(map[string]struct{})
+	for c := range candidates {
+		if strings.Contains(c, "/") {
+			qualifiedOnly[c] = struct{}{}
+		}
+	}
+
 	found := make([]relatedTaskSummary, 0)
 	seenRefs := make(map[string]struct{})
 	for _, handle := range handles {
@@ -166,7 +177,15 @@ func findBlockingTasks(ctx context.Context, registryStorage *storage.SQLiteStora
 			if candidate.ID == task.ID && sameProject(candidate.ProjectID, task.ProjectID) {
 				continue
 			}
-			if !matchesTaskReference(candidate.BlockedBy(), candidates) {
+
+			// Use the full candidate set for same-project tasks,
+			// but only project-qualified refs for cross-project
+			// tasks. This prevents bare T-ID collisions (T-0436).
+			matchSet := candidates
+			if !sameProject(candidate.ProjectID, task.ProjectID) {
+				matchSet = qualifiedOnly
+			}
+			if !matchesTaskReference(candidate.BlockedBy(), matchSet) {
 				continue
 			}
 

@@ -155,6 +155,95 @@ func TestTaskShow(t *testing.T) {
 	})
 }
 
+// TestFindBlockingTasks_CrossProjectFalsePositive verifies that
+// findBlockingTasks does NOT report tasks from other projects as
+// blocking when they reference the same bare T-ID in their
+// blocked_by (T-0436 regression).
+func TestFindBlockingTasks_CrossProjectFalsePositive(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	projA := "proj-a"
+	projB := "proj-b"
+
+	// Project A: T-0001 (the task we will view)
+	s.CreateTask(ctx, &core.Task{
+		ID:        "T-0001",
+		Title:     "Project A base",
+		Status:    core.StatusTodo,
+		ProjectID: &projA,
+	})
+
+	// Project A: T-0002 blocked by T-0001 (same project, legit)
+	s.CreateTask(ctx, &core.Task{
+		ID:        "T-0002",
+		Title:     "Project A dependent",
+		Status:    core.StatusTodo,
+		ProjectID: &projA,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{"T-0001"},
+		},
+	})
+
+	// Project B: T-0001 (different task, same bare ID)
+	s.CreateTask(ctx, &core.Task{
+		ID:        "T-0001",
+		Title:     "Project B base",
+		Status:    core.StatusTodo,
+		ProjectID: &projB,
+	})
+
+	// Project B: T-0003 blocked by T-0001 (refers to proj-B's
+	// T-0001, NOT proj-A's). This must NOT appear when viewing
+	// proj-A's T-0001.
+	s.CreateTask(ctx, &core.Task{
+		ID:        "T-0003",
+		Title:     "Project B unrelated",
+		Status:    core.StatusTodo,
+		ProjectID: &projB,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{"T-0001"},
+		},
+	})
+
+	// Call findBlockingTasks for project A's T-0001.
+	viewedTask := &core.Task{
+		ID:        "T-0001",
+		Title:     "Project A base",
+		Status:    core.StatusTodo,
+		ProjectID: &projA,
+	}
+	blocking := findBlockingTasks(ctx, s, viewedTask)
+
+	// We expect ONLY project A's T-0002, not project B's T-0003.
+	for _, b := range blocking {
+		if contains(b.Title, "Project B") {
+			t.Errorf(
+				"findBlockingTasks returned cross-project false "+
+					"positive: %s (%s); bare T-ID from another "+
+					"project should not match",
+				b.Ref, b.Title,
+			)
+		}
+	}
+
+	// Positive check: project A's T-0002 should still appear.
+	foundLegit := false
+	for _, b := range blocking {
+		if contains(b.Title, "Project A dependent") {
+			foundLegit = true
+		}
+	}
+	if !foundLegit {
+		t.Errorf(
+			"findBlockingTasks missing same-project blocker; "+
+				"got: %v", blocking,
+		)
+	}
+}
+
 // TestTaskShowMultipleIDs verifies that show accepts multiple IDs,
 // prints each task, and returns a non-zero exit on any missing ID.
 func TestTaskShowMultipleIDs(t *testing.T) {
