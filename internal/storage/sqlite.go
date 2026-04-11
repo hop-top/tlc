@@ -1133,6 +1133,54 @@ func (s *SQLiteStorage) DeleteProject(ctx context.Context, projectID string) err
 	})
 }
 
+// ResolveProjectByShortname finds a project by shortname. It first
+// tries an exact match on project_id, then falls back to matching
+// the last path segment (e.g. "tlc" matches "hop-top/tlc"). If
+// multiple projects match the suffix, returns an ambiguity error.
+func (s *SQLiteStorage) ResolveProjectByShortname(ctx context.Context, shortname string) (*core.RegisteredProject, error) {
+	// 1. Exact match
+	p, err := s.LookupProject(ctx, shortname)
+	if err != nil {
+		return nil, err
+	}
+	if p != nil {
+		return p, nil
+	}
+
+	// 2. Suffix match: project_id ends with "/<shortname>"
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status
+		 FROM projects
+		 WHERE project_id LIKE '%/' || ? AND status = 'active'`,
+		shortname,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query projects by shortname: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	matches, err := scanProjects(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &matches[0], nil
+	default:
+		ids := make([]string, len(matches))
+		for i, m := range matches {
+			ids[i] = m.ProjectID
+		}
+		return nil, fmt.Errorf(
+			"ambiguous shortname %q matches %d projects: %s; use full project ID",
+			shortname, len(matches), strings.Join(ids, ", "),
+		)
+	}
+}
+
 func (s *SQLiteStorage) TouchProject(ctx context.Context, projectID string) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339)
