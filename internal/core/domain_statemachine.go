@@ -58,6 +58,27 @@ func NewTrackStateMachine(pub domain.EventPublisher) *domain.StateMachine {
 	return domain.NewStateMachine(rules, pub)
 }
 
+// NewFlowStateMachine builds a domain.StateMachine for flow run lifecycle.
+// Rules: queued->running, running->succeeded/failed/canceled/paused,
+// paused->running/canceled. Succeeded/failed/canceled are terminal.
+func NewFlowStateMachine(pub domain.EventPublisher) *domain.StateMachine {
+	rules := map[domain.State][]domain.State{
+		domain.State(FlowStatusQueued):  {domain.State(FlowStatusRunning)},
+		domain.State(FlowStatusRunning): {
+			domain.State(FlowStatusSucceeded),
+			domain.State(FlowStatusFailed),
+			domain.State(FlowStatusCanceled),
+			domain.State(FlowStatusPaused),
+		},
+		domain.State(FlowStatusPaused): {
+			domain.State(FlowStatusRunning),
+			domain.State(FlowStatusCanceled),
+		},
+		// succeeded, failed, canceled: terminal — no outgoing transitions
+	}
+	return domain.NewStateMachine(rules, pub)
+}
+
 // buildStateMachine converts config status definitions and rules
 // into a domain.StateMachine.
 func buildStateMachine(
