@@ -19,7 +19,7 @@ func CompoundKey(projectID, entityID string) string {
 }
 
 // GetID returns a compound key encoding project_id:id for composite PK support.
-func (t *Task) GetID() string {
+func (t Task) GetID() string {
 	var pid string
 	if t.ProjectID != nil {
 		pid = *t.ProjectID
@@ -28,7 +28,7 @@ func (t *Task) GetID() string {
 }
 
 // GetID returns a compound key encoding project_id:id for composite PK support.
-func (t *Track) GetID() string {
+func (t Track) GetID() string {
 	var pid string
 	if t.ProjectID != nil {
 		pid = *t.ProjectID
@@ -37,6 +37,6 @@ func (t *Track) GetID() string {
 }
 
 // GetID returns the flow run ID. FlowRun has a simple (non-composite) PK.
-func (r *FlowRun) GetID() string {
+func (r FlowRun) GetID() string {
 	return r.ID
 }
