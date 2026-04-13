@@ -151,6 +151,15 @@ func kitRoot() *kitcli.Root {
 		return setupURICompletion(s)
 	}
 
+	// Register contextual post-command hints.
+	registerHints(root.Hints)
+
+	// Render hints after command output.
+	cmd.PersistentPostRunE = func(c *cobra.Command, _ []string) error {
+		renderPostRunHintsFor(c, root)
+		return nil
+	}
+
 	cobra.OnInitialize(initConfig)
 
 	// Discover tlc-* binary plugins on $PATH and register as subcommands.

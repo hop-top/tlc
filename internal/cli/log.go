@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"image/color"
 	"io"
@@ -10,7 +9,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/core"
 )
 
@@ -111,12 +110,8 @@ Examples:
 func formatLogs(cmd *cobra.Command, logs []*core.LogEntry, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case formatJSON:
-		data, _ := json.MarshalIndent(logs, "", "  ")
-		_, _ = fmt.Fprintln(out, string(data))
-	case formatYAML:
-		data, _ := yaml.Marshal(logs)
-		_, _ = fmt.Fprintln(out, string(data))
+	case formatJSON, formatYAML:
+		_ = output.Render(out, format, logs)
 	default: // table
 		renderLogTable(out, logs)
 	}

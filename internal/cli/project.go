@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/core"
 )
 
@@ -193,18 +194,10 @@ var ProjectListCmd = &cobra.Command{
 		}
 
 		switch format {
-		case formatJSON:
-			data, err := json.MarshalIndent(projects, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to marshal JSON: %w", err)
+		case formatJSON, formatYAML:
+			if err := output.Render(cmd.OutOrStdout(), format, projects); err != nil {
+				return err
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-		case formatYAML:
-			data, err := yaml.Marshal(projects)
-			if err != nil {
-				return fmt.Errorf("failed to marshal YAML: %w", err)
-			}
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), string(data))
 		default:
 			renderProjectTable(cmd, projects)
 		}

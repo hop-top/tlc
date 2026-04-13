@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +10,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/uri"
 )
@@ -186,12 +185,8 @@ var FlowListCmd = &cobra.Command{
 func printFlowRun(cmd *cobra.Command, run *core.FlowRun, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case formatJSON:
-		data, _ := json.MarshalIndent(run, "", "  ")
-		_, _ = fmt.Fprintln(out, string(data))
-	case formatYAML:
-		data, _ := yaml.Marshal(run)
-		_, _ = fmt.Fprintln(out, string(data))
+	case formatJSON, formatYAML:
+		_ = output.Render(out, format, run)
 	default:
 		_, _ = fmt.Fprintf(out, "Flow Run: %s\n", run.ID)
 		_, _ = fmt.Fprintf(out, "  Flow ID: %s\n", run.FlowID)
@@ -215,12 +210,8 @@ func printFlowRun(cmd *cobra.Command, run *core.FlowRun, format string) {
 func formatFlowRuns(cmd *cobra.Command, runs []*core.FlowRun, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case "json":
-		data, _ := json.MarshalIndent(runs, "", "  ")
-		_, _ = fmt.Fprintln(out, string(data))
-	case "yaml":
-		data, _ := yaml.Marshal(runs)
-		_, _ = fmt.Fprintln(out, string(data))
+	case formatJSON, formatYAML:
+		_ = output.Render(out, format, runs)
 	default:
 		if len(runs) == 0 {
 			_, _ = fmt.Fprintln(out, "No flow runs found")

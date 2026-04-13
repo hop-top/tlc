@@ -197,7 +197,7 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Track summary: `tlc track summary`
 - Link task to track: `tlc task create "Title" --track <track-id>`
 
-**Tool definition:** Run `tlc help llm --format mcp` for MCP tool schema.
+**Tool definition:** Run `tlc schema --format mcp` for MCP tool schema.
 ```
 
 **For other AI platforms:**
@@ -210,7 +210,7 @@ Add to your project's `AGENTS.md` file:
 This project uses TLC for task tracking.
 
 Setup: `tlc init`
-Tool definition: `tlc help llm` (or `--format openai` for OpenAI platforms)
+Tool definition: `tlc schema` (or `--format openai` for OpenAI platforms)
 ```
 
 **Natural language prompts:**
