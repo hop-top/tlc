@@ -9,17 +9,13 @@ import (
 
 var helpLLMFormat string
 
-var helpCmd = &cobra.Command{
-	Use:   "help",
-	Short: "Help about any command",
-	Long:  `Help provides help for any command in the application.`,
-}
-
 var helpLLMCmd = &cobra.Command{
-	Use:   "llm",
+	Use:   "schema",
 	Short: "Output LLM/agent tool definition for TLC",
 	Long: `Output the tool definition that AI agents and LLMs can use to interact with TLC.
-This command outputs a JSON schema that describes how to call TLC commands programmatically.`,
+This command outputs a JSON schema that describes how to call TLC commands programmatically.
+
+Replaces the former "help llm" subcommand.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		var output interface{}
 
@@ -43,10 +39,10 @@ This command outputs a JSON schema that describes how to call TLC commands progr
 }
 
 func init() {
-	RootCmd.SetHelpCommand(helpCmd)
-	helpCmd.AddCommand(helpLLMCmd)
-
+	// kit/cli hides the help subcommand; retain -h/--help flag only.
+	// LLM schema command is now a top-level hidden subcommand.
 	helpLLMCmd.Flags().StringVar(&helpLLMFormat, "format", "json", "Output format (json, mcp, openai, anthropic)")
+	RootCmd.AddCommand(helpLLMCmd)
 }
 
 const (
@@ -187,7 +183,7 @@ func getToolDefinition() map[string]interface{} {
 			"Stay Updated: Always move a task to 'IN_PROGRESS' when you start working on it, and to 'DONE' when finished.",
 			"Use Tags: Apply domain tags (e.g., 'storage', 'cli', 'sync') to help teammates filter and understand your work.",
 			"Reference IDs: When committing code or sending messages, refer to the Task IDs (e.g., 'Refs: T-0042') to maintain a clear link between planning and execution.",
-			"Self-Update: When TLC is updated, refresh your tool knowledge by running 'tlc help llm'.",
+			"Self-Update: When TLC is updated, refresh your tool knowledge by running 'tlc schema'.",
 		},
 	}
 }
