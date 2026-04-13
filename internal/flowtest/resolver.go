@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+	"hop.top/kit/xdg"
 	"hop.top/tlc/internal/core"
 )
 
@@ -16,14 +17,14 @@ type GlobalAdapterConfig struct {
 	Adapters core.FlowAdapters `json:"adapters" yaml:"adapters"`
 }
 
-// LoadGlobalAdapterConfig reads ~/.tlc/adapters.yaml.
+// LoadGlobalAdapterConfig reads <config-dir>/adapters.yaml.
 // Returns an empty config (not an error) if the file does not exist.
 func LoadGlobalAdapterConfig() (*GlobalAdapterConfig, error) {
-	home, err := os.UserHomeDir()
+	cfgDir, err := xdg.ConfigDir("tlc")
 	if err != nil {
 		return &GlobalAdapterConfig{}, nil
 	}
-	path := filepath.Join(home, ".tlc", "adapters.yaml")
+	path := filepath.Join(cfgDir, "adapters.yaml")
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return &GlobalAdapterConfig{}, nil
