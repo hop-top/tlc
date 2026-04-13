@@ -118,6 +118,93 @@ func TestTaskService_WithDomainRepo_Update(t *testing.T) {
 	}
 }
 
+// mockDomainTrackRepo implements domain.Repository[Track] for testing.
+type mockDomainTrackRepo struct {
+	tracks  map[string]*Track
+	creates int
+	updates int
+	deletes int
+}
+
+func newMockDomainTrackRepo() *mockDomainTrackRepo {
+	return &mockDomainTrackRepo{tracks: make(map[string]*Track)}
+}
+
+func (m *mockDomainTrackRepo) Create(_ context.Context, t *Track) error {
+	m.creates++
+	m.tracks[t.GetID()] = t
+	return nil
+}
+
+func (m *mockDomainTrackRepo) Get(_ context.Context, id string) (*Track, error) {
+	t, ok := m.tracks[id]
+	if !ok {
+		return nil, nil
+	}
+	return t, nil
+}
+
+func (m *mockDomainTrackRepo) List(_ context.Context, _ domain.Query) ([]Track, error) {
+	var result []Track
+	for _, t := range m.tracks {
+		result = append(result, *t)
+	}
+	return result, nil
+}
+
+func (m *mockDomainTrackRepo) Update(_ context.Context, t *Track) error {
+	m.updates++
+	m.tracks[t.GetID()] = t
+	return nil
+}
+
+func (m *mockDomainTrackRepo) Delete(_ context.Context, id string) error {
+	m.deletes++
+	delete(m.tracks, id)
+	return nil
+}
+
+func TestTrackService_WithDomainRepo_Create(t *testing.T) {
+	trackRepo := newStubTrackRepo()
+	taskRepo := NewMockRepository()
+	dr := newMockDomainTrackRepo()
+	svc := NewTrackService(trackRepo, taskRepo, WithDomainTrackRepo(dr))
+
+	ctx := context.Background()
+	track := &Track{
+		ID:    "test-track",
+		Title: "Test",
+		Type:  TrackTypeFeature,
+	}
+
+	if err := svc.CreateTrack(ctx, track); err != nil {
+		t.Fatalf("CreateTrack: %v", err)
+	}
+
+	if dr.creates != 1 {
+		t.Errorf("domain repo creates = %d, want 1", dr.creates)
+	}
+	if _, ok := dr.tracks[track.GetID()]; !ok {
+		t.Errorf("track not found in domain repo (key=%q)", track.GetID())
+	}
+}
+
+func TestTrackService_WithDomainRepo_Delete(t *testing.T) {
+	trackRepo := newStubTrackRepo()
+	taskRepo := NewMockRepository()
+	dr := newMockDomainTrackRepo()
+	svc := NewTrackService(trackRepo, taskRepo, WithDomainTrackRepo(dr))
+
+	ctx := context.Background()
+	if err := svc.DeleteTrack(ctx, "some-track"); err != nil {
+		t.Fatalf("DeleteTrack: %v", err)
+	}
+
+	if dr.deletes != 1 {
+		t.Errorf("domain repo deletes = %d, want 1", dr.deletes)
+	}
+}
+
 func TestTaskService_WithoutDomainRepo_FallsBack(t *testing.T) {
 	repo := &mockRepo{tasks: make(map[string]*Task)}
 	svc := NewTaskService(repo, repo) // no domain repo
