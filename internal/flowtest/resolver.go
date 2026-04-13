@@ -12,7 +12,7 @@ import (
 )
 
 // GlobalAdapterConfig holds the user-level adapter defaults loaded from
-// ~/.tlc/adapters.yaml. Missing file is not an error — results in empty config.
+// <config-dir>/adapters.yaml. Missing file is not an error — results in empty config.
 type GlobalAdapterConfig struct {
 	Adapters core.FlowAdapters `json:"adapters" yaml:"adapters"`
 }
