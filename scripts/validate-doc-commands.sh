@@ -120,13 +120,13 @@ check_flag "task update --timeout"           $TLC task update --timeout
 check_flag "task create --timeout"           $TLC task create --timeout
 
 echo
-echo "-- help llm formats --"
-if $TLC help llm >/dev/null 2>&1; then
-  echo "  OK  tlc help llm"
+echo "-- schema command --"
+if $TLC schema >/dev/null 2>&1; then
+  echo "  OK  tlc schema"
   ((PASS++)) || true
 else
-  echo " FAIL tlc help llm"
-  ERRORS+=("tlc help llm")
+  echo " FAIL tlc schema"
+  ERRORS+=("tlc schema")
   ((FAIL++)) || true
 fi
 
