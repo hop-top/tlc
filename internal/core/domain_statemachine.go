@@ -43,6 +43,21 @@ func NewTaskStateMachineFromWorkflow(
 	return domain.NewStateMachine(rules, pub)
 }
 
+// NewTrackStateMachine builds a domain.StateMachine for track lifecycle.
+// Rules: pending->active/abandoned, active->completed/abandoned,
+// completed->archived/abandoned, abandoned->archived.
+// Archived is terminal (no outgoing transitions).
+func NewTrackStateMachine(pub domain.EventPublisher) *domain.StateMachine {
+	rules := map[domain.State][]domain.State{
+		domain.State(TrackStatusPending):   {domain.State(TrackStatusActive), domain.State(TrackStatusAbandoned)},
+		domain.State(TrackStatusActive):    {domain.State(TrackStatusCompleted), domain.State(TrackStatusAbandoned)},
+		domain.State(TrackStatusCompleted): {domain.State(TrackStatusArchived), domain.State(TrackStatusAbandoned)},
+		domain.State(TrackStatusAbandoned): {domain.State(TrackStatusArchived)},
+		// archived: terminal — no outgoing transitions
+	}
+	return domain.NewStateMachine(rules, pub)
+}
+
 // buildStateMachine converts config status definitions and rules
 // into a domain.StateMachine.
 func buildStateMachine(

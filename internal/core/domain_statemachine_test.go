@@ -71,6 +71,57 @@ func TestNewTaskStateMachineFromWorkflow(t *testing.T) {
 	}
 }
 
+func TestNewTrackStateMachine_AllowedTransitions(t *testing.T) {
+	sm := NewTrackStateMachine(nil)
+	ctx := context.Background()
+
+	allowed := []struct{ from, to domain.State }{
+		{"pending", "active"},
+		{"pending", "abandoned"},
+		{"active", "completed"},
+		{"active", "abandoned"},
+		{"completed", "archived"},
+		{"completed", "abandoned"},
+		{"abandoned", "archived"},
+	}
+	for _, tt := range allowed {
+		if err := sm.Transition(ctx, tt.from, tt.to, false); err != nil {
+			t.Errorf("Transition(%s -> %s) unexpected error: %v",
+				tt.from, tt.to, err)
+		}
+	}
+}
+
+func TestNewTrackStateMachine_DisallowedTransitions(t *testing.T) {
+	sm := NewTrackStateMachine(nil)
+	ctx := context.Background()
+
+	disallowed := []struct{ from, to domain.State }{
+		{"archived", "active"},
+		{"archived", "pending"},
+		{"active", "pending"},
+		{"completed", "active"},
+		{"abandoned", "active"},
+		{"pending", "completed"},
+	}
+	for _, tt := range disallowed {
+		if err := sm.Transition(ctx, tt.from, tt.to, false); err == nil {
+			t.Errorf("Transition(%s -> %s) expected error, got nil",
+				tt.from, tt.to)
+		}
+	}
+}
+
+func TestNewTrackStateMachine_ForceBypass(t *testing.T) {
+	sm := NewTrackStateMachine(nil)
+	ctx := context.Background()
+
+	// Force bypasses rules.
+	if err := sm.Transition(ctx, "archived", "active", true); err != nil {
+		t.Errorf("forced Transition(archived -> active) unexpected error: %v", err)
+	}
+}
+
 func TestNewTaskStateMachine_NilConfig(t *testing.T) {
 	cfg := &config.TaskConfig{} // no statuses, no state machine
 	sm := NewTaskStateMachine(cfg, nil)
