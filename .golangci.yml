@@ -105,9 +105,6 @@ linters:
       - path: mocks?\.go
         linters:
           - unused
-      - path: internal/plugin/
-        linters:
-          - gochecknoglobals
       - path: internal/(tui|cli)/
         linters:
           - gocyclo
