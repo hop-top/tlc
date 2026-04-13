@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	kitcli "hop.top/kit/cli"
+	kitlog "hop.top/kit/log"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
@@ -342,19 +343,19 @@ func findAllConfigsForMode(startDir, stopDir string, mode config.EntryMode) []st
 }
 
 func setupLogging() {
-	options := log.Options{
-		ReportTimestamp: true,
-		TimeFormat:      "15:04:05",
-		Prefix:          "tlc 🚀",
-	}
-
+	level := log.InfoLevel
 	if viper.GetBool("output.verbose") {
-		options.Level = log.DebugLevel
-	} else {
-		options.Level = log.InfoLevel
+		level = log.DebugLevel
 	}
 
-	writer := os.Stderr
+	// kit/log handles quiet (→ WarnLevel) and no-color automatically
+	// from the global viper, and applies hop.top theme styles.
+	logger := kitlog.WithLevel(viper.GetViper(), level)
+	logger.SetReportTimestamp(true)
+	logger.SetTimeFormat("15:04:05")
+	logger.SetPrefix("tlc 🚀")
+
+	// Redirect to log file when configured.
 	logFile := viper.GetString("output.log_file")
 	if logFile != "" {
 		if err := os.MkdirAll(filepath.Dir(logFile), 0o750); err != nil {
@@ -362,14 +363,13 @@ func setupLogging() {
 		} else {
 			f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 			if err == nil {
-				writer = f
+				logger.SetOutput(f)
 			} else {
 				fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", logFile, err)
 			}
 		}
 	}
 
-	logger := log.NewWithOptions(writer, options)
 	log.SetDefault(logger)
 }
 
