@@ -16,6 +16,7 @@ import (
 	kitlog "hop.top/kit/log"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/extensions"
 	"hop.top/tlc/internal/storage"
 	"hop.top/upgrade"
 )
@@ -38,6 +39,10 @@ var kitRootInstance = kitRoot()
 // RootCmd is the package-level root command reference. Subcommand files
 // use RootCmd.AddCommand in their own init() functions.
 var RootCmd = kitRootInstance.Cmd
+
+// extMgr is the process-wide extension manager, initialised during the
+// first PersistentPreRunE and torn down by a deferred CloseAll in Execute.
+var extMgr *extensions.Manager
 
 // kitRoot constructs the root command using kit/cli.New() and wires up
 // TLC-specific flags, viper bindings, and lifecycle hooks.
@@ -89,6 +94,15 @@ func kitRoot() *kitcli.Root {
 		if c.Name() != "upgrade" {
 			upgrade.NotifyIfAvailable(c.Context(), newChecker(), os.Stderr)
 		}
+
+		// Bootstrap extensions once per process.
+		if extMgr == nil {
+			extMgr = extensions.New(log.Default())
+			if err := extMgr.InitAll(c.Context()); err != nil {
+				log.Warn("Failed to initialise extensions", "error", err)
+			}
+		}
+
 		s, err := getStorage()
 		if err != nil {
 			return nil
@@ -121,6 +135,11 @@ func Execute() {
 	if ok {
 		os.Args = expanded
 	}
+	defer func() {
+		if extMgr != nil {
+			extMgr.CloseAll()
+		}
+	}()
 	if err := kitRootInstance.Execute(context.Background()); err != nil {
 		os.Exit(1)
 	}
