@@ -4,18 +4,44 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"hop.top/kit/domain"
 )
 
+// TaskService provides business logic for task lifecycle management.
+// When a domain.Service is configured (via WithDomainRepo), CRUD
+// operations delegate to it for validation, auditing, and event
+// publishing. Custom orchestration methods (Claim, Unclaim, etc.)
+// remain as wrappers using the underlying repo directly.
 type TaskService struct {
-	repo    Repository
-	logRepo LogRepository
+	repo      Repository
+	logRepo   LogRepository
+	domainSvc *domain.Service[Task]
 }
 
-func NewTaskService(repo Repository, logRepo LogRepository) *TaskService {
-	return &TaskService{
+// TaskServiceOption configures a TaskService.
+type TaskServiceOption func(*TaskService)
+
+// WithDomainRepo wires a domain.Repository[Task] to enable
+// kit/domain CRUD delegation with optional audit/validation/events.
+func WithDomainRepo(
+	dr domain.Repository[Task],
+	opts ...domain.Option[Task],
+) TaskServiceOption {
+	return func(s *TaskService) {
+		s.domainSvc = domain.NewService[Task](dr, opts...)
+	}
+}
+
+func NewTaskService(repo Repository, logRepo LogRepository, opts ...TaskServiceOption) *TaskService {
+	s := &TaskService{
 		repo:    repo,
 		logRepo: logRepo,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // NextTaskID returns the next formatted task ID (e.g. "T-0001") for the given
@@ -30,15 +56,21 @@ func (s *TaskService) NextTaskID(ctx context.Context, projectID string) (string,
 }
 
 func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, note string) error {
-	if err := s.repo.CreateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to create task: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Create(ctx, task); err != nil {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
+	} else {
+		if err := s.repo.CreateTask(ctx, task); err != nil {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
 	}
 
 	logEntry := &LogEntry{
 		TaskID:    task.ID,
 		Timestamp: task.CreatedAt,
 		By:        by,
-		Action:    "CREATED",
+		Action:    ActionCreated,
 		Note:      note,
 	}
 
@@ -102,8 +134,14 @@ func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, _ s
 		}
 	}
 
-	if err := s.repo.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to update task: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Update(ctx, task); err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
+	} else {
+		if err := s.repo.UpdateTask(ctx, task); err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
 	}
 	return nil
 }
