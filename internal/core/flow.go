@@ -245,11 +245,11 @@ type StepGate struct {
 
 // FlowRun represents an execution instance of a flow definition.
 type FlowRun struct {
-	ID        string         `json:"run_id" yaml:"run_id"`
-	FlowID    string         `json:"flow_id" yaml:"flow_id"`
-	Status    FlowStatus     `json:"status" yaml:"status"`
-	Progress  float64        `json:"progress" yaml:"progress"` // 0.0 to 1.0
-	StartedAt time.Time      `json:"started_at" yaml:"started_at"`
+	ID        string         `json:"run_id" yaml:"run_id" table:"Run ID"`
+	FlowID    string         `json:"flow_id" yaml:"flow_id" table:"Flow"`
+	Status    FlowStatus     `json:"status" yaml:"status" table:"Status"`
+	Progress  float64        `json:"progress" yaml:"progress" table:"Progress"` // 0.0 to 1.0
+	StartedAt time.Time      `json:"started_at" yaml:"started_at" table:"Started"`
 	EndedAt   *time.Time     `json:"ended_at,omitempty" yaml:"ended_at,omitempty"`
 	Results   map[string]any `json:"results,omitempty" yaml:"results,omitempty"`
 }

@@ -53,17 +53,17 @@ func ValidPriority(p Priority) bool {
 }
 
 type Task struct {
-	ID           string                 `json:"id" yaml:"id"`
-	Title        string                 `json:"title" yaml:"title"`
-	Description  string                 `json:"description,omitempty" yaml:"description,omitempty"`
-	Status       TaskStatus             `json:"status" yaml:"status"`
-	AssignedTo   *string                `json:"assigned_to" yaml:"assigned_to"`
-	Tags         []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Reference    string                 `json:"reference" yaml:"reference"`
-	Effort       Effort                 `json:"effort,omitempty" yaml:"effort,omitempty"`
-	Priority     Priority               `json:"priority,omitempty" yaml:"priority,omitempty"`
-	CreatedAt    time.Time              `json:"created_at" yaml:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at" yaml:"updated_at"`
+	ID            string                 `json:"id" yaml:"id" table:"ID"`
+	Title         string                 `json:"title" yaml:"title" table:"Title"`
+	Description   string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Status        TaskStatus             `json:"status" yaml:"status" table:"Status"`
+	AssignedTo    *string                `json:"assigned_to" yaml:"assigned_to" table:"Assigned"`
+	Tags          []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Reference     string                 `json:"reference" yaml:"reference"`
+	Effort        Effort                 `json:"effort,omitempty" yaml:"effort,omitempty" table:"Effort"`
+	Priority      Priority               `json:"priority,omitempty" yaml:"priority,omitempty" table:"Priority"`
+	CreatedAt     time.Time              `json:"created_at" yaml:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at" yaml:"updated_at"`
 	OriginSystem  *string                `json:"origin_system,omitempty" yaml:"origin_system,omitempty"`
 	LastSyncAt    *time.Time             `json:"last_sync_at,omitempty" yaml:"last_sync_at,omitempty"`
 	Archived      bool                   `json:"archived" yaml:"archived"`
@@ -72,7 +72,7 @@ type Task struct {
 	StaleTimeout  *time.Duration         `json:"stale_timeout,omitempty" yaml:"stale_timeout,omitempty"`
 	BlockedReason *string                `json:"blocked_reason,omitempty" yaml:"blocked_reason,omitempty"`
 	StaleFiredAt  *time.Time             `json:"stale_fired_at,omitempty" yaml:"stale_fired_at,omitempty"`
-	TrackID       *string                `json:"track_id,omitempty" yaml:"track_id,omitempty"`
+	TrackID       *string                `json:"track_id,omitempty" yaml:"track_id,omitempty" table:"Track"`
 }
 
 type RegisteredProject struct {
