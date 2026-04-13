@@ -12,10 +12,12 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/kit/bus"
 	kitcli "hop.top/kit/cli"
 	kitlog "hop.top/kit/log"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/events"
 	"hop.top/tlc/internal/extensions"
 	"hop.top/tlc/internal/storage"
 	"hop.top/upgrade"
@@ -43,6 +45,17 @@ var RootCmd = kitRootInstance.Cmd
 // extMgr is the process-wide extension manager, initialised during the
 // first PersistentPreRunE and torn down by a deferred CloseAll in Execute.
 var extMgr *extensions.Manager
+
+// eventBus is the process-wide kit/bus instance, created at startup and
+// closed on shutdown. Subscribers and publishers use this to exchange
+// lifecycle events.
+var eventBus bus.Bus
+
+// auditSub is the bus subscriber that persists events to task_logs.
+var auditSub *events.AuditSubscriber
+
+// busPublisher is the domain.EventPublisher adapter for the bus.
+var busPublisher *events.BusPublisher
 
 // kitRoot constructs the root command using kit/cli.New() and wires up
 // TLC-specific flags, viper bindings, and lifecycle hooks.
@@ -95,9 +108,15 @@ func kitRoot() *kitcli.Root {
 			upgrade.NotifyIfAvailable(c.Context(), newChecker(), os.Stderr)
 		}
 
+		// Initialise the event bus once per process.
+		if eventBus == nil {
+			eventBus = bus.New()
+			busPublisher = events.NewBusPublisher(eventBus)
+		}
+
 		// Bootstrap extensions once per process.
 		if extMgr == nil {
-			extMgr = extensions.New(log.Default())
+			extMgr = extensions.New(log.Default(), eventBus)
 			extensions.RegisterBuiltins(extMgr)
 			if err := extMgr.InitAll(c.Context()); err != nil {
 				log.Warn("Failed to initialise extensions", "error", err)
@@ -108,6 +127,12 @@ func kitRoot() *kitcli.Root {
 		if err != nil {
 			return nil
 		}
+
+		// Wire audit subscriber once storage is available.
+		if auditSub == nil && eventBus != nil {
+			auditSub = events.NewAuditSubscriber(eventBus, s)
+		}
+
 		autoProcessInbox(c, s)
 		return setupURICompletion(s)
 	}
@@ -140,9 +165,17 @@ func Execute() {
 		os.Args = expanded
 	}
 	defer func() {
+		if auditSub != nil {
+			auditSub.Close()
+		}
 		if extMgr != nil {
 			for _, err := range extMgr.CloseAll() {
 				log.Warn("extension close error", "error", err)
+			}
+		}
+		if eventBus != nil {
+			if err := eventBus.Close(context.Background()); err != nil {
+				log.Warn("bus close error", "error", err)
 			}
 		}
 	}()
