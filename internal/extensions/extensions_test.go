@@ -23,7 +23,7 @@ func (s *stubExt) Init(_ context.Context) error  { s.inited = true; return s.ini
 func (s *stubExt) Close() error                  { s.closed = true; return nil }
 
 func TestNew(t *testing.T) {
-	m := New(nil)
+	m := New(nil, nil)
 	if m == nil {
 		t.Fatal("expected non-nil Manager")
 	}
@@ -33,7 +33,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestAddAndInitAll(t *testing.T) {
-	m := New(nil)
+	m := New(nil, nil)
 	s := &stubExt{name: "test-ext", caps: ext.CapRegistry | ext.CapConfig}
 	m.Add(s)
 
@@ -50,7 +50,7 @@ func TestAddAndInitAll(t *testing.T) {
 }
 
 func TestCloseAll(t *testing.T) {
-	m := New(nil)
+	m := New(nil, nil)
 	s := &stubExt{name: "close-ext", caps: ext.CapRegistry}
 	m.Add(s)
 

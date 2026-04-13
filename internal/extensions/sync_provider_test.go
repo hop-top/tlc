@@ -64,7 +64,7 @@ func assertSyncExt(t *testing.T, e ext.Extension, name, svc string) {
 }
 
 func TestSyncExtRegistration(t *testing.T) {
-	m := New(nil)
+	m := New(nil, nil)
 	store := auth.NewMockStore()
 
 	m.Add(NewGitHubSync(store))

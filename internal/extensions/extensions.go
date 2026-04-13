@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"charm.land/log/v2"
+	"hop.top/kit/bus"
 	"hop.top/kit/ext"
 )
 
@@ -16,13 +17,16 @@ import (
 // built-in extension registration.
 type Manager struct {
 	core *ext.Manager
+	bus  bus.Bus
 }
 
 // New creates a Manager and wires capability callbacks.
 // Call RegisterBuiltins to add built-in extensions after creation.
-// Pass nil logger to disable debug output.
-func New(logger *log.Logger) *Manager {
-	m := &Manager{core: ext.NewManager(logger)}
+// Pass nil logger to disable debug output. Pass nil bus to disable
+// hook subscriptions (extensions with CapHook will be logged but
+// not wired).
+func New(logger *log.Logger, b bus.Bus) *Manager {
+	m := &Manager{core: ext.NewManager(logger), bus: b}
 
 	// Wire capability callbacks before adding extensions.
 	m.core.SetOnRegistry(func(e ext.Extension) {
@@ -31,9 +35,23 @@ func New(logger *log.Logger) *Manager {
 		}
 	})
 	m.core.SetOnHook(func(e ext.Extension) {
-		// Stub — bus not available until Track C (kit-bus).
+		if b == nil {
+			if logger != nil {
+				logger.Debug("ext/hook: no bus; skipping", "name", e.Meta().Name)
+			}
+			return
+		}
+		// Subscribe the extension to all tlc lifecycle events.
+		b.SubscribeAsync("tlc.#", func(_ context.Context, ev bus.Event) {
+			if logger != nil {
+				logger.Debug("ext/hook: event dispatched",
+					"ext", e.Meta().Name,
+					"topic", string(ev.Topic),
+				)
+			}
+		})
 		if logger != nil {
-			logger.Debug("ext/hook: stub registered", "name", e.Meta().Name)
+			logger.Debug("ext/hook: subscribed to bus", "name", e.Meta().Name)
 		}
 	})
 	m.core.SetOnConfig(func(e ext.Extension) {
@@ -44,6 +62,9 @@ func New(logger *log.Logger) *Manager {
 
 	return m
 }
+
+// Bus returns the event bus, or nil if not configured.
+func (m *Manager) Bus() bus.Bus { return m.bus }
 
 // Add registers an extension with the underlying ext.Manager.
 func (m *Manager) Add(e ext.Extension) { m.core.Add(e) }

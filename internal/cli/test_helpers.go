@@ -355,8 +355,11 @@ func resetTaskFlags() {
 		f.Changed = false
 	})
 
-	// Reset extension manager.
+	// Reset extension manager and bus globals.
 	extMgr = nil
+	eventBus = nil
+	auditSub = nil
+	busPublisher = nil
 }
 
 // resetFlowFlags clears the package-level state bound to flow.go's Cobra
