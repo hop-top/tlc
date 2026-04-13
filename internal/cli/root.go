@@ -57,6 +57,14 @@ var auditSub *events.AuditSubscriber
 // busPublisher is the domain.EventPublisher adapter for the bus.
 var busPublisher *events.BusPublisher
 
+// GetBusPublisher returns the process-wide domain.EventPublisher, or nil
+// if the bus has not been initialised yet. Callers should pass the result
+// to domain.WithPublisher when constructing domain services.
+func GetBusPublisher() *events.BusPublisher { return busPublisher }
+
+// GetEventBus returns the process-wide bus.Bus, or nil if not initialised.
+func GetEventBus() bus.Bus { return eventBus }
+
 // kitRoot constructs the root command using kit/cli.New() and wires up
 // TLC-specific flags, viper bindings, and lifecycle hooks.
 func kitRoot() *kitcli.Root {
