@@ -98,6 +98,7 @@ func kitRoot() *kitcli.Root {
 		// Bootstrap extensions once per process.
 		if extMgr == nil {
 			extMgr = extensions.New(log.Default())
+			extensions.RegisterBuiltins(extMgr)
 			if err := extMgr.InitAll(c.Context()); err != nil {
 				log.Warn("Failed to initialise extensions", "error", err)
 			}
