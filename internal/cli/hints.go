@@ -9,13 +9,14 @@ import (
 // registerHints wires contextual next-step hints for key commands.
 // Hints render automatically via the PersistentPostRunE on the root.
 func registerHints(hints *output.HintSet) {
-	hints.Register("create", output.Hint{
+	// Task hints — scoped to "task <verb>" to avoid collisions.
+	hints.Register("task create", output.Hint{
 		Message: "Run `tlc task claim <id>` to start working on it.",
 	})
-	hints.Register("complete", output.Hint{
+	hints.Register("task complete", output.Hint{
 		Message: "Run `tlc task list` to see remaining tasks.",
 	})
-	hints.Register("claim", output.Hint{
+	hints.Register("task claim", output.Hint{
 		Message: "Run `tlc task complete <id>` when finished.",
 	})
 

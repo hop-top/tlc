@@ -40,7 +40,7 @@ Replaces the former "help llm" subcommand.`,
 
 func init() {
 	// kit/cli hides the help subcommand; retain -h/--help flag only.
-	// LLM schema command is now a top-level hidden subcommand.
+	// LLM schema command is a top-level subcommand (visible in help).
 	helpLLMCmd.Flags().StringVar(&helpLLMFormat, "format", "json", "Output format (json, mcp, openai, anthropic)")
 	RootCmd.AddCommand(helpLLMCmd)
 }
