@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"hop.top/kit/domain"
@@ -171,13 +170,8 @@ func (r *TaskDomainRepo) Create(ctx context.Context, task *core.Task) error {
 }
 
 // Get implements domain.Repository[core.Task].
-// The id parameter is a compound key (projectID:entityID) or plain entityID.
 func (r *TaskDomainRepo) Get(ctx context.Context, id string) (*core.Task, error) {
-	projectID, entityID := splitCompoundKey(id)
-	if projectID != "" {
-		return r.store.GetTaskInProject(ctx, entityID, projectID)
-	}
-	return r.store.GetTask(ctx, entityID)
+	return r.store.GetTask(ctx, id)
 }
 
 // List implements domain.Repository[core.Task] with basic Query support.
@@ -211,15 +205,5 @@ func (r *TaskDomainRepo) Update(ctx context.Context, task *core.Task) error {
 
 // Delete implements domain.Repository[core.Task].
 func (r *TaskDomainRepo) Delete(ctx context.Context, id string) error {
-	_, entityID := splitCompoundKey(id)
-	return r.store.DeleteTask(ctx, entityID)
-}
-
-// splitCompoundKey splits "projectID:entityID" into parts.
-// If no colon is present, returns ("", id).
-func splitCompoundKey(id string) (projectID, entityID string) {
-	if i := strings.Index(id, ":"); i >= 0 {
-		return id[:i], id[i+1:]
-	}
-	return "", id
+	return r.store.DeleteTask(ctx, id)
 }

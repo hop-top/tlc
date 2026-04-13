@@ -147,24 +147,6 @@ func TestTaskDomainRepo_List(t *testing.T) {
 	}
 }
 
-func TestSplitCompoundKey(t *testing.T) {
-	tests := []struct {
-		input    string
-		wantProj string
-		wantID   string
-	}{
-		{"T-0001", "", "T-0001"},
-		{"proj:T-0001", "proj", "T-0001"},
-		{"hop-top/tlc:T-0001", "hop-top/tlc", "T-0001"},
-	}
-	for _, tt := range tests {
-		proj, id := splitCompoundKey(tt.input)
-		if proj != tt.wantProj || id != tt.wantID {
-			t.Errorf("splitCompoundKey(%q) = (%q, %q), want (%q, %q)",
-				tt.input, proj, id, tt.wantProj, tt.wantID)
-		}
-	}
-}
 
 func TestBindTaskColumnCount(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
