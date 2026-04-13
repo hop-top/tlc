@@ -14,9 +14,10 @@ import (
 // publishing. Custom orchestration methods (Claim, Unclaim, etc.)
 // remain as wrappers using the underlying repo directly.
 type TaskService struct {
-	repo      Repository
-	logRepo   LogRepository
-	domainSvc *domain.Service[Task]
+	repo         Repository
+	logRepo      LogRepository
+	domainSvc    *domain.Service[Task]
+	flowDomainSvc *domain.Service[FlowRun]
 }
 
 // TaskServiceOption configures a TaskService.
@@ -30,6 +31,17 @@ func WithDomainRepo(
 ) TaskServiceOption {
 	return func(s *TaskService) {
 		s.domainSvc = domain.NewService[Task](dr, opts...)
+	}
+}
+
+// WithFlowDomainRepo wires a domain.Repository[FlowRun] to enable
+// kit/domain CRUD delegation for flow run lifecycle.
+func WithFlowDomainRepo(
+	dr domain.Repository[FlowRun],
+	opts ...domain.Option[FlowRun],
+) TaskServiceOption {
+	return func(s *TaskService) {
+		s.flowDomainSvc = domain.NewService[FlowRun](dr, opts...)
 	}
 }
 
@@ -264,7 +276,13 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 }
 
 func (s *TaskService) updateFlowRunStatus(ctx context.Context, runID, action, by, note string, status FlowStatus) error {
-	run, err := s.repo.GetFlowRun(ctx, runID)
+	var run *FlowRun
+	var err error
+	if s.flowDomainSvc != nil {
+		run, err = s.flowDomainSvc.Get(ctx, runID)
+	} else {
+		run, err = s.repo.GetFlowRun(ctx, runID)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to get flow run: %w", err)
 	}
@@ -272,8 +290,14 @@ func (s *TaskService) updateFlowRunStatus(ctx context.Context, runID, action, by
 		return fmt.Errorf("flow run %s not found", runID)
 	}
 	run.Status = status
-	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return fmt.Errorf("failed to update flow run: %w", err)
+	if s.flowDomainSvc != nil {
+		if err := s.flowDomainSvc.Update(ctx, run); err != nil {
+			return fmt.Errorf("failed to update flow run: %w", err)
+		}
+	} else {
+		if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
+			return fmt.Errorf("failed to update flow run: %w", err)
+		}
 	}
 	if err := s.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now().UTC(),
