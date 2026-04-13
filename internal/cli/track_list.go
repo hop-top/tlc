@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/core"
 )
 
@@ -127,10 +126,12 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 
 	format := viper.GetString("output.format")
 	switch format {
-	case formatJSON:
-		return renderTrackListJSON(cmd.OutOrStdout(), rows)
-	case formatYAML:
-		return renderTrackListYAML(cmd.OutOrStdout(), rows)
+	case formatJSON, formatYAML:
+		out := make([]trackListOutput, len(rows))
+		for i, r := range rows {
+			out[i] = toTrackListOutput(r.Track, r.State, r.Progress)
+		}
+		return output.Render(cmd.OutOrStdout(), format, out)
 	default:
 		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects)
 	}
@@ -179,31 +180,6 @@ type trackRowData struct {
 	Progress core.TrackProgress
 }
 
-func renderTrackListJSON(w io.Writer, rows []trackRowData) error {
-	out := make([]trackListOutput, len(rows))
-	for i, r := range rows {
-		out[i] = toTrackListOutput(r.Track, r.State, r.Progress)
-	}
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal tracks to JSON: %w", err)
-	}
-	_, _ = fmt.Fprintln(w, string(data))
-	return nil
-}
-
-func renderTrackListYAML(w io.Writer, rows []trackRowData) error {
-	out := make([]trackListOutput, len(rows))
-	for i, r := range rows {
-		out[i] = toTrackListOutput(r.Track, r.State, r.Progress)
-	}
-	data, err := yaml.Marshal(out)
-	if err != nil {
-		return fmt.Errorf("failed to marshal tracks to YAML: %w", err)
-	}
-	_, _ = fmt.Fprintln(w, string(data))
-	return nil
-}
 
 func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 	if len(rows) == 0 {

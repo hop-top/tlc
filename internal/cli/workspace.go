@@ -1,13 +1,13 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/workspace"
@@ -99,19 +99,10 @@ func runWorkspaceList(cmd *cobra.Command, _ []string) error {
 	}
 
 	format := viper.GetString("output.format")
-	if format == formatJSON {
-		return printWorkspaceListJSON(cmd, allData)
+	if format == formatJSON || format == formatYAML {
+		return output.Render(cmd.OutOrStdout(), format, allData)
 	}
 	printWorkspaceListTable(cmd, allData)
-	return nil
-}
-
-func printWorkspaceListJSON(cmd *cobra.Command, data []workspaceListData) error {
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %w", err)
-	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 	return nil
 }
 

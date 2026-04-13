@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -10,8 +9,8 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 	"hop.top/kit/markdown"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/core"
 )
 
@@ -34,12 +33,8 @@ var (
 func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case formatJSON:
-		data, _ := json.MarshalIndent(tasks, "", "  ")
-		_, _ = fmt.Fprintln(out, string(data))
-	case formatYAML:
-		data, _ := yaml.Marshal(tasks)
-		_, _ = fmt.Fprintln(out, string(data))
+	case formatJSON, formatYAML:
+		_ = output.Render(out, format, tasks)
 	case "tls":
 		for _, t := range tasks {
 			_, _ = fmt.Fprintln(out, formatTLS(t))
@@ -56,20 +51,12 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
-	case formatJSON:
+	case formatJSON, formatYAML:
 		result := map[string]interface{}{
 			"task": task,
 			"logs": logs,
 		}
-		data, _ := json.MarshalIndent(result, "", "  ")
-		_, _ = fmt.Fprintln(out, string(data))
-	case formatYAML:
-		result := map[string]interface{}{
-			"task": task,
-			"logs": logs,
-		}
-		data, _ := yaml.Marshal(result)
-		_, _ = fmt.Fprintln(out, string(data))
+		_ = output.Render(out, format, result)
 	default:
 		renderTaskDetail(out, task, logs)
 	}

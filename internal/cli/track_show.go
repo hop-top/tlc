@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -11,7 +10,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"hop.top/kit/output"
 	"hop.top/tlc/internal/core"
 )
 
@@ -71,10 +70,9 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 
 	format := viper.GetString("output.format")
 	switch format {
-	case formatJSON:
-		return renderTrackShowJSON(cmd.OutOrStdout(), track, flags, progress, tasks)
-	case formatYAML:
-		return renderTrackShowYAML(cmd.OutOrStdout(), track, flags, progress, tasks)
+	case formatJSON, formatYAML:
+		out := buildTrackShowOutput(track, flags, progress)
+		return output.Render(cmd.OutOrStdout(), format, out)
 	default:
 		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks)
 	}
@@ -118,38 +116,6 @@ func buildTrackShowOutput(
 		UpdatedAt: t.UpdatedAt.Format("2006-01-02"),
 		Progress:  progress,
 	}
-}
-
-func renderTrackShowJSON(
-	w io.Writer,
-	t *core.Track,
-	flags []core.TrackStateFlag,
-	progress *core.TrackProgress,
-	_ []*core.Task,
-) error {
-	out := buildTrackShowOutput(t, flags, progress)
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal track to JSON: %w", err)
-	}
-	_, _ = fmt.Fprintln(w, string(data))
-	return nil
-}
-
-func renderTrackShowYAML(
-	w io.Writer,
-	t *core.Track,
-	flags []core.TrackStateFlag,
-	progress *core.TrackProgress,
-	_ []*core.Task,
-) error {
-	out := buildTrackShowOutput(t, flags, progress)
-	data, err := yaml.Marshal(out)
-	if err != nil {
-		return fmt.Errorf("failed to marshal track to YAML: %w", err)
-	}
-	_, _ = fmt.Fprintln(w, string(data))
-	return nil
 }
 
 func renderTrackShowDetail(
