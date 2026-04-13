@@ -114,6 +114,9 @@ func kitRoot() *kitcli.Root {
 
 	cobra.OnInitialize(initConfig)
 
+	// Discover tlc-* binary plugins on $PATH and register as subcommands.
+	root.EnablePluginDispatch("tlc", "")
+
 	return root
 }
 
