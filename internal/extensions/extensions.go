@@ -1,8 +1,7 @@
 // Package extensions provides the tlc-specific ext.Manager bootstrap layer.
 //
-// It initialises the kit/ext Manager, registers built-in extensions, and
-// exposes a top-level accessor for CLI startup to pass the manager into
-// services that need it.
+// It initialises the kit/ext Manager, wires capability callbacks, and
+// exposes registration + lifecycle methods for CLI startup.
 package extensions
 
 import (
@@ -19,7 +18,8 @@ type Manager struct {
 	core *ext.Manager
 }
 
-// New creates a Manager and registers built-in extensions.
+// New creates a Manager and wires capability callbacks.
+// Call RegisterBuiltins to add built-in extensions after creation.
 // Pass nil logger to disable debug output.
 func New(logger *log.Logger) *Manager {
 	m := &Manager{core: ext.NewManager(logger)}

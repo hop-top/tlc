@@ -141,7 +141,9 @@ func Execute() {
 	}
 	defer func() {
 		if extMgr != nil {
-			extMgr.CloseAll()
+			for _, err := range extMgr.CloseAll() {
+				log.Warn("extension close error", "error", err)
+			}
 		}
 	}()
 	if err := kitRootInstance.Execute(context.Background()); err != nil {
