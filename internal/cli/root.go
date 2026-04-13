@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/kit/bus"
 	kitcli "hop.top/kit/cli"
+	"hop.top/kit/domain"
 	kitlog "hop.top/kit/log"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -59,8 +60,13 @@ var busPublisher *events.BusPublisher
 
 // GetBusPublisher returns the process-wide domain.EventPublisher, or nil
 // if the bus has not been initialised yet. Callers should pass the result
-// to domain.WithPublisher when constructing domain services.
-func GetBusPublisher() *events.BusPublisher { return busPublisher }
+// to events.DomainOptions when constructing domain services.
+func GetBusPublisher() domain.EventPublisher {
+	if busPublisher == nil {
+		return nil
+	}
+	return busPublisher
+}
 
 // GetEventBus returns the process-wide bus.Bus, or nil if not initialised.
 func GetEventBus() bus.Bus { return eventBus }

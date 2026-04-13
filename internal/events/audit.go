@@ -25,11 +25,17 @@ func NewAuditSubscriber(b bus.Bus, logRepo core.LogRepository) *AuditSubscriber 
 }
 
 func (s *AuditSubscriber) handle(ctx context.Context, e bus.Event) error {
+	// Only persist task events to task_logs. Track/flow events use a
+	// different entity ID space and AddLog queries the tasks table for
+	// project_id — non-task IDs would cause a lookup failure.
+	if !isTaskTopic(string(e.Topic)) {
+		return nil
+	}
+
 	entry := &core.LogEntry{
 		Timestamp: e.Timestamp,
 	}
 
-	// Extract fields from EntityEvent payload when available.
 	if ee, ok := e.Payload.(*EntityEvent); ok {
 		entry.TaskID = ee.ID
 		entry.By = ee.Actor
@@ -43,10 +49,8 @@ func (s *AuditSubscriber) handle(ctx context.Context, e bus.Event) error {
 		entry.Note = buildNote(&ee)
 		entry.Meta = ee.Meta
 	} else {
-		// Fallback for non-EntityEvent payloads.
 		entry.Action = string(e.Topic)
 		entry.By = e.Source
-		entry.Timestamp = e.Timestamp
 	}
 
 	if entry.Timestamp.IsZero() {
@@ -54,6 +58,15 @@ func (s *AuditSubscriber) handle(ctx context.Context, e bus.Event) error {
 	}
 
 	return s.logRepo.AddLog(ctx, entry)
+}
+
+// isTaskTopic returns true for task lifecycle topics.
+func isTaskTopic(topic string) bool {
+	switch topic {
+	case TaskCreated, TaskClaimed, TaskCompleted, TaskStatusChanged:
+		return true
+	}
+	return false
 }
 
 // Close unsubscribes from the bus.
