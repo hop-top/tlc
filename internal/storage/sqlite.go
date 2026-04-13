@@ -889,6 +889,21 @@ func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*
 	return runs, nil
 }
 
+// deleteFlowRun removes a flow run by ID.
+func (s *SQLiteStorage) deleteFlowRun(ctx context.Context, id string) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, "DELETE FROM flow_runs WHERE id = ?", id)
+		if err != nil {
+			return fmt.Errorf("failed to delete flow run: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return fmt.Errorf("flow run %s not found", id)
+		}
+		return nil
+	})
+}
+
 func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*core.LogEntry, error) {
 	sqlQuery := "SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs"
 	var args []interface{}

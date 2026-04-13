@@ -27,7 +27,7 @@ require (
 	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/hdl v0.0.1-alpha.1
-	hop.top/kit v0.1.1-alpha.3
+	hop.top/kit v0.3.0-alpha.2
 	hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7
 	hop.top/uri v0.0.1-alpha.1
 	hop.top/xrr v0.1.0-alpha.1

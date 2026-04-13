@@ -4,18 +4,57 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"hop.top/kit/domain"
 )
 
+// TaskService provides business logic for task lifecycle management.
+// When a domain.Service is configured (via WithDomainRepo), write
+// operations (Create, Update) delegate to it for validation, auditing,
+// and event publishing. Reads (Get, List) use the legacy repo for
+// rich filtering. Custom orchestration methods (Claim, Unclaim, etc.)
+// remain as wrappers using the underlying repo directly.
 type TaskService struct {
-	repo    Repository
-	logRepo LogRepository
+	repo         Repository
+	logRepo      LogRepository
+	domainSvc    *domain.Service[Task]
+	flowDomainSvc *domain.Service[FlowRun]
 }
 
-func NewTaskService(repo Repository, logRepo LogRepository) *TaskService {
-	return &TaskService{
+// TaskServiceOption configures a TaskService.
+type TaskServiceOption func(*TaskService)
+
+// WithDomainRepo wires a domain.Repository[Task] to enable
+// kit/domain CRUD delegation with optional audit/validation/events.
+func WithDomainRepo(
+	dr domain.Repository[Task],
+	opts ...domain.Option[Task],
+) TaskServiceOption {
+	return func(s *TaskService) {
+		s.domainSvc = domain.NewService[Task](dr, opts...)
+	}
+}
+
+// WithFlowDomainRepo wires a domain.Repository[FlowRun] to enable
+// kit/domain CRUD delegation for flow run lifecycle.
+func WithFlowDomainRepo(
+	dr domain.Repository[FlowRun],
+	opts ...domain.Option[FlowRun],
+) TaskServiceOption {
+	return func(s *TaskService) {
+		s.flowDomainSvc = domain.NewService[FlowRun](dr, opts...)
+	}
+}
+
+func NewTaskService(repo Repository, logRepo LogRepository, opts ...TaskServiceOption) *TaskService {
+	s := &TaskService{
 		repo:    repo,
 		logRepo: logRepo,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // NextTaskID returns the next formatted task ID (e.g. "T-0001") for the given
@@ -30,15 +69,21 @@ func (s *TaskService) NextTaskID(ctx context.Context, projectID string) (string,
 }
 
 func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, note string) error {
-	if err := s.repo.CreateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to create task: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Create(ctx, task); err != nil {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
+	} else {
+		if err := s.repo.CreateTask(ctx, task); err != nil {
+			return fmt.Errorf("failed to create task: %w", err)
+		}
 	}
 
 	logEntry := &LogEntry{
 		TaskID:    task.ID,
 		Timestamp: task.CreatedAt,
 		By:        by,
-		Action:    "CREATED",
+		Action:    ActionCreated,
 		Note:      note,
 	}
 
@@ -102,8 +147,14 @@ func (s *TaskService) UpdateTask(ctx context.Context, task *Task, by string, _ s
 		}
 	}
 
-	if err := s.repo.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to update task: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Update(ctx, task); err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
+	} else {
+		if err := s.repo.UpdateTask(ctx, task); err != nil {
+			return fmt.Errorf("failed to update task: %w", err)
+		}
 	}
 	return nil
 }
@@ -226,7 +277,13 @@ func (s *TaskService) UnclaimTask(ctx context.Context, taskID string, by string,
 }
 
 func (s *TaskService) updateFlowRunStatus(ctx context.Context, runID, action, by, note string, status FlowStatus) error {
-	run, err := s.repo.GetFlowRun(ctx, runID)
+	var run *FlowRun
+	var err error
+	if s.flowDomainSvc != nil {
+		run, err = s.flowDomainSvc.Get(ctx, runID)
+	} else {
+		run, err = s.repo.GetFlowRun(ctx, runID)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to get flow run: %w", err)
 	}
@@ -234,8 +291,14 @@ func (s *TaskService) updateFlowRunStatus(ctx context.Context, runID, action, by
 		return fmt.Errorf("flow run %s not found", runID)
 	}
 	run.Status = status
-	if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
-		return fmt.Errorf("failed to update flow run: %w", err)
+	if s.flowDomainSvc != nil {
+		if err := s.flowDomainSvc.Update(ctx, run); err != nil {
+			return fmt.Errorf("failed to update flow run: %w", err)
+		}
+	} else {
+		if err := s.repo.UpdateFlowRun(ctx, run); err != nil {
+			return fmt.Errorf("failed to update flow run: %w", err)
+		}
 	}
 	if err := s.logRepo.AddLog(ctx, &LogEntry{
 		Timestamp: time.Now().UTC(),

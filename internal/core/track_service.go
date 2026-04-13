@@ -4,20 +4,46 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"hop.top/kit/domain"
 )
 
 // TrackService provides business logic for track lifecycle management.
+// When a domain.Service is configured (via WithDomainTrackRepo), write
+// operations (Create, Update, Delete) delegate to it. Reads use the
+// legacy TrackRepository for rich filtering. Custom orchestration
+// (auto-transition, plan ingestion, abandon-with-tasks) stays as
+// wrappers.
 type TrackService struct {
-	repo     TrackRepository
-	taskRepo Repository
+	repo      TrackRepository
+	taskRepo  Repository
+	domainSvc *domain.Service[Track]
+}
+
+// TrackServiceOption configures a TrackService.
+type TrackServiceOption func(*TrackService)
+
+// WithDomainTrackRepo wires a domain.Repository[Track] to enable
+// kit/domain CRUD delegation.
+func WithDomainTrackRepo(
+	dr domain.Repository[Track],
+	opts ...domain.Option[Track],
+) TrackServiceOption {
+	return func(s *TrackService) {
+		s.domainSvc = domain.NewService[Track](dr, opts...)
+	}
 }
 
 // NewTrackService creates a new TrackService.
-func NewTrackService(repo TrackRepository, taskRepo Repository) *TrackService {
-	return &TrackService{
+func NewTrackService(repo TrackRepository, taskRepo Repository, opts ...TrackServiceOption) *TrackService {
+	s := &TrackService{
 		repo:     repo,
 		taskRepo: taskRepo,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // CreateTrack validates and persists a new track.
@@ -50,8 +76,14 @@ func (s *TrackService) CreateTrack(ctx context.Context, track *Track) error {
 		track.UpdatedAt = now
 	}
 
-	if err := s.repo.CreateTrack(ctx, track); err != nil {
-		return fmt.Errorf("failed to create track: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Create(ctx, track); err != nil {
+			return fmt.Errorf("failed to create track: %w", err)
+		}
+	} else {
+		if err := s.repo.CreateTrack(ctx, track); err != nil {
+			return fmt.Errorf("failed to create track: %w", err)
+		}
 	}
 	return nil
 }
@@ -120,8 +152,14 @@ func (s *TrackService) UpdateTrack(
 	}
 
 	track.UpdatedAt = time.Now().UTC()
-	if err := s.repo.UpdateTrack(ctx, track); err != nil {
-		return fmt.Errorf("failed to update track: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Update(ctx, track); err != nil {
+			return fmt.Errorf("failed to update track: %w", err)
+		}
+	} else {
+		if err := s.repo.UpdateTrack(ctx, track); err != nil {
+			return fmt.Errorf("failed to update track: %w", err)
+		}
 	}
 	return nil
 }
@@ -129,8 +167,14 @@ func (s *TrackService) UpdateTrack(
 // DeleteTrack removes a track. The repository enforces that no tasks
 // reference the track.
 func (s *TrackService) DeleteTrack(ctx context.Context, id string) error {
-	if err := s.repo.DeleteTrack(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete track: %w", err)
+	if s.domainSvc != nil {
+		if err := s.domainSvc.Delete(ctx, id); err != nil {
+			return fmt.Errorf("failed to delete track: %w", err)
+		}
+	} else {
+		if err := s.repo.DeleteTrack(ctx, id); err != nil {
+			return fmt.Errorf("failed to delete track: %w", err)
+		}
 	}
 	return nil
 }
