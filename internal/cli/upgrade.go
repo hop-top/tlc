@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"hop.top/upgrade"
@@ -68,11 +69,11 @@ func installTLCPreamble(preamble string) error {
 	if err != nil {
 		return fmt.Errorf("upgrade preamble: %w", err)
 	}
-	dir := configDir + "/tlc/skills"
+	dir := filepath.Join(configDir, "tlc", "skills")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("upgrade preamble: mkdir: %w", err)
 	}
-	path := dir + "/upgrade-preamble.md"
+	path := filepath.Join(dir, "upgrade-preamble.md")
 	if err := os.WriteFile(path, []byte(preamble), 0o600); err != nil {
 		return fmt.Errorf("upgrade preamble: write: %w", err)
 	}

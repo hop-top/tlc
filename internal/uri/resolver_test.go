@@ -3,6 +3,7 @@ package uri
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,7 +57,7 @@ func newTestStorage(t *testing.T) *storage.SQLiteStorage {
 		core.ResetDetectionCache()
 	})
 
-	s, err := storage.NewSQLiteStorage(tmp + "/test.db")
+	s, err := storage.NewSQLiteStorage(filepath.Join(tmp, "test.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	return s
@@ -139,7 +140,7 @@ func newRegisteredProject(
 ) *storage.SQLiteStorage {
 	t.Helper()
 	tmp := t.TempDir()
-	dbPath := tmp + "/proj.db"
+	dbPath := filepath.Join(tmp, "proj.db")
 
 	proj, err := storage.NewSQLiteStorage(dbPath)
 	require.NoError(t, err)
