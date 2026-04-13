@@ -31,8 +31,9 @@ func newDomainRepoTestStorage(t *testing.T) *SQLiteStorage {
 	return s
 }
 
-func TestSQLiteStorage_DomainRepoCreate(t *testing.T) {
+func TestTaskDomainRepo_CreateGet(t *testing.T) {
 	s := newDomainRepoTestStorage(t)
+	repo := NewTaskDomainRepo(s)
 	ctx := context.Background()
 
 	task := &core.Task{
@@ -43,11 +44,11 @@ func TestSQLiteStorage_DomainRepoCreate(t *testing.T) {
 		UpdatedAt: time.Now().UTC(),
 	}
 
-	if err := s.Create(ctx, task); err != nil {
+	if err := repo.Create(ctx, task); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	got, err := s.Get(ctx, "T-0001")
+	got, err := repo.Get(ctx, "T-0001")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -59,8 +60,9 @@ func TestSQLiteStorage_DomainRepoCreate(t *testing.T) {
 	}
 }
 
-func TestSQLiteStorage_DomainRepoUpdate(t *testing.T) {
+func TestTaskDomainRepo_Update(t *testing.T) {
 	s := newDomainRepoTestStorage(t)
+	repo := NewTaskDomainRepo(s)
 	ctx := context.Background()
 
 	task := &core.Task{
@@ -70,17 +72,17 @@ func TestSQLiteStorage_DomainRepoUpdate(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := s.Create(ctx, task); err != nil {
+	if err := repo.Create(ctx, task); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
 	task.Title = "updated"
 	task.UpdatedAt = time.Now().UTC()
-	if err := s.Update(ctx, task); err != nil {
+	if err := repo.Update(ctx, task); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	got, err := s.Get(ctx, "T-0002")
+	got, err := repo.Get(ctx, "T-0002")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -89,8 +91,9 @@ func TestSQLiteStorage_DomainRepoUpdate(t *testing.T) {
 	}
 }
 
-func TestSQLiteStorage_DomainRepoDelete(t *testing.T) {
+func TestTaskDomainRepo_Delete(t *testing.T) {
 	s := newDomainRepoTestStorage(t)
+	repo := NewTaskDomainRepo(s)
 	ctx := context.Background()
 
 	task := &core.Task{
@@ -100,15 +103,15 @@ func TestSQLiteStorage_DomainRepoDelete(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := s.Create(ctx, task); err != nil {
+	if err := repo.Create(ctx, task); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := s.Delete(ctx, "T-0003"); err != nil {
+	if err := repo.Delete(ctx, "T-0003"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	got, err := s.Get(ctx, "T-0003")
+	got, err := repo.Get(ctx, "T-0003")
 	if err != nil {
 		t.Fatalf("Get after delete: %v", err)
 	}
@@ -117,8 +120,9 @@ func TestSQLiteStorage_DomainRepoDelete(t *testing.T) {
 	}
 }
 
-func TestSQLiteStorage_DomainRepoList(t *testing.T) {
+func TestTaskDomainRepo_List(t *testing.T) {
 	s := newDomainRepoTestStorage(t)
+	repo := NewTaskDomainRepo(s)
 	ctx := context.Background()
 
 	for _, id := range []string{"T-A", "T-B", "T-C"} {
@@ -129,12 +133,12 @@ func TestSQLiteStorage_DomainRepoList(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
-		if err := s.Create(ctx, task); err != nil {
+		if err := repo.Create(ctx, task); err != nil {
 			t.Fatalf("Create %s: %v", id, err)
 		}
 	}
 
-	tasks, err := s.List(ctx, domain.Query{Limit: 2})
+	tasks, err := repo.List(ctx, domain.Query{Limit: 2})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
