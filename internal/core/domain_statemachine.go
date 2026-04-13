@@ -93,14 +93,6 @@ func buildStateMachine(
 		}
 	}
 
-	// Build terminal set for reference.
-	terminal := make(map[string]bool, len(statuses))
-	for _, s := range statuses {
-		if s.IsTerminal {
-			terminal[s.Name] = true
-		}
-	}
-
 	rules := make(map[domain.State][]domain.State, len(configRules))
 	for from, tos := range configRules {
 		targets := make([]domain.State, len(tos))

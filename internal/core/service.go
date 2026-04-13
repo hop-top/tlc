@@ -9,9 +9,10 @@ import (
 )
 
 // TaskService provides business logic for task lifecycle management.
-// When a domain.Service is configured (via WithDomainRepo), CRUD
-// operations delegate to it for validation, auditing, and event
-// publishing. Custom orchestration methods (Claim, Unclaim, etc.)
+// When a domain.Service is configured (via WithDomainRepo), write
+// operations (Create, Update) delegate to it for validation, auditing,
+// and event publishing. Reads (Get, List) use the legacy repo for
+// rich filtering. Custom orchestration methods (Claim, Unclaim, etc.)
 // remain as wrappers using the underlying repo directly.
 type TaskService struct {
 	repo         Repository

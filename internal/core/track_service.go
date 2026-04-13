@@ -9,9 +9,11 @@ import (
 )
 
 // TrackService provides business logic for track lifecycle management.
-// When a domain.Service is configured (via WithDomainTrackRepo), CRUD
-// operations delegate to it. Custom orchestration (auto-transition,
-// plan ingestion, abandon-with-tasks) stays as wrappers.
+// When a domain.Service is configured (via WithDomainTrackRepo), write
+// operations (Create, Update, Delete) delegate to it. Reads use the
+// legacy TrackRepository for rich filtering. Custom orchestration
+// (auto-transition, plan ingestion, abandon-with-tasks) stays as
+// wrappers.
 type TrackService struct {
 	repo      TrackRepository
 	taskRepo  Repository
