@@ -58,6 +58,15 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 	return scanTrackFromRow(row)
 }
 
+// getTrackInProject retrieves a track scoped to a specific project.
+func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID string) (*core.Track, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, title, type, status, assigned_to,
+			created_at, updated_at, project_id, meta
+		FROM tracks WHERE id = ? AND project_id = ?`, id, projectID)
+	return scanTrackFromRow(row)
+}
+
 func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		metaJSON, _ := json.Marshal(track.Meta)
@@ -73,7 +82,7 @@ func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) erro
 			WHERE id = ? AND project_id = ?`,
 			track.Title, track.Type, track.Status, track.AssignedTo,
 			track.UpdatedAt.Format(time.RFC3339),
-			track.ProjectID,
+			projectID,
 			string(metaJSON),
 			track.ID, projectID,
 		)

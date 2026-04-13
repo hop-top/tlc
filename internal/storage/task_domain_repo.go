@@ -11,11 +11,18 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// Compile-time assertion: SQLiteStorage implements domain.Repository[core.Task].
-var _ domain.Repository[core.Task] = (*SQLiteStorage)(nil)
+// TaskDomainRepo adapts SQLiteStorage to domain.Repository[core.Task].
+type TaskDomainRepo struct {
+	store *SQLiteStorage
+}
 
-// taskColumns is the ordered list of columns in the tasks table.
-const taskColumns = "id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id"
+// Compile-time assertion: TaskDomainRepo implements domain.Repository[core.Task].
+var _ domain.Repository[core.Task] = (*TaskDomainRepo)(nil)
+
+// NewTaskDomainRepo wraps a SQLiteStorage as a domain.Repository[core.Task].
+func NewTaskDomainRepo(store *SQLiteStorage) *TaskDomainRepo {
+	return &TaskDomainRepo{store: store}
+}
 
 // ScanTask scans a single sql.Row into a core.Task.
 func ScanTask(row *sql.Row) (core.Task, error) {
@@ -159,23 +166,23 @@ func populateTask(
 }
 
 // Create implements domain.Repository[core.Task].
-func (s *SQLiteStorage) Create(ctx context.Context, task *core.Task) error {
-	return s.CreateTask(ctx, task)
+func (r *TaskDomainRepo) Create(ctx context.Context, task *core.Task) error {
+	return r.store.CreateTask(ctx, task)
 }
 
 // Get implements domain.Repository[core.Task].
 // The id parameter is a compound key (projectID:entityID) or plain entityID.
-func (s *SQLiteStorage) Get(ctx context.Context, id string) (*core.Task, error) {
+func (r *TaskDomainRepo) Get(ctx context.Context, id string) (*core.Task, error) {
 	projectID, entityID := splitCompoundKey(id)
 	if projectID != "" {
-		return s.GetTaskInProject(ctx, entityID, projectID)
+		return r.store.GetTaskInProject(ctx, entityID, projectID)
 	}
-	return s.GetTask(ctx, entityID)
+	return r.store.GetTask(ctx, entityID)
 }
 
 // List implements domain.Repository[core.Task] with basic Query support.
 // For rich filtering (status, tags, assignee), use ListTasks directly.
-func (s *SQLiteStorage) List(ctx context.Context, q domain.Query) ([]core.Task, error) {
+func (r *TaskDomainRepo) List(ctx context.Context, q domain.Query) ([]core.Task, error) {
 	query := core.Query{
 		Limit:  q.Limit,
 		Offset: q.Offset,
@@ -186,7 +193,7 @@ func (s *SQLiteStorage) List(ctx context.Context, q domain.Query) ([]core.Task, 
 	if q.Sort != "" {
 		query.SortBy = q.Sort
 	}
-	tasks, err := s.ListTasks(ctx, query)
+	tasks, err := r.store.ListTasks(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -198,15 +205,14 @@ func (s *SQLiteStorage) List(ctx context.Context, q domain.Query) ([]core.Task, 
 }
 
 // Update implements domain.Repository[core.Task].
-func (s *SQLiteStorage) Update(ctx context.Context, task *core.Task) error {
-	return s.UpdateTask(ctx, task)
+func (r *TaskDomainRepo) Update(ctx context.Context, task *core.Task) error {
+	return r.store.UpdateTask(ctx, task)
 }
 
 // Delete implements domain.Repository[core.Task].
-func (s *SQLiteStorage) Delete(ctx context.Context, id string) error {
-	projectID, entityID := splitCompoundKey(id)
-	_ = projectID // DeleteTask already uses project scoping internally
-	return s.DeleteTask(ctx, entityID)
+func (r *TaskDomainRepo) Delete(ctx context.Context, id string) error {
+	_, entityID := splitCompoundKey(id)
+	return r.store.DeleteTask(ctx, entityID)
 }
 
 // splitCompoundKey splits "projectID:entityID" into parts.

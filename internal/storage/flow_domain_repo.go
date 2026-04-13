@@ -23,9 +23,6 @@ func NewFlowRunDomainRepo(store *SQLiteStorage) *FlowRunDomainRepo {
 	return &FlowRunDomainRepo{store: store}
 }
 
-// flowRunColumns is the ordered list of columns in the flow_runs table.
-const flowRunColumns = "id, flow_id, status, started_at, ended_at, results"
-
 // ScanFlowRun scans a single sql.Row into a core.FlowRun.
 func ScanFlowRun(row *sql.Row) (core.FlowRun, error) {
 	var r core.FlowRun
