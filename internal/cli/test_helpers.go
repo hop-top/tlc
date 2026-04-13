@@ -354,6 +354,9 @@ func resetTaskFlags() {
 	TaskCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
 		f.Changed = false
 	})
+
+	// Reset extension manager.
+	extMgr = nil
 }
 
 // resetFlowFlags clears the package-level state bound to flow.go's Cobra

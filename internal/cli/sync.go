@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/plugin"
+	"hop.top/tlc/internal/rpc"
 	"hop.top/tlc/internal/sync"
 )
 
@@ -210,7 +210,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	}
 
 	binPath := getPluginPath(system)
-	client, err := plugin.NewRPCClient(binPath)
+	client, err := rpc.NewClient(binPath)
 	if err != nil {
 		return fmt.Errorf("failed to start plugin %s: %w", system, err)
 	}
@@ -450,7 +450,7 @@ var SyncPushCmd = &cobra.Command{
 		}
 
 		binPath := getPluginPath(system)
-		client, err := plugin.NewRPCClient(binPath)
+		client, err := rpc.NewClient(binPath)
 		if err != nil {
 			return fmt.Errorf("failed to start plugin %s: %w", system, err)
 		}
