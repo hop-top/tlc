@@ -3,8 +3,10 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"hop.top/kit/xdg"
 	"hop.top/upgrade"
 	"hop.top/upgrade/skill"
 )
@@ -64,11 +66,11 @@ Agents read this to know how to self-upgrade tlc before executing tasks.`,
 }
 
 func installTLCPreamble(preamble string) error {
-	configDir, err := os.UserConfigDir()
+	configDir, err := xdg.ConfigDir("tlc")
 	if err != nil {
 		return fmt.Errorf("upgrade preamble: %w", err)
 	}
-	dir := configDir + "/tlc/skills"
+	dir := filepath.Join(configDir, "skills")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("upgrade preamble: mkdir: %w", err)
 	}

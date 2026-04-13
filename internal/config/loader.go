@@ -1,13 +1,12 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	kitconfig "hop.top/kit/config"
 )
 
 func DefaultConfig() *Config {
@@ -56,51 +55,38 @@ func DefaultConfig() *Config {
 	}
 }
 
+// LoadConfig loads configuration by merging system, user, and project
+// config files (in that order) via kit/config.Load, then applies env
+// overrides and validates the result.
 func LoadConfig(projectRoot string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	// 1. System config
-	if err := mergeFile(cfg, SystemConfigPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to load system config: %w", err)
-	}
-
-	// 2. User config
 	userConfigPath, err := UserConfigPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve user config path: %w", err)
 	}
-	if err := mergeFile(cfg, userConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to load user config: %w", err)
-	}
 
-	// 3. Project config
+	var projectConfigPath string
 	if projectRoot != "" {
-		projectConfigPath := filepath.Join(projectRoot, ".tlc", "config.yaml")
-		if err := mergeFile(cfg, projectConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to load project config: %w", err)
-		}
+		projectConfigPath = filepath.Join(projectRoot, ".tlc", "config.yaml")
 	}
 
-	// 4. Environment variables (simplistic implementation for now)
-	applyEnvOverrides(cfg)
+	opts := kitconfig.Options{
+		SystemConfigPath:  SystemConfigPath(),
+		UserConfigPath:    userConfigPath,
+		ProjectConfigPath: projectConfigPath,
+		EnvOverride:       func(dst any) { applyEnvOverrides(dst.(*Config)) },
+	}
 
-	// 5. Validate
+	if err := kitconfig.Load(cfg, opts); err != nil {
+		return nil, fmt.Errorf("config load failed: %w", err)
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
 	return cfg, nil
-}
-
-func mergeFile(cfg *Config, path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-	return nil
 }
 
 func applyEnvOverrides(cfg *Config) {

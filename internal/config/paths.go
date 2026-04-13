@@ -4,61 +4,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/spf13/viper"
+	"hop.top/kit/xdg"
 )
 
-const systemConfigDir = "/etc/tlc"
+const (
+	toolName        = "tlc"
+	systemConfigDir = "/etc/tlc"
+)
 
-// UserDataDir returns the TLC data directory under $XDG_DATA_HOME/tlc.
+// UserDataDir returns the TLC data directory via kit/xdg.DataDir.
 // Falls back to OS-native data directory when XDG_DATA_HOME is unset.
 func UserDataDir() string {
-	dataHome := os.Getenv("XDG_DATA_HOME")
-	if dataHome == "" {
-		home, _ := os.UserHomeDir()
-		switch runtime.GOOS {
-		case "darwin":
-			dataHome = filepath.Join(home, "Library", "Application Support")
-		case "windows":
-			dataHome = filepath.Join(home, "AppData", "Local")
-		default:
-			dataHome = filepath.Join(home, ".local", "share")
-		}
+	dir, err := xdg.DataDir(toolName)
+	if err != nil {
+		// Best-effort fallback — callers historically never checked error.
+		return ""
 	}
-	return filepath.Join(dataHome, "tlc")
+	return dir
 }
 
-// UserCacheDir returns the user-level cache directory for tlc.
-// It checks $XDG_CACHE_HOME first; if unset, falls back to OS-native paths:
-//   - macOS:   ~/Library/Caches/tlc
-//   - Windows: %LocalAppData%/tlc/cache
-//   - Linux:   ~/.cache/tlc
+// UserCacheDir returns the user-level cache directory for tlc
+// via kit/xdg.CacheDir.
 func UserCacheDir() (string, error) {
-	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
-		return filepath.Join(xdg, "tlc"), nil
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home directory: %w", err)
-		}
-		return filepath.Join(home, "Library", "Caches", "tlc"), nil
-	case "windows":
-		local := os.Getenv("LocalAppData")
-		if local == "" {
-			return "", fmt.Errorf("%%LocalAppData%% is not set")
-		}
-		return filepath.Join(local, "tlc", "cache"), nil
-	default: // linux and other unix
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home directory: %w", err)
-		}
-		return filepath.Join(home, ".cache", "tlc"), nil
-	}
+	return xdg.CacheDir(toolName)
 }
 
 // EnsureCacheDir returns the cache directory path, creating it if needed.
@@ -75,36 +45,10 @@ func EnsureCacheDir() (string, error) {
 	return dir, nil
 }
 
-// UserStateDir returns the user-level state directory for tlc.
-// It checks $XDG_STATE_HOME first; if unset, falls back to OS-native paths:
-//   - macOS:   ~/Library/Application Support/tlc/state
-//   - Windows: %LocalAppData%/tlc/state
-//   - Linux:   ~/.local/state/tlc
+// UserStateDir returns the user-level state directory for tlc
+// via kit/xdg.StateDir.
 func UserStateDir() (string, error) {
-	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
-		return filepath.Join(xdg, "tlc"), nil
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home directory: %w", err)
-		}
-		return filepath.Join(home, "Library", "Application Support", "tlc", "state"), nil
-	case "windows":
-		local := os.Getenv("LocalAppData")
-		if local == "" {
-			return "", fmt.Errorf("%%LocalAppData%% is not set")
-		}
-		return filepath.Join(local, "tlc", "state"), nil
-	default: // linux and other unix
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home directory: %w", err)
-		}
-		return filepath.Join(home, ".local", "state", "tlc"), nil
-	}
+	return xdg.StateDir(toolName)
 }
 
 // EnsureStateDir returns the state directory path, creating it if needed.
@@ -121,17 +65,10 @@ func EnsureStateDir() (string, error) {
 	return dir, nil
 }
 
+// UserConfigDir returns the user-level config directory for tlc
+// via kit/xdg.ConfigDir.
 func UserConfigDir() (string, error) {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "tlc"), nil
-	}
-
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user config directory: %w", err)
-	}
-
-	return filepath.Join(dir, "tlc"), nil
+	return xdg.ConfigDir(toolName)
 }
 
 func UserConfigPath() (string, error) {
