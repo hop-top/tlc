@@ -291,10 +291,36 @@ func TestBuildToolSpec_SpecIntegrity(t *testing.T) {
 		t.Error("expected at least one flag in tool spec")
 	}
 
-	// Verify action flag maps to command names.
+	// Verify action flag exists and its enum values (via specProperties)
+	// match the spec's command names.
 	actionFlag := findFlag(spec.Flags, "action")
 	if actionFlag == nil {
 		t.Fatal("missing 'action' flag in tool spec")
+	}
+
+	props := specProperties(spec)
+	actionProp, ok := props["action"].(map[string]interface{})
+	if !ok {
+		t.Fatal("action property missing from specProperties output")
+	}
+	enumVals, ok := actionProp["enum"].([]string)
+	if !ok {
+		t.Fatal("action property missing enum values")
+	}
+	cmdNames := make(map[string]bool, len(spec.Commands))
+	for _, c := range spec.Commands {
+		cmdNames[c.Name] = true
+	}
+	for _, v := range enumVals {
+		if !cmdNames[v] {
+			t.Errorf("enum value %q not found in command names", v)
+		}
+	}
+	if len(enumVals) != len(spec.Commands) {
+		t.Errorf(
+			"enum count %d != command count %d",
+			len(enumVals), len(spec.Commands),
+		)
 	}
 }
 

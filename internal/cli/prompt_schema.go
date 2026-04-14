@@ -107,7 +107,7 @@ func walkSchema(cmd *cobra.Command, fullName string, schemas *[]CommandSchema) {
 			Name:        fullName,
 			Description: cmd.Short,
 			Args:        cmd.Use,
-			Flags:       toolspecFlagsToSchema(collectToolspecFlags(cmd)),
+			Flags:       toolspecFlagsToSchema(cmd, collectToolspecFlags(cmd)),
 		}
 		*schemas = append(*schemas, cs)
 	}
@@ -117,9 +117,9 @@ func walkSchema(cmd *cobra.Command, fullName string, schemas *[]CommandSchema) {
 }
 
 // toolspecFlagsToSchema converts toolspec flags to the flat FlagSchema
-// format used by the prompt router. Default values are not available
-// in toolspec.Flag, so that field is omitted.
-func toolspecFlagsToSchema(flags []toolspec.Flag) []FlagSchema {
+// format used by the prompt router. Default values are read from the
+// cobra command's pflag set since toolspec.Flag has no Default field.
+func toolspecFlagsToSchema(cmd *cobra.Command, flags []toolspec.Flag) []FlagSchema {
 	if len(flags) == 0 {
 		return nil
 	}
@@ -130,6 +130,9 @@ func toolspecFlagsToSchema(flags []toolspec.Flag) []FlagSchema {
 			Shorthand:   f.Short,
 			Description: f.Description,
 			Type:        f.Type,
+		}
+		if pf := cmd.Flags().Lookup(f.Name); pf != nil {
+			out[i].Default = pf.DefValue
 		}
 	}
 	return out
@@ -152,7 +155,7 @@ func GenerateTaskSchema() []CommandSchema {
 			Name:        sub.Name(),
 			Description: sub.Short,
 			Args:        sub.Use,
-			Flags:       toolspecFlagsToSchema(collectToolspecFlags(sub)),
+			Flags:       toolspecFlagsToSchema(sub, collectToolspecFlags(sub)),
 		}
 		schemas = append(schemas, cs)
 	}
