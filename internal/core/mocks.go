@@ -134,6 +134,16 @@ func (m *MockRepository) applyFilter(task *Task, filter FieldFilter) bool {
 			return task.Status == status
 		}
 		return false
+	case "track_id":
+		val, ok := filter.Value.(string)
+		if !ok {
+			return false
+		}
+		switch filter.Operator {
+		case OpEq:
+			return task.TrackID != nil && *task.TrackID == val
+		}
+		return false
 	}
 	return false
 }
