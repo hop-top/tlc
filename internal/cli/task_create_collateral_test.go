@@ -56,8 +56,11 @@ func TestTaskCreateCollateralStateLeak(t *testing.T) {
 	}
 
 	// --- Task B: create with ONLY title, tag, priority, effort ---
-	// Intentionally do NOT call resetTaskFlags() here.
-	// This simulates the collateral state leak reported in T-0231.
+	// Call ResetCreateFlags() before re-executing, which uses cobra's
+	// built-in ResetFlags to clear stale pflag state (T-0231 fix).
+	// Production code does this in resetAllFlags() before every
+	// runCommand dispatch.
+	ResetCreateFlags()
 	cmd2 := newTestCmd()
 	cmd2.AddCommand(TaskCmd)
 	buf2 := new(bytes.Buffer)

@@ -299,17 +299,31 @@ func buildTaskReference(taskID string, proj *core.ProjectDetection) string {
 	return fmt.Sprintf("task://%s", taskID)
 }
 
+// ResetCreateFlags clears all flag state on TaskCreateCmd using
+// cobra's built-in ResetFlags, then re-registers with fresh defaults.
+// Call before Execute() to prevent stale state from a prior
+// invocation leaking into the next one (T-0231).
+func ResetCreateFlags() {
+	TaskCreateCmd.ResetFlags()
+	registerCreateFlags(TaskCreateCmd)
+}
+
+// registerCreateFlags binds task-create flags to package-level vars.
+func registerCreateFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
+	cmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
+	cmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
+	cmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
+	cmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
+	cmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority (P0, P1, P2, P3)")
+	cmd.Flags().StringSliceVar(&taskBlockedBy, "blocked-by", []string{}, "Blocking task IDs (repeatable)")
+	cmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
+	cmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
+	cmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
+	cmd.Flags().StringVar(&taskCreateTimeout, "timeout", "", "Stale timeout (e.g. 2h)")
+	cmd.Flags().StringVar(&taskTrack, "track", "", "Link task to a track ID")
+}
+
 func init() {
-	TaskCreateCmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
-	TaskCreateCmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
-	TaskCreateCmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
-	TaskCreateCmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
-	TaskCreateCmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
-	TaskCreateCmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority (P0, P1, P2, P3)")
-	TaskCreateCmd.Flags().StringSliceVar(&taskBlockedBy, "blocked-by", []string{}, "Blocking task IDs (repeatable)")
-	TaskCreateCmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
-	TaskCreateCmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")
-	TaskCreateCmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
-	TaskCreateCmd.Flags().StringVar(&taskCreateTimeout, "timeout", "", "Stale timeout (e.g. 2h)")
-	TaskCreateCmd.Flags().StringVar(&taskTrack, "track", "", "Link task to a track ID")
+	registerCreateFlags(TaskCreateCmd)
 }

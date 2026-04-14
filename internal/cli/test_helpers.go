@@ -250,8 +250,11 @@ func withTestLock(fn func()) {
 	fn()
 }
 
-// resetTaskFlags clears CLI flag state between tests
+// resetTaskFlags clears CLI flag state between tests.
+// Uses cobra's ResetFlags to clear both package vars and
+// pflag's internal Changed bits (T-0231).
 func resetTaskFlags() {
+	ResetCreateFlags()
 	taskID = ""
 	taskDescription = ""
 	taskStatus = "TODO"
