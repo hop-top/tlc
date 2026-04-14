@@ -31,5 +31,6 @@ type Query struct {
 	Limit           int
 	Offset          int
 	IncludeArchived bool
-	AllProjects     bool // If true, don't filter by current project
+	AllProjects     bool   // If true, don't filter by current project
+	StatusPriority  string // Status value to sort first (e.g. "IN_PROGRESS")
 }

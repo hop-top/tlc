@@ -566,15 +566,23 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 	}
 
 	// Sorting
+	var orderParts []string
+	if query.StatusPriority != "" {
+		orderParts = append(orderParts,
+			"CASE WHEN status = ? THEN 0 ELSE 1 END")
+		args = append(args, query.StatusPriority)
+	}
 	if query.SortBy != "" {
 		order := sqlOrderASC
 		if strings.ToLower(query.SortDirection) == "desc" {
 			order = sqlOrderDESC
 		}
-		sqlQuery += fmt.Sprintf(" ORDER BY %s %s", query.SortBy, order) //nolint:gosec // G202: SortBy is validated against known columns
+		orderParts = append(orderParts,
+			fmt.Sprintf("%s %s", query.SortBy, order)) //nolint:gosec // G202: SortBy is validated against known columns
 	} else {
-		sqlQuery += " ORDER BY created_at DESC"
+		orderParts = append(orderParts, "created_at DESC")
 	}
+	sqlQuery += " ORDER BY " + strings.Join(orderParts, ", ")
 
 	// Pagination
 	if query.Limit > 0 {
