@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"hop.top/kit/domain"
@@ -36,7 +37,9 @@ func ScanTrack(row *sql.Row) (core.Track, error) {
 	if err != nil {
 		return t, err
 	}
-	populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr)
+	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr); err != nil {
+		return t, err
+	}
 	return t, nil
 }
 
@@ -53,13 +56,15 @@ func ScanTrackRows(rows *sql.Rows) (core.Track, error) {
 	if err != nil {
 		return t, err
 	}
-	populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr)
+	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr); err != nil {
+		return t, err
+	}
 	return t, nil
 }
 
 // BindTrack returns column names and values for a Track.
 func BindTrack(t core.Track) (cols []string, vals []any) {
-	metaJSON, _ := json.Marshal(t.Meta)
+	metaJSON, _ := json.Marshal(t.Meta) //nolint:errcheck // marshalling known-valid struct
 	var pid string
 	if t.ProjectID != nil {
 		pid = *t.ProjectID
@@ -83,9 +88,14 @@ func populateTrack(
 	t *core.Track,
 	createdAt, updatedAt string,
 	assignedTo, projectID, metaStr sql.NullString,
-) {
-	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	t.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+) error {
+	var err error
+	if t.CreatedAt, err = parseRFC3339(createdAt); err != nil {
+		return err
+	}
+	if t.UpdatedAt, err = parseRFC3339(updatedAt); err != nil {
+		return err
+	}
 	if assignedTo.Valid {
 		t.AssignedTo = &assignedTo.String
 	}
@@ -93,8 +103,11 @@ func populateTrack(
 		t.ProjectID = &projectID.String
 	}
 	if metaStr.Valid && metaStr.String != "null" {
-		_ = json.Unmarshal([]byte(metaStr.String), &t.Meta)
+		if err := json.Unmarshal([]byte(metaStr.String), &t.Meta); err != nil {
+			return fmt.Errorf("failed to unmarshal track meta: %w", err)
+		}
 	}
+	return nil
 }
 
 // Create implements domain.Repository[core.Track].
