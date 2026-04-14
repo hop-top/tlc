@@ -136,3 +136,70 @@ func RenderBatchSummary(strategy *ExecutionStrategy) string {
 
 	return b.String()
 }
+
+// RenderMermaid generates a Mermaid flowchart TB diagram from the
+// execution strategy. Edges represent blocked-by relationships.
+// Tasks are grouped into subgraphs per batch.
+func RenderMermaid(strategy *ExecutionStrategy, tasks []*Task) string {
+	if strategy == nil || len(strategy.Batches) == 0 {
+		return ""
+	}
+
+	graph, err := NewDepGraph(tasks)
+	if err != nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("flowchart TB\n")
+
+	// Emit edges (dependency arrows).
+	sorted, sErr := graph.TopologicalSort()
+	if sErr != nil {
+		return ""
+	}
+	for _, id := range sorted {
+		deps := graph.Dependents(id)
+		sort.Strings(deps)
+		for _, dep := range deps {
+			b.WriteString(fmt.Sprintf("  %s --> %s\n",
+				mermaidNodeID(id), mermaidNodeID(dep)))
+		}
+	}
+
+	// Emit batch subgraphs with node definitions.
+	for _, batch := range strategy.Batches {
+		if len(batch.Tasks) == 0 {
+			continue
+		}
+
+		mode := "sequential"
+		if batch.Parallel {
+			mode = "parallel"
+		}
+		label := fmt.Sprintf("Batch %d (%s)", batch.Index+1, mode)
+		b.WriteString(fmt.Sprintf("  subgraph Batch%d[\"%s\"]\n",
+			batch.Index+1, label))
+
+		for _, t := range batch.Tasks {
+			nid := mermaidNodeID(t.ID)
+			b.WriteString(fmt.Sprintf("    %s[\"%s %s\"]\n",
+				nid, t.ID, escapeMermaid(t.Title)))
+		}
+
+		b.WriteString("  end\n")
+	}
+
+	return b.String()
+}
+
+// mermaidNodeID converts a task ID like "T-0074" to a valid Mermaid
+// node identifier "T0074" (no hyphens).
+func mermaidNodeID(id string) string {
+	return strings.ReplaceAll(id, "-", "")
+}
+
+// escapeMermaid escapes characters that are special in Mermaid labels.
+func escapeMermaid(s string) string {
+	return strings.ReplaceAll(s, "\"", "#quot;")
+}
