@@ -123,6 +123,13 @@ func kitRoot() *kitcli.Root {
 			upgrade.NotifyIfAvailable(c.Context(), newChecker(), os.Stderr)
 		}
 
+		// Skip auto-detection and storage bootstrap for the init command.
+		// DetectProject() with fallback_mode=auto creates .tlc/config.yaml
+		// before runInit executes, causing "directory already exists" (GH-1).
+		if c.Name() == "init" {
+			return nil
+		}
+
 		// Initialise the event bus once per process.
 		if eventBus == nil {
 			eventBus = bus.New()
