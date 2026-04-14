@@ -157,7 +157,9 @@ func TestInitCmd_ReconnectsExistingProject(t *testing.T) {
 	if proj.DBPath == oldPath {
 		t.Errorf("db_path was not updated, still %q", oldPath)
 	}
-	if !strings.Contains(proj.DBPath, "db.sqlite") {
-		t.Errorf("expected db_path to contain db.sqlite, got %q", proj.DBPath)
+	// The init command uses the configured db filename (from viper storage.db_path).
+	dbName := filepath.Base(viper.GetString("storage.db_path"))
+	if !strings.Contains(proj.DBPath, dbName) {
+		t.Errorf("expected db_path to contain %q, got %q", dbName, proj.DBPath)
 	}
 }

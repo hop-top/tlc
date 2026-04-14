@@ -521,7 +521,7 @@ func getStorageRaw() (*storage.SQLiteStorage, error) {
 
 	dbPath := viper.GetString("storage.db_path")
 	if dbPath == "" {
-		dbPath = filepath.Join(config.UserDataDir(), "db.sqlite")
+		dbPath = filepath.Join(config.UserDataDir(), dbFileName())
 	}
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {

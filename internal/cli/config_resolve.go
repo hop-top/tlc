@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/storage"
 )
@@ -69,7 +70,10 @@ func errConfigNotFound(name string) error {
 var resolveConfigShortname = resolveConfigShortnameDefault
 
 func resolveConfigShortnameDefault(shortname string) (string, error) {
-	dbPath := filepath.Join(config.UserDataDir(), "db.sqlite")
+	dbPath := viper.GetString("storage.db_path")
+	if dbPath == "" {
+		dbPath = filepath.Join(config.UserDataDir(), dbFileName())
+	}
 	s, err := storage.NewSQLiteStorage(dbPath)
 	if err != nil {
 		return "", errConfigNotFound(shortname)

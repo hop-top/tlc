@@ -82,7 +82,11 @@ func syncToProjectTODO() error {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), "todo.txt")
+	todoName := viper.GetString("task.todo_file")
+	if todoName == "" {
+		todoName = "todo.txt"
+	}
+	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), todoName)
 	if err := os.MkdirAll(filepath.Dir(todoFile), 0o750); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}

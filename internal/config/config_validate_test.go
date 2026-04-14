@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -254,6 +255,130 @@ func TestTrackConfig_CustomValuesPreserved(t *testing.T) {
 	}
 	if cfg.Tracks.Health.MinProgressToStart != 80 {
 		t.Errorf("expected 80, got %d", cfg.Tracks.Health.MinProgressToStart)
+	}
+}
+
+// -- Configurable path fields -------------------------------------------------
+
+func TestTrackConfig_TracksDir_Default(t *testing.T) {
+	tc := &TrackConfig{}
+	if got := tc.TracksDir(); got != "tracks" {
+		t.Errorf("TracksDir() = %q, want %q", got, "tracks")
+	}
+}
+
+func TestTrackConfig_TracksDir_Custom(t *testing.T) {
+	tc := &TrackConfig{Dir: "my-tracks"}
+	if got := tc.TracksDir(); got != "my-tracks" {
+		t.Errorf("TracksDir() = %q, want %q", got, "my-tracks")
+	}
+}
+
+func TestFlowConfig_FlowsDir_Default(t *testing.T) {
+	fc := &FlowConfig{}
+	want := filepath.Join("examples", "flows")
+	if got := fc.FlowsDir(); got != want {
+		t.Errorf("FlowsDir() = %q, want %q", got, want)
+	}
+}
+
+func TestFlowConfig_FlowsDir_Custom(t *testing.T) {
+	fc := &FlowConfig{Dir: "flows"}
+	if got := fc.FlowsDir(); got != "flows" {
+		t.Errorf("FlowsDir() = %q, want %q", got, "flows")
+	}
+}
+
+func TestFlowConfig_AssigneesDirectory_Default(t *testing.T) {
+	fc := &FlowConfig{}
+	want := filepath.Join("examples", "assignees")
+	if got := fc.AssigneesDirectory(); got != want {
+		t.Errorf("AssigneesDirectory() = %q, want %q", got, want)
+	}
+}
+
+func TestFlowConfig_AssigneesDirectory_Custom(t *testing.T) {
+	fc := &FlowConfig{AssigneesDir: "people"}
+	if got := fc.AssigneesDirectory(); got != "people" {
+		t.Errorf("AssigneesDirectory() = %q, want %q", got, "people")
+	}
+}
+
+func TestInboxConfig_InboxDir_Default(t *testing.T) {
+	ic := &InboxConfig{}
+	if got := ic.InboxDir(); got != "inbox" {
+		t.Errorf("InboxDir() = %q, want %q", got, "inbox")
+	}
+}
+
+func TestInboxConfig_InboxDir_Custom(t *testing.T) {
+	ic := &InboxConfig{Dir: "my-inbox"}
+	if got := ic.InboxDir(); got != "my-inbox" {
+		t.Errorf("InboxDir() = %q, want %q", got, "my-inbox")
+	}
+}
+
+func TestTaskConfig_ProjectionDirectory_Default(t *testing.T) {
+	tc := &TaskConfig{}
+	if got := tc.ProjectionDirectory(); got != "tasks" {
+		t.Errorf("ProjectionDirectory() = %q, want %q", got, "tasks")
+	}
+}
+
+func TestTaskConfig_ProjectionDirectory_Custom(t *testing.T) {
+	tc := &TaskConfig{ProjectionDir: "my-tasks"}
+	if got := tc.ProjectionDirectory(); got != "my-tasks" {
+		t.Errorf("ProjectionDirectory() = %q, want %q", got, "my-tasks")
+	}
+}
+
+func TestTaskConfig_TodoFilePath_Default(t *testing.T) {
+	tc := &TaskConfig{}
+	if got := tc.TodoFilePath(); got != "todo.txt" {
+		t.Errorf("TodoFilePath() = %q, want %q", got, "todo.txt")
+	}
+}
+
+func TestTaskConfig_TodoFilePath_Custom(t *testing.T) {
+	tc := &TaskConfig{TodoFile: "my-todo.txt"}
+	if got := tc.TodoFilePath(); got != "my-todo.txt" {
+		t.Errorf("TodoFilePath() = %q, want %q", got, "my-todo.txt")
+	}
+}
+
+func TestStorageConfig_DBFilePath_Default(t *testing.T) {
+	sc := &StorageConfig{}
+	if got := sc.DBFilePath(); got != "db.sqlite" {
+		t.Errorf("DBFilePath() = %q, want %q", got, "db.sqlite")
+	}
+}
+
+func TestStorageConfig_DBFilePath_Custom(t *testing.T) {
+	sc := &StorageConfig{DBPath: "data/main.db"}
+	if got := sc.DBFilePath(); got != "data/main.db" {
+		t.Errorf("DBFilePath() = %q, want %q", got, "data/main.db")
+	}
+}
+
+func TestValidateRelativePath_RejectsAbsolute(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*Config)
+	}{
+		{"tracks.dir absolute", func(c *Config) { c.Tracks.Dir = "/abs/tracks" }},
+		{"flow.dir absolute", func(c *Config) { c.Flow.Dir = "/abs/flows" }},
+		{"flow.assignees_dir absolute", func(c *Config) { c.Flow.AssigneesDir = "/abs/people" }},
+		{"storage.inbox.dir absolute", func(c *Config) { c.Storage.Inbox.Dir = "/abs/inbox" }},
+		{"task.projection_dir absolute", func(c *Config) { c.Task.ProjectionDir = "/abs/tasks" }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tt.setup(cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Error("expected error for absolute path, got nil")
+			}
+		})
 	}
 }
 

@@ -11,8 +11,33 @@ import (
 	"hop.top/uri"
 )
 
+// TypesDirConfig holds configurable directory paths for URI type registration.
+type TypesDirConfig struct {
+	FlowsDir     string // empty = "examples/flows"
+	AssigneesDir string // empty = "examples/assignees"
+}
+
+func (c *TypesDirConfig) flowsDir() string {
+	if c != nil && c.FlowsDir != "" {
+		return c.FlowsDir
+	}
+	return filepath.Join("examples", "flows")
+}
+
+func (c *TypesDirConfig) assigneesDir() string {
+	if c != nil && c.AssigneesDir != "" {
+		return c.AssigneesDir
+	}
+	return filepath.Join("examples", "assignees")
+}
+
 // RegisterTypes registers tlc-specific URI types with the registry.
-func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage) error {
+// dirs is optional; nil uses defaults.
+func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage, dirs ...*TypesDirConfig) error {
+	var dc *TypesDirConfig
+	if len(dirs) > 0 {
+		dc = dirs[0]
+	}
 	// Project completion
 	err := reg.Register(uri.TypeRegistration{
 		Name: "project",
@@ -59,8 +84,7 @@ func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage) error {
 	err = reg.Register(uri.TypeRegistration{
 		Name: "assignee",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
-			assigneesDir := filepath.Join("examples", "assignees")
-			loader := core.NewAssigneeLoader(assigneesDir)
+			loader := core.NewAssigneeLoader(dc.assigneesDir())
 			assignees, err := loader.LoadAll()
 			if err != nil {
 				return nil, err
@@ -103,7 +127,7 @@ func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage) error {
 	err = reg.Register(uri.TypeRegistration{
 		Name: "flow",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
-			flowsDir := filepath.Join("examples", "flows")
+			flowsDir := dc.flowsDir()
 			entries, err := os.ReadDir(flowsDir)
 			if err != nil {
 				return nil, err

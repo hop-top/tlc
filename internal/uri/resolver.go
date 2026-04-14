@@ -14,12 +14,21 @@ import (
 
 // Resolver handles resolution of TLC resource URIs.
 type Resolver struct {
-	storage *storage.SQLiteStorage
+	storage  *storage.SQLiteStorage
+	FlowsDir string // overrides default flows directory; empty = "examples/flows"
 }
 
 // NewResolver creates a new URI resolver.
 func NewResolver(s *storage.SQLiteStorage) *Resolver {
 	return &Resolver{storage: s}
+}
+
+// defaultFlowsDir returns the configured or default flows directory.
+func (r *Resolver) defaultFlowsDir() string {
+	if r.FlowsDir != "" {
+		return r.FlowsDir
+	}
+	return filepath.Join("examples", "flows")
 }
 
 // ResolvedTask represents a task and the storage it was found in.
@@ -153,13 +162,13 @@ func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow
 	}
 
 	// Determine flows directory
-	flowsDir := filepath.Join("examples", "flows")
+	flowsDir := r.defaultFlowsDir()
 	if projectID != "" {
 		regProj, err := r.storage.LookupProject(ctx, projectID)
 		if err == nil && regProj != nil {
 			// If we have a project, the flows should be in its directory
 			projectRoot := filepath.Dir(filepath.Dir(regProj.DBPath))
-			flowsDir = filepath.Join(projectRoot, "examples", "flows")
+			flowsDir = filepath.Join(projectRoot, r.defaultFlowsDir())
 		}
 	}
 

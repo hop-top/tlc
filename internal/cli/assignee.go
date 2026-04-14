@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
@@ -33,7 +32,7 @@ func newAssigneeListCmd() *cobra.Command {
 		Long:  "Display all assignees with their capabilities",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			// Get assignees directory from config or default
-			assigneesDir := filepath.Join("examples", "assignees")
+			assigneesDir := assigneesDirFromConfig()
 
 			loader := core.NewAssigneeLoader(assigneesDir)
 			assignees, err := loader.LoadAll()
@@ -84,7 +83,7 @@ func newAssigneeShowCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			assigneeID := args[0]
-			assigneesDir := filepath.Join("examples", "assignees")
+			assigneesDir := assigneesDirFromConfig()
 
 			loader := core.NewAssigneeLoader(assigneesDir)
 			assignee, err := loader.GetAssignee(assigneeID)

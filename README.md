@@ -583,6 +583,42 @@ Defaults:
 - **Logs**: `$XDG_DATA_HOME/tlc/tlc.log`
 - **Archive threshold**: 168h (7 days)
 
+### Custom Paths
+
+All directory paths are configurable. When omitted, defaults match
+the original hardcoded values so existing projects work unchanged.
+
+```yaml
+# .tlc/config.yaml
+tracks:
+  dir: docs/tracks             # default: "tracks" (relative to .tlc/)
+
+flow:
+  dir: workflows               # default: "examples/flows"
+  assignees_dir: team           # default: "examples/assignees"
+
+task:
+  todo_file: TODO.md            # default: "todo.txt"
+  projection_dir: work-items    # default: "tasks"
+
+storage:
+  db_path: data/store.db        # default: "db.sqlite"
+  inbox:
+    dir: incoming               # default: "inbox"
+```
+
+Paths must be relative (resolved from project root).
+This is useful for mono-repo layouts where `.tlc/` sits at the
+repo root but artifacts live in a shared directory:
+
+```yaml
+# mono-repo example: .tlc/config.yaml at repo root
+tracks:
+  dir: packages/project-a/tracks
+flow:
+  dir: packages/project-a/flows
+```
+
 ## 📚 Documentation
 
 **New to TLC?** Start with [Getting Started Guide](docs/GETTING-STARTED.md) for a progressive learning path from basic tasks to advanced workflows.

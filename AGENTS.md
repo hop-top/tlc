@@ -257,6 +257,16 @@ just validate-docs               # via justfile recipe
 
 Add to CI pipeline: `just validate-docs`
 
+## Configurable Paths
+
+Directory paths for tracks, flows, assignees, inbox, projection, todo
+file, and database are all configurable in `.tlc/config.yaml`. Accessor
+methods (`TracksDir()`, `FlowsDir()`, `AssigneesDirectory()`,
+`InboxDir()`, `ProjectionDirectory()`, `TodoFilePath()`, `DBFilePath()`)
+return the configured value or a default. Never hardcode directory names
+like `"tracks"` or `"examples/flows"` — always use the accessor method
+from the relevant config struct.
+
 ## Required Docs to Keep Updated
 
 - `README.md`
