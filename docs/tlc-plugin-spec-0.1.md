@@ -2,7 +2,16 @@
 
 ## Overview
 
-This document defines the plugin system for TLC (Task Line CLI), enabling extensibility through external system integrations, custom task executors, output formatters, and other capabilities.
+This document defines the plugin system for TLC (Task Line CLI), enabling
+extensibility through external system integrations, custom task executors,
+output formatters, and other capabilities.
+
+> **Implementation note (v0.1)**: The current extensibility layer uses
+> `kit/ext.Extension` (see `internal/extensions/`). Built-in sync
+> integrations (GitHub, Jira, Linear) are registered as extensions via
+> `kit/ext.Manager`, wired to lifecycle events through `kit/bus`. The
+> JSON-RPC plugin protocol described below is the target architecture
+> for out-of-process, language-agnostic plugins.
 
 ## Design Principles
 

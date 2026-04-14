@@ -596,8 +596,7 @@ ui:
     refresh_interval: 30s
     sync_poll_interval: 5m
 
-    # Theme
-    theme: default  # default, dark, light, solarized
+    # Theme — derived from kit/cli.Theme at startup; no runtime picker
     color_scheme: 16  # 16, 256, truecolor
 
     # Behavior
@@ -619,26 +618,13 @@ ui:
 
 ### Theme System
 
-Built-in themes:
+TUI styling is derived from `kit/cli.Theme`. The TUI accepts a
+theme at construction (`NewModel(service, theme)`) and builds all
+lipgloss styles via `styles.NewFromTheme(theme)`. There is no
+runtime theme picker; the theme is set at startup.
 
-```yaml
-themes:
-  default:
-    primary: blue
-    success: green
-    warning: yellow
-    error: red
-    text: white
-    background: black
-
-  solarized:
-    primary: "#268bd2"
-    success: "#859900"
-    warning: "#b58900"
-    error: "#dc322f"
-    text: "#839496"
-    background: "#002b36"
-```
+A default theme is available via `styles.DefaultKitTheme()` for
+tests and fallback use.
 
 ---
 

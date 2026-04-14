@@ -14,9 +14,10 @@ This guide walks you through TLC concepts progressively, from basic task managem
   - [Stage 7: Advanced Flows](#stage-7-advanced-flows-30-minutes)
   - [Stage 8: Interactive TUI](#stage-8-interactive-tui-10-minutes)
   - [Stage 9: Git Conventions](#stage-9-git-conventions-optional-15-minutes)
-  - [Stage 10: Workspace Queries](#stage-10-workspace-queries-10-minutes)
-  - [Stage 11: Custom Plugins](#stage-11-custom-plugins-advanced)
+  - [Stage 10: Stale & Blocked Detection](#stage-10-stale--blocked-detection-5-minutes)
+  - [Stage 11: Workspace Queries](#stage-11-workspace-queries-10-minutes)
   - [Stage 12: Batch Operations](#stage-12-batch-operations-5-minutes)
+  - [Stage 13: Custom Extensions](#stage-13-custom-extensions-advanced)
 - [🎓 Learning Checkpoints](#-learning-checkpoints)
 - [🚫 Common Mistakes to Avoid](#-common-mistakes-to-avoid)
 - [🎯 Quick Reference by Role](#-quick-reference-by-role)
@@ -181,7 +182,6 @@ tlc tui
 # c - claim task
 # s - cycle status
 # / - filter/search
-# t - theme picker
 ```
 
 **When to move on**: You're comfortable navigating the TUI.
@@ -328,10 +328,10 @@ tlc task unclaim '*' --no-prompt
 
 ---
 
-### Stage 11: Custom Plugins (Advanced)
+### Stage 13: Custom Extensions (Advanced)
 **Goal**: Extend TLC with custom integrations
 
-**Concepts**: Plugin types, gRPC interface
+**Concepts**: Extension types, `kit/ext.Extension` interface
 **Docs**: [Plugin Spec](tlc-plugin-spec-0.1.md)
 
 ---
@@ -403,7 +403,7 @@ After completing stages 7-8, you should be able to:
 ### For DevOps Engineers
 **Learn**: Stages 1-5, 9 (basics through GitHub sync + Git integration)
 **Skip**: Stages 6-7 (flows, unless automating deployments)
-**Consider**: Stage 10 (custom plugins for CI/CD)
+**Consider**: Stage 13 (custom extensions for CI/CD)
 
 ---
 

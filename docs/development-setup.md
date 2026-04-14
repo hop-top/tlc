@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- Go 1.25+ (project uses 1.25.5)
+- Go 1.26+ (project uses 1.26.1)
 - Git
-- Make (standard on macOS/Linux)
+- [just](https://github.com/casey/just) — command runner (replaces Make)
 
 ## Quick Setup
 
@@ -16,22 +16,22 @@
 
 2. Install development tools:
    ```bash
-   make tools
+   just tools
    ```
 
    This installs:
-   - golangci-lint v1.61.0
+   - golangci-lint
    - air (file watcher)
 
 3. (Optional) Install pre-commit hooks:
    ```bash
    pip install pre-commit  # If not already installed
-   make pre-commit-install
+   just pre-commit-install
    ```
 
 4. Verify setup:
    ```bash
-   make verify  # Runs lint + test
+   just check  # Runs lint + test
    ```
 
 ## Development Workflow
@@ -40,19 +40,19 @@
 
 ```bash
 # Build
-make build
+just build
 
 # Run tests
-make test
+just test
 
 # Lint code
-make lint
+just lint
 
 # Format code
-make fmt
+just fmt
 
 # All checks (fmt + lint + test)
-make dev
+just dev
 ```
 
 ### Watch Mode (Auto-detection)
@@ -61,13 +61,13 @@ Watch mode provides immediate feedback by automatically running tasks when you s
 
 ```bash
 # Watch and rebuild on changes
-make watch        # or: make w
+just watch        # or: just w
 
 # Watch and lint on changes
-make watch-lint   # or: make wl
+just watch-lint   # or: just wl
 
 # Watch and test on changes
-make watch-test   # or: make wt
+just watch-test   # or: just wt
 ```
 
 **How it works:**
@@ -78,15 +78,15 @@ make watch-test   # or: make wt
 - Clear screen on each run for better visibility
 
 **Use cases:**
-- `make watch-lint`: Best for active development - catches errors as you type
-- `make watch`: Use when testing the built binary
-- `make watch-test`: Use during TDD workflow
+- `just watch-lint`: Best for active development - catches errors as you type
+- `just watch`: Use when testing the built binary
+- `just watch-test`: Use during TDD workflow
 
 ### Before Committing
 
 ```bash
 # Run all checks
-make dev
+just dev
 
 # Or let pre-commit handle it (if installed)
 git commit  # Hooks run automatically
@@ -96,20 +96,20 @@ git commit  # Hooks run automatically
 
 | Task | Command |
 |------|---------|
-| Build binary | `make build` |
-| Run tests | `make test` |
-| Run tests (fast) | `make test-short` |
-| Lint code | `make lint` |
-| Lint with auto-fix | `make lint-fix` |
-| Format code | `make fmt` |
-| Coverage report | `make coverage` |
-| Clean artifacts | `make clean` |
-| Install tools | `make tools` |
-| Watch & rebuild | `make watch` |
-| Watch & lint | `make watch-lint` |
-| Watch & test | `make watch-test` |
-| All checks | `make dev` |
-| CI-like checks | `make verify` |
+| Build binary | `just build` |
+| Run tests | `just test` |
+| Run tests (fast) | `just test-short` |
+| Lint code | `just lint` |
+| Lint with auto-fix | `just lint-fix` |
+| Format code | `just fmt` |
+| Coverage report | `just coverage` |
+| Clean artifacts | `just clean` |
+| Install tools | `just tools` |
+| Watch & rebuild | `just watch` |
+| Watch & lint | `just watch-lint` |
+| Watch & test | `just watch-test` |
+| All checks | `just dev` |
+| CI-like checks | `just check` |
 
 ## CI Integration
 
@@ -121,14 +121,14 @@ All PRs automatically run:
 
 Local workflow should match CI:
 ```bash
-make verify  # Equivalent to CI checks
+just check  # Equivalent to CI checks
 ```
 
 ## Troubleshooting
 
 ### golangci-lint not found
 ```bash
-make tools  # Reinstall tools
+just tools  # Reinstall tools
 ```
 
 ### Pre-commit hook failing
@@ -139,13 +139,13 @@ pre-commit autoupdate       # Update hook versions
 
 ### Watch mode not working
 ```bash
-make tools  # Ensure air is installed
+just tools  # Ensure air is installed
 which air   # Verify installation
 ```
 
 ### Linting errors on first run
 
-It's normal to see linting errors on first run as we've added comprehensive checks. Use `make lint-fix` to auto-fix simple issues like formatting and imports.
+It's normal to see linting errors on first run as we've added comprehensive checks. Use `just lint-fix` to auto-fix simple issues like formatting and imports.
 
 For other issues:
 - Review the error message and fix manually
@@ -156,8 +156,8 @@ For other issues:
 
 If tests fail after setting up linting:
 1. The critical bug in `internal/core/mocks.go` has been fixed (missing imports)
-2. Run `make test` to verify all tests pass
-3. If issues persist, check for race conditions with `make test` (includes `-race` flag)
+2. Run `just test` to verify all tests pass
+3. If issues persist, check for race conditions with `just test` (includes `-race` flag)
 
 ## Editor Setup
 
@@ -170,25 +170,25 @@ See [editor-setup.md](./editor-setup.md) for:
 
 ### Development Cycle
 
-1. Start watch-lint in one terminal: `make watch-lint`
+1. Start watch-lint in one terminal: `just watch-lint`
 2. Edit code in your editor
 3. See instant feedback on lint errors
-4. Before commit: `make dev` (format, lint, test)
+4. Before commit: `just dev` (format, lint, test)
 5. Commit changes
 
 ### Code Quality
 
 - Fix lint warnings before committing
-- Run tests with race detector: `make test`
-- Keep test coverage high: `make coverage`
-- Use `make lint-fix` for auto-fixable issues
+- Run tests with race detector: `just test`
+- Keep test coverage high: `just coverage`
+- Use `just lint-fix` for auto-fixable issues
 - Review TODO/FIXME comments regularly
 
 ### Performance
 
-- Use `make test-short` for faster feedback during development
-- Full `make test` with race detector before pushing
-- `make watch-lint` is faster than `make watch-test`
+- Use `just test-short` for faster feedback during development
+- Full `just test` with race detector before pushing
+- `just watch-lint` is faster than `just watch-test`
 
 ## Additional Resources
 

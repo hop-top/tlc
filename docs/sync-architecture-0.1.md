@@ -84,7 +84,11 @@ When a conflict is detected, TLC applies one of the following strategies (config
 
 ### Implementation Notes
 
-- **Plugins**: Must include `updated_at` and `created_at` in the `Task` objects returned by `sync.pull` to enable accurate conflict detection.
+- **Extensions**: Sync integrations (GitHub, Jira, Linear) are implemented as
+  `ext.Extension` instances registered via `kit/ext.Manager` (see
+  `internal/extensions/`). Each provider must include `updated_at` and
+  `created_at` in the `Task` objects returned by `sync.pull` to enable
+  accurate conflict detection.
 - **Audit Logs**: All conflict resolutions are logged with the `SYNC_CONFLICT` action.
 - **Last Sync Timestamp**: The `last_sync_at` field is updated only after a successful pull or push operation, serving as the baseline for future change tracking.
 

@@ -16,7 +16,8 @@ This document defines the configuration system for TLC (Task Line CLI), includin
 
 ## Configuration Hierarchy
 
-Configuration is loaded and merged in this order (later overrides earlier):
+Configuration is loaded and merged in this order (later overrides
+earlier) via `kit/config.Load` (see `internal/config/loader.go`):
 
 1. **System defaults** (built-in)
 2. **System config** (`/etc/tlc/config.yaml`)
