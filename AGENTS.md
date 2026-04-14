@@ -103,6 +103,52 @@ tlc task list --track <track-id>                 # filter by track
 Auto-transition: when a linked task is claimed (→ IN_PROGRESS), a pending
 track auto-transitions to active.
 
+### `tlc agent` — Agent Dispatch
+
+Run tasks, tracks, or flows via named agent profiles.
+
+```bash
+# run an agent against a task, flow, or track
+tlc agent run --agent <name> --task <id>
+tlc agent run --agent <name> --flow <flow.yaml>
+tlc agent run --agent <name> --track <id>
+
+# watch the agent queue; poll every 5s
+tlc agent watch [--queue agent] [--interval 5s]
+
+# inspect / cancel a running job
+tlc agent status <job-id>
+tlc agent cancel <job-id>
+
+# list jobs (filterable)
+tlc agent list [--status <s>] [--limit N] [--json]
+```
+
+Shorthand exec (delegates to `agent run` internally):
+```bash
+tlc task exec <id> --agent <name>
+tlc track exec <id> --agent <name>
+```
+
+The `--agent <name>` flag is also accepted on `tlc flow run`:
+```bash
+tlc flow run <flow.yaml> --agent <name>
+```
+
+### `tlc schema` — Toolspec Schema
+
+Output the tool definition that AI agents use to interact with TLC.
+
+```bash
+tlc schema                        # default JSON output
+tlc schema --format json          # explicit JSON
+tlc schema --format mcp           # MCP tool definition
+tlc schema --format openai        # OpenAI function-calling schema
+tlc schema --format anthropic     # Anthropic tool-use schema
+```
+
+Supported formats: `json` · `mcp` · `openai` · `anthropic`
+
 ### `tlc flow test` — Deterministic Flow Testing
 
 Run a flow definition through a hermetic sandbox with cassette-backed tool shims.
@@ -256,6 +302,31 @@ just validate-docs               # via justfile recipe
 ### CI integration
 
 Add to CI pipeline: `just validate-docs`
+
+## Build & Test
+
+All builds go through the project `Makefile`. Two top-level workflows:
+
+| Target | Mutating? | Steps | Use |
+|--------|-----------|-------|-----|
+| `make dev` | yes | fmt, vet, lint, tidy, test | Local developer workflow |
+| `make check` | no | fmt-check, vet, lint, tidy-check, test | CI / pre-merge gate |
+
+Always run `make check` before push — it mirrors CI exactly.
+
+Additional targets:
+```bash
+make build          # compile binary + plugins → bin/
+make test           # go test -race ./...
+make lint           # golangci-lint
+make fmt            # gofmt + goimports (mutating)
+make vet            # go vet ./...
+make tidy           # go mod tidy && go mod verify (mutating)
+make fmt-check      # formatting check (non-mutating; exits 1 if dirty)
+make tidy-check     # module tidiness check (non-mutating; exits 1 if dirty)
+make coverage       # test with coverage report
+make build-shims    # compile flowtest shim binaries
+```
 
 ## Configurable Paths
 
