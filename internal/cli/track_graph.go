@@ -91,7 +91,7 @@ func runTrackGraph(cmd *cobra.Command, args []string) error {
 		return output.Render(w, format, strategy)
 
 	case "mermaid":
-		_, _ = fmt.Fprintln(w, "mermaid format not yet available")
+		_, _ = fmt.Fprint(w, core.RenderMermaid(strategy, tasks))
 		return nil
 
 	default: // table

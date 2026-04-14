@@ -335,8 +335,11 @@ func TestTrackGraph_MermaidFormat(t *testing.T) {
 		}
 
 		out := buf.String()
-		if !contains(out, "mermaid format not yet available") {
-			t.Errorf("expected mermaid placeholder message:\n%s", out)
+		if !contains(out, "flowchart TB") {
+			t.Errorf("expected mermaid flowchart output, got:\n%s", out)
+		}
+		if !contains(out, "subgraph") {
+			t.Errorf("expected mermaid subgraph sections, got:\n%s", out)
 		}
 	})
 }

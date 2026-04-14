@@ -71,7 +71,10 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 	// Compute execution strategy when tasks have blocked-by deps.
 	var strategy *core.ExecutionStrategy
 	if graph, gErr := core.NewDepGraph(tasks); gErr == nil && graph.HasDeps() {
-		strategy, _ = graph.ComputeStrategy()
+		strategy, err = graph.ComputeStrategy()
+		if err != nil {
+			return fmt.Errorf("failed to compute execution strategy: %w", err)
+		}
 	}
 
 	format := viper.GetString("output.format")

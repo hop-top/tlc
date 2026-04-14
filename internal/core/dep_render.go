@@ -16,6 +16,9 @@ func RenderDepTree(strategy *ExecutionStrategy, tasks []*Task) string {
 
 	taskMap := make(map[string]*Task, len(tasks))
 	for _, t := range tasks {
+		if t == nil || t.ID == "" {
+			continue
+		}
 		taskMap[t.ID] = t
 	}
 
@@ -201,5 +204,5 @@ func mermaidNodeID(id string) string {
 
 // escapeMermaid escapes characters that are special in Mermaid labels.
 func escapeMermaid(s string) string {
-	return strings.ReplaceAll(s, "\"", "#quot;")
+	return strings.ReplaceAll(s, "\"", "&quot;")
 }
