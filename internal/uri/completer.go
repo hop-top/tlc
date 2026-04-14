@@ -6,9 +6,10 @@ import (
 )
 
 // GetRegistry returns a registry with tlc types registered.
-func GetRegistry(s *storage.SQLiteStorage) (*uri.Registry, error) {
+// dirs is optional; nil uses default directories.
+func GetRegistry(s *storage.SQLiteStorage, dirs ...*TypesDirConfig) (*uri.Registry, error) {
 	reg := uri.NewRegistry()
-	if err := RegisterTypes(reg, s); err != nil {
+	if err := RegisterTypes(reg, s, dirs...); err != nil {
 		return nil, err
 	}
 	return reg, nil

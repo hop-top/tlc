@@ -67,17 +67,18 @@ func processInbox(
 // inboxDir returns the inbox directory path using the detected
 // config mode (supports .tlc/ and .hop/tlc/).
 func inboxDir() string {
+	dir := inboxDirName()
 	cwd, err := os.Getwd()
 	if err != nil {
 		return filepath.Join(
 			config.LocalConfigDir(config.DetectMode()),
-			"inbox",
+			dir,
 		)
 	}
 	return filepath.Join(
 		cwd,
 		config.LocalConfigDir(config.DetectMode()),
-		"inbox",
+		dir,
 	)
 }
 

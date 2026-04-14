@@ -72,7 +72,9 @@ Usage:
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveFlow(ctx, flowRef)
+		resolver := uri.NewResolver(s)
+		resolver.FlowsDir = flowsDirFromConfig()
+		res, err := resolver.ResolveFlow(ctx, flowRef)
 		if err != nil {
 			return err
 		}
@@ -284,7 +286,9 @@ Example:
 		defer func() { _ = s.Close() }()
 
 		ctx := context.Background()
-		res, err := uri.NewResolver(s).ResolveFlow(ctx, flowRef)
+		resolver := uri.NewResolver(s)
+		resolver.FlowsDir = flowsDirFromConfig()
+		res, err := resolver.ResolveFlow(ctx, flowRef)
 		if err != nil {
 			return err
 		}

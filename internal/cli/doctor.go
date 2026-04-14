@@ -329,7 +329,7 @@ func checkProjectIDSet(fix bool) checkResult {
 func checkDBPathWritable(fix bool) checkResult {
 	dbPath := viper.GetString("storage.db_path")
 	if dbPath == "" {
-		dbPath = filepath.Join(config.UserDataDir(), "db.sqlite")
+		dbPath = filepath.Join(config.UserDataDir(), dbFileName())
 	}
 	dir := filepath.Dir(dbPath)
 	if _, err := os.Stat(dir); err == nil {
@@ -547,7 +547,11 @@ func checkProjectTodoSynced(fix bool) checkResult {
 		}
 	}
 
-	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), "todo.txt")
+	todoName := viper.GetString("task.todo_file")
+	if todoName == "" {
+		todoName = "todo.txt"
+	}
+	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), filepath.Base(todoName))
 	data, err := os.ReadFile(todoFile)
 	if err != nil || len(strings.TrimSpace(string(data))) == 0 {
 		return checkResult{

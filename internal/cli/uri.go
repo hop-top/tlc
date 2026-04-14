@@ -27,7 +27,7 @@ func (c *cobraCompleter) Complete(typeName string) func(
 
 // setupURICompletion wires URI-aware completion into the CLI.
 func setupURICompletion(s *storage.SQLiteStorage) error {
-	reg, err := uri.GetRegistry(s)
+	reg, err := uri.GetRegistry(s, uriDirsConfig())
 	if err != nil {
 		return err
 	}

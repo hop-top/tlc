@@ -128,11 +128,12 @@ type filesystemCfg struct {
 // projectionBaseDir returns the base directory for filesystem projection.
 // Defaults to .tlc/tasks relative to cwd.
 func projectionBaseDir() string {
+	dir := projectionDirFromConfig()
 	cwd, err := os.Getwd()
 	if err != nil {
-		return ".tlc/tasks"
+		return filepath.Join(".tlc", dir)
 	}
-	return filepath.Join(cwd, ".tlc", "tasks")
+	return filepath.Join(cwd, ".tlc", dir)
 }
 
 // SetupProjector wires a FilesystemProjector into the given storage

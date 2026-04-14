@@ -47,7 +47,7 @@ func resolveConfigDir() string {
 // configDir is the .tlc/ (or .hop/tlc/) directory containing config.yaml.
 // Scaffold errors are warnings — track creation already succeeded.
 func scaffoldTrackDir(w io.Writer, track *core.Track, configDir string) {
-	trackDir := filepath.Join(configDir, "tracks", track.ID)
+	trackDir := filepath.Join(configDir, tracksDir(), track.ID)
 	if err := os.MkdirAll(trackDir, 0o755); err != nil {
 		_, _ = fmt.Fprintf(w, "  Warning: could not create %s: %v\n", trackDir, err)
 		return
@@ -143,7 +143,7 @@ TODO: list what is in scope and out of scope.
 
 // updateTracksRegistry appends an entry to tracks/tracks.md.
 func updateTracksRegistry(w io.Writer, track *core.Track, configDir string) {
-	registryPath := filepath.Join(configDir, "tracks", "tracks.md")
+	registryPath := filepath.Join(configDir, tracksDir(), "tracks.md")
 
 	// Create registry with header if missing.
 	if _, err := os.Stat(registryPath); os.IsNotExist(err) {

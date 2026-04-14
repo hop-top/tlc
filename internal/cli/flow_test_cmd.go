@@ -106,7 +106,9 @@ func runFlowTest(
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-	res, err := uri.NewResolver(s).ResolveFlow(ctx, flowFile)
+	resolver := uri.NewResolver(s)
+	resolver.FlowsDir = flowsDirFromConfig()
+	res, err := resolver.ResolveFlow(ctx, flowFile)
 	if err != nil {
 		return &ExitCodeError{Code: 3, Message: fmt.Sprintf("flow test: resolve flow: %v", err)}
 	}

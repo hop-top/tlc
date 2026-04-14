@@ -81,7 +81,7 @@ func localProjectDBPath() string {
 		cwd = "."
 	}
 	mode := config.DetectMode()
-	return filepath.Join(cwd, config.LocalConfigDir(mode), "db.sqlite")
+	return filepath.Join(cwd, config.LocalConfigDir(mode), dbFileName())
 }
 
 // inferSpaceURI detects the workspace space URI from the directory
