@@ -41,7 +41,10 @@ func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle
 	t.Helper()
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
-	s, _ := getStorageRaw() //nolint:errcheck // test helper
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
 	defer s.Close()
 
 	task := &core.Task{
@@ -49,7 +52,9 @@ func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle
 		Title:  titleSuffix + " test task",
 		Status: core.StatusTodo,
 	}
-	s.CreateTask(ctx, task) //nolint:errcheck // test setup
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
 
 	viper.Set("output.format", format)
 	cmd := newTestCmd()
@@ -76,7 +81,10 @@ func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
 	t.Helper()
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
-	s, _ := getStorageRaw() //nolint:errcheck // test helper
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
 	defer s.Close()
 
 	task := &core.Task{
@@ -84,7 +92,9 @@ func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
 		Title:  "Show " + format + " test",
 		Status: core.StatusTodo,
 	}
-	s.CreateTask(ctx, task) //nolint:errcheck // test setup
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
 
 	viper.Set("output.format", format)
 	cmd := newTestCmd()
@@ -124,7 +134,9 @@ func testClearAssignee(t *testing.T, clearValue string) {
 		Status:     core.StatusTodo,
 		AssignedTo: &assignee1,
 	}
-	s.CreateTask(ctx, task) //nolint:errcheck // test setup
+	if err = s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
 
 	cmd := newTestCmd()
 	cmd.AddCommand(TaskCmd)
@@ -137,7 +149,10 @@ func testClearAssignee(t *testing.T, clearValue string) {
 		t.Fatalf("task update to clear assignee with %s failed: %v", clearValue, err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001") //nolint:errcheck // test assertion
+	updatedTask, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
