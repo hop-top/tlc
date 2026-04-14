@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build build-plugins test lint fmt coverage clean watch watch-lint watch-test dev tools pre-commit-install
+.PHONY: help install build build-plugins test lint fmt vet tidy coverage clean watch watch-lint watch-test dev check tools pre-commit-install
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -92,6 +92,16 @@ fmt: ## Format all Go files
 	@goimports -w $(GO_FILES)
 	@echo "$(COLOR_GREEN)✓ Formatting complete$(COLOR_RESET)"
 
+vet: ## Run go vet
+	@echo "$(COLOR_BLUE)Running go vet...$(COLOR_RESET)"
+	@go vet ./...
+	@echo "$(COLOR_GREEN)✓ Vet passed$(COLOR_RESET)"
+
+tidy: ## Tidy and verify go modules
+	@echo "$(COLOR_BLUE)Tidying go modules...$(COLOR_RESET)"
+	@go mod tidy && go mod verify
+	@echo "$(COLOR_GREEN)✓ Modules tidy$(COLOR_RESET)"
+
 coverage: ## Generate test coverage report
 	@echo "$(COLOR_BLUE)Generating coverage report...$(COLOR_RESET)"
 	@./scripts/coverage.sh
@@ -129,8 +139,11 @@ watch-test: ## Watch for changes and run tests
 	fi
 	@air -c .air.toml -- -c 'go test -v -short ./...'
 
-dev: fmt lint test ## Run fmt, lint, and test (pre-commit workflow)
+dev: fmt vet lint tidy test ## Run fmt, vet, lint, tidy, and test (pre-commit workflow)
 	@echo "$(COLOR_GREEN)✓ Development checks passed$(COLOR_RESET)"
+
+check: fmt vet lint tidy test ## Full pre-build gate (fmt, vet, lint, tidy, test)
+	@echo "$(COLOR_GREEN)✓ All checks passed$(COLOR_RESET)"
 
 tools: ## Install development tools (golangci-lint, air)
 	@echo "$(COLOR_BLUE)Installing development tools...$(COLOR_RESET)"
