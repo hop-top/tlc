@@ -258,7 +258,7 @@ Meta: {
 Spec:     "spec://my-api-spec"           // Reusable spec ID
 Phase:     "phase://1:spec://my-api-spec"   // Phase 1 of spec
 Step:      "step://auth:phase://1:spec://my-api-spec"  // Auth step of phase 1
-Sub-task:  "task://login:step://auth:phase://1:spec://my-api-spec"  // Login task
+Sub-task:  "tlc://login:step://auth:phase://1:spec://my-api-spec"  // Login task
 ```
 
 ### Tags
@@ -518,5 +518,5 @@ func calculateProgress(taskID string) (int, int, int) {
 
 - Existing tasks without task_type work as regular tasks
 - Existing queries without type filters return all tasks
-- Reference field format is additive (can coexist with task://)
+- Reference field format is additive (can coexist with tlc://)
 - No database schema changes required

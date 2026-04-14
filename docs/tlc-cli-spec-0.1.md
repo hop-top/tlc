@@ -172,7 +172,7 @@ tlc task create --interactive
   "id": "T-0042",
   "title": "Add API rate limiting",
   "status": "TODO",
-  "reference": "task://T-0042",
+  "reference": "tlc://T-0042",
   "created_at": "2025-01-16T10:30:00Z"
 }
 ```
@@ -337,7 +337,7 @@ Title: Add API rate limiting
 Status: IN_PROGRESS
 Assigned: codex
 Tags: feat, api, security
-Reference: task://T-0042
+Reference: tlc://T-0042
 Created: 2025-01-16T10:30:00Z
 Updated: 2025-01-16T11:15:00Z
 
