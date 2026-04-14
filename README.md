@@ -26,7 +26,7 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 
 - **Hybrid Storage Model**: Edit tasks directly in a human-friendly `todo.txt` (Task Line Syntax) or use the synchronized SQLite database for high-performance querying.
 - **Complex Orchestration (Task Flows)**: Define declarative workflows with support for sequential and parallel execution, conditional branching, synchronization joins, and automated retries.
-- **Flows & Assignees**: Procedural workflow templates that generate task sequences with capability-based auto-assignment to specialized executors (inspired by superpowers plugin).
+- **Flows & Assignees**: Procedural workflow templates that generate task sequences with capability-based auto-assignment to specialized executors.
 - **Multi-Agent Collaboration**: Safe coordination between humans and AI agents using task claiming, responsibility transfer, delegation protocols, and time-bounded ownership leases (TTL).
 - **Deterministic Task Execution**: Robust execution contract with stdout/stderr capture, error normalization, and configurable timeouts.
 - **Audit-Ready Logging**: A canonical, reverse-chronological `CHANGELOG` capturing every state transition, collaboration action, and execution attempt.
@@ -38,7 +38,12 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
   context (deps, track info, audit log) in markdown or JSON optimized
   for LLM consumption.
 - **Advanced Query Engine**: Power-user filtering with intuitive shorthands (`@me`, `#tag`), logical operators (AND/OR/NOT), and metadata-aware searching.
-- **External System Sync**: Bidirectional integration with GitHub Issues, Jira, and Linear while maintaining a strict boundary for internal agent tasks.
+- **Extension System**: Pluggable sync providers (GitHub Issues, Jira,
+  Linear) built on `kit/ext`. Bidirectional integration while maintaining
+  a strict boundary for internal agent tasks.
+- **Event Bus**: Decoupled state-change propagation via `kit/bus`. Drives
+  audit logging, stale-detection hooks, and track auto-transitions without
+  tight coupling between subsystems.
 - **Auto-Archiving**: Automatically clean up your workspace by archiving completed tasks after a configurable duration (default: 7 days), keeping your active list focused and high-performance.
 - **Configurable Workflows**: Define custom task statuses, state
   machine transitions, and per-tag workflow overrides via config.
@@ -55,6 +60,22 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
   real-time flow monitoring.
 - **XDG Specification Compliance**: Zero-config persistence
   following standard OS paths for data, logs, and configuration.
+
+## Architecture
+
+TLC is built on [`hop.top/kit`](https://github.com/hop-top/kit), a shared
+foundation providing:
+
+- **kit/domain** — Domain modeling primitives (entities, value objects,
+  repositories) used throughout `internal/core`.
+- **kit/bus** — Event bus for decoupled state-change propagation. Powers
+  audit logging, stale detection hooks, and track auto-transitions.
+- **kit/ext** — Extension system replacing the legacy plugin architecture.
+  Sync providers (GitHub, Jira, Linear) register as extensions.
+- **kit/llm** — LLM provider abstraction for the natural language prompt
+  router and config interactive mode.
+- **kit/tui** — Shared TUI components (themes, layouts) used by the
+  Bubble Tea interface.
 
 ## 🛠 Installation
 
