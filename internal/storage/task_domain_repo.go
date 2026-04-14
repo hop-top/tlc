@@ -23,8 +23,13 @@ func NewTaskDomainRepo(store *SQLiteStorage) *TaskDomainRepo {
 	return &TaskDomainRepo{store: store}
 }
 
-// ScanTask scans a single sql.Row into a core.Task.
-func ScanTask(row *sql.Row) (core.Task, error) {
+// scanner abstracts sql.Row and sql.Rows behind a single Scan method.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+// scanTaskFields scans a task row using any scanner (sql.Row or sql.Rows).
+func scanTaskFields(s scanner) (core.Task, error) {
 	var t core.Task
 	var createdAt, updatedAt string
 	var metaStr, tagsStr, originSys, lastSync sql.NullString
@@ -32,7 +37,7 @@ func ScanTask(row *sql.Row) (core.Task, error) {
 	var staleNs sql.NullInt64
 	var blockedReason, staleFired, trackID sql.NullString
 
-	err := row.Scan(
+	err := s.Scan(
 		&t.ID, &t.Title, &t.Description, &t.Status,
 		&t.AssignedTo, &t.Reference, &createdAt, &updatedAt,
 		&metaStr, &tagsStr, &originSys, &lastSync,
@@ -48,29 +53,14 @@ func ScanTask(row *sql.Row) (core.Task, error) {
 	return t, nil
 }
 
+// ScanTask scans a single sql.Row into a core.Task.
+func ScanTask(row *sql.Row) (core.Task, error) {
+	return scanTaskFields(row)
+}
+
 // ScanTaskRows scans a sql.Rows cursor into a core.Task.
 func ScanTaskRows(rows *sql.Rows) (core.Task, error) {
-	var t core.Task
-	var createdAt, updatedAt string
-	var metaStr, tagsStr, originSys, lastSync sql.NullString
-	var projectID, effortStr, priorityStr sql.NullString
-	var staleNs sql.NullInt64
-	var blockedReason, staleFired, trackID sql.NullString
-
-	err := rows.Scan(
-		&t.ID, &t.Title, &t.Description, &t.Status,
-		&t.AssignedTo, &t.Reference, &createdAt, &updatedAt,
-		&metaStr, &tagsStr, &originSys, &lastSync,
-		&t.Archived, &projectID, &effortStr, &priorityStr,
-		&staleNs, &blockedReason, &staleFired, &trackID,
-	)
-	if err != nil {
-		return t, err
-	}
-	populateTask(&t, createdAt, updatedAt, metaStr, tagsStr, originSys,
-		lastSync, projectID, effortStr, priorityStr, staleNs,
-		blockedReason, staleFired, trackID)
-	return t, nil
+	return scanTaskFields(rows)
 }
 
 // BindTask returns column names and values for a Task, suitable for
