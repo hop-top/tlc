@@ -240,10 +240,32 @@ var migrations = []migration{
 		PRAGMA foreign_keys = ON;
 		`,
 	},
+	{
+		version: 9,
+		query: `
+		CREATE TABLE IF NOT EXISTS jobs (
+			id         TEXT PRIMARY KEY,
+			queue      TEXT NOT NULL,
+			type       TEXT NOT NULL,
+			status     TEXT NOT NULL DEFAULT 'queued',
+			payload    TEXT NOT NULL,
+			result     TEXT,
+			error      TEXT,
+			created_at TEXT NOT NULL,
+			started_at TEXT,
+			ended_at   TEXT,
+			created_by TEXT
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_jobs_queue_status ON jobs(queue, status);
+		CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+		CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 8
+const LatestMigrationVersion = 9
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

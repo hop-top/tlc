@@ -120,12 +120,10 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 		return printDryRun(cmd, agentCfg)
 	}
 
-	// Async not yet supported (kit/job not available).
+	// Async: enqueue to local job queue and exit.
 	if agentRunAsync {
-		return fmt.Errorf(
-			"--async requires kit/job which is not available; " +
-				"run without --async for synchronous execution",
-		)
+		_, err := enqueueAgentJob(cmd)
+		return err
 	}
 
 	// Open storage.
