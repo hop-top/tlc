@@ -120,6 +120,43 @@ check_flag "task update --timeout"           $TLC task update --timeout
 check_flag "task create --timeout"           $TLC task create --timeout
 
 echo
+echo "-- track subcommands --"
+check "track create"     $TLC track create
+check "track list"       $TLC track list
+check "track show"       $TLC track show
+check "track update"     $TLC track update
+check "track archive"    $TLC track archive
+check "track abandon"    $TLC track abandon
+check "track delete"     $TLC track delete
+check "track summary"    $TLC track summary
+# Requires agent-exec PR merge into main
+check "track exec"       $TLC track exec
+
+echo
+echo "-- agent subcommands (requires agent-exec PR) --"
+check "tlc agent"        $TLC agent
+check "agent run"        $TLC agent run
+check "agent watch"      $TLC agent watch
+check "agent status"     $TLC agent status
+check "agent cancel"     $TLC agent cancel
+check "agent list"       $TLC agent list
+
+echo
+echo "-- task exec (requires agent-exec PR) --"
+check "task exec"        $TLC task exec
+
+echo
+echo "-- agent/exec flag checks (requires agent-exec PR) --"
+check_flag "agent run --agent"          $TLC agent run --agent
+check_flag "agent run --async"          $TLC agent run --async
+check_flag "agent run --local"          $TLC agent run --local
+check_flag "agent run --trust-project"  $TLC agent run --trust-project
+check_flag "task exec --agent"          $TLC task exec --agent
+check_flag "task exec --async"          $TLC task exec --async
+check_flag "track exec --agent"         $TLC track exec --agent
+check_flag "track exec --async"         $TLC track exec --async
+
+echo
 echo "-- schema command --"
 if $TLC schema >/dev/null 2>&1; then
   echo "  OK  tlc schema"
