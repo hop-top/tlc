@@ -2006,7 +2006,7 @@ var taskCreateCmd = &cobra.Command{
 }
 
 func init() {
-    // Global flags — config loading via kit/config.Load
+    // Global flags — config merged via kit/config, bound via Viper
     rootCmd.PersistentFlags().StringP("config", "c", "", "config file")
     rootCmd.PersistentFlags().StringP("format", "f", "table", "output format")
     rootCmd.PersistentFlags().Bool("no-color", false, "disable colors")
@@ -2022,8 +2022,7 @@ func init() {
     taskCmd.AddCommand(taskCreateCmd)
     rootCmd.AddCommand(taskCmd)
 
-    // Wire kit/cli contract for hints and help
-    _ = kitcli.Contract{} // see internal/cli/root.go
+    // Root command built via kitcli.New() — see internal/cli/root.go
 }
 
 func Execute() error {

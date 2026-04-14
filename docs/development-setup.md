@@ -150,7 +150,7 @@ It's normal to see linting errors on first run as we've added comprehensive chec
 For other issues:
 - Review the error message and fix manually
 - Use `//nolint:linter-name` for legitimate exceptions (with explanation)
-- Admake `.golangci.yml` if rules are too strict (discuss with team first)
+- Adjust `.golangci.yml` if rules are too strict (discuss with team first)
 
 ### Test failures
 
