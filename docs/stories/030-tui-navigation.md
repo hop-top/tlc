@@ -7,7 +7,18 @@
 
 ## Story
 
-As a Solo Developer, I want to navigate, view, and interact with tasks via a terminal UI so that I can work efficiently without context switching to web interfaces or multiple terminals.
+As a Solo Developer, I want to navigate, view, and interact with tasks
+via a terminal UI so that I can work efficiently without context
+switching to web interfaces or multiple terminals.
+
+## Context
+
+The TUI is built on `kit/tui` components (`kit/tui.List`,
+`kit/tui.Progress`) and styled via `kit/cli.Theme`. Layout uses
+Bubbletea under the hood, but all list rendering, item formatting,
+and progress bars delegate to kit's reusable widgets. Styles are
+derived from the shared theme in `internal/tui/styles/` via
+`styles.NewFromTheme`.
 
 ## Acceptance Scenarios
 

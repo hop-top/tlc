@@ -8,7 +8,18 @@
 
 ## Story
 
-As a Team Lead, I want to sync task state with GitHub issues so that team work is visible in both TLC and GitHub, and I can use GitHub's existing workflows and integrations.
+As a Team Lead, I want to sync task state with GitHub issues so that team
+work is visible in both TLC and GitHub, and I can use GitHub's existing
+workflows and integrations.
+
+## Context
+
+GitHub sync is implemented as a `kit/ext.Extension` via the extension
+manager in `internal/extensions/`. The extension declares capabilities
+(sync provider) and is wired into the `kit/bus` event system so that
+task lifecycle events (claim, complete, reopen) can trigger push
+operations automatically. Configuration lives in the standard
+`sync.github` config section loaded through `kit/config`.
 
 ## Acceptance Scenarios
 
