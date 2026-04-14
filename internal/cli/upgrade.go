@@ -74,7 +74,7 @@ func installTLCPreamble(preamble string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("upgrade preamble: mkdir: %w", err)
 	}
-	path := dir + "/upgrade-preamble.md"
+	path := filepath.Join(dir, "upgrade-preamble.md")
 	if err := os.WriteFile(path, []byte(preamble), 0o600); err != nil {
 		return fmt.Errorf("upgrade preamble: write: %w", err)
 	}

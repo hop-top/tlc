@@ -2,6 +2,7 @@ package uri
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,7 @@ import (
 
 func TestGetRegistry_RegistersExpectedTypes(t *testing.T) {
 	dir := t.TempDir()
-	s, err := storage.NewSQLiteStorage(dir + "/test.db")
+	s, err := storage.NewSQLiteStorage(filepath.Join(dir, "test.db"))
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -25,7 +26,7 @@ func TestGetRegistry_RegistersExpectedTypes(t *testing.T) {
 
 func TestGetRegistry_DoubleCallReturnsNewRegistry(t *testing.T) {
 	dir := t.TempDir()
-	s, err := storage.NewSQLiteStorage(dir + "/test.db")
+	s, err := storage.NewSQLiteStorage(filepath.Join(dir, "test.db"))
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -41,7 +42,7 @@ func TestGetRegistry_DoubleCallReturnsNewRegistry(t *testing.T) {
 
 func TestRegisterTypes_TaskCompleter(t *testing.T) {
 	dir := t.TempDir()
-	s, err := storage.NewSQLiteStorage(dir + "/test.db")
+	s, err := storage.NewSQLiteStorage(filepath.Join(dir, "test.db"))
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -56,7 +57,7 @@ func TestRegisterTypes_TaskCompleter(t *testing.T) {
 
 func TestRegisterTypes_TagCompleter(t *testing.T) {
 	dir := t.TempDir()
-	s, err := storage.NewSQLiteStorage(dir + "/test.db")
+	s, err := storage.NewSQLiteStorage(filepath.Join(dir, "test.db"))
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -71,7 +72,7 @@ func TestRegisterTypes_TagCompleter(t *testing.T) {
 
 func TestRegisterTypes_ProjectCompleter(t *testing.T) {
 	dir := t.TempDir()
-	s, err := storage.NewSQLiteStorage(dir + "/test.db")
+	s, err := storage.NewSQLiteStorage(filepath.Join(dir, "test.db"))
 	require.NoError(t, err)
 	defer s.Close()
 
