@@ -181,7 +181,7 @@ func userHome() string {
 // Returns empty bytes (not an error) when the binary is not found.
 func runProbeCmd(ctx context.Context, binPath string, args ...string) []byte {
 	cmd := exec.CommandContext(ctx, binPath, args...)
-	out, _ := cmd.CombinedOutput()
+	out, _ := cmd.CombinedOutput() //nolint:errcheck // probe cmd; missing binary returns empty
 	return out
 }
 

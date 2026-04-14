@@ -104,7 +104,7 @@ func (fi *FlowImporter) fetchContent(ctx context.Context, url string) (string, e
 
 	req.Header.Set("User-Agent", userAgent)
 
-	resp, err := fi.httpClient.Do(req) //nolint:gosec // G704: url validated by convertToRawURL to be github.com only
+	resp, err := fi.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch URL: %w", err)
 	}

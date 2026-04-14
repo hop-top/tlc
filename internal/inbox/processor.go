@@ -107,7 +107,7 @@ func (p *FileInboxProcessor) processCreates(
 		data, err := os.ReadFile(src)
 		if err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -116,7 +116,7 @@ func (p *FileInboxProcessor) processCreates(
 		parsed, err := p.parseCreate(name, data)
 		if err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -125,7 +125,7 @@ func (p *FileInboxProcessor) processCreates(
 		taskID, err := p.svc.NextTaskID(ctx, p.projectID)
 		if err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -137,7 +137,7 @@ func (p *FileInboxProcessor) processCreates(
 			ctx, task, "inbox", "",
 		); err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -171,7 +171,7 @@ func (p *FileInboxProcessor) processTransitions(
 		data, err := os.ReadFile(src)
 		if err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -180,7 +180,7 @@ func (p *FileInboxProcessor) processTransitions(
 		intent, err := ParseTransitionJSON(data)
 		if err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -194,7 +194,7 @@ func (p *FileInboxProcessor) processTransitions(
 			intent.Note,
 		); err != nil {
 			p.fail(name, err, result)
-			moveFile(src, filepath.Join(
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
 				p.inboxDir, dirFailed, name,
 			))
 			continue
@@ -240,7 +240,7 @@ func (p *FileInboxProcessor) fail(
 	sidecar := filepath.Join(
 		p.inboxDir, dirFailed, name+".error",
 	)
-	_ = os.WriteFile(sidecar, []byte(err.Error()), 0o644)
+	_ = os.WriteFile(sidecar, []byte(err.Error()), 0o644) //nolint:errcheck // best-effort error sidecar
 }
 
 // buildTask converts a ParseResult into a core.Task.

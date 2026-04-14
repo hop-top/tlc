@@ -18,7 +18,7 @@ func awaitOAuthCallback(ctx context.Context, cfg *oauth2.Config, service string,
 			return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 		}
 
-		_ = server.Shutdown(ctx)
+		_ = server.Shutdown(ctx) //nolint:errcheck // best-effort cleanup
 
 		cred := &Credential{
 			Service: service,
@@ -38,11 +38,11 @@ func awaitOAuthCallback(ctx context.Context, cfg *oauth2.Config, service string,
 		return cred, nil
 
 	case err := <-errChan:
-		_ = server.Shutdown(ctx)
+		_ = server.Shutdown(ctx) //nolint:errcheck // best-effort cleanup
 		return nil, err
 
 	case <-time.After(5 * time.Minute):
-		_ = server.Shutdown(ctx)
+		_ = server.Shutdown(ctx) //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("authentication timed out")
 	}
 }

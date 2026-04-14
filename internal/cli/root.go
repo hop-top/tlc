@@ -524,7 +524,7 @@ func getStorageRaw() (*storage.SQLiteStorage, error) {
 		dbPath = filepath.Join(config.UserDataDir(), "db.sqlite")
 	}
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil { //nolint:gosec // G703: dbPath from config or standard data dir
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 

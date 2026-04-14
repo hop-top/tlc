@@ -122,9 +122,9 @@ func (h *Hook) invokeEvaGate(stepID, contractName string, output map[string]any)
 	if err != nil {
 		return fmt.Errorf("flowtest: hook: eva request failed: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck // best-effort read for error message
 
 	if resp.StatusCode == http.StatusOK {
 		return nil

@@ -160,7 +160,7 @@ func fetchJiraIssues(url, project, lastSyncAt string) ([]interface{}, error) {
 	if lastSyncAt != "" {
 		// Convert ISO to Jira JQL format if needed
 		// For now, simple updated check
-		t, _ := time.Parse(time.RFC3339, lastSyncAt)
+		t, _ := time.Parse(time.RFC3339, lastSyncAt) //nolint:errcheck // best-effort parse; zero time is safe fallback
 		jql = fmt.Sprintf("%s AND updated >= \"%s\"", jql, t.Format("2006-01-02 15:04"))
 	}
 
@@ -349,7 +349,7 @@ func deleteJiraIssue(client *jira.Client, issueID string) error {
 }
 
 func sendResponse(resp Response) {
-	data, _ := json.Marshal(resp)
+	data, _ := json.Marshal(resp) //nolint:errcheck // marshalling known-valid response struct
 	fmt.Println(string(data))
 }
 

@@ -19,7 +19,7 @@ func TestNewChecker_ReturnsChecker(t *testing.T) {
 
 func TestUpgrade_NoUpdate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
+		json.NewEncoder(w).Encode(map[string]string{
 			"version": "0.0.0",
 			"url":     "http://example.com/tlc",
 		})
@@ -40,7 +40,7 @@ func TestUpgrade_NoUpdate(t *testing.T) {
 
 func TestUpgrade_UpdateAvail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
+		json.NewEncoder(w).Encode(map[string]string{
 			"version": "99.0.0",
 			"url":     "http://example.com/tlc",
 			"notes":   "Many improvements",

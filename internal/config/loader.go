@@ -75,7 +75,9 @@ func LoadConfig(projectRoot string) (*Config, error) {
 		SystemConfigPath:  SystemConfigPath(),
 		UserConfigPath:    userConfigPath,
 		ProjectConfigPath: projectConfigPath,
-		EnvOverride:       func(dst any) { applyEnvOverrides(dst.(*Config)) },
+		EnvOverride: func(dst any) {
+			applyEnvOverrides(dst.(*Config)) //nolint:errcheck // type assertion on known-valid cfg pointer
+		},
 	}
 
 	if err := kitconfig.Load(cfg, opts); err != nil {
