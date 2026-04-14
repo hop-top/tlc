@@ -33,18 +33,23 @@ func enqueueAgentJob(cmd *cobra.Command) (string, error) {
 	}
 
 	payload := &core.JobPayload{
-		AgentName:   agentRunAgent,
-		Tasks:       agentRunTasks,
-		FlowRef:     agentRunFlow,
-		TrackID:     agentRunTrack,
-		Image:       agentRunImage,
-		Local:       agentRunLocal,
-		Prompt:      agentRunPrompt,
-		NoState:     agentRunNoState,
-		KeepPod:     agentRunKeepPod,
-		Network:     agentRunNetwork,
-		Retries:     agentRunRetries,
-		TimeoutSecs: int(agentRunTimeout.Seconds()),
+		AgentName:        agentRunAgent,
+		Tasks:            agentRunTasks,
+		FlowRef:          agentRunFlow,
+		TrackID:          agentRunTrack,
+		Image:            agentRunImage,
+		Local:            agentRunLocal,
+		Prompt:           agentRunPrompt,
+		NoState:          agentRunNoState,
+		KeepPod:          agentRunKeepPod,
+		Network:          agentRunNetwork,
+		Retries:          agentRunRetries,
+		TimeoutSecs:      int(agentRunTimeout.Seconds()),
+		Env:              agentRunEnv,
+		Mounts:           agentRunMounts,
+		Context:          agentRunContext,
+		TotalTimeoutSecs: int(agentRunTotalTimeout.Seconds()),
+		TrustProject:     agentRunTrustProject,
 	}
 
 	payloadStr, err := core.MarshalPayload(payload)
@@ -92,9 +97,7 @@ var AgentStatusCmd = &cobra.Command{
 			return fmt.Errorf("get job: %w", err)
 		}
 		if job == nil {
-			return fmt.Errorf(
-				"job %s not found; run 'tlc agent list' to see jobs", jobID,
-			)
+			return fmt.Errorf("job %s not found", jobID)
 		}
 
 		format := viper.GetString("output.format")
@@ -225,10 +228,17 @@ func processJob(
 	agentRunKeepPod = payload.KeepPod
 	agentRunNetwork = payload.Network
 	agentRunRetries = payload.Retries
+	agentRunEnv = payload.Env
+	agentRunMounts = payload.Mounts
+	agentRunContext = payload.Context
+	agentRunTrustProject = payload.TrustProject
 	agentRunAsync = false // execute synchronously
 	agentRunDryRun = false
 	if payload.TimeoutSecs > 0 {
 		agentRunTimeout = time.Duration(payload.TimeoutSecs) * time.Second
+	}
+	if payload.TotalTimeoutSecs > 0 {
+		agentRunTotalTimeout = time.Duration(payload.TotalTimeoutSecs) * time.Second
 	}
 
 	execErr := runAgentRun(cmd, nil)

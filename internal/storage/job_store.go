@@ -106,34 +106,55 @@ func (s *SQLiteStorage) ListJobs(
 }
 
 // ClaimNextJob atomically picks the oldest queued job and marks it running.
+// Uses a transaction to guarantee the SELECT fetches the exact row that
+// was UPDATEd, avoiding races with concurrent workers.
 func (s *SQLiteStorage) ClaimNextJob(ctx context.Context, queue string) (*core.Job, error) {
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	result, err := s.db.ExecContext(ctx, `
-		UPDATE jobs SET status = 'running', started_at = ?
-		WHERE id = (
-			SELECT id FROM jobs
-			WHERE queue = ? AND status = 'queued'
-			ORDER BY created_at ASC
-			LIMIT 1
-		)`, now, queue)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("claim job: %w", err)
+		return nil, fmt.Errorf("claim job: begin tx: %w", err)
 	}
-	n, _ := result.RowsAffected()
-	if n == 0 {
-		return nil, nil
+	defer func() { _ = tx.Rollback() }()
+
+	// Find the oldest queued job.
+	var jobID string
+	err = tx.QueryRowContext(ctx, `
+		SELECT id FROM jobs
+		WHERE queue = ? AND status = 'queued'
+		ORDER BY created_at ASC
+		LIMIT 1`, queue).Scan(&jobID)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("claim job: select: %w", err)
 	}
 
-	// Fetch the claimed job.
-	row := s.db.QueryRowContext(ctx, `
+	// Claim it.
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = tx.ExecContext(ctx, `
+		UPDATE jobs SET status = 'running', started_at = ?
+		WHERE id = ?`, now, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("claim job: update: %w", err)
+	}
+
+	// Fetch the claimed job by its exact ID.
+	row := tx.QueryRowContext(ctx, `
 		SELECT id, queue, type, status, payload, result, error,
 			created_at, started_at, ended_at, created_by
-		FROM jobs WHERE queue = ? AND status = 'running'
-		ORDER BY started_at DESC LIMIT 1`, queue)
-	return scanJob(row)
+		FROM jobs WHERE id = ?`, jobID)
+	job, err := scanJob(row)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("claim job: commit: %w", err)
+	}
+	return job, nil
 }
 
 // CancelJob marks a queued job as canceled.

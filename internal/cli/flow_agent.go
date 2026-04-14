@@ -1,12 +1,14 @@
 package cli
 
 import (
-	"os"
-
 	"hop.top/tlc/internal/core"
 )
 
-var flowRunAgent string
+var (
+	flowRunAgent        string
+	flowRunAgentLocal   bool
+	flowRunTrustProject bool
+)
 
 // buildFlowAgentRunner creates a ContainerAgentRunner when --agent is
 // set on flow run. Returns nil if no agent is configured.
@@ -19,24 +21,23 @@ func buildFlowAgentRunner() core.AgentRunner {
 	if err := registry.LoadDefaults(); err != nil {
 		return nil
 	}
-	// Auto-trust for interactive CLI use.
-	registry.TrustProject(".tlc/agents.yaml")
+	if flowRunTrustProject {
+		registry.TrustProject(registry.ProjectConfigPath())
+	}
 
 	return &ContainerAgentRunner{
 		AgentName: flowRunAgent,
 		Registry:  registry,
-		Local:     agentRunLocal,
-		EnvExtra:  parseEnvSlice(os.Environ()),
+		Local:     flowRunAgentLocal,
 	}
 }
 
-// parseEnvSlice is intentionally a no-op — we only pass agent-specific
-// env vars, not the entire shell environment.
-func parseEnvSlice(_ []string) map[string]string {
-	return nil
-}
-
 func init() {
-	FlowRunCmd.Flags().StringVar(&flowRunAgent, "agent", "",
+	f := FlowRunCmd.Flags()
+	f.StringVar(&flowRunAgent, "agent", "",
 		"Agent to execute flow steps (enables container/local dispatch)")
+	f.BoolVar(&flowRunAgentLocal, "agent-local", false,
+		"Execute agent locally (no container)")
+	f.BoolVar(&flowRunTrustProject, "trust-project", false,
+		"Trust project-local agent config without prompting")
 }

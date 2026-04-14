@@ -43,10 +43,11 @@ func (e *ErrTrustRequired) Error() string {
 // supports ${VAR} env-var expansion; project-local values are literal
 // (security: prevents secret exfiltration via committed config).
 type AgentRegistry struct {
-	mu       sync.RWMutex
-	global   map[string]*AgentConfig
-	project  map[string]*AgentConfig
-	trusted  map[string]bool // path -> user approved
+	mu              sync.RWMutex
+	global          map[string]*AgentConfig
+	project         map[string]*AgentConfig
+	trusted         map[string]bool // path -> user approved
+	projectCfgPath  string          // actual loaded project config path
 }
 
 // NewAgentRegistry returns an empty registry.
@@ -107,11 +108,23 @@ func (r *AgentRegistry) loadProject(path string) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.projectCfgPath = path
 	for name, cfg := range configs {
 		// Project-local env values are literal — no expansion.
 		r.project[name] = cfg
 	}
 	return nil
+}
+
+// ProjectConfigPath returns the path of the loaded project-local config,
+// or the default ".tlc/agents.yaml" if none was loaded.
+func (r *AgentRegistry) ProjectConfigPath() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.projectCfgPath != "" {
+		return r.projectCfgPath
+	}
+	return filepath.Join(".tlc", "agents.yaml")
 }
 
 // TrustProject marks a project-local config path as user-approved.
@@ -139,9 +152,9 @@ func (r *AgentRegistry) Get(name string) (*AgentConfig, error) {
 		)
 	}
 
-	// Check trust for project-local.
-	if p != nil && !r.trusted[".tlc/agents.yaml"] {
-		return nil, &ErrTrustRequired{Path: ".tlc/agents.yaml"}
+	// Check trust for project-local against actual loaded path.
+	if p != nil && !r.trusted[r.projectCfgPath] {
+		return nil, &ErrTrustRequired{Path: r.projectCfgPath}
 	}
 
 	merged := mergeConfigs(g, p)

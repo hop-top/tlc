@@ -14,10 +14,20 @@ func buildOpts() core.BuildOpts {
 	}
 }
 
+// repoRoot returns the working directory for agent execution. In local
+// mode it returns the host CWD; in container mode the repo is mounted
+// at /workspace.
 func repoRoot() string {
+	return repoRootForMode(agentRunLocal)
+}
+
+func repoRootForMode(local bool) string {
+	if !local {
+		return "/workspace"
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "/workspace"
+		return "."
 	}
 	return cwd
 }

@@ -109,7 +109,7 @@ func taskExecForTrack(
 ) error {
 	builder := core.NewContextBuilder(s)
 	ac, err := builder.BuildForTask(ctx, taskID, core.BuildOpts{
-		RepoRoot: repoRoot(),
+		RepoRoot: repoRootForMode(local),
 	})
 	if err != nil {
 		return err

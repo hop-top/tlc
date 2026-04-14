@@ -59,26 +59,30 @@ func (c *ResultCollector) CollectFromExec(
 		)
 	}
 
-	// Case 1: stdout says failed -> discard volume.
-	if stdoutResult.Status == AgentStatusFailed {
-		if err := stdoutResult.Validate(); err != nil {
-			return nil, fmt.Errorf("stdout result invalid: %w", err)
-		}
-		return stdoutResult, nil
+	// Stdout is authoritative for status, exit_code, and summary.
+	// Volume only contributes artifacts and outputs.
+	if err := stdoutResult.Validate(); err != nil {
+		return nil, fmt.Errorf("stdout result invalid: %w", err)
 	}
 
-	// Case 2: stdout says succeeded + volume exists -> use volume.
+	// Merge volume artifacts/outputs into stdout result when available.
 	if volumeResult != nil && volumeErr == nil {
 		if err := volumeResult.Validate(); err != nil {
 			return nil, fmt.Errorf("volume result invalid: %w", err)
 		}
-		return volumeResult, nil
+		if len(volumeResult.Artifacts) > 0 {
+			stdoutResult.Artifacts = volumeResult.Artifacts
+		}
+		if len(volumeResult.Outputs) > 0 {
+			if stdoutResult.Outputs == nil {
+				stdoutResult.Outputs = make(map[string]any)
+			}
+			for k, v := range volumeResult.Outputs {
+				stdoutResult.Outputs[k] = v
+			}
+		}
 	}
 
-	// Case 3: stdout succeeded + no volume -> use stdout.
-	if err := stdoutResult.Validate(); err != nil {
-		return nil, fmt.Errorf("stdout result invalid: %w", err)
-	}
 	return stdoutResult, nil
 }
 

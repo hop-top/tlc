@@ -52,12 +52,9 @@ func TestResultCollector_StdoutSucceeded_VolumeExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Should use volume result (richer data).
-	if got.Summary != "volume summary" {
-		t.Errorf("summary = %q, want volume summary", got.Summary)
-	}
-	if got.Agent != "claude" {
-		t.Errorf("agent = %q, want claude", got.Agent)
+	// Stdout is authoritative for status/summary; volume provides artifacts.
+	if got.Summary != "stdout summary" {
+		t.Errorf("summary = %q, want stdout summary", got.Summary)
 	}
 	if len(got.Artifacts) != 1 {
 		t.Errorf("artifacts len = %d, want 1", len(got.Artifacts))

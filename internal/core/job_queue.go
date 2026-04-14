@@ -44,18 +44,23 @@ type Job struct {
 
 // JobPayload is the serialized payload for an async agent job.
 type JobPayload struct {
-	AgentName   string   `json:"agent_name"`
-	Tasks       []string `json:"tasks,omitempty"`
-	FlowRef     string   `json:"flow_ref,omitempty"`
-	TrackID     string   `json:"track_id,omitempty"`
-	Image       string   `json:"image,omitempty"`
-	Local       bool     `json:"local,omitempty"`
-	Prompt      string   `json:"prompt,omitempty"`
-	NoState     bool     `json:"no_state_update,omitempty"`
-	KeepPod     bool     `json:"keep_pod,omitempty"`
-	Network     string   `json:"network,omitempty"`
-	Retries     int      `json:"retries,omitempty"`
-	TimeoutSecs int      `json:"timeout_secs,omitempty"`
+	AgentName        string   `json:"agent_name"`
+	Tasks            []string `json:"tasks,omitempty"`
+	FlowRef          string   `json:"flow_ref,omitempty"`
+	TrackID          string   `json:"track_id,omitempty"`
+	Image            string   `json:"image,omitempty"`
+	Local            bool     `json:"local,omitempty"`
+	Prompt           string   `json:"prompt,omitempty"`
+	NoState          bool     `json:"no_state_update,omitempty"`
+	KeepPod          bool     `json:"keep_pod,omitempty"`
+	Network          string   `json:"network,omitempty"`
+	Retries          int      `json:"retries,omitempty"`
+	TimeoutSecs      int      `json:"timeout_secs,omitempty"`
+	Env              []string `json:"env,omitempty"`
+	Mounts           []string `json:"mounts,omitempty"`
+	Context          []string `json:"context,omitempty"`
+	TotalTimeoutSecs int      `json:"total_timeout_secs,omitempty"`
+	TrustProject     bool     `json:"trust_project,omitempty"`
 }
 
 // MarshalPayload encodes a JobPayload to JSON string.

@@ -1,13 +1,16 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // LocalExecManager executes an agent binary directly on the host,
@@ -51,7 +54,7 @@ func WarnIgnoredFlags(flags map[string]bool) {
 }
 
 // Exec runs the agent binary locally with injected env vars and
-// returns stdout, stderr, and exit code.
+// working directory, returning stdout, stderr, and exit code.
 func (m *LocalExecManager) Exec(
 	ctx context.Context, opts LocalExecOpts,
 ) (stdout string, stderr string, exitCode int, err error) {
@@ -61,9 +64,40 @@ func (m *LocalExecManager) Exec(
 		)
 	}
 
-	stdout, stderr, exitCode, err = m.runner.Run(
-		ctx, opts.Binary, opts.Args...,
-	)
+	cmd := exec.CommandContext(ctx, opts.Binary, opts.Args...)
+
+	// Set working directory if specified.
+	if opts.RepoRoot != "" {
+		cmd.Dir = opts.RepoRoot
+	}
+
+	// Inject environment variables: inherit current env + overlay opts.EnvVars.
+	if len(opts.EnvVars) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range opts.EnvVars {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	runErr := cmd.Run()
+	stdout = outBuf.String()
+	stderr = errBuf.String()
+
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+				exitCode = ws.ExitStatus()
+			} else {
+				exitCode = exitErr.ExitCode()
+			}
+			runErr = nil // non-zero exit is not an execution error
+		}
+	}
+	err = runErr
 	return
 }
 

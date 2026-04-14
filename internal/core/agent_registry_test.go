@@ -73,12 +73,12 @@ agents:
 	if !ok {
 		t.Fatalf("expected *ErrTrustRequired, got %T: %v", err, err)
 	}
-	if trustErr.Path != ".tlc/agents.yaml" {
-		t.Errorf("trust path = %q", trustErr.Path)
+	if trustErr.Path != path {
+		t.Errorf("trust path = %q, want %q", trustErr.Path, path)
 	}
 
 	// After trust, Get should succeed.
-	reg.TrustProject(".tlc/agents.yaml")
+	reg.TrustProject(reg.ProjectConfigPath())
 	cfg, err := reg.Get("gemini")
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ agents:
 	if err := reg.LoadFromFile(projectPath, false); err != nil {
 		t.Fatal(err)
 	}
-	reg.TrustProject(".tlc/agents.yaml")
+	reg.TrustProject(reg.ProjectConfigPath())
 
 	cfg, err := reg.Get("claude")
 	if err != nil {
@@ -167,7 +167,7 @@ agents:
 	if err := reg.LoadFromFile(projectPath, false); err != nil {
 		t.Fatal(err)
 	}
-	reg.TrustProject(".tlc/agents.yaml")
+	reg.TrustProject(reg.ProjectConfigPath())
 
 	cfg, err := reg.Get("claude")
 	if err != nil {

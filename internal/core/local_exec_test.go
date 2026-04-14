@@ -5,18 +5,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestLocalExecManager_Exec(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		r := &mockRunner{results: []mockResult{
-			{Stdout: `{"version":1,"status":"succeeded","exit_code":0,"summary":"done"}`, ExitCode: 0},
-		}}
-		m := NewLocalExecManager(r, "")
+		m := NewLocalExecManager(nil, "")
 		stdout, _, code, err := m.Exec(context.Background(), LocalExecOpts{
-			Binary: "claude",
-			Args:   []string{"--context", "/tmp/ctx.json"},
+			Binary: "echo",
+			Args:   []string{"hello"},
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -29,9 +27,28 @@ func TestLocalExecManager_Exec(t *testing.T) {
 		}
 	})
 
+	t.Run("env and dir", func(t *testing.T) {
+		dir := t.TempDir()
+		m := NewLocalExecManager(nil, "")
+		stdout, _, code, err := m.Exec(context.Background(), LocalExecOpts{
+			Binary:   "sh",
+			Args:     []string{"-c", "echo $MY_VAR && pwd"},
+			EnvVars:  map[string]string{"MY_VAR": "test123"},
+			RepoRoot: dir,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if code != 0 {
+			t.Errorf("exit code = %d", code)
+		}
+		if !strings.Contains(stdout, "test123") {
+			t.Errorf("env var not passed: stdout = %q", stdout)
+		}
+	})
+
 	t.Run("missing binary", func(t *testing.T) {
-		r := &mockRunner{}
-		m := NewLocalExecManager(r, "")
+		m := NewLocalExecManager(nil, "")
 		_, _, _, err := m.Exec(context.Background(), LocalExecOpts{})
 		if err == nil {
 			t.Fatal("expected error for missing binary")

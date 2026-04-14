@@ -38,6 +38,7 @@ var (
 	agentRunRetries      int
 	agentRunNetwork      string
 	agentRunJSON         bool
+	agentRunTrustProject bool
 )
 
 // AgentRunCmd implements `tlc agent run`.
@@ -74,15 +75,18 @@ func init() {
 	f.DurationVar(&agentRunTimeout, "timeout", 30*time.Minute, "Per-task timeout")
 	f.DurationVar(&agentRunTotalTimeout, "total-timeout", 0, "Total execution timeout")
 	f.BoolVar(&agentRunDryRun, "dry-run", false, "Print plan without executing")
-	f.StringVar(&agentRunPrompt, "prompt", "", "Prompt file or inline text")
+	f.StringVar(&agentRunPrompt, "prompt", "", "Inline prompt text")
 	f.StringSliceVar(&agentRunContext, "context", nil, "Extra context files")
 	f.BoolVar(&agentRunNoState, "no-state-update", false, "Skip tlc state transitions")
 	f.BoolVar(&agentRunKeepPod, "keep-pod", false, "Keep container after execution")
 	f.BoolVar(&agentRunLocal, "local", false, "Execute locally (no container)")
 	f.BoolVar(&agentRunAsync, "async", false, "Dispatch asynchronously")
-	f.IntVar(&agentRunRetries, "retries", 0, "Retry count on failure")
+	// TODO: implement retry logic (currently unused)
+	// f.IntVar(&agentRunRetries, "retries", 0, "Retry count on failure")
 	f.StringVar(&agentRunNetwork, "network", "", "Container network")
 	f.BoolVar(&agentRunJSON, "json", false, "Output as JSON")
+	f.BoolVar(&agentRunTrustProject, "trust-project", false,
+		"Trust project-local agent config without prompting")
 
 	_ = AgentRunCmd.MarkFlagRequired("agent")
 }
@@ -98,16 +102,18 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("load agent config: %w", err)
 	}
 
+	if agentRunTrustProject {
+		registry.TrustProject(registry.ProjectConfigPath())
+	}
+
 	agentCfg, err := registry.Get(agentRunAgent)
 	if err != nil {
-		// Auto-trust project config for interactive use.
 		if _, ok := err.(*core.ErrTrustRequired); ok {
-			registry.TrustProject(".tlc/agents.yaml")
-			agentCfg, err = registry.Get(agentRunAgent)
+			return fmt.Errorf(
+				"%w; re-run with --trust-project to approve", err,
+			)
 		}
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	// Apply image override.
@@ -224,12 +230,18 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("update audit record: %w", err)
 		}
 
-		// Update task state.
+		// Update task state. When running in --track mode, each
+		// individual task uses targetType="task" so StateUpdater
+		// applies the transition (it no-ops on "track").
 		tid := ac.TaskID
+		updateType := targetType
 		if tid == "" {
 			tid = targetID
 		}
-		if err := updater.Update(ctx, result, targetType, tid, core.UpdateOpts{
+		if targetType == "track" && ac.TaskID != "" {
+			updateType = "task"
+		}
+		if err := updater.Update(ctx, result, updateType, tid, core.UpdateOpts{
 			NoStateUpdate: agentRunNoState,
 		}); err != nil {
 			return fmt.Errorf("state update: %w", err)

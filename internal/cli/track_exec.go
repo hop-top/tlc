@@ -10,13 +10,12 @@ import (
 )
 
 var (
-	trackExecAgent   string
-	trackExecLocal   bool
-	trackExecTimeout time.Duration
-	trackExecDryRun  bool
-	trackExecNoState bool
-	trackExecKeepPod bool
-	trackExecJSON    bool
+	trackExecAgent        string
+	trackExecLocal        bool
+	trackExecTimeout      time.Duration
+	trackExecDryRun       bool
+	trackExecNoState      bool
+	trackExecTrustProject bool
 )
 
 // trackExecCmd implements `tlc track exec <id> --agent <name>`.
@@ -44,10 +43,17 @@ Examples:
 		if err := registry.LoadDefaults(); err != nil {
 			return fmt.Errorf("load agent config: %w", err)
 		}
-		registry.TrustProject(".tlc/agents.yaml")
+		if trackExecTrustProject {
+			registry.TrustProject(registry.ProjectConfigPath())
+		}
 
 		agentCfg, err := registry.Get(trackExecAgent)
 		if err != nil {
+			if _, ok := err.(*core.ErrTrustRequired); ok {
+				return fmt.Errorf(
+					"%w; re-run with --trust-project to approve", err,
+				)
+			}
 			return err
 		}
 
@@ -68,7 +74,7 @@ Examples:
 		// Resolve linked TODO tasks in dependency order.
 		builder := core.NewContextBuilder(s)
 		taskContexts, err := builder.BuildForTrack(ctx, trackID, core.BuildOpts{
-			RepoRoot: repoRoot(),
+			RepoRoot: repoRootForMode(trackExecLocal),
 		})
 		if err != nil {
 			return err
@@ -120,8 +126,8 @@ func init() {
 	f.DurationVar(&trackExecTimeout, "timeout", 0, "Total timeout")
 	f.BoolVar(&trackExecDryRun, "dry-run", false, "Print plan only")
 	f.BoolVar(&trackExecNoState, "no-state-update", false, "Skip state transitions")
-	f.BoolVar(&trackExecKeepPod, "keep-pod", false, "Keep containers")
-	f.BoolVar(&trackExecJSON, "json", false, "JSON output")
+	f.BoolVar(&trackExecTrustProject, "trust-project", false,
+		"Trust project-local agent config without prompting")
 
 	TrackCmd.AddCommand(trackExecCmd)
 }
