@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build build-plugins test lint fmt vet tidy coverage clean watch watch-lint watch-test dev check tools pre-commit-install
+.PHONY: help install build build-plugins build-shims test test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -102,6 +102,18 @@ tidy: ## Tidy and verify go modules
 	@go mod tidy && go mod verify
 	@echo "$(COLOR_GREEN)✓ Modules tidy$(COLOR_RESET)"
 
+fmt-check: ## Check formatting (non-mutating; fails if files need formatting)
+	@echo "$(COLOR_BLUE)Checking Go file formatting...$(COLOR_RESET)"
+	@bad=$$(gofmt -l $(GO_FILES)); if [ -n "$$bad" ]; then echo "$$bad"; echo "$(COLOR_YELLOW)⚠ Run 'make fmt' to fix$(COLOR_RESET)"; exit 1; fi
+	@bad=$$(goimports -l $(GO_FILES)); if [ -n "$$bad" ]; then echo "$$bad"; echo "$(COLOR_YELLOW)⚠ Run 'make fmt' to fix$(COLOR_RESET)"; exit 1; fi
+	@echo "$(COLOR_GREEN)✓ Formatting check passed$(COLOR_RESET)"
+
+tidy-check: ## Verify go.mod/go.sum are tidy (non-mutating; fails if dirty)
+	@echo "$(COLOR_BLUE)Checking go module tidiness...$(COLOR_RESET)"
+	@go mod tidy
+	@git diff --exit-code -- go.mod go.sum || { echo "$(COLOR_YELLOW)⚠ go.mod/go.sum not tidy; run 'make tidy'$(COLOR_RESET)"; exit 1; }
+	@echo "$(COLOR_GREEN)✓ Modules tidy check passed$(COLOR_RESET)"
+
 coverage: ## Generate test coverage report
 	@echo "$(COLOR_BLUE)Generating coverage report...$(COLOR_RESET)"
 	@./scripts/coverage.sh
@@ -142,7 +154,7 @@ watch-test: ## Watch for changes and run tests
 dev: fmt vet lint tidy test ## Run fmt, vet, lint, tidy, and test (pre-commit workflow)
 	@echo "$(COLOR_GREEN)✓ Development checks passed$(COLOR_RESET)"
 
-check: fmt vet lint tidy test ## Full pre-build gate (fmt, vet, lint, tidy, test)
+check: fmt-check vet lint tidy-check test ## Full pre-build gate (non-mutating: fmt-check, vet, lint, tidy-check, test)
 	@echo "$(COLOR_GREEN)✓ All checks passed$(COLOR_RESET)"
 
 tools: ## Install development tools (golangci-lint, air)
