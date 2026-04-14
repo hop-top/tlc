@@ -133,8 +133,9 @@ func executeCommands(ctx context.Context, cmds []ResolvedCommand, opts ExecuteOp
 }
 
 // resetAllFlags resets all CLI flag state before dispatching a resolved command.
-// It calls resetTaskFlags for task-domain flags; extend here for future domains.
+// Uses cobra's ResetFlags to clear pflag internal state (T-0231).
 func resetAllFlags() {
+	ResetCreateFlags()
 	resetTaskFlags()
 }
 
