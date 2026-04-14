@@ -335,6 +335,7 @@ func resetTaskFlags() {
 
 	// Reset track flags.
 	resetTrackFlags()
+	resetTrackGraphFlags()
 
 	// Reset flow flags.
 	resetFlowFlags()
@@ -359,7 +360,7 @@ func resetTaskFlags() {
 		logCmd,
 		aliasAddCmd, aliasRemoveCmd,
 		trackCreateCmd, trackUpdateCmd, trackArchiveCmd, trackAbandonCmd, trackDeleteCmd,
-		trackListCmd, trackShowCmd, trackSummaryCmd,
+		trackListCmd, trackShowCmd, trackSummaryCmd, trackGraphCmd,
 		TasksSyncCmd,
 		PromptTaskCmd,
 	} {

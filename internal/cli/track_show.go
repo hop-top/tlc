@@ -68,34 +68,45 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list linked tasks: %w", err)
 	}
 
+	// Compute execution strategy when tasks have blocked-by deps.
+	var strategy *core.ExecutionStrategy
+	if graph, gErr := core.NewDepGraph(tasks); gErr == nil && graph.HasDeps() {
+		strategy, err = graph.ComputeStrategy()
+		if err != nil {
+			return fmt.Errorf("failed to compute execution strategy: %w", err)
+		}
+	}
+
 	format := viper.GetString("output.format")
 	switch format {
 	case formatJSON, formatYAML:
-		out := buildTrackShowOutput(track, flags, progress)
+		out := buildTrackShowOutput(track, flags, progress, strategy)
 		return output.Render(cmd.OutOrStdout(), format, out)
 	default:
-		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks)
+		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks, strategy)
 	}
 	return nil
 }
 
 // trackShowOutput is the structured output for JSON/YAML rendering.
 type trackShowOutput struct {
-	ID        string              `json:"id" yaml:"id"`
-	Title     string              `json:"title" yaml:"title"`
-	Type      string              `json:"type" yaml:"type"`
-	Status    string              `json:"status" yaml:"status"`
-	State     []string            `json:"state" yaml:"state"`
-	Assignee  string              `json:"assignee" yaml:"assignee"`
-	CreatedAt string              `json:"created_at" yaml:"created_at"`
-	UpdatedAt string              `json:"updated_at" yaml:"updated_at"`
-	Progress  *core.TrackProgress `json:"progress" yaml:"progress"`
+	ID                string                 `json:"id" yaml:"id"`
+	Title             string                 `json:"title" yaml:"title"`
+	Type              string                 `json:"type" yaml:"type"`
+	Status            string                 `json:"status" yaml:"status"`
+	State             []string               `json:"state" yaml:"state"`
+	Assignee          string                 `json:"assignee" yaml:"assignee"`
+	CreatedAt         string                 `json:"created_at" yaml:"created_at"`
+	UpdatedAt         string                 `json:"updated_at" yaml:"updated_at"`
+	Progress          *core.TrackProgress    `json:"progress" yaml:"progress"`
+	ExecutionStrategy *core.ExecutionStrategy `json:"execution_strategy,omitempty" yaml:"execution_strategy,omitempty"`
 }
 
 func buildTrackShowOutput(
 	t *core.Track,
 	flags []core.TrackStateFlag,
 	progress *core.TrackProgress,
+	strategy *core.ExecutionStrategy,
 ) trackShowOutput {
 	stateStrs := make([]string, len(flags))
 	for i, f := range flags {
@@ -106,15 +117,16 @@ func buildTrackShowOutput(
 		assignee = "@" + *t.AssignedTo
 	}
 	return trackShowOutput{
-		ID:        t.ID,
-		Title:     t.Title,
-		Type:      t.Type,
-		Status:    string(t.Status),
-		State:     stateStrs,
-		Assignee:  assignee,
-		CreatedAt: t.CreatedAt.Format("2006-01-02"),
-		UpdatedAt: t.UpdatedAt.Format("2006-01-02"),
-		Progress:  progress,
+		ID:                t.ID,
+		Title:             t.Title,
+		Type:              t.Type,
+		Status:            string(t.Status),
+		State:             stateStrs,
+		Assignee:          assignee,
+		CreatedAt:         t.CreatedAt.Format("2006-01-02"),
+		UpdatedAt:         t.UpdatedAt.Format("2006-01-02"),
+		Progress:          progress,
+		ExecutionStrategy: strategy,
 	}
 }
 
@@ -124,6 +136,7 @@ func renderTrackShowDetail(
 	flags []core.TrackStateFlag,
 	progress *core.TrackProgress,
 	tasks []*core.Task,
+	strategy *core.ExecutionStrategy,
 ) {
 	// Header
 	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", t.ID)))
@@ -201,6 +214,18 @@ func renderTrackShowDetail(
 	} else {
 		for _, task := range progress.Unphased {
 			renderPhaseTask(w, task)
+		}
+	}
+
+	// Execution strategy — only shown when deps exist.
+	if strategy != nil && len(strategy.Batches) > 0 {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprint(w, core.RenderBatchSummary(strategy))
+
+		if len(strategy.CriticalPath) > 0 {
+			_, _ = fmt.Fprintf(w, "\nCritical Path (%d tasks): %s\n",
+				len(strategy.CriticalPath),
+				strings.Join(strategy.CriticalPath, " \u2192 "))
 		}
 	}
 }
