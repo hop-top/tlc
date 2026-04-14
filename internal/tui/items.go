@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	kitcli "hop.top/kit/cli"
 	kittui "hop.top/kit/tui"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
@@ -61,11 +62,13 @@ func (ti *taskItem) Render(width int) string {
 	)
 }
 
-// flowRunItem renders a single flow run row.
+// flowRunItem renders a single flow run row with status indicator
+// and kit/tui.Progress bar for running flows.
 type flowRunItem struct {
 	run      *core.FlowRun
 	selected bool
 	styles   *styles.Styles
+	theme    kitcli.Theme
 }
 
 func (fi *flowRunItem) Render(_ int) string {
@@ -74,12 +77,40 @@ func (fi *flowRunItem) Render(_ int) string {
 		cursor = fi.styles.InProgress.Render("►")
 	}
 
-	status := string(fi.run.Status)
+	// Status indicator with semantic colors.
+	var statusStr string
+	switch fi.run.Status {
+	case core.FlowStatusRunning:
+		statusStr = fi.styles.InProgress.Render("● " + string(fi.run.Status))
+	case core.FlowStatusSucceeded:
+		statusStr = fi.styles.Done.Render("✓ " + string(fi.run.Status))
+	case core.FlowStatusFailed:
+		statusStr = fi.styles.Error.Render("✗ " + string(fi.run.Status))
+	case core.FlowStatusQueued:
+		statusStr = fi.styles.Muted.Render("◌ " + string(fi.run.Status))
+	case core.FlowStatusPaused:
+		statusStr = fi.styles.Warning.Render("⏸ " + string(fi.run.Status))
+	default:
+		statusStr = string(fi.run.Status)
+	}
+
 	startedAt := fi.run.StartedAt.Format("2006-01-02 15:04:05")
 
-	return fmt.Sprintf("%s %s %s %s (%s)",
-		cursor, fi.run.ID, fi.run.FlowID, status, startedAt,
+	line := fmt.Sprintf("%s %s %s %s (%s)",
+		cursor, fi.run.ID, fi.run.FlowID, statusStr, startedAt,
 	)
+
+	// Show progress bar for running or paused flows.
+	if fi.run.Status == core.FlowStatusRunning ||
+		fi.run.Status == core.FlowStatusPaused {
+		prog := kittui.NewProgress(fi.theme).
+			SetPercent(fi.run.Progress).
+			SetWidth(20)
+		pct := fmt.Sprintf(" %3.0f%%", fi.run.Progress*100)
+		line += " " + prog.View() + fi.styles.Muted.Render(pct)
+	}
+
+	return line
 }
 
 // headerItem renders a status group header.

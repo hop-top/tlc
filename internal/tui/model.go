@@ -221,6 +221,7 @@ func (m Model) rebuildFlowList() Model {
 			run:      run,
 			selected: i == m.selected,
 			styles:   m.styles,
+			theme:    m.theme,
 		}
 	}
 	m.flowList = m.flowList.SetItems(items)
