@@ -22,7 +22,7 @@ import (
 	"hop.top/tlc/internal/events"
 	"hop.top/tlc/internal/extensions"
 	"hop.top/tlc/internal/storage"
-	"hop.top/upgrade"
+	"hop.top/kit/upgrade"
 )
 
 const backendSQLite = "sqlite"

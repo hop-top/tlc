@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"hop.top/kit/xdg"
-	"hop.top/upgrade"
-	"hop.top/upgrade/skill"
+	"hop.top/kit/upgrade"
+	"hop.top/kit/upgrade/skill"
 )
 
 const tlcGitHubRepo = "hop-top/tlc"
