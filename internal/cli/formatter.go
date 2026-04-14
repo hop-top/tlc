@@ -90,7 +90,7 @@ func formatTLS(t *core.Task) string {
 		parts = append(parts, "prio:"+string(t.Priority))
 	}
 
-	if t.Reference != "" && t.Reference != "task://"+t.ID {
+	if t.Reference != "" && !isDefaultRef(t.Reference, t.ID) {
 		parts = append(parts, "ref:"+t.Reference)
 	}
 	if t.ProjectID != nil && *t.ProjectID != "" {
@@ -285,26 +285,65 @@ func formatStatus(status core.TaskStatus) string {
 }
 
 // resolveTaskReference returns the absolute reference URI for a task.
-// If the stored reference is relative (task://T-XXXX), it is expanded using the
+// If the stored reference is relative (tlc:///T-XXXX), it is expanded using the
 // task's project_id or the currently detected project.
 func resolveTaskReference(t *core.Task) string {
 	ref := t.Reference
 	if ref == "" {
-		ref = fmt.Sprintf("task://%s", t.ID)
+		ref = fmt.Sprintf("tlc:///%s", t.ID)
 	}
-	// Already absolute: contains a path segment beyond the task ID.
-	if !strings.HasPrefix(ref, "task://T-") {
+	// Already absolute: contains a project host segment beyond the task ID.
+	if !isLocalTaskRef(ref) {
 		return ref
 	}
-	// Relative form: task://T-XXXX — expand with project ID.
-	taskID := strings.TrimPrefix(ref, "task://")
+	// Local form: tlc:///T-XXXX — expand with project ID.
+	taskID := extractLocalTaskID(ref)
 	if t.ProjectID != nil && *t.ProjectID != "" {
-		return fmt.Sprintf("task://%s/%s", *t.ProjectID, taskID)
+		return fmt.Sprintf("tlc://%s/%s", *t.ProjectID, taskID)
 	}
 	if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
-		return fmt.Sprintf("task://%s/%s", proj.ProjectID, taskID)
+		return fmt.Sprintf("tlc://%s/%s", proj.ProjectID, taskID)
 	}
 	return ref
+}
+
+// isLocalTaskRef returns true if ref is a local (no-project) task reference
+// in any of the known default forms: tlc:///T-..., tlc://T-..., task://T-....
+func isLocalTaskRef(ref string) bool {
+	switch {
+	case strings.HasPrefix(ref, "tlc:///T-"):
+		return true
+	case strings.HasPrefix(ref, "tlc://T-"):
+		return true
+	case strings.HasPrefix(ref, "task://T-"):
+		return true
+	default:
+		return false
+	}
+}
+
+// extractLocalTaskID strips the scheme+authority from a local task reference,
+// returning the bare task ID (e.g. "T-0042").
+func extractLocalTaskID(ref string) string {
+	for _, prefix := range []string{"tlc:///", "tlc://", "task://"} {
+		if strings.HasPrefix(ref, prefix) {
+			return strings.TrimPrefix(ref, prefix)
+		}
+	}
+	return ref
+}
+
+// isDefaultRef returns true if ref is a default-generated local reference
+// for the given task ID (any of the known local forms).
+func isDefaultRef(ref, taskID string) bool {
+	switch ref {
+	case "tlc:///" + taskID,
+		"tlc://" + taskID,
+		"task://" + taskID:
+		return true
+	default:
+		return false
+	}
 }
 
 func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {

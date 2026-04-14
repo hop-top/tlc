@@ -32,14 +32,14 @@ func goldenModel(t *testing.T) Model {
 			Status:     core.StatusTodo,
 			AssignedTo: &assignee,
 			Tags:       []string{"auth", "backend"},
-			Reference:  "task://hop-top/tlc/T-0001",
+			Reference:  "tlc://hop-top/tlc/T-0001",
 		},
 		{
 			ID:        "T-0002",
 			Title:     "Refactor task list",
 			Status:    core.StatusInProgress,
 			Tags:      []string{"refactor"},
-			Reference: "task://hop-top/tlc/T-0002",
+			Reference: "tlc://hop-top/tlc/T-0002",
 		},
 		{
 			ID:          "T-0003",
@@ -47,7 +47,7 @@ func goldenModel(t *testing.T) Model {
 			Description: "Capture View() output for parity check.",
 			Status:      core.StatusDone,
 			Tags:        []string{"test"},
-			Reference:   "task://hop-top/tlc/T-0003",
+			Reference:   "tlc://hop-top/tlc/T-0003",
 		},
 	}
 

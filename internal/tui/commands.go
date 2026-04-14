@@ -214,14 +214,14 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 			Title:       title,
 			Description: description,
 			Status:      core.StatusTodo,
-			Reference:   fmt.Sprintf("task://%s", id),
+			Reference:   fmt.Sprintf("tlc:///%s", id),
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
 
 		if proj != nil && proj.ProjectID != "" {
 			task.ProjectID = &proj.ProjectID
-			task.Reference = fmt.Sprintf("task://%s/%s", proj.ProjectID, id)
+			task.Reference = fmt.Sprintf("tlc://%s/%s", proj.ProjectID, id)
 		}
 
 		// Retry with a fresh sequence ID if the generated ID collides (mirrors CLI saveTask).
@@ -237,9 +237,9 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 			}
 			task.ID = id
 			if proj != nil && proj.ProjectID != "" {
-				task.Reference = fmt.Sprintf("task://%s/%s", proj.ProjectID, id)
+				task.Reference = fmt.Sprintf("tlc://%s/%s", proj.ProjectID, id)
 			} else {
-				task.Reference = fmt.Sprintf("task://%s", id)
+				task.Reference = fmt.Sprintf("tlc:///%s", id)
 			}
 		}
 
