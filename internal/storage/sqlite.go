@@ -14,6 +14,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// parseRFC3339 parses an RFC3339 timestamp string, returning an error
+// instead of silently producing a zero time on invalid input.
+func parseRFC3339(s string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid RFC3339 timestamp %q: %w", s, err)
+	}
+	return t, nil
+}
+
 // project calls projector.ProjectTask if a projector is set, logging errors.
 func (s *SQLiteStorage) project(task *core.Task) {
 	if s.projector != nil {
