@@ -81,6 +81,9 @@ Usage:
 		flow := res.Flow
 
 		executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY"))
+		if runner := buildFlowAgentRunner(); runner != nil {
+			executor = executor.WithAgentRunner(runner)
+		}
 
 		by := flowRunBy
 		if by == "" {
