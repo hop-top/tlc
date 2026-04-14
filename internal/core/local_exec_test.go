@@ -47,6 +47,61 @@ func TestLocalExecManager_Exec(t *testing.T) {
 		}
 	})
 
+	// T-0594: verify Exec passes EnvVars and RepoRoot to the subprocess.
+	// The subprocess must see the injected env var and run inside the
+	// specified directory (RepoRoot -> cmd.Dir, EnvVars -> cmd.Env).
+	t.Run("env vars and repo root", func(t *testing.T) {
+		dir := t.TempDir()
+		m := NewLocalExecManager(nil, "")
+		stdout, _, code, err := m.Exec(context.Background(), LocalExecOpts{
+			Binary:   "sh",
+			Args:     []string{"-c", "echo $TLC_TEST_VAR; pwd"},
+			EnvVars:  map[string]string{"TLC_TEST_VAR": "regression-594"},
+			RepoRoot: dir,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if code != 0 {
+			t.Errorf("exit code = %d", code)
+		}
+		// Verify env var was passed.
+		if !strings.Contains(stdout, "regression-594") {
+			t.Errorf("env var not passed; stdout = %q", stdout)
+		}
+		// Verify working directory was set to RepoRoot.
+		// filepath.EvalSymlinks normalises /private/tmp -> /tmp on macOS.
+		resolvedDir, _ := filepath.EvalSymlinks(dir)
+		if !strings.Contains(stdout, resolvedDir) {
+			t.Errorf(
+				"repo root not set as working dir; stdout = %q, want %q",
+				stdout, resolvedDir,
+			)
+		}
+	})
+
+	// T-0594 (cont): multiple env vars are passed correctly.
+	t.Run("multiple env vars", func(t *testing.T) {
+		m := NewLocalExecManager(nil, "")
+		stdout, _, code, err := m.Exec(context.Background(), LocalExecOpts{
+			Binary: "sh",
+			Args:   []string{"-c", "echo $VAR_A:$VAR_B"},
+			EnvVars: map[string]string{
+				"VAR_A": "alpha",
+				"VAR_B": "bravo",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if code != 0 {
+			t.Errorf("exit code = %d", code)
+		}
+		if !strings.Contains(stdout, "alpha:bravo") {
+			t.Errorf("multiple env vars not passed; stdout = %q", stdout)
+		}
+	})
+
 	t.Run("missing binary", func(t *testing.T) {
 		m := NewLocalExecManager(nil, "")
 		_, _, _, err := m.Exec(context.Background(), LocalExecOpts{})

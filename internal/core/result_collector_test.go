@@ -306,6 +306,52 @@ func TestResultCollector_ConflictingStatus(t *testing.T) {
 	}
 }
 
+// T-0592: stdout is authoritative for ALL statuses, not just failed.
+// When stdout says "partial" and volume says "succeeded", merged result
+// must reflect "partial" (the stdout status wins).
+func TestResultCollector_StdoutAuthoritativeForAllStatuses(t *testing.T) {
+	tests := []struct {
+		name         string
+		stdoutStatus AgentResultStatus
+		volStatus    AgentResultStatus
+	}{
+		{"partial over succeeded", AgentStatusPartial, AgentStatusSucceeded},
+		{"timeout over succeeded", AgentStatusTimeout, AgentStatusSucceeded},
+		{"failed over succeeded", AgentStatusFailed, AgentStatusSucceeded},
+		{"succeeded over partial", AgentStatusSucceeded, AgentStatusPartial},
+		{"partial over failed", AgentStatusPartial, AgentStatusFailed},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			volResult := AgentResult{
+				Version:  1,
+				Status:   tc.volStatus,
+				ExitCode: 0,
+				Summary:  "volume says " + string(tc.volStatus),
+			}
+			path := writeResultFile(t, dir, volResult)
+
+			stdout := validStdoutJSON(tc.stdoutStatus, "stdout says "+string(tc.stdoutStatus))
+
+			c := NewResultCollector()
+			got, err := c.CollectFromExec(stdout, path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.Status != tc.stdoutStatus {
+				t.Errorf(
+					"status = %q, want %q (stdout authoritative)",
+					got.Status, tc.stdoutStatus,
+				)
+			}
+			if got.Summary != "stdout says "+string(tc.stdoutStatus) {
+				t.Errorf("summary = %q, want stdout summary", got.Summary)
+			}
+		})
+	}
+}
+
 func TestResultCollector_StdoutWithLogLines(t *testing.T) {
 	stdout := "Starting agent...\nProcessing task T-0042...\n" +
 		`{"version":1,"status":"succeeded","exit_code":0,"summary":"task done"}` +

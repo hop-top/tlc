@@ -309,6 +309,43 @@ func TestPodShell_Destroy(t *testing.T) {
 		}
 	})
 
+	// T-0593: deferred destroy idempotent — second call is a no-op,
+	// no error returned, no subprocess spawned via mock runner.
+	t.Run("idempotent no subprocess", func(t *testing.T) {
+		r := &mockRunner{results: []mockResult{{ExitCode: 0}}}
+		ps := NewPodShell(r)
+
+		// First destroy succeeds.
+		if err := ps.Destroy(context.Background(), "pod-1"); err != nil {
+			t.Fatalf("first destroy: %v", err)
+		}
+		if !ps.Destroyed() {
+			t.Fatal("expected destroyed=true after first call")
+		}
+		if len(r.calls) != 1 {
+			t.Fatalf("expected 1 runner call after first destroy, got %d", len(r.calls))
+		}
+
+		// Second destroy: no error, no new subprocess call.
+		if err := ps.Destroy(context.Background(), "pod-1"); err != nil {
+			t.Fatalf("second destroy should be no-op: %v", err)
+		}
+		if len(r.calls) != 1 {
+			t.Errorf("expected still 1 runner call after second destroy, got %d", len(r.calls))
+		}
+
+		// Third destroy: still idempotent.
+		if err := ps.Destroy(context.Background(), "pod-1"); err != nil {
+			t.Fatalf("third destroy should be no-op: %v", err)
+		}
+		if len(r.calls) != 1 {
+			t.Errorf("expected still 1 runner call after third destroy, got %d", len(r.calls))
+		}
+		if !ps.Destroyed() {
+			t.Error("destroyed should remain true")
+		}
+	})
+
 	t.Run("failure", func(t *testing.T) {
 		r := &mockRunner{results: []mockResult{
 			{ExitCode: 1, Stderr: "cannot destroy"},

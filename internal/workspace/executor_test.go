@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -306,6 +307,74 @@ func TestSortTasks_DefaultsToCreatedAtAsc(t *testing.T) {
 	sortTasks(tasks, "", "")
 	if tasks[0].ID != "a" {
 		t.Fatalf("expected 'a' first, got %s", tasks[0].ID)
+	}
+}
+
+// T-0598: workspace mode preserves IN_PROGRESS-first ordering.
+// After QueryAcross merges tasks from multiple projects, a stable sort
+// with StatusPriority = "IN_PROGRESS" must bubble IN_PROGRESS tasks to
+// the top while preserving the base sort order within each status group.
+// This mirrors the post-merge sort in runTaskListWorkspace (task_list.go).
+func TestQueryAcross_StatusPriorityPreservesINPROGRESSFirst(t *testing.T) {
+	now := time.Now()
+	opener := &mockOpener{sources: map[string]*mockSource{
+		"proj-a": {reader: &mockReader{tasks: []*core.Task{
+			mkTask("a1", "A TODO", core.StatusTodo, now.Add(-3*time.Hour)),
+			mkTask("a2", "A IN_PROGRESS", core.StatusInProgress, now.Add(-2*time.Hour)),
+		}}},
+		"proj-b": {reader: &mockReader{tasks: []*core.Task{
+			mkTask("b1", "B TODO", core.StatusTodo, now.Add(-1*time.Hour)),
+			mkTask("b2", "B IN_PROGRESS", core.StatusInProgress, now),
+		}}},
+	}}
+
+	projects := []core.RegisteredProject{mkProj("proj-a"), mkProj("proj-b")}
+	q := core.Query{
+		SortBy:         "created_at",
+		SortDirection:  "desc",
+		StatusPriority: string(core.StatusInProgress),
+	}
+
+	tasks, err := QueryAcross(context.Background(), projects, q, opener)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tasks) != 4 {
+		t.Fatalf("expected 4 tasks, got %d", len(tasks))
+	}
+
+	// QueryAcross ignores StatusPriority; the caller (runTaskListWorkspace)
+	// applies a post-merge stable sort. Use the same sort.SliceStable call
+	// as task_list.go to avoid reimplementing the comparator.
+	prio := core.TaskStatus(q.StatusPriority)
+	sort.SliceStable(tasks, func(i, j int) bool {
+		ip := tasks[i].Status == prio
+		jp := tasks[j].Status == prio
+		return ip && !jp
+	})
+
+	// First two must be IN_PROGRESS.
+	if tasks[0].Status != core.StatusInProgress {
+		t.Errorf("tasks[0].Status = %q, want IN_PROGRESS", tasks[0].Status)
+	}
+	if tasks[1].Status != core.StatusInProgress {
+		t.Errorf("tasks[1].Status = %q, want IN_PROGRESS", tasks[1].Status)
+	}
+	// Last two must be TODO.
+	if tasks[2].Status != core.StatusTodo {
+		t.Errorf("tasks[2].Status = %q, want TODO", tasks[2].Status)
+	}
+	if tasks[3].Status != core.StatusTodo {
+		t.Errorf("tasks[3].Status = %q, want TODO", tasks[3].Status)
+	}
+
+	// Within the IN_PROGRESS group, base sort (created_at desc) preserved:
+	// b2 (newest) before a2 (older).
+	if tasks[0].ID != "b2" {
+		t.Errorf("tasks[0].ID = %q, want b2 (newest IN_PROGRESS)", tasks[0].ID)
+	}
+	if tasks[1].ID != "a2" {
+		t.Errorf("tasks[1].ID = %q, want a2 (older IN_PROGRESS)", tasks[1].ID)
 	}
 }
 
