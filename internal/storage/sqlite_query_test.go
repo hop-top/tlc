@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -158,6 +159,98 @@ func TestStorage_TagFiltering(t *testing.T) {
 	}
 	if len(got) > 0 && got[0].ID != "T-1" {
 		t.Errorf("expected T-1, got %s", got[0].ID)
+	}
+}
+
+// TestSQLiteStorage_LimitRespectsStatusPriority verifies that
+// StatusPriority causes IN_PROGRESS tasks to sort first at the SQL
+// level, so LIMIT doesn't truncate them before they're surfaced.
+func TestSQLiteStorage_LimitRespectsStatusPriority(t *testing.T) {
+	resetProjectDetection()
+	tmpDir := t.TempDir()
+	oldCwd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldCwd)
+	defer resetProjectDetection()
+
+	dbPath := filepath.Join(tmpDir, "test_status_priority.db")
+	s, err := NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Create 10 tasks: 8 TODO (created first), 2 IN_PROGRESS (created last).
+	// Without StatusPriority the 2 IN_PROGRESS tasks appear at the top of
+	// created_at DESC, but if they were created first they'd be pushed out
+	// by LIMIT. We create the IN_PROGRESS tasks with earlier timestamps so
+	// a naive ORDER BY created_at DESC + LIMIT 5 would miss them.
+	for i := 0; i < 8; i++ {
+		task := &core.Task{
+			ID:        fmt.Sprintf("T-%04d", i+1),
+			Title:     fmt.Sprintf("TODO task %d", i+1),
+			Status:    core.StatusTodo,
+			Reference: "ref",
+			CreatedAt: now.Add(time.Duration(i+3) * time.Second), // later timestamps
+			UpdatedAt: now,
+		}
+		if err := s.CreateTask(ctx, task); err != nil {
+			t.Fatalf("create TODO task: %v", err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		task := &core.Task{
+			ID:        fmt.Sprintf("T-%04d", i+9),
+			Title:     fmt.Sprintf("WIP task %d", i+1),
+			Status:    core.StatusInProgress,
+			Reference: "ref",
+			CreatedAt: now.Add(time.Duration(i) * time.Second), // earlier timestamps
+			UpdatedAt: now,
+		}
+		if err := s.CreateTask(ctx, task); err != nil {
+			t.Fatalf("create IN_PROGRESS task: %v", err)
+		}
+	}
+
+	q := core.Query{
+		Limit: 5,
+		Filters: []core.FieldFilter{
+			{Field: "status", Value: core.StatusTodo},
+			{Field: "status", Value: core.StatusInProgress},
+		},
+		StatusPriority: string(core.StatusInProgress),
+	}
+
+	got, err := s.ListTasks(ctx, q)
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("expected 5 tasks, got %d", len(got))
+	}
+
+	// Both IN_PROGRESS tasks must appear in the result.
+	var ipCount int
+	for _, tsk := range got {
+		if tsk.Status == core.StatusInProgress {
+			ipCount++
+		}
+	}
+	if ipCount != 2 {
+		t.Errorf("expected 2 IN_PROGRESS tasks in top 5, got %d", ipCount)
+	}
+
+	// IN_PROGRESS tasks must come first.
+	for i, tsk := range got {
+		if i < 2 && tsk.Status != core.StatusInProgress {
+			t.Errorf("position %d: expected IN_PROGRESS, got %s", i, tsk.Status)
+		}
+		if i >= 2 && tsk.Status != core.StatusTodo {
+			t.Errorf("position %d: expected TODO, got %s", i, tsk.Status)
+		}
 	}
 }
 
