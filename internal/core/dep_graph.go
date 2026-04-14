@@ -16,17 +16,17 @@ type DepGraph struct {
 
 // Batch represents a group of tasks that can execute together.
 type Batch struct {
-	Index    int     // 0-based batch index
-	Tasks    []*Task // tasks in this batch
-	Parallel bool    // true if >1 task can run concurrently
+	Index    int     `json:"index" yaml:"index"`
+	Tasks    []*Task `json:"tasks" yaml:"tasks"`
+	Parallel bool    `json:"parallel" yaml:"parallel"`
 }
 
 // ExecutionStrategy describes how tasks should execute respecting deps.
 type ExecutionStrategy struct {
-	Batches        []Batch  // ordered batches for execution
-	CriticalPath   []string // task IDs forming the longest dependency chain
-	TotalTasks     int
-	MaxParallelism int // largest batch size
+	Batches        []Batch  `json:"batches" yaml:"batches"`
+	CriticalPath   []string `json:"critical_path" yaml:"critical_path"`
+	TotalTasks     int      `json:"total_tasks" yaml:"total_tasks"`
+	MaxParallelism int      `json:"max_parallelism" yaml:"max_parallelism"`
 }
 
 // NewDepGraph builds a dependency graph from a slice of tasks using
