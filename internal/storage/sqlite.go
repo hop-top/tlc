@@ -427,23 +427,21 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 	return nil
 }
 
-func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id FROM tasks"
-	var args []interface{}
-
-	// Group filters by field to implement OR logic for same field
+// buildFilterClauses converts FieldFilter groups into SQL WHERE clauses and args.
+func buildFilterClauses(filters []core.FieldFilter) ([]string, []any) {
 	fieldGroups := make(map[string][]core.FieldFilter)
-	for _, f := range query.Filters {
+	for _, f := range filters {
 		fieldGroups[f.Field] = append(fieldGroups[f.Field], f)
 	}
 
-	whereClauses := []string{}
-	for field, filters := range fieldGroups {
-		groupClauses := []string{}
-		for _, f := range filters {
-			// Tags are stored as JSON arrays; use json_each for exact element matching.
+	var whereClauses []string
+	var args []any
+	for field, group := range fieldGroups {
+		var groupClauses []string
+		for _, f := range group {
 			if field == "tags" && f.Operator == core.OpContains {
-				groupClauses = append(groupClauses, "EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
+				groupClauses = append(groupClauses,
+					"EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
 				args = append(args, f.Value)
 				continue
 			}
@@ -478,15 +476,18 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 					placeholders[i] = "?"
 					args = append(args, strings.TrimSpace(v))
 				}
-				groupClauses = append(groupClauses, fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
+				groupClauses = append(groupClauses,
+					fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
 				continue
 			}
 
 			if f.Value == nil {
 				if op == "=" {
-					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NULL OR %s = '')", field, field))
+					groupClauses = append(groupClauses,
+						fmt.Sprintf("(%s IS NULL OR %s = '')", field, field))
 				} else {
-					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field))
+					groupClauses = append(groupClauses,
+						fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field))
 				}
 			} else {
 				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))
@@ -494,9 +495,44 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 			}
 		}
 		if len(groupClauses) > 0 {
-			whereClauses = append(whereClauses, "("+strings.Join(groupClauses, " OR ")+")")
+			whereClauses = append(whereClauses,
+				"("+strings.Join(groupClauses, " OR ")+")")
 		}
 	}
+	return whereClauses, args
+}
+
+// scanLogEntries iterates sql.Rows and returns parsed LogEntry slices.
+func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
+	var entries []*core.LogEntry
+	for rows.Next() {
+		var entry core.LogEntry
+		var timestampStr string
+		var metaStr sql.NullString
+		if err := rows.Scan(
+			&entry.ID, &entry.TaskID, &timestampStr,
+			&entry.By, &entry.Action, &entry.Note, &metaStr,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan log row: %w", err)
+		}
+		entry.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
+		if metaStr.Valid {
+			if err := json.Unmarshal([]byte(metaStr.String), &entry.Meta); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+			}
+		}
+		entries = append(entries, &entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate log rows: %w", err)
+	}
+	return entries, nil
+}
+
+func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
+	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id FROM tasks"
+
+	whereClauses, args := buildFilterClauses(query.Filters)
 
 	if query.Search != "" {
 		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
@@ -612,26 +648,7 @@ func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirectio
 	}
 	defer func() { _ = rows.Close() }()
 
-	var entries []*core.LogEntry
-	for rows.Next() {
-		var entry core.LogEntry
-		var timestampStr string
-		var metaStr sql.NullString
-		if err := rows.Scan(&entry.ID, &entry.TaskID, &timestampStr, &entry.By, &entry.Action, &entry.Note, &metaStr); err != nil {
-			return nil, fmt.Errorf("failed to scan log row: %w", err)
-		}
-		entry.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
-		if metaStr.Valid {
-			if err := json.Unmarshal([]byte(metaStr.String), &entry.Meta); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
-			}
-		}
-		entries = append(entries, &entry)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate log rows: %w", err)
-	}
-	return entries, nil
+	return scanLogEntries(rows)
 }
 
 func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
@@ -947,26 +964,7 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 	}
 	defer func() { _ = rows.Close() }()
 
-	var entries []*core.LogEntry
-	for rows.Next() {
-		var entry core.LogEntry
-		var timestampStr string
-		var metaStr sql.NullString
-		if err := rows.Scan(&entry.ID, &entry.TaskID, &timestampStr, &entry.By, &entry.Action, &entry.Note, &metaStr); err != nil {
-			return nil, fmt.Errorf("failed to scan log row: %w", err)
-		}
-		entry.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
-		if metaStr.Valid {
-			if err := json.Unmarshal([]byte(metaStr.String), &entry.Meta); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
-			}
-		}
-		entries = append(entries, &entry)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate log rows: %w", err)
-	}
-	return entries, nil
+	return scanLogEntries(rows)
 }
 
 func (s *SQLiteStorage) GetNextSequenceID(ctx context.Context, projectID string) (int, error) {
@@ -1280,74 +1278,8 @@ func (s *SQLiteStorage) GetTaskLogs(ctx context.Context, taskID string) ([]*core
 // Satisfies core.TaskReader.
 func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, error) {
 	sqlQuery := "SELECT COUNT(*) FROM tasks"
-	var args []interface{}
 
-	// Group filters by field to implement OR logic for same field
-	fieldGroups := make(map[string][]core.FieldFilter)
-	for _, f := range query.Filters {
-		fieldGroups[f.Field] = append(fieldGroups[f.Field], f)
-	}
-
-	whereClauses := []string{}
-	for field, filters := range fieldGroups {
-		groupClauses := []string{}
-		for _, f := range filters {
-			// Tags are stored as JSON arrays; use json_each for exact element matching.
-			if field == "tags" && f.Operator == core.OpContains {
-				groupClauses = append(groupClauses, "EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
-				args = append(args, f.Value)
-				continue
-			}
-
-			op := "="
-			switch f.Operator {
-			case core.OpEq, core.OpEqual:
-				op = "="
-			case core.OpNotEq:
-				op = "!="
-			case core.OpGt:
-				op = ">"
-			case core.OpGte:
-				op = ">="
-			case core.OpLt:
-				op = "<"
-			case core.OpLte:
-				op = "<="
-			case core.OpContains:
-				op = sqlOpLike
-				f.Value = "%" + fmt.Sprintf("%v", f.Value) + "%"
-			case core.OpStart:
-				op = sqlOpLike
-				f.Value = fmt.Sprintf("%v", f.Value) + "%"
-			case core.OpEnd:
-				op = sqlOpLike
-				f.Value = "%" + fmt.Sprintf("%v", f.Value)
-			case core.OpIn:
-				vals := strings.Split(fmt.Sprintf("%v", f.Value), ",")
-				placeholders := make([]string, len(vals))
-				for i, v := range vals {
-					placeholders[i] = "?"
-					args = append(args, strings.TrimSpace(v))
-				}
-				groupClauses = append(groupClauses, fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
-				continue
-			}
-
-			if f.Value == nil {
-				if op == "=" {
-					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NULL OR %s = '')", field, field))
-				} else {
-					groupClauses = append(groupClauses, fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field))
-				}
-			} else {
-				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))
-				args = append(args, f.Value)
-			}
-		}
-		if len(groupClauses) > 0 {
-			whereClauses = append(whereClauses, "("+strings.Join(groupClauses, " OR ")+")")
-		}
-	}
+	whereClauses, args := buildFilterClauses(query.Filters)
 
 	if query.Search != "" {
 		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
