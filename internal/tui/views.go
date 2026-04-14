@@ -61,18 +61,7 @@ var statusOrder = []core.TaskStatus{
 }
 
 func (m Model) formatStatus(status core.TaskStatus) string {
-	switch status {
-	case core.StatusTodo:
-		return m.styles.Todo.Render("[ ]")
-	case core.StatusInProgress:
-		return m.styles.InProgress.Render("[~]")
-	case core.StatusDone:
-		return m.styles.Done.Render("[x]")
-	case core.StatusSkipped:
-		return m.styles.Skipped.Render("[-]")
-	default:
-		return string(status)
-	}
+	return formatStatusWithStyles(status, m.styles)
 }
 
 func formatAssignee(assignee *string) string {
@@ -82,22 +71,6 @@ func formatAssignee(assignee *string) string {
 	return "@" + *assignee
 }
 
-// getTagStyle returns the lipgloss style for a tag, using the model's
-// in-memory tagColors map. No disk I/O here -- tagColors is populated
-// in NewModel from viper and new assignments are written back lazily.
-func (m Model) getTagStyle(tag string) lipgloss.Style {
-	color, ok := m.tagColors[tag]
-	if !ok {
-		h := 0
-		for _, c := range tag {
-			h += int(c)
-		}
-		color = m.styles.TagColors[h%len(m.styles.TagColors)]
-		m.tagColors[tag] = color
-	}
-
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-}
 
 func (m Model) View() tea.View {
 	view := tea.NewView(m.viewString())
@@ -225,64 +198,7 @@ func (m Model) dashboardContent() string {
 	if len(m.tasks) == 0 {
 		return "No tasks found."
 	}
-
-	var s strings.Builder
-	groups := make(map[core.TaskStatus][]*core.Task)
-	for _, t := range m.tasks {
-		groups[t.Status] = append(groups[t.Status], t)
-	}
-
-	currentIndex := 0
-	for _, status := range statusOrder {
-		tasks := groups[status]
-		if len(tasks) == 0 {
-			continue
-		}
-
-		s.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")).
-			Bold(true).
-			Render(strings.ToUpper(string(status))))
-		s.WriteString("\n")
-
-		for _, task := range tasks {
-			cursor := " "
-			if currentIndex == m.selected {
-				cursor = m.styles.InProgress.Render("►")
-			}
-
-			statusIcon := m.formatStatus(task.Status)
-			title := task.Title
-			if currentIndex == m.selected {
-				title = lipgloss.NewStyle().Bold(true).Render(title)
-			}
-
-			assignee := ""
-			if task.AssignedTo != nil {
-				assignee = fmt.Sprintf(" @%s", *task.AssignedTo)
-			}
-
-			tags := ""
-			for _, tag := range task.Tags {
-				tags += " " + m.getTagStyle(tag).Render("#"+tag)
-			}
-
-			syncIcon := ""
-			if task.NeedsPush() {
-				syncIcon = m.styles.Warning.Render(" ↑")
-			}
-
-			fmt.Fprintf(&s, "%s %s %s %s%s%s%s\n",
-				cursor, task.ID, statusIcon, title,
-				syncIcon, m.styles.Muted.Render(assignee), tags,
-			)
-			currentIndex++
-		}
-
-		s.WriteString("\n")
-	}
-
-	return s.String()
+	return m.taskList.View(m.width)
 }
 
 func (m Model) detailView() string {
@@ -403,21 +319,5 @@ func (m Model) flowsContent() string {
 	if len(m.flowRuns) == 0 {
 		return "No flow runs found."
 	}
-
-	var s strings.Builder
-	for i, run := range m.flowRuns {
-		cursor := " "
-		if i == m.selected {
-			cursor = m.styles.InProgress.Render("►")
-		}
-
-		status := string(run.Status)
-		startedAt := run.StartedAt.Format("2006-01-02 15:04:05")
-
-		fmt.Fprintf(&s, "%s %s %s %s (%s)\n",
-			cursor, run.ID, run.FlowID, status, startedAt,
-		)
-	}
-
-	return s.String()
+	return m.flowList.View(m.width)
 }

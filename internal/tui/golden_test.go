@@ -57,6 +57,8 @@ func goldenModel(t *testing.T) Model {
 	m.height = 24
 	m.viewport.SetWidth(80)
 	m.viewport.SetHeight(18)
+	m.taskList = m.taskList.SetHeight(18)
+	m = m.rebuildTaskList()
 	return m
 }
 

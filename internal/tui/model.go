@@ -9,6 +9,7 @@ import (
 	"charm.land/huh/v2"
 	"github.com/spf13/viper"
 	kitcli "hop.top/kit/cli"
+	kittui "hop.top/kit/tui"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 )
@@ -36,6 +37,11 @@ type Model struct {
 	taskTitle        string
 	taskDescription  string
 	err              error
+
+	// taskList is the kit/tui.List used for dashboard and kanban views.
+	taskList kittui.List
+	// flowList is the kit/tui.List used for flow runs view.
+	flowList kittui.List
 
 	// theme is the kit/cli.Theme used for styling.
 	theme kitcli.Theme
@@ -76,6 +82,8 @@ func NewModel(service *core.TaskService, theme kitcli.Theme) Model {
 		logSortDirection: direction,
 		theme:            theme,
 		styles:           styles.NewFromTheme(theme),
+		taskList:         kittui.NewList(1),
+		flowList:         kittui.NewList(1),
 		tagColors:        tc,
 	}
 }
@@ -99,7 +107,10 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.SetWidth(msg.Width)
-		m.viewport.SetHeight(m.effectiveViewportHeight())
+		vh := m.effectiveViewportHeight()
+		m.viewport.SetHeight(vh)
+		m.taskList = m.taskList.SetHeight(vh)
+		m.flowList = m.flowList.SetHeight(vh)
 
 		// Rebuild cached markdown renderer when width changes.
 		wrapWidth := msg.Width - 10
@@ -122,11 +133,13 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		if m.selected >= len(m.tasks) && len(m.tasks) > 0 {
 			m.selected = len(m.tasks) - 1
 		}
+		m = m.rebuildTaskList()
 		m = m.syncViewport()
 		// Persist any newly-assigned tag colors asynchronously.
 		return m, m.persistTagColors
 	case flowRunsMsg:
 		m.flowRuns = msg
+		m = m.rebuildFlowList()
 		return m, nil
 	case logsMsg:
 		m.taskLogs = msg
@@ -168,7 +181,57 @@ func (m Model) addFilter(field, value string) Model {
 	return m
 }
 
+// rebuildTaskList rebuilds the kit/tui.List items from the current tasks,
+// grouped by status with headers and spacers.
+func (m Model) rebuildTaskList() Model {
+	groups := make(map[core.TaskStatus][]*core.Task)
+	for _, t := range m.tasks {
+		groups[t.Status] = append(groups[t.Status], t)
+	}
+
+	var items []kittui.Item
+	taskIdx := 0
+	for _, status := range statusOrder {
+		tasks := groups[status]
+		if len(tasks) == 0 {
+			continue
+		}
+		items = append(items, &headerItem{text: string(status)})
+		for _, task := range tasks {
+			items = append(items, &taskItem{
+				task:      task,
+				selected:  taskIdx == m.selected,
+				styles:    m.styles,
+				tagColors: m.tagColors,
+			})
+			taskIdx++
+		}
+		items = append(items, &spacerItem{})
+	}
+
+	m.taskList = m.taskList.SetItems(items)
+	return m
+}
+
+// rebuildFlowList rebuilds the kit/tui.List items from the current flow runs.
+func (m Model) rebuildFlowList() Model {
+	items := make([]kittui.Item, len(m.flowRuns))
+	for i, run := range m.flowRuns {
+		items[i] = &flowRunItem{
+			run:      run,
+			selected: i == m.selected,
+			styles:   m.styles,
+		}
+	}
+	m.flowList = m.flowList.SetItems(items)
+	return m
+}
+
 func (m Model) syncViewport() Model {
+	// Rebuild list items to reflect new selection state.
+	m = m.rebuildTaskList()
+	m = m.rebuildFlowList()
+
 	line := m.getLineOfSelected()
 	if line < m.viewport.YOffset() {
 		m.viewport.SetYOffset(line)
