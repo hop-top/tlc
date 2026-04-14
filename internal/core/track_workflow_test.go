@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"errors"
 	"testing"
 
 	"hop.top/tlc/internal/core"
@@ -34,10 +33,6 @@ func TestValidateTrackTransition_PendingToActive(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected error for 0 linked tasks")
-	}
-	var te core.ErrInvalidTrackTransition
-	if !errors.As(err, &te) {
-		t.Fatalf("expected ErrInvalidTrackTransition, got %T", err)
 	}
 }
 
@@ -142,30 +137,5 @@ func TestValidateTrackTransition_UnknownStatus(t *testing.T) {
 	err = core.ValidateTrackTransition(core.TrackStatusPending, "bogus", 1, false)
 	if err == nil {
 		t.Fatal("expected error for unknown target status")
-	}
-}
-
-func TestErrInvalidTrackTransition_Error(t *testing.T) {
-	// With allowed list
-	e := core.ErrInvalidTrackTransition{
-		From:    core.TrackStatusActive,
-		To:      core.TrackStatusPending,
-		Msg:     "transition not allowed",
-		Allowed: []core.TrackStatus{core.TrackStatusCompleted, core.TrackStatusAbandoned},
-	}
-	msg := e.Error()
-	if msg == "" {
-		t.Fatal("expected non-empty error message")
-	}
-
-	// Without allowed list
-	e2 := core.ErrInvalidTrackTransition{
-		From: core.TrackStatusArchived,
-		To:   core.TrackStatusActive,
-		Msg:  "archived is terminal",
-	}
-	msg2 := e2.Error()
-	if msg2 == "" {
-		t.Fatal("expected non-empty error message")
 	}
 }

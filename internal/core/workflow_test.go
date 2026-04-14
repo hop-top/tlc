@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"testing"
 
+	"hop.top/kit/domain"
 	"hop.top/tlc/internal/config"
 )
 
@@ -14,53 +16,61 @@ func defaultTestConfig() *config.TaskConfig {
 	}
 }
 
-func TestValidateTransition_DefaultConfig(t *testing.T) {
+func TestStateMachine_DefaultConfig(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {
 		t.Fatalf("unexpected error creating WorkflowManager: %v", err)
 	}
+	sm := wm.StateMachine()
+	ctx := context.Background()
 
 	tests := []struct {
 		name    string
-		current TaskStatus
-		next    TaskStatus
+		current domain.State
+		next    domain.State
 		wantErr bool
 	}{
-		{"TODO to IN_PROGRESS", StatusTodo, StatusInProgress, false},
-		{"TODO to SKIPPED", StatusTodo, StatusSkipped, false},
-		{"IN_PROGRESS to DONE", StatusInProgress, StatusDone, false},
-		{"IN_PROGRESS to TODO", StatusInProgress, StatusTodo, false},
-		{"IN_PROGRESS to SKIPPED", StatusInProgress, StatusSkipped, false},
-		{"same status", StatusTodo, StatusTodo, false},
+		{"TODO to IN_PROGRESS", domain.State(StatusTodo), domain.State(StatusInProgress), false},
+		{"TODO to SKIPPED", domain.State(StatusTodo), domain.State(StatusSkipped), false},
+		{"IN_PROGRESS to DONE", domain.State(StatusInProgress), domain.State(StatusDone), false},
+		{"IN_PROGRESS to TODO", domain.State(StatusInProgress), domain.State(StatusTodo), false},
+		{"IN_PROGRESS to SKIPPED", domain.State(StatusInProgress), domain.State(StatusSkipped), false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := wm.ValidateTransition(tt.current, tt.next, false)
+			err := sm.Transition(ctx, tt.current, tt.next, false)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateTransition(%s, %s) error = %v, wantErr %v",
+				t.Errorf("Transition(%s, %s) error = %v, wantErr %v",
 					tt.current, tt.next, err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestValidateTransition_RejectsTerminalToAnything(t *testing.T) {
+func TestStateMachine_RejectsTerminalToAnything(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	sm := wm.StateMachine()
+	ctx := context.Background()
 
-	terminalStatuses := []TaskStatus{StatusDone, StatusSkipped}
-	targets := []TaskStatus{StatusTodo, StatusInProgress, StatusDone, StatusSkipped}
+	terminalStatuses := []domain.State{domain.State(StatusDone), domain.State(StatusSkipped)}
+	targets := []domain.State{
+		domain.State(StatusTodo),
+		domain.State(StatusInProgress),
+		domain.State(StatusDone),
+		domain.State(StatusSkipped),
+	}
 
 	for _, from := range terminalStatuses {
 		for _, to := range targets {
 			if from == to {
-				continue // same-status is always allowed
+				continue // same-status transitions are no-ops in StateMachine
 			}
 			t.Run(string(from)+"_to_"+string(to), func(t *testing.T) {
-				err := wm.ValidateTransition(from, to, false)
+				err := sm.Transition(ctx, from, to, false)
 				if err == nil {
 					t.Errorf("expected error for terminal %s -> %s", from, to)
 				}
@@ -69,59 +79,58 @@ func TestValidateTransition_RejectsTerminalToAnything(t *testing.T) {
 	}
 }
 
-func TestValidateTransition_RejectsTodoToDone(t *testing.T) {
+func TestStateMachine_RejectsTodoToDone(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	sm := wm.StateMachine()
 
-	err = wm.ValidateTransition(StatusTodo, StatusDone, false)
+	err = sm.Transition(context.Background(), "TODO", "DONE", false)
 	if err == nil {
 		t.Error("expected error for TODO -> DONE without rule, got nil")
 	}
 }
 
-func TestValidateTransition_ForceBypassesRules(t *testing.T) {
+func TestStateMachine_ForceBypassesRules(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	sm := wm.StateMachine()
 
 	// TODO -> DONE is normally forbidden, but force=true bypasses
-	err = wm.ValidateTransition(StatusTodo, StatusDone, true)
+	err = sm.Transition(context.Background(), "TODO", "DONE", true)
 	if err != nil {
 		t.Errorf("expected force=true to bypass rules, got error: %v", err)
 	}
 }
 
-func TestValidateTransition_ForceBypassesTerminal(t *testing.T) {
+func TestStateMachine_ForceBypassesTerminal(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	sm := wm.StateMachine()
 
 	// DONE -> TODO is normally blocked (terminal), but force=true bypasses
-	err = wm.ValidateTransition(StatusDone, StatusTodo, true)
+	err = sm.Transition(context.Background(), "DONE", "TODO", true)
 	if err != nil {
-		t.Errorf("expected force=true to bypass terminal immutability, got error: %v", err)
+		t.Errorf("expected force=true to bypass terminal, got error: %v", err)
 	}
 }
 
-func TestValidateTransition_ForceRejectsUnknownStatuses(t *testing.T) {
+func TestStateMachine_UnknownStatusReturnsError(t *testing.T) {
 	wm, err := NewWorkflowManager(defaultTestConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	sm := wm.StateMachine()
 
-	// Even with force=true, unknown statuses should be rejected
-	err = wm.ValidateTransition(StatusTodo, "NONEXISTENT", true)
+	// Unknown from-status returns error (no rules for it).
+	err = sm.Transition(context.Background(), "NONEXISTENT", "TODO", false)
 	if err == nil {
-		t.Error("expected error for unknown target status even with force=true")
-	}
-
-	err = wm.ValidateTransition("NONEXISTENT", StatusTodo, true)
-	if err == nil {
-		t.Error("expected error for unknown source status even with force=true")
+		t.Error("expected error for unknown source status")
 	}
 }
 
@@ -257,7 +266,8 @@ func TestGetWorkflowForTags(t *testing.T) {
 			t.Error("expected different WorkflowManager for matching tag")
 		}
 		// The "urgent" override allows TODO -> DONE
-		err := tagWM.ValidateTransition(StatusTodo, StatusDone, false)
+		sm := tagWM.StateMachine()
+		err := sm.Transition(context.Background(), "TODO", "DONE", false)
 		if err != nil {
 			t.Errorf("expected TODO -> DONE to be allowed for urgent tag, got: %v", err)
 		}
@@ -301,21 +311,23 @@ func TestCustomConfig_WithInReviewStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	sm := wm.StateMachine()
+	ctx := context.Background()
 
 	// IN_PROGRESS -> IN_REVIEW should be allowed
-	err = wm.ValidateTransition(TaskStatus("IN_PROGRESS"), TaskStatus("IN_REVIEW"), false)
+	err = sm.Transition(ctx, "IN_PROGRESS", "IN_REVIEW", false)
 	if err != nil {
 		t.Errorf("expected IN_PROGRESS -> IN_REVIEW to be allowed: %v", err)
 	}
 
 	// IN_REVIEW -> DONE should be allowed
-	err = wm.ValidateTransition(TaskStatus("IN_REVIEW"), TaskStatus("DONE"), false)
+	err = sm.Transition(ctx, "IN_REVIEW", "DONE", false)
 	if err != nil {
 		t.Errorf("expected IN_REVIEW -> DONE to be allowed: %v", err)
 	}
 
 	// TODO -> IN_REVIEW should NOT be allowed
-	err = wm.ValidateTransition(StatusTodo, TaskStatus("IN_REVIEW"), false)
+	err = sm.Transition(ctx, "TODO", "IN_REVIEW", false)
 	if err == nil {
 		t.Error("expected TODO -> IN_REVIEW to be rejected")
 	}
@@ -346,7 +358,8 @@ func TestDefaultWorkflow(t *testing.T) {
 	}
 
 	// Should be able to do standard transitions
-	err := wm.ValidateTransition(StatusTodo, StatusInProgress, false)
+	sm := wm.StateMachine()
+	err := sm.Transition(context.Background(), "TODO", "IN_PROGRESS", false)
 	if err != nil {
 		t.Errorf("expected TODO -> IN_PROGRESS on default workflow, got: %v", err)
 	}

@@ -1,37 +1,16 @@
 package core
 
-import "fmt"
+import (
+	"context"
+	"errors"
+	"fmt"
 
-// ErrInvalidTrackTransition describes an illegal track status transition.
-type ErrInvalidTrackTransition struct {
-	From    TrackStatus
-	To      TrackStatus
-	Msg     string
-	Allowed []TrackStatus
-}
-
-func (e ErrInvalidTrackTransition) Error() string {
-	base := fmt.Sprintf(
-		"cannot transition track from %s to %s: %s",
-		e.From, e.To, e.Msg,
-	)
-	if len(e.Allowed) > 0 {
-		return fmt.Sprintf("%s; valid transitions from %s: %v", base, e.From, e.Allowed)
-	}
-	return base
-}
-
-// trackTransitionRules defines the allowed status transitions.
-// Each key maps to the set of statuses reachable from it.
-var trackTransitionRules = map[TrackStatus][]TrackStatus{
-	TrackStatusPending:   {TrackStatusActive, TrackStatusAbandoned},
-	TrackStatusActive:    {TrackStatusCompleted, TrackStatusAbandoned},
-	TrackStatusCompleted: {TrackStatusArchived, TrackStatusAbandoned},
-	TrackStatusAbandoned: {TrackStatusArchived},
-	// archived is terminal — no outgoing transitions
-}
+	"hop.top/kit/domain"
+)
 
 // ValidateTrackTransition checks whether a track status transition is allowed.
+// It delegates state-graph validation to the kit/domain TrackStateMachine
+// and applies business-rule guards on top.
 //
 // Business rules enforced:
 //   - pending → active: requires linkedTaskCount > 0
@@ -52,68 +31,65 @@ func ValidateTrackTransition(
 
 	// Validate both statuses are known.
 	if !ValidTrackStatus(current) {
-		return ErrInvalidTrackTransition{
-			From: current, To: next,
-			Msg: fmt.Sprintf("unknown status: %s", current),
-		}
+		return fmt.Errorf(
+			"cannot transition track from %s to %s: unknown status: %s",
+			current, next, current,
+		)
 	}
 	if !ValidTrackStatus(next) {
-		return ErrInvalidTrackTransition{
-			From: current, To: next,
-			Msg: fmt.Sprintf("unknown status: %s", next),
-		}
+		return fmt.Errorf(
+			"cannot transition track from %s to %s: unknown status: %s",
+			current, next, next,
+		)
 	}
 
-	// Archived is terminal.
-	if current == TrackStatusArchived {
-		return ErrInvalidTrackTransition{
-			From: current, To: next,
-			Msg: "archived is terminal; no transitions allowed",
+	// Validate state-graph edge via kit/domain StateMachine.
+	sm := NewTrackStateMachine(nil)
+	if err := sm.Transition(
+		context.Background(),
+		domain.State(current), domain.State(next), false,
+	); err != nil {
+		var te *domain.TransitionError
+		if errors.As(err, &te) {
+			allowed := make([]string, len(te.Allowed))
+			for i, s := range te.Allowed {
+				allowed[i] = string(s)
+			}
+			if len(allowed) > 0 {
+				return fmt.Errorf(
+					"cannot transition track from %s to %s: "+
+						"transition not allowed; valid: %v",
+					current, next, allowed,
+				)
+			}
+			return fmt.Errorf(
+				"cannot transition track from %s to %s: %s",
+				current, next, err,
+			)
 		}
-	}
-
-	// Check transition is in the allowed set.
-	allowed, ok := trackTransitionRules[current]
-	if !ok {
-		return ErrInvalidTrackTransition{
-			From: current, To: next,
-			Msg: "no transition rules defined for current status",
-		}
-	}
-
-	found := false
-	for _, a := range allowed {
-		if a == next {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return ErrInvalidTrackTransition{
-			From: current, To: next,
-			Msg:     "transition not allowed",
-			Allowed: allowed,
-		}
+		return err
 	}
 
 	// Business-rule guards.
 	switch {
 	case current == TrackStatusPending && next == TrackStatusActive:
 		if linkedTaskCount == 0 {
-			return ErrInvalidTrackTransition{
-				From: current, To: next,
-				Msg: "cannot activate track with 0 linked tasks; " +
+			return fmt.Errorf(
+				"cannot transition track from %s to %s: "+
+					"cannot activate track with 0 linked tasks; "+
 					"link at least one task first",
-			}
+				current, next,
+			)
 		}
 
 	case current == TrackStatusActive && next == TrackStatusCompleted:
 		if !allTasksTerminal {
-			return ErrInvalidTrackTransition{
-				From: current, To: next,
-				Msg: "cannot complete track with non-terminal tasks; " +
+			return fmt.Errorf(
+				"cannot transition track from %s to %s: "+
+					"cannot complete track with non-terminal tasks; "+
 					"all linked tasks must be DONE or SKIPPED",
-			}
+				current, next,
+			)
 		}
 	}
 

@@ -4,29 +4,35 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"hop.top/kit/domain"
 )
 
-func TestValidateTransition(t *testing.T) {
+func TestStateMachine_DefaultTransitions(t *testing.T) {
+	sm := DefaultWorkflow().StateMachine()
+	ctx := context.Background()
+
 	tests := []struct {
 		name    string
-		current TaskStatus
-		next    TaskStatus
+		from    domain.State
+		to      domain.State
 		wantErr bool
 	}{
-		{"TODO to IN_PROGRESS", StatusTodo, StatusInProgress, false},
-		{"TODO to SKIPPED", StatusTodo, StatusSkipped, false},
-		{"TODO to DONE", StatusTodo, StatusDone, true}, // Must go through IN_PROGRESS
-		{"IN_PROGRESS to DONE", StatusInProgress, StatusDone, false},
-		{"IN_PROGRESS to TODO", StatusInProgress, StatusTodo, false},
-		{"DONE to TODO", StatusDone, StatusTodo, true},
-		{"SKIPPED to IN_PROGRESS", StatusSkipped, StatusInProgress, true},
+		{"TODO to IN_PROGRESS", domain.State(StatusTodo), domain.State(StatusInProgress), false},
+		{"TODO to SKIPPED", domain.State(StatusTodo), domain.State(StatusSkipped), false},
+		{"TODO to DONE", domain.State(StatusTodo), domain.State(StatusDone), true},
+		{"IN_PROGRESS to DONE", domain.State(StatusInProgress), domain.State(StatusDone), false},
+		{"IN_PROGRESS to TODO", domain.State(StatusInProgress), domain.State(StatusTodo), false},
+		{"DONE to TODO", domain.State(StatusDone), domain.State(StatusTodo), true},
+		{"SKIPPED to IN_PROGRESS", domain.State(StatusSkipped), domain.State(StatusInProgress), true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateTransition(tt.current, tt.next)
+			err := sm.Transition(ctx, tt.from, tt.to, false)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateTransition() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Transition(%s, %s) error = %v, wantErr %v",
+					tt.from, tt.to, err, tt.wantErr)
 			}
 		})
 	}

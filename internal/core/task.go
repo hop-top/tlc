@@ -1,41 +1,24 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
+
+	"hop.top/kit/domain"
 )
 
-type ErrInvalidTransition struct {
-	From    TaskStatus
-	To      TaskStatus
-	Msg     string
-	Allowed []string // valid target statuses from From (nil = unknown/no rules)
-}
-
-func (e ErrInvalidTransition) Error() string {
-	base := fmt.Sprintf("cannot transition task from %s to %s: %s", e.From, e.To, e.Msg)
-	if len(e.Allowed) > 0 {
-		return fmt.Sprintf(
-			"%s; valid transitions from %s: %v; use --force to bypass",
-			base, e.From, e.Allowed,
-		)
-	}
-	return base + "; use --force to bypass the state machine"
-}
-
-// ValidateTransition checks if a status transition is allowed using the
-// default workflow. Kept for backward compatibility; new code should use
-// WorkflowManager.ValidateTransition directly.
-func ValidateTransition(current, next TaskStatus) error {
-	return DefaultWorkflow().ValidateTransition(current, next, false)
-}
-
-// TransitionWithWorkflow transitions the task using the given WorkflowManager
-// and records a log entry. Set force=true to bypass transition rules.
+// TransitionWithWorkflow transitions the task using the given WorkflowManager's
+// StateMachine and records a log entry. Set force=true to bypass transition rules.
 func (t *Task) TransitionWithWorkflow(next TaskStatus, by string, note string, wm *WorkflowManager, force bool) (*LogEntry, error) {
-	if err := wm.ValidateTransition(t.Status, next, force); err != nil {
-		return nil, err
+	if t.Status == next {
+		// Same-status is always a no-op.
+	} else {
+		sm := wm.StateMachine()
+		if err := sm.Transition(context.Background(), domain.State(t.Status), domain.State(next), force); err != nil {
+			return nil, err
+		}
 	}
 	oldStatus := t.Status
 	t.Status = next

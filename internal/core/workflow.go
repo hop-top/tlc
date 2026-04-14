@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"hop.top/kit/domain"
 	"hop.top/tlc/internal/config"
 )
 
@@ -96,62 +97,10 @@ func defaultRules() map[string][]string {
 	}
 }
 
-// ValidateTransition checks if a status transition is allowed.
-func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bool) error {
-	currentStr := string(current)
-	nextStr := string(next)
-
-	// Both statuses must be defined
-	if _, ok := wm.statuses[currentStr]; !ok {
-		return ErrInvalidTransition{From: current, To: next, Msg: fmt.Sprintf("unknown status: %s", currentStr)}
-	}
-	if _, ok := wm.statuses[nextStr]; !ok {
-		return ErrInvalidTransition{From: current, To: next, Msg: fmt.Sprintf("unknown status: %s", nextStr)}
-	}
-
-	// Same status is always valid
-	if current == next {
-		return nil
-	}
-
-	// Terminal statuses cannot transition unless forced.
-	if wm.IsTerminal(current) {
-		if force {
-			return nil
-		}
-		return ErrInvalidTransition{
-			From: current,
-			To:   next,
-			Msg:  "terminal states are immutable; run 'tlc task reopen <id> --note \"<reason>\"' first",
-		}
-	}
-
-	if force {
-		return nil
-	}
-
-	// Check rules
-	allowed, hasRule := wm.rules[currentStr]
-	if !hasRule {
-		return ErrInvalidTransition{
-			From: current,
-			To:   next,
-			Msg:  "no transition rules defined for current status",
-		}
-	}
-
-	for _, a := range allowed {
-		if a == nextStr {
-			return nil
-		}
-	}
-
-	return ErrInvalidTransition{
-		From:    current,
-		To:      next,
-		Msg:     "transition not allowed by state machine",
-		Allowed: allowed,
-	}
+// StateMachine returns a kit/domain StateMachine built from this
+// WorkflowManager's rules. The result is cached after first call.
+func (wm *WorkflowManager) StateMachine() *domain.StateMachine {
+	return NewTaskStateMachineFromWorkflow(wm, nil)
 }
 
 // GetStatusDef returns the StatusDefinition for a given status.

@@ -1,6 +1,11 @@
 package cli
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+
+	"hop.top/kit/domain"
+)
 
 // errTaskNotFound returns an actionable error for a missing task.
 // Tells the agent which command to run to see available tasks.
@@ -17,8 +22,8 @@ func errProjectNotFound(projectID string) error {
 	)
 }
 
-// errTransitionNotAllowed returns an actionable error for a blocked state-machine transition.
-// Lists the valid next statuses and the escape hatch.
+// errTransitionNotAllowed returns an actionable error for a blocked
+// state-machine transition. Lists valid next statuses and escape hatch.
 func errTransitionNotAllowed(from, to string, allowed []string) error {
 	if len(allowed) == 0 {
 		return fmt.Errorf(
@@ -34,7 +39,26 @@ func errTransitionNotAllowed(from, to string, allowed []string) error {
 	)
 }
 
-// errTerminalState returns an actionable error when trying to mutate a terminal task.
+// fmtTransitionError converts a kit/domain TransitionError (or any error
+// wrapping domain.ErrInvalidTransition) into an actionable CLI message.
+// Returns the original error unchanged if it is not a transition error.
+func fmtTransitionError(err error) error {
+	var te *domain.TransitionError
+	if errors.As(err, &te) {
+		allowed := make([]string, len(te.Allowed))
+		for i, s := range te.Allowed {
+			allowed[i] = string(s)
+		}
+		return errTransitionNotAllowed(string(te.From), string(te.To), allowed)
+	}
+	if errors.Is(err, domain.ErrInvalidTransition) {
+		return fmt.Errorf("%v; use --force to bypass the state machine", err)
+	}
+	return err
+}
+
+// errTerminalState returns an actionable error when trying to mutate a
+// terminal task.
 func errTerminalState(taskID, status string) error {
 	return fmt.Errorf(
 		"task %s is in terminal state %s and cannot be transitioned; "+
@@ -48,7 +72,8 @@ func errNoteRequired(cmdHint string) error {
 	return fmt.Errorf("--note is required; re-run with: %s --note \"<reason>\"", cmdHint)
 }
 
-// errDeleteRequiresYes returns an actionable error when --yes is missing for delete.
+// errDeleteRequiresYes returns an actionable error when --yes is missing for
+// delete.
 func errDeleteRequiresYes(taskID string) error {
 	return fmt.Errorf(
 		"task delete requires confirmation; re-run with: tlc task delete %s --yes",

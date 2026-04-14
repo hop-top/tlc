@@ -220,7 +220,7 @@ All error messages in this codebase must follow the **agent-first actionable** p
 ### Implementation anchors
 
 - Sentinel error types: `uri.ErrTaskNotFound`, `uri.ErrProjectNotFound`
-- Transition error: `core.ErrInvalidTransition` (includes `Allowed []string` field)
+- Transition error: `domain.TransitionError` from kit (includes `From`, `To`, `Allowed` fields)
 - CLI helpers: `internal/cli/errors.go` — `errNoteRequired`, `errDeleteRequiresYes`, …
 
 ## Doc Command Validation

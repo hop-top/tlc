@@ -56,7 +56,7 @@ var TaskClaimCmd = &cobra.Command{
 				appendAuditLog(task, user, "CLAIMED", details, taskClaimNote, task.UpdatedAt)
 			}
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, fmtTransitionError(transErr)))
 				continue
 			}
 
@@ -129,7 +129,7 @@ var TaskUnclaimCmd = &cobra.Command{
 				appendAuditLog(task, user, "UNCLAIMED", details, taskUnclaimNote, task.UpdatedAt)
 			}
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, fmtTransitionError(transErr)))
 				continue
 			}
 
@@ -331,7 +331,7 @@ var TaskCompleteCmd = &cobra.Command{
 				appendAuditLog(task, user, "COMPLETED", details, taskCompleteNote, task.UpdatedAt)
 			}
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, fmtTransitionError(transErr)))
 				continue
 			}
 
@@ -404,7 +404,7 @@ var TaskReopenCmd = &cobra.Command{
 				initialStatus, user, taskReopenNote, wm, true,
 			)
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to reopen task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, fmtTransitionError(transErr)))
 				continue
 			}
 

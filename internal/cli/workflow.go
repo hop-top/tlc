@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"hop.top/kit/domain"
 	"hop.top/tlc/internal/core"
 )
 
@@ -74,18 +76,12 @@ var workflowRulesCmd = &cobra.Command{
 				continue
 			}
 
-			// Collect reachable statuses by testing transitions
-			var targets []string
-			for _, target := range allStatuses {
-				if target == name {
-					continue
-				}
-				err := wm.ValidateTransition(
-					core.TaskStatus(name), core.TaskStatus(target), false,
-				)
-				if err == nil {
-					targets = append(targets, target)
-				}
+			// Collect reachable statuses from the StateMachine
+			sm := wm.StateMachine()
+			allowed := sm.AllowedFrom(domain.State(name))
+			targets := make([]string, len(allowed))
+			for i, s := range allowed {
+				targets[i] = string(s)
 			}
 
 			if len(targets) == 0 {
@@ -110,7 +106,8 @@ var workflowValidateCmd = &cobra.Command{
 		wm := core.DefaultWorkflow()
 		out := cmd.OutOrStdout()
 
-		err := wm.ValidateTransition(from, to, false)
+		sm := wm.StateMachine()
+		err := sm.Transition(context.Background(), domain.State(from), domain.State(to), false)
 		if err == nil {
 			_, _ = fmt.Fprintf(out,
 				"Transition allowed: %s -> %s\n", from, to,
@@ -119,7 +116,8 @@ var workflowValidateCmd = &cobra.Command{
 		}
 
 		_, _ = fmt.Fprintf(out,
-			"Transition not allowed: %s -> %s (%s)\n", from, to, err,
+			"Transition not allowed: %s -> %s (%s)\n", from, to,
+			fmtTransitionError(err),
 		)
 		return nil
 	},

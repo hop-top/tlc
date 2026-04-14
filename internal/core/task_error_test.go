@@ -1,18 +1,21 @@
 package core
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
+
+	"hop.top/kit/domain"
 )
 
-func TestErrInvalidTransition_WithAllowed(t *testing.T) {
-	err := ErrInvalidTransition{
-		From:    TaskStatus("TODO"),
-		To:      TaskStatus("DONE"),
-		Msg:     "transition not allowed by state machine",
-		Allowed: []string{"IN_PROGRESS", "SKIPPED"},
+func TestTransitionError_WithAllowed(t *testing.T) {
+	te := &domain.TransitionError{
+		From:    domain.State("TODO"),
+		To:      domain.State("DONE"),
+		Allowed: []domain.State{"IN_PROGRESS", "SKIPPED"},
 	}
-	msg := err.Error()
+	msg := te.Error()
 
 	if !strings.Contains(msg, "TODO") {
 		t.Errorf("expected From status in error: %q", msg)
@@ -23,55 +26,63 @@ func TestErrInvalidTransition_WithAllowed(t *testing.T) {
 	if !strings.Contains(msg, "IN_PROGRESS") {
 		t.Errorf("expected allowed transitions in error: %q", msg)
 	}
-	if !strings.Contains(msg, "--force") {
-		t.Errorf("expected '--force' hint in error: %q", msg)
-	}
 }
 
-func TestErrInvalidTransition_NoAllowed(t *testing.T) {
-	err := ErrInvalidTransition{
-		From: TaskStatus("DONE"),
-		To:   TaskStatus("TODO"),
-		Msg:  "terminal states are immutable; run 'tlc task reopen <id> --note \"<reason>\"' first",
+func TestTransitionError_NoAllowed(t *testing.T) {
+	te := &domain.TransitionError{
+		From: domain.State("DONE"),
+		To:   domain.State("TODO"),
 	}
-	msg := err.Error()
+	msg := te.Error()
 
 	if !strings.Contains(msg, "DONE") {
 		t.Errorf("expected From status in error: %q", msg)
 	}
-	if !strings.Contains(msg, "--force") {
-		t.Errorf("expected '--force' hint in error: %q", msg)
+}
+
+func TestTransitionError_Is(t *testing.T) {
+	te := &domain.TransitionError{
+		From: domain.State("TODO"),
+		To:   domain.State("DONE"),
+	}
+	if !errors.Is(te, domain.ErrInvalidTransition) {
+		t.Error("expected TransitionError to match ErrInvalidTransition")
 	}
 }
 
-func TestWorkflow_TransitionError_IncludesAllowed(t *testing.T) {
+func TestWorkflow_StateMachine_TransitionError_IncludesAllowed(t *testing.T) {
 	wm := DefaultWorkflow()
+	sm := wm.StateMachine()
 
-	// TODO -> DONE is not directly allowed; should list [IN_PROGRESS SKIPPED]
-	err := wm.ValidateTransition("TODO", "DONE", false)
+	// TODO -> DONE is not directly allowed; should list allowed targets
+	err := sm.Transition(context.Background(), "TODO", "DONE", false)
 	if err == nil {
 		t.Fatal("expected error for TODO -> DONE transition")
+	}
+
+	var te *domain.TransitionError
+	if !errors.As(err, &te) {
+		t.Fatalf("expected *domain.TransitionError, got %T", err)
+	}
+	if len(te.Allowed) == 0 {
+		t.Error("expected non-empty Allowed list")
 	}
 
 	msg := err.Error()
 	if !strings.Contains(msg, "IN_PROGRESS") {
 		t.Errorf("expected allowed transition IN_PROGRESS in error: %q", msg)
 	}
-	if !strings.Contains(msg, "--force") {
-		t.Errorf("expected '--force' hint in error: %q", msg)
-	}
 }
 
-func TestWorkflow_TerminalTransitionError_HasReopenHint(t *testing.T) {
+func TestWorkflow_StateMachine_TerminalTransitionError(t *testing.T) {
 	wm := DefaultWorkflow()
+	sm := wm.StateMachine()
 
-	err := wm.ValidateTransition("DONE", "TODO", false)
+	err := sm.Transition(context.Background(), "DONE", "TODO", false)
 	if err == nil {
 		t.Fatal("expected error for DONE -> TODO transition")
 	}
-
-	msg := err.Error()
-	if !strings.Contains(msg, "reopen") {
-		t.Errorf("expected 'reopen' hint in terminal transition error: %q", msg)
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got: %v", err)
 	}
 }

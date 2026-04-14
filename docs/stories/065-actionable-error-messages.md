@@ -47,7 +47,7 @@ An actionable message (`…; run 'tlc task list'…`) closes the loop immediatel
 |------|---------|---------------|
 | `ErrTaskNotFound` | `internal/uri` | `tlc task list` |
 | `ErrProjectNotFound` | `internal/uri` | `tlc init` |
-| `ErrInvalidTransition` | `internal/core` | lists `Allowed []string` |
+| `domain.TransitionError` | `hop.top/kit/domain` | lists `From`, `To`, `Allowed` |
 
 ### CLI helpers (`internal/cli/errors.go`)
 
@@ -55,6 +55,7 @@ An actionable message (`…; run 'tlc task list'…`) closes the loop immediatel
 - `errDeleteRequiresYes(taskID)` — exact re-run with `--yes`
 - `errTerminalState(taskID, status)` — reopens via `tlc task reopen`
 - `errTransitionNotAllowed(from, to, allowed)` — lists valid transitions
+- `fmtTransitionError(err)` — converts kit `domain.TransitionError` to actionable CLI message
 
 ## Tests
 

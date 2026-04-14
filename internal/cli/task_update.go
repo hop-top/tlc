@@ -80,7 +80,7 @@ var TaskUpdateCmd = &cobra.Command{
 					nextStatus, core.GetCurrentUser(), "Manual update", wm, taskUpdateForce,
 				)
 				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: failed to transition: %v", task.ID, err))
+					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, fmtTransitionError(err)))
 					continue
 				}
 				if err := res.Storage.AddLog(ctx, log); err != nil {
