@@ -1,0 +1,4 @@
+# Ignore all compiled shim binaries in this directory.
+# Keep this .gitignore so the directory is tracked by git.
+*
+!.gitignore
