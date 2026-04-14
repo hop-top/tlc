@@ -193,6 +193,78 @@ func TestGenerateTaskSchema_FlagDetails(t *testing.T) {
 	}
 }
 
+// T-0597: FlagSchema.Default is populated from pflag defaults.
+// TaskCreateCmd has --status with default "TODO". The generated schema
+// must reflect that default value in FlagSchema.Default.
+func TestFlagSchema_DefaultPopulatedFromPflag(t *testing.T) {
+	schemas := GenerateTaskSchema()
+	index := make(map[string]CommandSchema, len(schemas))
+	for _, s := range schemas {
+		index[s.Name] = s
+	}
+
+	cs, ok := index["create"]
+	if !ok {
+		t.Fatal("subcommand 'create' not found in task schema")
+	}
+
+	tests := []struct {
+		flag    string
+		wantDef string
+	}{
+		{"status", "TODO"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.flag, func(t *testing.T) {
+			var found *FlagSchema
+			for i := range cs.Flags {
+				if cs.Flags[i].Name == tc.flag {
+					found = &cs.Flags[i]
+					break
+				}
+			}
+			if found == nil {
+				t.Fatalf("flag %q not found on 'create'", tc.flag)
+			}
+			if found.Default != tc.wantDef {
+				t.Errorf(
+					"FlagSchema.Default for --%s = %q, want %q",
+					tc.flag, found.Default, tc.wantDef,
+				)
+			}
+		})
+	}
+}
+
+// T-0597 (cont): FlagSchema.Default is empty for flags without defaults.
+func TestFlagSchema_DefaultEmptyWhenNoDefault(t *testing.T) {
+	schemas := GenerateTaskSchema()
+	index := make(map[string]CommandSchema, len(schemas))
+	for _, s := range schemas {
+		index[s.Name] = s
+	}
+
+	cs, ok := index["list"]
+	if !ok {
+		t.Fatal("subcommand 'list' not found in task schema")
+	}
+
+	// --mine is a bool flag with default "false"; since DefValue is "false"
+	// it should be populated.
+	for _, f := range cs.Flags {
+		if f.Name == "mine" {
+			if f.Default != "false" {
+				t.Errorf(
+					"FlagSchema.Default for --mine = %q, want %q",
+					f.Default, "false",
+				)
+			}
+			return
+		}
+	}
+	t.Error("--mine flag not found on 'list' subcommand")
+}
+
 func TestGenerateTaskSchema_PersistentFlags(t *testing.T) {
 	schemas := GenerateTaskSchema()
 	if len(schemas) == 0 {
