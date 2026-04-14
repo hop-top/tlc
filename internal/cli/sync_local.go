@@ -86,7 +86,7 @@ func syncToProjectTODO() error {
 	if todoName == "" {
 		todoName = "todo.txt"
 	}
-	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), filepath.Base(todoName))
+	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), todoName)
 	if err := os.MkdirAll(filepath.Dir(todoFile), 0o750); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}

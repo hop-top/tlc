@@ -21,11 +21,11 @@ func TestTracksDir_CustomValue(t *testing.T) {
 	}
 }
 
-func TestTracksDir_AbsolutePath(t *testing.T) {
+func TestTracksDir_AbsolutePathRejectedByValidation(t *testing.T) {
 	abs := filepath.Join(string(filepath.Separator), "opt", "tracks")
 	tc := &TrackConfig{Dir: abs}
-	if got := tc.TracksDir(); got != abs {
-		t.Errorf("TracksDir() = %q; want %q", got, abs)
+	if err := tc.Validate(); err == nil {
+		t.Error("Validate() should reject absolute tracks dir")
 	}
 }
 
@@ -46,11 +46,11 @@ func TestFlowsDir_CustomValue(t *testing.T) {
 	}
 }
 
-func TestFlowsDir_AbsolutePath(t *testing.T) {
+func TestFlowsDir_AbsolutePathRejectedByValidation(t *testing.T) {
 	abs := filepath.Join(string(filepath.Separator), "opt", "flows")
 	fc := &FlowConfig{Dir: abs}
-	if got := fc.FlowsDir(); got != abs {
-		t.Errorf("FlowsDir() = %q; want %q", got, abs)
+	if err := fc.Validate(); err == nil {
+		t.Error("Validate() should reject absolute flows dir")
 	}
 }
 

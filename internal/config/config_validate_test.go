@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -275,7 +276,7 @@ func TestTrackConfig_TracksDir_Custom(t *testing.T) {
 
 func TestFlowConfig_FlowsDir_Default(t *testing.T) {
 	fc := &FlowConfig{}
-	want := "examples/flows"
+	want := filepath.Join("examples", "flows")
 	if got := fc.FlowsDir(); got != want {
 		t.Errorf("FlowsDir() = %q, want %q", got, want)
 	}
@@ -290,7 +291,7 @@ func TestFlowConfig_FlowsDir_Custom(t *testing.T) {
 
 func TestFlowConfig_AssigneesDirectory_Default(t *testing.T) {
 	fc := &FlowConfig{}
-	want := "examples/assignees"
+	want := filepath.Join("examples", "assignees")
 	if got := fc.AssigneesDirectory(); got != want {
 		t.Errorf("AssigneesDirectory() = %q, want %q", got, want)
 	}

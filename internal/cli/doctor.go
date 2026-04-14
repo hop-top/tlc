@@ -551,7 +551,7 @@ func checkProjectTodoSynced(fix bool) checkResult {
 	if todoName == "" {
 		todoName = "todo.txt"
 	}
-	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), filepath.Base(todoName))
+	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), todoName)
 	data, err := os.ReadFile(todoFile)
 	if err != nil || len(strings.TrimSpace(string(data))) == 0 {
 		return checkResult{

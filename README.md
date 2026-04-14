@@ -607,7 +607,7 @@ storage:
     dir: incoming               # default: "inbox"
 ```
 
-Paths can be relative (resolved from project root) or absolute.
+Paths must be relative (resolved from project root).
 This is useful for mono-repo layouts where `.tlc/` sits at the
 repo root but artifacts live in a shared directory:
 
