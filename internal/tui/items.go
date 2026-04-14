@@ -16,6 +16,7 @@ var (
 	_ kittui.Renderer = (*flowRunItem)(nil)
 	_ kittui.Renderer = (*headerItem)(nil)
 	_ kittui.Renderer = (*spacerItem)(nil)
+	_ kittui.Renderer = (*kanbanCardItem)(nil)
 )
 
 // taskItem renders a single task row in the dashboard list.
@@ -97,6 +98,49 @@ func (hi *headerItem) Render(_ int) string {
 type spacerItem struct{}
 
 func (si *spacerItem) Render(_ int) string { return "" }
+
+// kanbanCardItem renders a task card in the kanban board.
+type kanbanCardItem struct {
+	task      *core.Task
+	selected  bool
+	colWidth  int
+	styles    *styles.Styles
+	tagColors map[string]string
+}
+
+func (ki *kanbanCardItem) Render(_ int) string {
+	style := lipgloss.NewStyle().
+		Width(ki.colWidth - 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240"))
+
+	if ki.selected {
+		style = style.
+			BorderForeground(ki.styles.PrimaryColor).
+			Bold(true)
+	}
+
+	// Build card content: ID + title + tags.
+	var b strings.Builder
+	b.WriteString(ki.task.ID)
+	b.WriteByte('\n')
+	b.WriteString(ki.task.Title)
+
+	if len(ki.task.Tags) > 0 {
+		b.WriteByte('\n')
+		for i, tag := range ki.task.Tags {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(
+				getTagStyleFrom(tag, ki.tagColors, ki.styles).
+					Render("#" + tag),
+			)
+		}
+	}
+
+	return style.Render(b.String())
+}
 
 // formatStatusWithStyles renders a task status icon using the given styles.
 func formatStatusWithStyles(status core.TaskStatus, s *styles.Styles) string {

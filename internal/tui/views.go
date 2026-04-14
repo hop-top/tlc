@@ -275,49 +275,43 @@ func (m Model) kanbanView() string {
 		groups[t.Status] = append(groups[t.Status], t)
 	}
 
-	cols := make([]string, 0, len(kanbanStatusOrder))
 	colWidth := (m.width - 4) / kanbanColCount
 	if colWidth < kanbanMinColWidth {
 		colWidth = kanbanMinColWidth
 	}
 
+	cols := make([]string, 0, len(kanbanStatusOrder))
 	for _, status := range kanbanStatusOrder {
-		var col strings.Builder
 		tasks := groups[status]
 
+		// Column header.
 		header := fmt.Sprintf("%s (%d)",
 			strings.ToUpper(string(status)), len(tasks),
 		)
-		col.WriteString(lipgloss.NewStyle().
+		headerStr := lipgloss.NewStyle().
 			Width(colWidth).
 			Align(lipgloss.Center).
 			Bold(true).
 			Foreground(lipgloss.Color("245")).
-			Render(header))
-		col.WriteString("\n\n")
+			Render(header)
 
+		// Build kit/tui.List items for this column.
+		var items []kittui.Item
 		for _, task := range tasks {
-			isSelected := false
-			if len(m.tasks) > 0 && m.tasks[m.selected].ID == task.ID {
-				isSelected = true
-			}
-
-			style := lipgloss.NewStyle().
-				Width(colWidth - 2).
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("240"))
-
-			if isSelected {
-				style = style.
-					BorderForeground(m.styles.PrimaryColor).
-					Bold(true)
-			}
-
-			card := fmt.Sprintf("%s\n%s", task.ID, task.Title)
-			col.WriteString(style.Render(card))
-			col.WriteString("\n")
+			isSelected := len(m.tasks) > 0 && m.tasks[m.selected].ID == task.ID
+			items = append(items, &kanbanCardItem{
+				task:      task,
+				selected:  isSelected,
+				colWidth:  colWidth,
+				styles:    m.styles,
+				tagColors: m.tagColors,
+			})
 		}
-		cols = append(cols, col.String())
+
+		colList := kittui.NewList(m.height).SetItems(items)
+		colContent := colList.View(colWidth)
+
+		cols = append(cols, headerStr+"\n\n"+colContent)
 	}
 
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
