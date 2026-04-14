@@ -351,7 +351,7 @@ func formatTLS(t *core.Task) string {
 		parts = append(parts, "#"+tag)
 	}
 
-	if t.Reference != "" && t.Reference != "task://"+t.ID {
+	if t.Reference != "" && t.Reference != "tlc:///"+t.ID && t.Reference != "tlc://"+t.ID && t.Reference != "task://"+t.ID {
 		parts = append(parts, "ref:"+t.Reference)
 	}
 

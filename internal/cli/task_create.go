@@ -296,7 +296,7 @@ func buildTaskReference(taskID string, proj *core.ProjectDetection) string {
 	if proj != nil && proj.ProjectID != "" {
 		return fmt.Sprintf("tlc://%s/%s", proj.ProjectID, taskID)
 	}
-	return fmt.Sprintf("tlc://%s", taskID)
+	return fmt.Sprintf("tlc:///%s", taskID)
 }
 
 func init() {

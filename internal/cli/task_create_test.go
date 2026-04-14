@@ -461,7 +461,7 @@ func TestBuildTaskReference(t *testing.T) {
 	})
 	t.Run("WithoutProject", func(t *testing.T) {
 		got := buildTaskReference("T-0042", nil)
-		want := "tlc://T-0042"
+		want := "tlc:///T-0042"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
@@ -469,37 +469,16 @@ func TestBuildTaskReference(t *testing.T) {
 	t.Run("EmptyProjectID", func(t *testing.T) {
 		proj := &core.ProjectDetection{ProjectID: ""}
 		got := buildTaskReference("T-0042", proj)
-		want := "tlc://T-0042"
+		want := "tlc:///T-0042"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
-		}
-	})
-}
-
-// TestBuildTaskReference_UsesTLCScheme verifies that task references use the
-// tlc:// URI scheme (the project's registered scheme) instead of task://.
-// See GH-2: references must be globally resolvable.
-func TestBuildTaskReference_UsesTLCScheme(t *testing.T) {
-	t.Run("WithProjectUsesTLCScheme", func(t *testing.T) {
-		proj := &core.ProjectDetection{ProjectID: "hop-top/tlc"}
-		got := buildTaskReference("T-0042", proj)
-		want := "tlc://hop-top/tlc/T-0042"
-		if got != want {
-			t.Errorf("got %q, want %q — reference must use tlc:// scheme, not task://", got, want)
 		}
 	})
 	t.Run("WithProjectMustNotUseTaskScheme", func(t *testing.T) {
 		proj := &core.ProjectDetection{ProjectID: "hop-top/tlc"}
 		got := buildTaskReference("T-0042", proj)
 		if strings.HasPrefix(got, "task://") {
-			t.Errorf("reference %q uses task:// scheme; must use tlc:// — see GH-2", got)
-		}
-	})
-	t.Run("WithoutProjectUsesTLCScheme", func(t *testing.T) {
-		got := buildTaskReference("T-0042", nil)
-		want := "tlc://T-0042"
-		if got != want {
-			t.Errorf("got %q, want %q — even relative refs must use tlc:// scheme", got, want)
+			t.Errorf("reference %q uses task:// scheme; must use tlc://", got)
 		}
 	})
 	t.Run("ReferenceContainsProjectID", func(t *testing.T) {
