@@ -8,9 +8,10 @@ import (
 	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/huh/v2"
 	"github.com/spf13/viper"
+	kitcli "hop.top/kit/cli"
+	kittui "hop.top/kit/tui"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
-	"hop.top/tlc/pkg/themepicker"
 )
 
 type (
@@ -21,7 +22,7 @@ type (
 
 type Model struct {
 	service          *core.TaskService
-	view             string // "dashboard", "list", "detail", "search", "form", "kanban", "flows", "theme_picker"
+	view             string // "dashboard", "list", "detail", "search", "form", "kanban", "flows"
 	tasks            []*core.Task
 	flowRuns         []*core.FlowRun
 	selected         int
@@ -33,21 +34,30 @@ type Model struct {
 	taskLogs         []*core.LogEntry
 	logSortDirection string
 	form             *huh.Form
-	themePicker      themepicker.Model
 	taskTitle        string
 	taskDescription  string
 	err              error
+
+	// taskList is the kit/tui.List used for dashboard and kanban views.
+	taskList kittui.List
+	// flowList is the kit/tui.List used for flow runs view.
+	flowList kittui.List
+
+	// theme is the kit/cli.Theme used for styling.
+	theme kitcli.Theme
+	// styles holds TUI styles derived from the theme.
+	styles *styles.Styles
 
 	// mdRenderer is a cached glamour renderer; recreated only on window resize.
 	mdRenderer    *glamour.TermRenderer
 	mdRenderWidth int
 
-	// tagColors holds unsaved tag→color assignments accumulated during a session.
+	// tagColors holds unsaved tag->color assignments accumulated during a session.
 	// Written to viper/disk via persistTagColors cmd, not inside View().
 	tagColors map[string]string
 }
 
-func NewModel(service *core.TaskService) Model {
+func NewModel(service *core.TaskService, theme kitcli.Theme) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search tasks..."
 
@@ -57,12 +67,6 @@ func NewModel(service *core.TaskService) Model {
 	if direction == "" {
 		direction = "desc"
 	}
-
-	// Initialize theme picker with default theme
-	// In the future, we can load more themes here
-	defaultTheme := styles.DefaultTheme()
-	tp := themepicker.New([]themepicker.Theme{defaultTheme})
-	tp.SetFetcher(themepicker.FetchTheme)
 
 	// Seed tagColors from viper so existing config is respected.
 	tc := viper.GetStringMapString("ui.tag_colors")
@@ -76,7 +80,10 @@ func NewModel(service *core.TaskService) Model {
 		searchInput:      ti,
 		viewport:         vp,
 		logSortDirection: direction,
-		themePicker:      tp,
+		theme:            theme,
+		styles:           styles.NewFromTheme(theme),
+		taskList:         kittui.NewList(1),
+		flowList:         kittui.NewList(1),
 		tagColors:        tc,
 	}
 }
@@ -88,10 +95,11 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m, cmd := m.updateInner(msg)
 	// Recompute viewport height after every Update so view/filter/search
-	// transitions that change header/footer height stay in sync. The
-	// calculation is cheap (two lipgloss.Height calls). WindowSizeMsg also
-	// runs this via its own SetHeight call, which is redundant but harmless.
-	m.viewport.SetHeight(m.effectiveViewportHeight())
+	// transitions that change header/footer height stay in sync.
+	vh := m.effectiveViewportHeight()
+	m.viewport.SetHeight(vh)
+	m.taskList = m.taskList.SetHeight(vh)
+	m.flowList = m.flowList.SetHeight(vh)
 	return m, cmd
 }
 
@@ -102,7 +110,10 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.SetWidth(msg.Width)
-		m.viewport.SetHeight(m.effectiveViewportHeight())
+		vh := m.effectiveViewportHeight()
+		m.viewport.SetHeight(vh)
+		m.taskList = m.taskList.SetHeight(vh)
+		m.flowList = m.flowList.SetHeight(vh)
 
 		// Rebuild cached markdown renderer when width changes.
 		wrapWidth := msg.Width - 10
@@ -116,12 +127,7 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
-		// Resize theme picker
-		var cmd tea.Cmd
-		var tm tea.Model
-		tm, cmd = m.themePicker.Update(msg)
-		m.themePicker = tm.(themepicker.Model)
-		return m, cmd
+		return m, nil
 	case error:
 		m.err = msg
 		return m, nil
@@ -130,11 +136,13 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		if m.selected >= len(m.tasks) && len(m.tasks) > 0 {
 			m.selected = len(m.tasks) - 1
 		}
+		m = m.rebuildTaskList()
 		m = m.syncViewport()
-		// Persist any newly-assigned tag colors asynchronously (no-op if nothing changed).
+		// Persist any newly-assigned tag colors asynchronously.
 		return m, m.persistTagColors
 	case flowRunsMsg:
 		m.flowRuns = msg
+		m = m.rebuildFlowList()
 		return m, nil
 	case logsMsg:
 		m.taskLogs = msg
@@ -156,8 +164,6 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		return handleSearchUpdate(m, msg)
 	case "form":
 		return handleFormUpdate(m, msg)
-	case "theme_picker":
-		return handleThemePickerUpdate(m, msg)
 	default:
 		return handleDashboardUpdate(m, msg)
 	}
@@ -178,7 +184,58 @@ func (m Model) addFilter(field, value string) Model {
 	return m
 }
 
+// rebuildTaskList rebuilds the kit/tui.List items from the current tasks,
+// grouped by status with headers and spacers.
+func (m Model) rebuildTaskList() Model {
+	groups := make(map[core.TaskStatus][]*core.Task)
+	for _, t := range m.tasks {
+		groups[t.Status] = append(groups[t.Status], t)
+	}
+
+	var items []kittui.Item
+	taskIdx := 0
+	for _, status := range statusOrder {
+		tasks := groups[status]
+		if len(tasks) == 0 {
+			continue
+		}
+		items = append(items, &headerItem{text: string(status)})
+		for _, task := range tasks {
+			items = append(items, &taskItem{
+				task:      task,
+				selected:  taskIdx == m.selected,
+				styles:    m.styles,
+				tagColors: m.tagColors,
+			})
+			taskIdx++
+		}
+		items = append(items, &spacerItem{})
+	}
+
+	m.taskList = m.taskList.SetItems(items)
+	return m
+}
+
+// rebuildFlowList rebuilds the kit/tui.List items from the current flow runs.
+func (m Model) rebuildFlowList() Model {
+	items := make([]kittui.Item, len(m.flowRuns))
+	for i, run := range m.flowRuns {
+		items[i] = &flowRunItem{
+			run:      run,
+			selected: i == m.selected,
+			styles:   m.styles,
+			theme:    m.theme,
+		}
+	}
+	m.flowList = m.flowList.SetItems(items)
+	return m
+}
+
 func (m Model) syncViewport() Model {
+	// Rebuild list items to reflect new selection state.
+	m = m.rebuildTaskList()
+	m = m.rebuildFlowList()
+
 	line := m.getLineOfSelected()
 	if line < m.viewport.YOffset() {
 		m.viewport.SetYOffset(line)

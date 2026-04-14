@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/tui/styles"
 )
 
 // TestSaveTask_UniqueIDs verifies that rapid consecutive creates produce distinct
@@ -15,7 +16,7 @@ func TestSaveTask_UniqueIDs(t *testing.T) {
 	repo := core.NewMockRepository()
 	logRepo := core.NewMockLogRepository()
 	svc := core.NewTaskService(repo, logRepo)
-	m := NewModel(svc)
+	m := NewModel(svc, styles.DefaultKitTheme())
 
 	// Simulate creating two tasks back-to-back via the TUI saveTask command.
 	cmd1 := m.saveTask("First Task", "desc1")
@@ -62,7 +63,7 @@ func TestSaveTask_IDNotDerivedFromCount(t *testing.T) {
 	repo.Tasks["T-0001"] = &core.Task{ID: "T-0001", Title: "pre"}
 	repo.Tasks["T-0002"] = &core.Task{ID: "T-0002", Title: "pre"}
 
-	m := NewModel(svc)
+	m := NewModel(svc, styles.DefaultKitTheme())
 	cmd := m.saveTask("New Task", "")
 	msg := cmd()
 
@@ -98,7 +99,7 @@ func TestSaveTask_RetryOnCollision(t *testing.T) {
 	repo.Tasks["T-0001"] = &core.Task{ID: "T-0001", Title: "existing"}
 
 	svc := core.NewTaskService(repo, logRepo)
-	m := NewModel(svc)
+	m := NewModel(svc, styles.DefaultKitTheme())
 
 	cmd := m.saveTask("Collision Task", "")
 	var msg tea.Msg

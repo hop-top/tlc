@@ -8,8 +8,8 @@ import (
 	glamour "charm.land/glamour/v2"
 	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
+	kittui "hop.top/kit/tui"
 	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/tui/styles"
 )
 
 const (
@@ -18,19 +18,18 @@ const (
 	kanbanMinColWidth  = 20
 	kanbanColCount     = 3
 
-	viewDashboard   = "dashboard"
-	viewSearch      = "search"
-	viewKanban      = "kanban"
-	viewFlows       = "flows"
-	viewDetail      = "detail"
-	viewThemePicker = "theme_picker"
-	viewForm        = "form"
-	sortAsc         = "asc"
+	viewDashboard = "dashboard"
+	viewSearch    = "search"
+	viewKanban    = "kanban"
+	viewFlows     = "flows"
+	viewDetail    = "detail"
+	viewForm      = "form"
+	sortAsc       = "asc"
 )
 
 // renderMarkdown renders content with the model's cached glamour renderer.
 // If the renderer is nil (not yet built or invalidated), it falls back to
-// building one on the fly — but that path is only hit before the first
+// building one on the fly -- but that path is only hit before the first
 // WindowSizeMsg arrives.
 func (m Model) renderMarkdown(content string) string {
 	r := m.mdRenderer
@@ -47,9 +46,6 @@ func (m Model) renderMarkdown(content string) string {
 		if err != nil {
 			return content
 		}
-		// Note: cannot persist r back into value-receiver model here;
-		// renderer is rebuilt on first render after startup or resize.
-		// After the first WindowSizeMsg, m.mdRenderer is populated by Update().
 	}
 	out, err := r.Render(content)
 	if err != nil {
@@ -65,19 +61,8 @@ var statusOrder = []core.TaskStatus{
 	core.StatusSkipped,
 }
 
-func formatStatus(status core.TaskStatus) string {
-	switch status {
-	case core.StatusTodo:
-		return styles.Current.Todo.Render("[ ]")
-	case core.StatusInProgress:
-		return styles.Current.InProgress.Render("[~]")
-	case core.StatusDone:
-		return styles.Current.Done.Render("[x]")
-	case core.StatusSkipped:
-		return styles.Current.Skipped.Render("[-]")
-	default:
-		return string(status)
-	}
+func (m Model) formatStatus(status core.TaskStatus) string {
+	return formatStatusWithStyles(status, m.styles)
 }
 
 func formatAssignee(assignee *string) string {
@@ -87,24 +72,6 @@ func formatAssignee(assignee *string) string {
 	return "@" + *assignee
 }
 
-// getTagStyle returns the lipgloss style for a tag, using the model's in-memory
-// tagColors map. No disk I/O here — tagColors is populated in NewModel from viper
-// and new assignments are written back to viper lazily (not on every render).
-// Maps are reference types in Go, so mutations here propagate to the caller's copy.
-func (m Model) getTagStyle(tag string) lipgloss.Style {
-	color, ok := m.tagColors[tag]
-	if !ok {
-		// Stable hash → palette index.
-		h := 0
-		for _, c := range tag {
-			h += int(c)
-		}
-		color = styles.Current.TagColors[h%len(styles.Current.TagColors)]
-		m.tagColors[tag] = color // map mutation propagates; no copy-on-write issue
-	}
-
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-}
 
 func (m Model) View() tea.View {
 	view := tea.NewView(m.viewString())
@@ -112,13 +79,10 @@ func (m Model) View() tea.View {
 	return view
 }
 
-// viewString returns the rendered string content, wrapped by View() into a
-// tea.View. Helper view methods (headerView, helpView, dashboardContent,
-// detailView, kanbanView, flowsContent) keep returning string and are
-// composed here.
+// viewString returns the rendered string content.
 func (m Model) viewString() string {
 	if m.err != nil {
-		return styles.Current.Error.Render(fmt.Sprintf("Error: %v", m.err))
+		return m.styles.Error.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
 	if m.view == viewForm {
@@ -133,11 +97,6 @@ func (m Model) viewString() string {
 
 	var content string
 	switch m.view {
-	case viewThemePicker:
-		// themePicker.View() returns tea.View; extract its string content
-		// since themepicker is embedded in this Model and inherits our View
-		// options (AltScreen, etc.) from the parent.
-		return m.themePicker.View().Content
 	case viewDetail:
 		content = m.detailView()
 	case viewKanban:
@@ -150,11 +109,6 @@ func (m Model) viewString() string {
 
 	m.viewport.SetContent(content)
 
-	// Note: viewport height is computed centrally in Update() via
-	// effectiveViewportHeight(). We don't set it here because View() has a
-	// value receiver — any mutation would be discarded, causing syncViewport()
-	// to read a stale stored height. See Model.effectiveViewportHeight().
-
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
@@ -166,10 +120,7 @@ func (m Model) viewString() string {
 }
 
 // effectiveViewportHeight computes the viewport height available after
-// subtracting rendered header + footer + spacing. This is the single source
-// of truth used by Update() on WindowSizeMsg to keep the stored viewport
-// height in sync with what View() will actually render. Requires m.width
-// and m.height to be set before calling (headerView() depends on m.width).
+// subtracting rendered header + footer + spacing.
 func (m Model) effectiveViewportHeight() int {
 	headerHeight := lipgloss.Height(m.headerView())
 	footerHeight := lipgloss.Height(m.helpView())
@@ -192,24 +143,25 @@ func (m Model) headerView() string {
 		title = "Task Details"
 	}
 
-	titleRendered := styles.Current.Title.MaxWidth(m.width).Render(title)
+	titleRendered := m.styles.Title.MaxWidth(m.width).Render(title)
 
 	if m.view == viewSearch {
 		m.searchInput.SetWidth(m.width - searchInputPadding)
-		searchRendered := styles.Current.Muted.Render("Search: ") + m.searchInput.View()
+		searchRendered := m.styles.Muted.Render("Search: ") + m.searchInput.View()
 		return lipgloss.JoinVertical(lipgloss.Left, titleRendered, searchRendered)
 	}
 
 	if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
-		var filterParts []string
+		var pills []kittui.Pill
 		if m.searchInput.Value() != "" {
-			filterParts = append(filterParts, fmt.Sprintf("search:%s", m.searchInput.Value()))
+			pills = append(pills, kittui.NewPill("search", m.searchInput.Value()))
 		}
 		for _, f := range m.activeFilters {
-			filterParts = append(filterParts, fmt.Sprintf("%s:%v", f.Field, f.Value))
+			pills = append(pills, kittui.NewPill(f.Field, fmt.Sprintf("%v", f.Value)))
 		}
-		filterRendered := styles.Current.Muted.Render(fmt.Sprintf("Filtered by: %s", strings.Join(filterParts, ", ")))
-		return titleRendered + " | " + filterRendered
+		bar := kittui.NewPillBar(pills...)
+		filterRendered := bar.ViewWithTheme(m.theme, m.width)
+		return lipgloss.JoinVertical(lipgloss.Left, titleRendered, filterRendered)
 	}
 
 	return titleRendered
@@ -220,80 +172,33 @@ func (m Model) helpView() string {
 	items = append(items, "[j/k] navigate")
 	switch m.view {
 	case viewDashboard:
-		items = append(items, "[n]ew", "[c/u] claim/unclaim", "[s] status", "[/ ] search", "[f/a] filter tag/assignee")
+		items = append(items,
+			"[n]ew", "[c/u] claim/unclaim", "[s] status",
+			"[/ ] search", "[f/a] filter tag/assignee",
+		)
 		if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
 			items = append(items, "[esc] clear filter")
 		}
-		items = append(items, "[p] sync", "[t] theme", "[v] cycle view", "[enter] details")
-	case viewThemePicker:
-		items = append(items, "[enter] select", "[R] fetch remote", "[esc] cancel")
+		items = append(items, "[p] sync", "[v] cycle view", "[enter] details")
 	case viewKanban:
 		items = append(items, "[h/l] move", "[v] cycle view", "[enter] details")
 	case viewFlows:
 		items = append(items, "[v] cycle view")
 	case viewDetail:
-		items = append(items, "[c/u] claim/unclaim", "[s] status", "[o] sort dir", "[esc] back")
+		items = append(items,
+			"[c/u] claim/unclaim", "[s] status",
+			"[o] sort dir", "[esc] back",
+		)
 	}
 	items = append(items, "[r]efresh", "[q]uit")
-	return styles.Current.Muted.Render(strings.Join(items, "  "))
+	return m.styles.Muted.Render(strings.Join(items, "  "))
 }
 
 func (m Model) dashboardContent() string {
 	if len(m.tasks) == 0 {
 		return "No tasks found."
 	}
-
-	var s strings.Builder
-	groups := make(map[core.TaskStatus][]*core.Task)
-	for _, t := range m.tasks {
-		groups[t.Status] = append(groups[t.Status], t)
-	}
-
-	currentIndex := 0
-	for _, status := range statusOrder {
-		tasks := groups[status]
-		if len(tasks) == 0 {
-			continue
-		}
-
-		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true).Render(strings.ToUpper(string(status))))
-		s.WriteString("\n")
-
-		for _, task := range tasks {
-			cursor := " "
-			if currentIndex == m.selected {
-				cursor = styles.Current.InProgress.Render("►")
-			}
-
-			statusIcon := formatStatus(task.Status)
-			title := task.Title
-			if currentIndex == m.selected {
-				title = lipgloss.NewStyle().Bold(true).Render(title)
-			}
-
-			assignee := ""
-			if task.AssignedTo != nil {
-				assignee = fmt.Sprintf(" @%s", *task.AssignedTo)
-			}
-
-			tags := ""
-			for _, tag := range task.Tags {
-				tags += " " + m.getTagStyle(tag).Render("#"+tag)
-			}
-
-			syncIcon := ""
-			if task.NeedsPush() {
-				syncIcon = styles.Current.Warning.Render(" ↑")
-			}
-
-			fmt.Fprintf(&s, "%s %s %s %s%s%s%s\n", cursor, task.ID, statusIcon, title, syncIcon, styles.Current.Muted.Render(assignee), tags)
-			currentIndex++
-		}
-
-		s.WriteString("\n")
-	}
-
-	return s.String()
+	return m.taskList.View(m.width)
 }
 
 func (m Model) detailView() string {
@@ -304,18 +209,29 @@ func (m Model) detailView() string {
 	task := m.tasks[m.selected]
 
 	var s strings.Builder
-	s.WriteString(styles.Current.Title.Render(fmt.Sprintf("Task %s: %s", task.ID, task.Title)))
+	s.WriteString(m.styles.Title.Render(
+		fmt.Sprintf("Task %s: %s", task.ID, task.Title),
+	))
 	s.WriteString("\n\n")
 
-	fmt.Fprintf(&s, "Status:    %s\n", formatStatus(task.Status))
+	fmt.Fprintf(&s, "Status:    %s\n", m.formatStatus(task.Status))
 	fmt.Fprintf(&s, "Assigned:  %s\n", formatAssignee(task.AssignedTo))
 	fmt.Fprintf(&s, "Reference: %s\n", task.Reference)
-	fmt.Fprintf(&s, "Tags:      %s\n", strings.Join(task.Tags, ", "))
+	if len(task.Tags) > 0 {
+		var tagPills []kittui.Pill
+		for _, tag := range task.Tags {
+			tagPills = append(tagPills, kittui.NewPill("#", tag))
+		}
+		tagBar := kittui.NewPillBar(tagPills...)
+		fmt.Fprintf(&s, "Tags:      %s\n", tagBar.ViewWithTheme(m.theme, m.width))
+	} else {
+		s.WriteString("Tags:      -\n")
+	}
 
 	if task.OriginSystem != nil && *task.OriginSystem != "" {
 		syncStatus := "In Sync"
 		if task.NeedsPush() {
-			syncStatus = styles.Current.Warning.Render("Pending Push")
+			syncStatus = m.styles.Warning.Render("Pending Push")
 		}
 		fmt.Fprintf(&s, "Sync:      %s (%s)\n", syncStatus, *task.OriginSystem)
 	}
@@ -324,7 +240,7 @@ func (m Model) detailView() string {
 
 	if task.Description != "" {
 		s.WriteString("Description:\n")
-		s.WriteString(styles.Current.Box.Render(m.renderMarkdown(task.Description)))
+		s.WriteString(m.styles.Box.Render(m.renderMarkdown(task.Description)))
 		s.WriteString("\n")
 	}
 
@@ -345,7 +261,7 @@ func (m Model) detailView() string {
 
 func (m Model) kanbanView() string {
 	var s strings.Builder
-	s.WriteString(styles.Current.Title.Render("Kanban Board"))
+	s.WriteString(m.styles.Title.Render("Kanban Board"))
 	s.WriteString("\n\n")
 
 	kanbanStatusOrder := []core.TaskStatus{
@@ -359,45 +275,43 @@ func (m Model) kanbanView() string {
 		groups[t.Status] = append(groups[t.Status], t)
 	}
 
-	cols := make([]string, 0, len(kanbanStatusOrder))
 	colWidth := (m.width - 4) / kanbanColCount
 	if colWidth < kanbanMinColWidth {
 		colWidth = kanbanMinColWidth
 	}
 
+	cols := make([]string, 0, len(kanbanStatusOrder))
 	for _, status := range kanbanStatusOrder {
-		var col strings.Builder
 		tasks := groups[status]
 
-		header := fmt.Sprintf("%s (%d)", strings.ToUpper(string(status)), len(tasks))
-		col.WriteString(lipgloss.NewStyle().
+		// Column header.
+		header := fmt.Sprintf("%s (%d)",
+			strings.ToUpper(string(status)), len(tasks),
+		)
+		headerStr := lipgloss.NewStyle().
 			Width(colWidth).
 			Align(lipgloss.Center).
 			Bold(true).
 			Foreground(lipgloss.Color("245")).
-			Render(header))
-		col.WriteString("\n\n")
+			Render(header)
 
+		// Build kit/tui.List items for this column.
+		var items []kittui.Item
 		for _, task := range tasks {
-			isSelected := false
-			if len(m.tasks) > 0 && m.tasks[m.selected].ID == task.ID {
-				isSelected = true
-			}
-
-			style := lipgloss.NewStyle().
-				Width(colWidth - 2).
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("240"))
-
-			if isSelected {
-				style = style.BorderForeground(styles.PrimaryColor).Bold(true) //nolint:staticcheck // PrimaryColor needed until Colors added to Styles struct
-			}
-
-			card := fmt.Sprintf("%s\n%s", task.ID, task.Title)
-			col.WriteString(style.Render(card))
-			col.WriteString("\n")
+			isSelected := len(m.tasks) > 0 && m.tasks[m.selected].ID == task.ID
+			items = append(items, &kanbanCardItem{
+				task:      task,
+				selected:  isSelected,
+				colWidth:  colWidth,
+				styles:    m.styles,
+				tagColors: m.tagColors,
+			})
 		}
-		cols = append(cols, col.String())
+
+		colList := kittui.NewList(m.height).SetItems(items)
+		colContent := colList.View(colWidth)
+
+		cols = append(cols, headerStr+"\n\n"+colContent)
 	}
 
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
@@ -408,19 +322,5 @@ func (m Model) flowsContent() string {
 	if len(m.flowRuns) == 0 {
 		return "No flow runs found."
 	}
-
-	var s strings.Builder
-	for i, run := range m.flowRuns {
-		cursor := " "
-		if i == m.selected {
-			cursor = styles.Current.InProgress.Render("►")
-		}
-
-		status := string(run.Status)
-		startedAt := run.StartedAt.Format("2006-01-02 15:04:05")
-
-		fmt.Fprintf(&s, "%s %s %s %s (%s)\n", cursor, run.ID, run.FlowID, status, startedAt)
-	}
-
-	return s.String()
+	return m.flowList.View(m.width)
 }

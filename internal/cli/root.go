@@ -15,6 +15,7 @@ import (
 	"hop.top/kit/bus"
 	kitcli "hop.top/kit/cli"
 	"hop.top/kit/domain"
+	"hop.top/kit/ext/dispatch"
 	kitlog "hop.top/kit/log"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -163,7 +164,7 @@ func kitRoot() *kitcli.Root {
 	cobra.OnInitialize(initConfig)
 
 	// Discover tlc-* binary plugins on $PATH and register as subcommands.
-	root.EnablePluginDispatch("tlc", "")
+	dispatch.Register(root.Cmd, "tlc", "")
 
 	return root
 }

@@ -1,15 +1,8 @@
 package tui
 
 import (
-	"fmt"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"charm.land/log/v2"
-	"github.com/spf13/viper"
-	"hop.top/tlc/internal/config"
-	"hop.top/tlc/internal/tui/styles"
-	"hop.top/tlc/pkg/themepicker"
 )
 
 const (
@@ -70,11 +63,6 @@ func handleDashboardUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case "n":
 			return m.createTask()
-		case "t":
-			m.view = viewThemePicker
-			tm, _ := m.themePicker.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
-			m.themePicker = tm.(themepicker.Model)
-			return m, nil
 		case "c":
 			if len(m.tasks) > 0 {
 				return m, m.claimTask(m.tasks[m.selected].ID)
@@ -287,74 +275,5 @@ func handleFormUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		m.view = viewDashboard
 		return m, nil
 	}
-	return m, cmd
-}
-
-func handleThemePickerUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		if msg.String() == keyEsc {
-			m.view = viewDashboard
-			return m, nil
-		}
-		if msg.String() == "R" {
-			// Trigger fetch remote themes
-			return m, func() tea.Msg {
-				names, err := themepicker.FetchThemeNames()
-				if err != nil {
-					return fmt.Errorf("failed to fetch themes: %w", err)
-				}
-
-				var themes []themepicker.Theme
-				themes = append(themes, styles.DefaultTheme())
-
-				for _, name := range names {
-					themes = append(themes, themepicker.LazyTheme{Name: name})
-				}
-				return themes
-			}
-		}
-	case []themepicker.Theme:
-		m.themePicker = themepicker.New(msg)
-		m.themePicker.SetFetcher(themepicker.FetchTheme)
-		tm, _ := m.themePicker.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
-		m.themePicker = tm.(themepicker.Model)
-		return m, nil
-	case themepicker.ThemeSelectedMsg:
-		var themeToApply styles.Theme
-
-		if t, ok := msg.Theme.(styles.Theme); ok {
-			themeToApply = t
-		} else if bt, ok := msg.Theme.(themepicker.BasicTheme); ok {
-			themeToApply = styles.Theme{
-				Name:       bt.NameVal,
-				Primary:    bt.PrimaryVal,
-				Secondary:  bt.SecondaryVal,
-				Success:    bt.SuccessVal,
-				Warning:    bt.WarningVal,
-				Error:      bt.ErrorVal,
-				Muted:      bt.MutedVal,
-				Background: bt.BackgroundVal,
-				Foreground: bt.ForegroundVal,
-				TagColors:  styles.DefaultTheme().TagColors,
-			}
-		}
-
-		styles.ApplyTheme(themeToApply)
-		viper.Set("ui.theme", themeToApply.Name)
-		if _, err := config.PrepareViperForWrite(viper.GetViper()); err != nil {
-			log.Warn("Failed to prepare config file for theme preference", "error", err)
-		} else if err := viper.WriteConfig(); err != nil {
-			log.Warn("Failed to save theme preference", "error", err)
-		}
-
-		m.view = viewDashboard
-		return m, nil
-	}
-
-	var cmd tea.Cmd
-	var tm tea.Model
-	tm, cmd = m.themePicker.Update(msg)
-	m.themePicker = tm.(themepicker.Model)
 	return m, cmd
 }
