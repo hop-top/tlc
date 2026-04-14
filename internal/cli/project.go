@@ -92,7 +92,7 @@ var ProjectExportCmd = &cobra.Command{
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Exported %d tasks and %d logs to %s\n",
 				len(tasks), len(allLogs), args[0])
 		} else {
-			_, _ = cmd.OutOrStdout().Write(data)
+			_, _ = cmd.OutOrStdout().Write(data) //nolint:errcheck // best-effort stdout
 		}
 		return nil
 	},
@@ -267,7 +267,7 @@ var ProjectPruneCmd = &cobra.Command{
 		if !projectPruneYes {
 			_, _ = fmt.Fprint(cmd.OutOrStdout(), "Remove these projects? [y/N] ")
 			var answer string
-			_, _ = fmt.Fscan(cmd.InOrStdin(), &answer)
+			_, _ = fmt.Fscan(cmd.InOrStdin(), &answer) //nolint:errcheck // interactive prompt
 			if answer != "y" && answer != "Y" {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
 				return nil

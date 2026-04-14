@@ -25,8 +25,8 @@ var upgradeCmd = &cobra.Command{
 	Short: "Check for and install updates",
 	Long:  `Check for a newer version of tlc and optionally install it.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		auto, _ := cmd.Flags().GetBool("auto")
-		quiet, _ := cmd.Flags().GetBool("quiet")
+		auto, _ := cmd.Flags().GetBool("auto")   //nolint:errcheck // registered flag
+		quiet, _ := cmd.Flags().GetBool("quiet") //nolint:errcheck // registered flag
 		return upgrade.RunCLI(cmd.Context(), newChecker(), upgrade.CLIOptions{
 			AutoUpgrade: auto,
 			Quiet:       quiet,
@@ -40,9 +40,9 @@ var upgradePreambleCmd = &cobra.Command{
 	Long: `Print a markdown preamble fragment for embedding in TLC skill files.
 Agents read this to know how to self-upgrade tlc before executing tasks.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		auto, _ := cmd.Flags().GetBool("auto")
-		never, _ := cmd.Flags().GetBool("never")
-		install, _ := cmd.Flags().GetBool("install")
+		auto, _ := cmd.Flags().GetBool("auto")      //nolint:errcheck // registered flag
+		never, _ := cmd.Flags().GetBool("never")    //nolint:errcheck // registered flag
+		install, _ := cmd.Flags().GetBool("install") //nolint:errcheck // registered flag
 
 		level := skill.SnoozeOnce
 		if auto {

@@ -34,7 +34,7 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
-		_ = output.Render(out, format, tasks)
+		_ = output.Render(out, format, tasks) //nolint:errcheck // best-effort output
 	case "tls":
 		for _, t := range tasks {
 			_, _ = fmt.Fprintln(out, formatTLS(t))
@@ -56,7 +56,7 @@ func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, forma
 			"task": task,
 			"logs": logs,
 		}
-		_ = output.Render(out, format, result)
+		_ = output.Render(out, format, result) //nolint:errcheck // best-effort output
 	default:
 		renderTaskDetail(out, task, logs)
 	}

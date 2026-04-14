@@ -67,7 +67,7 @@ func createTaskInteractive(initialTitle string) error {
 	allStatuses := wm.GetAllStatuses()
 	statusOptions := make([]huh.Option[string], 0, len(allStatuses))
 	for _, s := range allStatuses {
-		def, _ := wm.GetStatusDef(core.TaskStatus(s))
+		def, _ := wm.GetStatusDef(core.TaskStatus(s)) //nolint:errcheck // best-effort label lookup
 		label := s
 		if def != nil && def.Label != "" {
 			label = def.Label

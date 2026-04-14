@@ -197,7 +197,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 
 	// Get max last_sync_at for this system to pass to plugin
 	var lastSyncAt string
-	tasksForSystem, _ := s.ListTasks(ctx, core.Query{
+	tasksForSystem, _ := s.ListTasks(ctx, core.Query{ //nolint:errcheck // best-effort sync timestamp lookup
 		Filters: []core.FieldFilter{
 			{Field: "origin_system", Value: system},
 		},
@@ -273,7 +273,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 			// Create new task
 			// Assign a new ID if not present
 			if remoteTask.ID == "" {
-				allTasks, _ := s.ListTasks(ctx, core.Query{})
+				allTasks, _ := s.ListTasks(ctx, core.Query{}) //nolint:errcheck // best-effort ID generation
 				remoteTask.ID = fmt.Sprintf("T-%04d", len(allTasks)+1)
 			}
 			remoteTask.LastSyncAt = &now

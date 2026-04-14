@@ -36,7 +36,7 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		url := args[0]
-		outputFile, _ := cmd.Flags().GetString("output")
+		outputFile, _ := cmd.Flags().GetString("output") //nolint:errcheck // registered flag
 
 		importer := core.NewFlowImporter()
 

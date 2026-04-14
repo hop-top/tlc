@@ -19,7 +19,7 @@ var labelInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Auto-detect and initialize project labels",
 	Run: func(_ *cobra.Command, _ []string) {
-		wd, _ := os.Getwd()
+		wd, _ := os.Getwd() //nolint:errcheck // best-effort directory detection
 
 		var pType labels.ProjectType
 		if projectType != "" {
