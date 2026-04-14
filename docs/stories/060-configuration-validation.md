@@ -8,7 +8,17 @@
 
 ## Story
 
-As a System, I want to validate TLC configuration at startup, so that invalid configuration is detected early with clear error messages.
+As a System, I want to validate TLC configuration at startup, so that
+invalid configuration is detected early with clear error messages.
+
+## Context
+
+Configuration loading is handled by `kit/config.Load` (via
+`internal/config/loader.go`), which provides the cascade merge
+strategy across multiple config file locations. TLC's validation
+layer runs on top of the merged config struct, checking field
+values and cross-field constraints. Environment variable overrides
+(`TLC_*` prefix) are applied after the kit/config merge pass.
 
 ## Acceptance Scenarios
 

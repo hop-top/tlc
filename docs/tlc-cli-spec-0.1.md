@@ -1709,17 +1709,18 @@ tlc completion fish > ~/.config/fish/completions/tlc.fish
 
 **CLI Framework**:
 - [Cobra](https://github.com/spf13/cobra) — CLI application framework
-- [Viper](https://github.com/spf13/viper) — Configuration management
+- `kit/config` (`hop.top/kit/config`) — hierarchical config loading
+- `kit/cli` (`hop.top/kit/cli`) — CLI contract (theme, hints, help)
+- `kit/output` (`hop.top/kit/output`) — structured output rendering
 
 **Interactive Components** (Charm):
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework (for `tlc tui`)
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework
 - [Huh](https://github.com/charmbracelet/huh) — Interactive forms and prompts
 - [Lip Gloss](https://github.com/charmbracelet/lipgloss) — Terminal styling
 - [Glamour](https://github.com/charmbracelet/glamour) — Markdown rendering
-- [Log](https://github.com/charmbracelet/log) — Structured logging
 
 **Output Formatting**:
-- [Bubbles Table](https://github.com/charmbracelet/bubbles) — Table component for `--format table`
+- [Bubbles Table](https://github.com/charmbracelet/bubbles) — Table component
 - Standard library `encoding/json` for JSON output
 - [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml) for YAML output
 
@@ -1973,7 +1974,7 @@ package cmd
 
 import (
     "github.com/spf13/cobra"
-    "github.com/spf13/viper"
+    kitcli "hop.top/kit/cli"
 )
 
 var rootCmd = &cobra.Command{
@@ -2005,14 +2006,11 @@ var taskCreateCmd = &cobra.Command{
 }
 
 func init() {
-    // Global flags
+    // Global flags — config merged via kit/config, bound via Viper
     rootCmd.PersistentFlags().StringP("config", "c", "", "config file")
     rootCmd.PersistentFlags().StringP("format", "f", "table", "output format")
     rootCmd.PersistentFlags().Bool("no-color", false, "disable colors")
     rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
-
-    viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-    viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
 
     // Task create flags
     taskCreateCmd.Flags().BoolP("interactive", "i", false, "interactive mode")
@@ -2023,6 +2021,8 @@ func init() {
     // Build command tree
     taskCmd.AddCommand(taskCreateCmd)
     rootCmd.AddCommand(taskCmd)
+
+    // Root command built via kitcli.New() — see internal/cli/root.go
 }
 
 func Execute() error {

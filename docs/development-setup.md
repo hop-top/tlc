@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- Go 1.25+ (project uses 1.25.5)
+- Go 1.26+ (project uses 1.26.1)
 - Git
-- Make (standard on macOS/Linux)
+- Make (pre-installed on macOS/Linux)
 
 ## Quick Setup
 
@@ -20,7 +20,7 @@
    ```
 
    This installs:
-   - golangci-lint v1.61.0
+   - golangci-lint
    - air (file watcher)
 
 3. (Optional) Install pre-commit hooks:
@@ -31,7 +31,7 @@
 
 4. Verify setup:
    ```bash
-   make verify  # Runs lint + test
+   make check  # Runs lint + test
    ```
 
 ## Development Workflow
@@ -109,7 +109,7 @@ git commit  # Hooks run automatically
 | Watch & lint | `make watch-lint` |
 | Watch & test | `make watch-test` |
 | All checks | `make dev` |
-| CI-like checks | `make verify` |
+| CI-like checks | `make check` |
 
 ## CI Integration
 
@@ -121,7 +121,7 @@ All PRs automatically run:
 
 Local workflow should match CI:
 ```bash
-make verify  # Equivalent to CI checks
+make check  # Equivalent to CI checks
 ```
 
 ## Troubleshooting
