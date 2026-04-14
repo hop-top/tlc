@@ -143,7 +143,12 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	}
 
 	if _, err := os.Stat(configDir); err == nil && !*force {
-		return fmt.Errorf("%s directory already exists. Use --force to overwrite", configDir)
+		// Tolerate .tlc/ auto-created by DetectProject with
+		// fallback_mode=auto (GH-1). Auto-created configs are minimal
+		// (no storage section); a full init overwrites them.
+		if !isAutoCreatedConfig(configDir) {
+			return fmt.Errorf("%s directory already exists. Use --force to overwrite", configDir)
+		}
 	}
 
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
@@ -362,6 +367,25 @@ func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) 
 
 	err := form.Run()
 	return choice, fmt.Errorf("failed to run form: %w", err)
+}
+
+// isAutoCreatedConfig returns true when configDir was auto-created by
+// DetectProject's fallback_mode=auto path (CreateConfigWithInferredID).
+// Auto-created configs contain only version + project.id; a full init
+// additionally writes storage, output, and git sections.
+func isAutoCreatedConfig(configDir string) bool {
+	data, err := os.ReadFile(filepath.Join(configDir, "config.yaml"))
+	if err != nil {
+		return false
+	}
+	var cfg map[string]interface{}
+	if yaml.Unmarshal(data, &cfg) != nil {
+		return false
+	}
+	// A full init always writes a "storage" section; auto-created configs
+	// from CreateConfigWithInferredID do not.
+	_, hasStorage := cfg["storage"]
+	return !hasStorage
 }
 
 func addInitFlags(cmd *cobra.Command) {
