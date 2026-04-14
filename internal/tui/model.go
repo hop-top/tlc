@@ -96,7 +96,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m, cmd := m.updateInner(msg)
 	// Recompute viewport height after every Update so view/filter/search
 	// transitions that change header/footer height stay in sync.
-	m.viewport.SetHeight(m.effectiveViewportHeight())
+	vh := m.effectiveViewportHeight()
+	m.viewport.SetHeight(vh)
+	m.taskList = m.taskList.SetHeight(vh)
+	m.flowList = m.flowList.SetHeight(vh)
 	return m, cmd
 }
 
