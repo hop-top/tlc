@@ -118,7 +118,7 @@ func (p *FilesystemProjector) removeSymlinks(taskID string) error {
 			return nil // skip inaccessible paths
 		}
 		// Skip the "all" directory
-		rel, _ := filepath.Rel(p.cfg.BaseDir, path)
+		rel, _ := filepath.Rel(p.cfg.BaseDir, path) //nolint:errcheck // baseDir is guaranteed ancestor of path in WalkDir
 		if rel == "all" || strings.HasPrefix(rel, "all"+string(filepath.Separator)) {
 			if d.IsDir() {
 				return filepath.SkipDir

@@ -85,7 +85,7 @@ func runWorkspaceList(cmd *cobra.Command, _ []string) error {
 
 			adapter, resolveErr := reg.Resolve(sp)
 			if resolveErr == nil {
-				projects, _ := adapter.Discover(sp)
+				projects, _ := adapter.Discover(sp) //nolint:errcheck // best-effort discovery
 				spData.Projects = projects
 			}
 			if spData.Projects == nil {

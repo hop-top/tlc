@@ -180,7 +180,7 @@ func fetchLinearIssues(teamName, lastSyncAt string) ([]interface{}, error) {
 	// Fetch issues
 	filter := fmt.Sprintf(`{ team: { id: { eq: "%s" } } }`, teamID)
 	if lastSyncAt != "" {
-		t, _ := time.Parse(time.RFC3339, lastSyncAt)
+		t, _ := time.Parse(time.RFC3339, lastSyncAt) //nolint:errcheck // best-effort parse; zero time is safe fallback
 		filter = fmt.Sprintf(`{ team: { id: { eq: "%s" } }, updatedAt: { gt: "%s" } }`, teamID, t.Format(time.RFC3339))
 	}
 
@@ -418,7 +418,7 @@ func deleteLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issu
 }
 
 func sendResponse(resp Response) {
-	data, _ := json.Marshal(resp)
+	data, _ := json.Marshal(resp) //nolint:errcheck // marshalling known-valid response struct
 	fmt.Println(string(data))
 }
 

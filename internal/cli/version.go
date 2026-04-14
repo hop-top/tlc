@@ -13,8 +13,8 @@ var versionCmd = &cobra.Command{
 	Short: "Print version information",
 	Long:  `Print detailed version information including build metadata.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		short, _ := cmd.Flags().GetBool("short")
-		jsonOut, _ := cmd.Flags().GetBool("json")
+		short, _ := cmd.Flags().GetBool("short")   //nolint:errcheck // registered flag
+		jsonOut, _ := cmd.Flags().GetBool("json") //nolint:errcheck // registered flag
 
 		if short {
 			fmt.Fprintln(cmd.OutOrStdout(), tlcVersion)
@@ -28,7 +28,7 @@ var versionCmd = &cobra.Command{
 				"os":        runtime.GOOS,
 				"arch":      runtime.GOARCH,
 			}
-			data, _ := json.MarshalIndent(info, "", "  ")
+			data, _ := json.MarshalIndent(info, "", "  ") //nolint:errcheck // marshalling known-valid map
 			fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return
 		}

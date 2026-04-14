@@ -83,7 +83,7 @@ func saveAliasesTo(path string, aliases aliasMap) error {
 	// Read existing content to preserve non-alias keys.
 	existing := make(map[string]interface{})
 	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
+		_ = yaml.Unmarshal(data, &existing) //nolint:errcheck // best-effort: file may be empty or malformed
 	}
 
 	if len(aliases) == 0 {
@@ -101,7 +101,7 @@ func saveAliasesTo(path string, aliases aliasMap) error {
 
 // globalAliasPath returns the path to the global config file.
 func globalAliasPath() string {
-	p, _ := config.UserConfigPath()
+	p, _ := config.UserConfigPath() //nolint:errcheck // best-effort path resolution
 	return p
 }
 

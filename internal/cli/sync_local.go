@@ -162,7 +162,7 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 			lookupProjectID = *task.ProjectID
 		}
 
-		existing, _ := s.GetTaskInProject(ctx, task.ID, lookupProjectID)
+		existing, _ := s.GetTaskInProject(ctx, task.ID, lookupProjectID) //nolint:errcheck // nil means create new
 		if existing == nil {
 			if task.CreatedAt.IsZero() {
 				task.CreatedAt = time.Now()

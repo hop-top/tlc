@@ -161,8 +161,8 @@ var TaskListCmd = &cobra.Command{
 
 		// Load stale config once; apply project default timeout + auto-fire hooks.
 		var taskCfg config.TaskConfig
-		_ = viper.UnmarshalKey("task", &taskCfg)
-		_ = taskCfg.Validate()
+		_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
+		_ = taskCfg.Validate()                  //nolint:errcheck // best-effort validation
 
 		// Apply project default stale timeout to all tasks with nil StaleTimeout.
 		for _, t := range tasks {
@@ -177,9 +177,9 @@ var TaskListCmd = &cobra.Command{
 			now := time.Now().UTC()
 			for _, t := range tasks {
 				if t.IsStale() && t.StaleFiredAt == nil {
-					_ = core.RunStaleHooks(t, taskCfg.Stale.Hooks)
+					_ = core.RunStaleHooks(t, taskCfg.Stale.Hooks) //nolint:errcheck // best-effort stale hook
 					t.StaleFiredAt = &now
-					_ = s.UpdateTask(ctx, t)
+					_ = s.UpdateTask(ctx, t) //nolint:errcheck // best-effort stale timestamp persist
 				}
 			}
 		}

@@ -355,7 +355,7 @@ func deleteGitHubIssue(repoFull string, task *Task) error {
 }
 
 func sendResponse(resp Response) {
-	data, _ := json.Marshal(resp)
+	data, _ := json.Marshal(resp) //nolint:errcheck // marshalling known-valid response struct
 	fmt.Println(string(data))
 }
 

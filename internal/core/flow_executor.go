@@ -372,9 +372,9 @@ func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string
 	}
 
 	wm := DefaultWorkflow()
-	activeStatus, _ := wm.StatusForRole("active")
-	completedStatus, _ := wm.StatusForRole("completed")
-	initialStatus, _ := wm.StatusForRole("initial")
+	activeStatus, _ := wm.StatusForRole("active")       //nolint:errcheck // well-known role
+	completedStatus, _ := wm.StatusForRole("completed") //nolint:errcheck // well-known role
+	initialStatus, _ := wm.StatusForRole("initial")     //nolint:errcheck // well-known role
 
 	if task.Status == initialStatus {
 		task.Status = activeStatus
@@ -415,7 +415,7 @@ func (e *FlowExecutor) emitFlowLog(ctx context.Context, flowID, runID, by, actio
 	if e.logRepo == nil {
 		return
 	}
-	_ = e.logRepo.AddLog(ctx, &LogEntry{
+	_ = e.logRepo.AddLog(ctx, &LogEntry{ //nolint:errcheck // best-effort audit log
 		Timestamp: time.Now(),
 		By:        by,
 		Action:    action,
@@ -432,7 +432,7 @@ func (e *FlowExecutor) emitStepLog(ctx context.Context, flowID, runID, stepID, b
 	if e.logRepo == nil {
 		return
 	}
-	_ = e.logRepo.AddLog(ctx, &LogEntry{
+	_ = e.logRepo.AddLog(ctx, &LogEntry{ //nolint:errcheck // best-effort audit log
 		Timestamp: time.Now(),
 		By:        by,
 		Action:    action,
@@ -463,9 +463,9 @@ func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by st
 
 	// DB-only ephemeral path (test mode w/o runner, or normal non-test execution).
 	wm := DefaultWorkflow()
-	initialStatus, _ := wm.StatusForRole("initial")
-	activeStatus, _ := wm.StatusForRole("active")
-	completedStatus, _ := wm.StatusForRole("completed")
+	initialStatus, _ := wm.StatusForRole("initial")     //nolint:errcheck // well-known role
+	activeStatus, _ := wm.StatusForRole("active")       //nolint:errcheck // well-known role
+	completedStatus, _ := wm.StatusForRole("completed") //nolint:errcheck // well-known role
 
 	task := &Task{
 		ID:          generateTaskID(),
@@ -493,7 +493,7 @@ func (e *FlowExecutor) executeTemplateStep(ctx context.Context, step Step, by st
 	if err := e.repo.UpdateTask(ctx, task); err != nil {
 		return nil, fmt.Errorf("flow template step %q: complete task: %w", step.ID, err)
 	}
-	_ = e.logRepo.AddLog(ctx, &LogEntry{
+	_ = e.logRepo.AddLog(ctx, &LogEntry{ //nolint:errcheck // best-effort audit log
 		TaskID:    task.ID,
 		Timestamp: time.Now(),
 		By:        by,
@@ -565,7 +565,7 @@ func (e *FlowExecutor) generateTaskFromTemplate(flow *Flow, runID, stepID string
 	taskID := generateTaskID()
 
 	wm := DefaultWorkflow()
-	initialStatus, _ := wm.StatusForRole("initial")
+	initialStatus, _ := wm.StatusForRole("initial") //nolint:errcheck // well-known role
 
 	task := &Task{
 		ID:          taskID,

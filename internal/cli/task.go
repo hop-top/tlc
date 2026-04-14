@@ -143,7 +143,7 @@ func appendAuditLog(task *core.Task, author, action, details, note string, ts ti
 	tmpl, err := texttemplate.New("audit").Parse(tmplStr)
 	if err != nil {
 		// Fallback to default if custom template is invalid.
-		tmpl, _ = texttemplate.New("audit").Parse(defaultAuditTemplate)
+		tmpl, _ = texttemplate.New("audit").Parse(defaultAuditTemplate) //nolint:errcheck // default template is compile-time constant
 	}
 
 	var buf strings.Builder

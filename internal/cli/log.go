@@ -111,7 +111,7 @@ func formatLogs(cmd *cobra.Command, logs []*core.LogEntry, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
-		_ = output.Render(out, format, logs)
+		_ = output.Render(out, format, logs) //nolint:errcheck // best-effort output
 	default: // table
 		renderLogTable(out, logs)
 	}

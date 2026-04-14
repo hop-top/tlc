@@ -52,7 +52,7 @@ func detectProjectOnce() *ProjectDetection {
 	if checkConfigPath != "" {
 		viper.SetConfigFile(checkConfigPath)
 		viper.SetConfigType("yaml")
-		_ = viper.ReadInConfig()
+		_ = viper.ReadInConfig() //nolint:errcheck // best-effort config load
 	}
 
 	configPath := viper.ConfigFileUsed()
@@ -80,7 +80,7 @@ func detectProjectOnce() *ProjectDetection {
 	if projectID == "" {
 		projectID = DetectProjectID()
 		viper.Set("project.id", projectID)
-		_ = viper.WriteConfig()
+		_ = viper.WriteConfig() //nolint:errcheck // best-effort config persist
 	}
 
 	return &ProjectDetection{

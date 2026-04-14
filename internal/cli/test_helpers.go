@@ -41,7 +41,10 @@ func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle
 	t.Helper()
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
-	s, _ := getStorageRaw()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
 	defer s.Close()
 
 	task := &core.Task{
@@ -49,7 +52,9 @@ func testListTaskFormat(t *testing.T, format, titleSuffix, expectID, expectTitle
 		Title:  titleSuffix + " test task",
 		Status: core.StatusTodo,
 	}
-	s.CreateTask(ctx, task)
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
 
 	viper.Set("output.format", format)
 	cmd := newTestCmd()
@@ -76,7 +81,10 @@ func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
 	t.Helper()
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
-	s, _ := getStorageRaw()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
 	defer s.Close()
 
 	task := &core.Task{
@@ -84,7 +92,9 @@ func testShowTaskFormat(t *testing.T, format, expectID, expectTitle string) {
 		Title:  "Show " + format + " test",
 		Status: core.StatusTodo,
 	}
-	s.CreateTask(ctx, task)
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
 
 	viper.Set("output.format", format)
 	cmd := newTestCmd()
@@ -124,7 +134,9 @@ func testClearAssignee(t *testing.T, clearValue string) {
 		Status:     core.StatusTodo,
 		AssignedTo: &assignee1,
 	}
-	s.CreateTask(ctx, task)
+	if err = s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
 
 	cmd := newTestCmd()
 	cmd.AddCommand(TaskCmd)
@@ -137,7 +149,10 @@ func testClearAssignee(t *testing.T, clearValue string) {
 		t.Fatalf("task update to clear assignee with %s failed: %v", clearValue, err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask, err := s.GetTask(ctx, "T-0001")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
@@ -191,13 +206,13 @@ func resetTestDB(t *testing.T) string {
 	}
 	dbPath := filepath.Join(tmpDir, "test.sqlite")
 
-	origDir, _ := os.Getwd()
+	origDir, _ := os.Getwd() //nolint:errcheck // test setup
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("failed to chdir to temp dir: %v", err)
 	}
 	t.Cleanup(func() {
 		cfgFile = ""
-		_ = os.Chdir(origDir)
+		_ = os.Chdir(origDir) //nolint:errcheck // test cleanup
 		core.ResetDetectionCache()
 		_ = os.RemoveAll(tmpDir)
 	})
@@ -396,11 +411,11 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
-	origDir, _ := os.Getwd()
+	origDir, _ := os.Getwd() //nolint:errcheck // test setup
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Chdir: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) }) //nolint:errcheck // test cleanup
 
 	tlcDir := filepath.Join(tmpDir, ".tlc")
 	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
@@ -447,10 +462,10 @@ func newTestCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "verbose logging")
 	cmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
 
-	_ = viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format"))
-	_ = viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color"))
-	_ = viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose"))
-	_ = viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))
+	_ = viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format"))   //nolint:errcheck // test setup
+	_ = viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color")) //nolint:errcheck // test setup
+	_ = viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose")) //nolint:errcheck // test setup
+	_ = viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))    //nolint:errcheck // test setup
 
 	return cmd
 }

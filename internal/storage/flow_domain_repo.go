@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"hop.top/kit/domain"
@@ -34,7 +35,9 @@ func ScanFlowRun(row *sql.Row) (core.FlowRun, error) {
 	if err != nil {
 		return r, err
 	}
-	populateFlowRun(&r, startedAt, endedAt, resultsStr)
+	if err := populateFlowRun(&r, startedAt, endedAt, resultsStr); err != nil {
+		return r, err
+	}
 	return r, nil
 }
 
@@ -49,13 +52,15 @@ func ScanFlowRunRows(rows *sql.Rows) (core.FlowRun, error) {
 	if err != nil {
 		return r, err
 	}
-	populateFlowRun(&r, startedAt, endedAt, resultsStr)
+	if err := populateFlowRun(&r, startedAt, endedAt, resultsStr); err != nil {
+		return r, err
+	}
 	return r, nil
 }
 
 // BindFlowRun returns column names and values for a FlowRun.
 func BindFlowRun(r core.FlowRun) (cols []string, vals []any) {
-	resultsJSON, _ := json.Marshal(r.Results)
+	resultsJSON, _ := json.Marshal(r.Results) //nolint:errcheck // marshalling known-valid struct
 	var endedAt *string
 	if r.EndedAt != nil {
 		s := r.EndedAt.Format(time.RFC3339)
@@ -75,15 +80,24 @@ func populateFlowRun(
 	r *core.FlowRun,
 	startedAt string,
 	endedAt, resultsStr sql.NullString,
-) {
-	r.StartedAt, _ = time.Parse(time.RFC3339, startedAt)
+) error {
+	var err error
+	if r.StartedAt, err = parseRFC3339(startedAt); err != nil {
+		return err
+	}
 	if endedAt.Valid {
-		t, _ := time.Parse(time.RFC3339, endedAt.String)
+		t, err := parseRFC3339(endedAt.String)
+		if err != nil {
+			return err
+		}
 		r.EndedAt = &t
 	}
 	if resultsStr.Valid {
-		_ = json.Unmarshal([]byte(resultsStr.String), &r.Results)
+		if err := json.Unmarshal([]byte(resultsStr.String), &r.Results); err != nil {
+			return fmt.Errorf("failed to unmarshal flow run results: %w", err)
+		}
 	}
+	return nil
 }
 
 // Create implements domain.Repository[core.FlowRun].

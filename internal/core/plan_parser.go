@@ -105,7 +105,7 @@ func parseBlockedByRef(raw interface{}) (BlockedByRef, error) {
 			return BlockedByRef{TaskID: s}, nil
 		}
 		if m := crossTrackPattern.FindStringSubmatch(s); m != nil {
-			n, _ := strconv.Atoi(m[2])
+			n, _ := strconv.Atoi(m[2]) //nolint:errcheck // regex guarantees digits
 			if n < 1 {
 				return BlockedByRef{}, fmt.Errorf(
 					"blocked-by cross-track ref %q: task number must be >= 1",

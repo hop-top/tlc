@@ -75,7 +75,11 @@ func LoadConfig(projectRoot string) (*Config, error) {
 		SystemConfigPath:  SystemConfigPath(),
 		UserConfigPath:    userConfigPath,
 		ProjectConfigPath: projectConfigPath,
-		EnvOverride:       func(dst any) { applyEnvOverrides(dst.(*Config)) },
+		EnvOverride: func(dst any) {
+			if c, ok := dst.(*Config); ok {
+				applyEnvOverrides(c)
+			}
+		},
 	}
 
 	if err := kitconfig.Load(cfg, opts); err != nil {

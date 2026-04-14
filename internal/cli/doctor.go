@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,15 @@ func checkGitInstalled(_ bool) checkResult {
 }
 
 func checkInsideGitRepo(_ bool) checkResult {
-	curr, _ := os.Getwd()
+	curr, err := os.Getwd()
+	if err != nil {
+		return checkResult{
+			name:     "inside git repository",
+			category: "Git",
+			status:   "fail",
+			message:  fmt.Sprintf("failed to get working directory: %v", err),
+		}
+	}
 	for {
 		if _, err := os.Stat(filepath.Join(curr, ".git")); err == nil {
 			return checkResult{
@@ -288,7 +297,7 @@ func checkProjectIDSet(fix bool) checkResult {
 		}
 		proj["id"] = detected
 		raw["project"] = proj
-		out, _ := yaml.Marshal(raw)
+		out, _ := yaml.Marshal(raw) //nolint:errcheck // marshalling known-valid map
 		if err := os.WriteFile(configPath, out, 0o600); err != nil {
 			return checkResult{
 				name:     "project.id is set",
@@ -588,7 +597,12 @@ func checkProjectTodoSynced(fix bool) checkResult {
 	ctx := context.Background()
 	var drifted int
 	for _, ft := range fileTasks {
-		existing, _ := s.GetTask(ctx, ft.ID)
+		existing, getErr := s.GetTask(ctx, ft.ID)
+		if getErr != nil {
+			log.Printf("doctor: failed to get task %s: %v", ft.ID, getErr)
+			drifted++
+			continue
+		}
 		if existing == nil {
 			drifted++
 			continue
@@ -624,7 +638,11 @@ func checkProjectTodoSynced(fix bool) checkResult {
 		if proj.ProjectID != "" {
 			ft.ProjectID = &proj.ProjectID
 		}
-		existing, _ := s.GetTask(ctx, ft.ID)
+		existing, getErr := s.GetTask(ctx, ft.ID)
+		if getErr != nil {
+			log.Printf("doctor: failed to get task %s: %v", ft.ID, getErr)
+			continue
+		}
 		if existing == nil {
 			if ft.CreatedAt.IsZero() {
 				ft.CreatedAt = time.Now()
@@ -844,7 +862,7 @@ var doctorCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		fix, _ := cmd.Flags().GetBool("fix")
+		fix, _ := cmd.Flags().GetBool("fix") //nolint:errcheck // registered flag
 		return runDoctor(cmd, fix)
 	},
 }

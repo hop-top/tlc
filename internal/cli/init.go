@@ -134,7 +134,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	configDir := config.LocalConfigDir(mode)
 
 	// Refuse to init if the other mode's config already exists.
-	cwd, _ := os.Getwd()
+	cwd, _ := os.Getwd() //nolint:errcheck // fallback to "." below
 	if cwd == "" {
 		cwd = "."
 	}
@@ -279,7 +279,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {
 			defer func() { _ = f.Close() }()
-			content, _ := os.ReadFile(".gitignore")
+			content, _ := os.ReadFile(".gitignore") //nolint:errcheck // file may not exist yet
 			contentStr := string(content)
 
 			if track && !strings.Contains(contentStr, gitignoreEntry) {
@@ -293,7 +293,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	// Ensure tasks/ is in the config dir's .gitignore so projected task
 	// files are never tracked, even when the user commits .tlc/ itself.
 	innerGitignore := filepath.Join(configDir, ".gitignore")
-	innerContent, _ := os.ReadFile(innerGitignore)
+	innerContent, _ := os.ReadFile(innerGitignore) //nolint:errcheck // file may not exist yet
 	if !strings.Contains(string(innerContent), "tasks/") {
 		igf, err := os.OpenFile(innerGitignore, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
@@ -323,7 +323,7 @@ func projectExists(ctx context.Context, s *storage.SQLiteStorage, projectID stri
 }
 
 func generateUniqueProjectID(ctx context.Context, s *storage.SQLiteStorage, baseID string) string {
-	cwd, _ := os.Getwd()
+	cwd, _ := os.Getwd() //nolint:errcheck // best-effort; Base(".") returns "."
 	dirName := filepath.Base(cwd)
 
 	if !strings.Contains(baseID, dirName) {

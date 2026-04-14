@@ -42,7 +42,7 @@ func run(name string) error {
 
 	cassette := xrr.NewFileCassette(cassetteDir)
 	session := xrr.NewSession(mode, cassette)
-	defer session.Close() //nolint:errcheck
+	defer session.Close()
 
 	stdin, err := io.ReadAll(os.Stdin)
 	if err != nil {

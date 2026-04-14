@@ -37,7 +37,7 @@ func NormalizeTaskID(s string) string {
 
 	// Bare numeric: "46" or "0046".
 	if reNumeric.MatchString(raw) {
-		n, _ := strconv.Atoi(raw)
+		n, _ := strconv.Atoi(raw) //nolint:errcheck // guarded by reNumeric.MatchString
 		return fmt.Sprintf("T-%04d", n)
 	}
 

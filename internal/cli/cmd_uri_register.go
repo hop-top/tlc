@@ -76,7 +76,7 @@ installer scripts).`,
 }
 
 func runURISnippet(cmd *cobra.Command, _ []string) error {
-	platform, _ := cmd.Flags().GetString("platform")
+	platform, _ := cmd.Flags().GetString("platform") //nolint:errcheck // registered flag
 	if platform == "" {
 		switch runtime.GOOS {
 		case "darwin":

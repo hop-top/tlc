@@ -44,7 +44,7 @@ func TestAllFlowsParse(t *testing.T) {
 			t.Parallel()
 			f, err := os.Open(path)
 			require.NoError(t, err)
-			defer f.Close() //nolint:errcheck
+			defer f.Close()
 
 			flow, err := core.ParseFlow(f, path)
 			require.NoError(t, err, "ParseFlow failed")
@@ -66,7 +66,7 @@ func TestFlowAgentFieldParsedFromDisk(t *testing.T) {
 	path := filepath.Join(flowsDir, "writing-plans.yaml")
 	f, err := os.Open(path)
 	require.NoError(t, err)
-	defer f.Close() //nolint:errcheck
+	defer f.Close()
 
 	flow, err := core.ParseFlow(f, path)
 	require.NoError(t, err)

@@ -181,8 +181,28 @@ func userHome() string {
 // Returns empty bytes (not an error) when the binary is not found.
 func runProbeCmd(ctx context.Context, binPath string, args ...string) []byte {
 	cmd := exec.CommandContext(ctx, binPath, args...)
-	out, _ := cmd.CombinedOutput()
+	out, _ := cmd.CombinedOutput() //nolint:errcheck // probe cmd; missing binary returns empty
 	return out
+}
+
+// probeFromHelp runs `binPath --help` and parses --flag lines into Flags.
+// Shared by adapters whose Probe is a simple help-flag parse.
+func probeFromHelp(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
+	out := runProbeCmd(ctx, binPath, "--help")
+	caps := &AdapterCapabilities{}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") {
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				flagName := strings.TrimRight(parts[0], ",")
+				caps.Flags = append(caps.Flags, flagName)
+			}
+		}
+	}
+
+	return caps, nil
 }
 
 // ---- ClaudeAdapter ----
@@ -742,21 +762,7 @@ func (a *crewAIAdapter) ParseOutput(raw []byte) (map[string]any, error) {
 
 // Probe runs `binPath --help` and parses --flag lines into Flags.
 func (a *crewAIAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
-	out := runProbeCmd(ctx, binPath, "--help")
-	caps := &AdapterCapabilities{}
-
-	for _, line := range strings.Split(string(out), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			parts := strings.Fields(trimmed)
-			if len(parts) > 0 {
-				flagName := strings.TrimRight(parts[0], ",")
-				caps.Flags = append(caps.Flags, flagName)
-			}
-		}
-	}
-
-	return caps, nil
+	return probeFromHelp(ctx, binPath)
 }
 
 // Operation returns "" — crewai is single-mode.
@@ -906,21 +912,7 @@ func (a *mastraAdapter) ParseOutput(raw []byte) (map[string]any, error) {
 
 // Probe runs `binPath --help` and parses --flag lines into Flags.
 func (a *mastraAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
-	out := runProbeCmd(ctx, binPath, "--help")
-	caps := &AdapterCapabilities{}
-
-	for _, line := range strings.Split(string(out), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			parts := strings.Fields(trimmed)
-			if len(parts) > 0 {
-				flagName := strings.TrimRight(parts[0], ",")
-				caps.Flags = append(caps.Flags, flagName)
-			}
-		}
-	}
-
-	return caps, nil
+	return probeFromHelp(ctx, binPath)
 }
 
 // Operation returns "" — mastra is single-mode.
@@ -1007,21 +999,7 @@ func (a *n8nAdapter) ParseOutput(raw []byte) (map[string]any, error) {
 
 // Probe runs `binPath --help` and parses --flag lines into Flags.
 func (a *n8nAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
-	out := runProbeCmd(ctx, binPath, "--help")
-	caps := &AdapterCapabilities{}
-
-	for _, line := range strings.Split(string(out), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			parts := strings.Fields(trimmed)
-			if len(parts) > 0 {
-				flagName := strings.TrimRight(parts[0], ",")
-				caps.Flags = append(caps.Flags, flagName)
-			}
-		}
-	}
-
-	return caps, nil
+	return probeFromHelp(ctx, binPath)
 }
 
 // Operation returns "" — n8n is single-mode.
@@ -1117,21 +1095,7 @@ func (a *autoGenAdapter) ParseOutput(raw []byte) (map[string]any, error) {
 
 // Probe runs `binPath --help` and parses --flag lines into Flags.
 func (a *autoGenAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error) {
-	out := runProbeCmd(ctx, binPath, "--help")
-	caps := &AdapterCapabilities{}
-
-	for _, line := range strings.Split(string(out), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			parts := strings.Fields(trimmed)
-			if len(parts) > 0 {
-				flagName := strings.TrimRight(parts[0], ",")
-				caps.Flags = append(caps.Flags, flagName)
-			}
-		}
-	}
-
-	return caps, nil
+	return probeFromHelp(ctx, binPath)
 }
 
 // Operation returns "" — autogen is single-mode.

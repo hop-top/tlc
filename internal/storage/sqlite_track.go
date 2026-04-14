@@ -16,7 +16,7 @@ var _ core.TrackRepository = (*SQLiteStorage)(nil)
 
 func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		metaJSON, _ := json.Marshal(track.Meta)
+		metaJSON, _ := json.Marshal(track.Meta) //nolint:errcheck // marshalling known-valid struct
 
 		projectID := ""
 		if track.ProjectID != nil {
@@ -69,7 +69,7 @@ func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID str
 
 func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		metaJSON, _ := json.Marshal(track.Meta)
+		metaJSON, _ := json.Marshal(track.Meta) //nolint:errcheck // marshalling known-valid struct
 
 		projectID := ""
 		if track.ProjectID != nil {
@@ -251,8 +251,12 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 		return nil, fmt.Errorf("failed to scan track row: %w", err)
 	}
 
-	track.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-	track.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	if track.CreatedAt, err = parseRFC3339(createdAtStr); err != nil {
+		return nil, err
+	}
+	if track.UpdatedAt, err = parseRFC3339(updatedAtStr); err != nil {
+		return nil, err
+	}
 
 	if assignedTo.Valid {
 		track.AssignedTo = &assignedTo.String
@@ -283,8 +287,12 @@ func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 		return nil, fmt.Errorf("failed to scan track row: %w", err)
 	}
 
-	track.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-	track.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	if track.CreatedAt, err = parseRFC3339(createdAtStr); err != nil {
+		return nil, err
+	}
+	if track.UpdatedAt, err = parseRFC3339(updatedAtStr); err != nil {
+		return nil, err
+	}
 
 	if assignedTo.Valid {
 		track.AssignedTo = &assignedTo.String
