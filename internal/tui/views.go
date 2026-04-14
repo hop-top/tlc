@@ -8,6 +8,7 @@ import (
 	glamour "charm.land/glamour/v2"
 	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
+	kittui "hop.top/kit/tui"
 	"hop.top/tlc/internal/core"
 )
 
@@ -151,17 +152,16 @@ func (m Model) headerView() string {
 	}
 
 	if m.searchInput.Value() != "" || len(m.activeFilters) > 0 {
-		var filterParts []string
+		var pills []kittui.Pill
 		if m.searchInput.Value() != "" {
-			filterParts = append(filterParts, fmt.Sprintf("search:%s", m.searchInput.Value()))
+			pills = append(pills, kittui.NewPill("search", m.searchInput.Value()))
 		}
 		for _, f := range m.activeFilters {
-			filterParts = append(filterParts, fmt.Sprintf("%s:%v", f.Field, f.Value))
+			pills = append(pills, kittui.NewPill(f.Field, fmt.Sprintf("%v", f.Value)))
 		}
-		filterRendered := m.styles.Muted.Render(
-			fmt.Sprintf("Filtered by: %s", strings.Join(filterParts, ", ")),
-		)
-		return titleRendered + " | " + filterRendered
+		bar := kittui.NewPillBar(pills...)
+		filterRendered := bar.ViewWithTheme(m.theme, m.width)
+		return lipgloss.JoinVertical(lipgloss.Left, titleRendered, filterRendered)
 	}
 
 	return titleRendered
@@ -217,7 +217,16 @@ func (m Model) detailView() string {
 	fmt.Fprintf(&s, "Status:    %s\n", m.formatStatus(task.Status))
 	fmt.Fprintf(&s, "Assigned:  %s\n", formatAssignee(task.AssignedTo))
 	fmt.Fprintf(&s, "Reference: %s\n", task.Reference)
-	fmt.Fprintf(&s, "Tags:      %s\n", strings.Join(task.Tags, ", "))
+	if len(task.Tags) > 0 {
+		var tagPills []kittui.Pill
+		for _, tag := range task.Tags {
+			tagPills = append(tagPills, kittui.NewPill("#", tag))
+		}
+		tagBar := kittui.NewPillBar(tagPills...)
+		fmt.Fprintf(&s, "Tags:      %s\n", tagBar.ViewWithTheme(m.theme, m.width))
+	} else {
+		s.WriteString("Tags:      -\n")
+	}
 
 	if task.OriginSystem != nil && *task.OriginSystem != "" {
 		syncStatus := "In Sync"
