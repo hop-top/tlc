@@ -183,11 +183,9 @@ func TestSQLiteStorage_LimitRespectsStatusPriority(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// Create 10 tasks: 8 TODO (created first), 2 IN_PROGRESS (created last).
-	// Without StatusPriority the 2 IN_PROGRESS tasks appear at the top of
-	// created_at DESC, but if they were created first they'd be pushed out
-	// by LIMIT. We create the IN_PROGRESS tasks with earlier timestamps so
-	// a naive ORDER BY created_at DESC + LIMIT 5 would miss them.
+	// Create 10 tasks: 8 TODO with later CreatedAt, 2 IN_PROGRESS with
+	// earlier CreatedAt. Without StatusPriority, ORDER BY created_at DESC
+	// + LIMIT 5 returns only newer TODO tasks.
 	for i := 0; i < 8; i++ {
 		task := &core.Task{
 			ID:        fmt.Sprintf("T-%04d", i+1),
@@ -218,8 +216,8 @@ func TestSQLiteStorage_LimitRespectsStatusPriority(t *testing.T) {
 	q := core.Query{
 		Limit: 5,
 		Filters: []core.FieldFilter{
-			{Field: "status", Value: core.StatusTodo},
-			{Field: "status", Value: core.StatusInProgress},
+			{Field: "status", Operator: core.OpEq, Value: core.StatusTodo},
+			{Field: "status", Operator: core.OpEq, Value: core.StatusInProgress},
 		},
 		StatusPriority: string(core.StatusInProgress),
 	}

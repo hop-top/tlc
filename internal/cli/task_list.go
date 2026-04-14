@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -279,6 +280,17 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	tasks, err := workspace.QueryAcross(ctx, projects, query, &filesystemOpener{})
 	if err != nil {
 		return fmt.Errorf("workspace query failed: %w", err)
+	}
+
+	// QueryAcross ignores StatusPriority; reintroduce IN_PROGRESS-first
+	// ordering via a post-merge stable sort so the base sort is preserved.
+	if query.StatusPriority != "" {
+		prio := core.TaskStatus(query.StatusPriority)
+		sort.SliceStable(tasks, func(i, j int) bool {
+			ip := tasks[i].Status == prio
+			jp := tasks[j].Status == prio
+			return ip && !jp
+		})
 	}
 
 	format := viper.GetString("output.format")
