@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/tui/styles"
 )
 
 // updateGolden controls whether tests overwrite the golden files
@@ -50,7 +51,7 @@ func goldenModel(t *testing.T) Model {
 		},
 	}
 
-	m := NewModel(svc)
+	m := NewModel(svc, styles.DefaultKitTheme())
 	m.tasks = tasks
 	m.width = 80
 	m.height = 24

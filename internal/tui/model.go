@@ -8,9 +8,9 @@ import (
 	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/huh/v2"
 	"github.com/spf13/viper"
+	kitcli "hop.top/kit/cli"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
-	"hop.top/tlc/pkg/themepicker"
 )
 
 type (
@@ -21,7 +21,7 @@ type (
 
 type Model struct {
 	service          *core.TaskService
-	view             string // "dashboard", "list", "detail", "search", "form", "kanban", "flows", "theme_picker"
+	view             string // "dashboard", "list", "detail", "search", "form", "kanban", "flows"
 	tasks            []*core.Task
 	flowRuns         []*core.FlowRun
 	selected         int
@@ -33,21 +33,25 @@ type Model struct {
 	taskLogs         []*core.LogEntry
 	logSortDirection string
 	form             *huh.Form
-	themePicker      themepicker.Model
 	taskTitle        string
 	taskDescription  string
 	err              error
+
+	// theme is the kit/cli.Theme used for styling.
+	theme kitcli.Theme
+	// styles holds TUI styles derived from the theme.
+	styles *styles.Styles
 
 	// mdRenderer is a cached glamour renderer; recreated only on window resize.
 	mdRenderer    *glamour.TermRenderer
 	mdRenderWidth int
 
-	// tagColors holds unsaved tag→color assignments accumulated during a session.
+	// tagColors holds unsaved tag->color assignments accumulated during a session.
 	// Written to viper/disk via persistTagColors cmd, not inside View().
 	tagColors map[string]string
 }
 
-func NewModel(service *core.TaskService) Model {
+func NewModel(service *core.TaskService, theme kitcli.Theme) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search tasks..."
 
@@ -57,12 +61,6 @@ func NewModel(service *core.TaskService) Model {
 	if direction == "" {
 		direction = "desc"
 	}
-
-	// Initialize theme picker with default theme
-	// In the future, we can load more themes here
-	defaultTheme := styles.DefaultTheme()
-	tp := themepicker.New([]themepicker.Theme{defaultTheme})
-	tp.SetFetcher(themepicker.FetchTheme)
 
 	// Seed tagColors from viper so existing config is respected.
 	tc := viper.GetStringMapString("ui.tag_colors")
@@ -76,7 +74,8 @@ func NewModel(service *core.TaskService) Model {
 		searchInput:      ti,
 		viewport:         vp,
 		logSortDirection: direction,
-		themePicker:      tp,
+		theme:            theme,
+		styles:           styles.NewFromTheme(theme),
 		tagColors:        tc,
 	}
 }
@@ -88,9 +87,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m, cmd := m.updateInner(msg)
 	// Recompute viewport height after every Update so view/filter/search
-	// transitions that change header/footer height stay in sync. The
-	// calculation is cheap (two lipgloss.Height calls). WindowSizeMsg also
-	// runs this via its own SetHeight call, which is redundant but harmless.
+	// transitions that change header/footer height stay in sync.
 	m.viewport.SetHeight(m.effectiveViewportHeight())
 	return m, cmd
 }
@@ -116,12 +113,7 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
-		// Resize theme picker
-		var cmd tea.Cmd
-		var tm tea.Model
-		tm, cmd = m.themePicker.Update(msg)
-		m.themePicker = tm.(themepicker.Model)
-		return m, cmd
+		return m, nil
 	case error:
 		m.err = msg
 		return m, nil
@@ -131,7 +123,7 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 			m.selected = len(m.tasks) - 1
 		}
 		m = m.syncViewport()
-		// Persist any newly-assigned tag colors asynchronously (no-op if nothing changed).
+		// Persist any newly-assigned tag colors asynchronously.
 		return m, m.persistTagColors
 	case flowRunsMsg:
 		m.flowRuns = msg
@@ -156,8 +148,6 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		return handleSearchUpdate(m, msg)
 	case "form":
 		return handleFormUpdate(m, msg)
-	case "theme_picker":
-		return handleThemePickerUpdate(m, msg)
 	default:
 		return handleDashboardUpdate(m, msg)
 	}
