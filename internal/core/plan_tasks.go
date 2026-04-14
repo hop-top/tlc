@@ -553,7 +553,7 @@ func (s *TrackService) ResolvePendingCrossTrackRefs(
 	stillByTrack := make(map[string]bool)
 	for _, u := range res.StillUnresolved {
 		// Find the track for this task to mark it dirty.
-		t, _ := s.taskRepo.GetTask(ctx, u.TaskID)
+		t, _ := s.taskRepo.GetTask(ctx, u.TaskID) //nolint:errcheck // best-effort track lookup
 		if t != nil && t.TrackID != nil {
 			stillByTrack[*t.TrackID] = true
 		}
