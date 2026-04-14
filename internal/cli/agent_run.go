@@ -187,7 +187,7 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 
 	// Execute each context.
 	taskSvc := core.NewTaskService(s, s)
-	updater := core.NewStateUpdater(taskSvc, GetEventBus())
+	updater := core.NewStateUpdater(taskSvc, GetEventBus()).WithRunStore(s)
 
 	for i, ac := range contexts {
 		runID := uuid.New().String()
