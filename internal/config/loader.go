@@ -76,7 +76,9 @@ func LoadConfig(projectRoot string) (*Config, error) {
 		UserConfigPath:    userConfigPath,
 		ProjectConfigPath: projectConfigPath,
 		EnvOverride: func(dst any) {
-			applyEnvOverrides(dst.(*Config)) //nolint:errcheck // type assertion on known-valid cfg pointer
+			if c, ok := dst.(*Config); ok {
+				applyEnvOverrides(c)
+			}
 		},
 	}
 
