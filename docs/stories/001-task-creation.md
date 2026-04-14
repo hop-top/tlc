@@ -16,7 +16,7 @@ As a Solo Developer, I want to create tasks with title, description, tags, and a
     - Auto-generated ID (e.g., `T-0001`)
     - Status: `TODO`
     - Title: `Fix auth bug`
-    - A task:// URL reference (e.g., `task://T-0001`)
+    - A tlc:// URL reference (e.g., `tlc://T-0001`)
     - Auto-detected project_id if in a project directory
 
 2. **Given** TLC is initialized, **When** I run:
@@ -83,7 +83,7 @@ As a Solo Developer, I want to create tasks with title, description, tags, and a
 - [ ] Create E2E test suite in `tests/integration/task_test.go` covering all 6 scenarios
 - [ ] Add interactive mode test to `internal/cli/task_test.go` (verify status options limited to TODO/IN_PROGRESS/DONE)
 - [ ] Add ID generation and sequencing tests to `internal/core/task_test.go`
-- [ ] Validate `task://` URL reference format in tests
+- [ ] Validate `tlc://` URL reference format in tests
 - [ ] **HIGH PRIORITY**: Test assignee field creation (`--assigned-to engineer-1`) and verification in storage
 - [ ] **HIGH PRIORITY**: Test tag queryability after creation (filter by `--tag auth`)
 - [ ] **HIGH PRIORITY**: Test assignee queryability after creation (filter by `--assigned-to engineer-1`)

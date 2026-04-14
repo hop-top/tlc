@@ -20,7 +20,7 @@ Backed by `hop.top/uri` — a lightweight identifier parser — and extended in
 tlc-uri   = absolute-uri / shorthand
 absolute-uri = scheme "://" project-id "/" task-id
 shorthand    = project-id "/" task-id / task-id
-scheme       = "task" / "tlc" / "flow"
+scheme       = "tlc" / "flow"
 project-id   = segment *("/" segment)   ; one or more slash-separated segments
 task-id      = "T-" 1*DIGIT             ; canonical form: T-NNNN (4-digit padded)
 segment      = 1*(ALPHA / DIGIT / "-" / "_" / ".")
@@ -33,7 +33,7 @@ segment      = 1*(ALPHA / DIGIT / "-" / "_" / ".")
 | `T-0001` | *(local)* | `T-0001` |
 | `tlc/T-0001` | `tlc` | `T-0001` |
 | `hop-top/tlc/T-0001` | `hop-top/tlc` | `T-0001` |
-| `task://hop-top/tlc/T-0001` | `hop-top/tlc` | `T-0001` |
+| `tlc://hop-top/tlc/T-0001` | `hop-top/tlc` | `T-0001` |
 | `tlc:///T-0001` | *(local)* | `T-0001` |
 
 ---
@@ -44,7 +44,7 @@ segment      = 1*(ALPHA / DIGIT / "-" / "_" / ".")
 
 If input contains `://`, treat as absolute URI; delegate to `url.Parse`.
 
-- `Scheme` ← URL scheme (`task`, `tlc`, `flow`, …)
+- `Scheme` ← URL scheme (`tlc`, `flow`, …)
 - `Space`  ← URL host (first path segment before the host separator)
 - `ID`     ← URL path with leading `/` stripped
 
@@ -84,7 +84,7 @@ the input used a scheme or shorthand form.
 | `@T-0001` | no | no | `@`-prefixed → stripped → local |
 | `tlc/T-0001` | no | yes | `project-id=tlc`, `task-id=T-0001` |
 | `hop-top/tlc/T-0001` | no | yes | `project-id=hop-top/tlc`, `task-id=T-0001` |
-| `task://hop-top/tlc/T-0001` | yes | yes | `project-id=hop-top/tlc`, `task-id=T-0001` |
+| `tlc://hop-top/tlc/T-0001` | yes | yes | `project-id=hop-top/tlc`, `task-id=T-0001` |
 | `tlc:///T-0001` | yes | no host | Local storage (empty project-id) |
 
 Key rule: **the last slash-delimited segment is always the task ID**.
@@ -96,7 +96,7 @@ Everything before it (host + path prefix) is the project ID.
 
 `hop.top/uri.Parse` maps input to `{Scheme, Space, ID}`:
 
-- **Scheme** — URI scheme or empty
+- **Scheme** — URI scheme (`tlc`, `flow`) or empty
 - **Space** — URL host (for absolute URIs) or first shorthand segment
 - **ID** — remainder of the path
 
@@ -118,7 +118,7 @@ Applied by `NormalizeTaskID` before URI parsing:
 | `46` | `T-0046` |
 | `0046` | `T-0046` |
 | `tlc/T-0001` | *(pass-through)* |
-| `task://…` | *(pass-through)* |
+| `tlc://…` | *(pass-through)* |
 
 ---
 

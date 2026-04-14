@@ -453,6 +453,55 @@ TLC includes a comprehensive workflow suite with capability-based task assignmen
 
 See [docs/flows-and-assignees.md](docs/flows-and-assignees.md) for complete documentation.
 
+### Agent Execution
+
+TLC supports delegating tasks, tracks, and flows to registered AI agents:
+
+**Run agents directly:**
+```bash
+tlc agent run --agent code-analyst --task T-0042
+tlc agent run --agent code-analyst --track browser-rendering
+tlc agent run --agent code-analyst --flow deploy.yaml
+```
+
+**Execute from task/track/flow context:**
+```bash
+tlc task exec T-0042 --agent code-analyst
+tlc track exec browser-rendering --agent code-analyst
+tlc flow run deploy.yaml --agent code-analyst
+```
+
+**Monitor and manage agent runs:**
+```bash
+tlc agent status <job-id>     # check async job status
+tlc agent cancel <job-id>     # cancel queued job
+tlc agent list                # list agent run audit records
+tlc agent watch               # live tail of agent output
+```
+
+**Agent registry** (`.tlc/agents.yaml`):
+```yaml
+agents:
+  code-analyst:
+    image: ghcr.io/org/code-analyst:latest
+    binary: ./bin/analyst
+    env:
+      TIMEOUT: "300"
+    default_timeout: 300
+  engineer:
+    image: ghcr.io/org/engineer:latest
+    binary: ./bin/engineer
+    env:
+      TIMEOUT: "600"
+    default_timeout: 600
+```
+
+**Modes:**
+- Container mode is the default (uses `image` from agents.yaml)
+- `--local` — opt-in: run agent in-process using `binary` path
+
+See [docs/plans/2026-04-02-flowtest-agent-dispatch.md](docs/plans/2026-04-02-flowtest-agent-dispatch.md) for design details.
+
 ### Interactive TUI
 Launch the interactive terminal interface:
 ```bash
