@@ -90,7 +90,7 @@ func formatTLS(t *core.Task) string {
 		parts = append(parts, "prio:"+string(t.Priority))
 	}
 
-	if t.Reference != "" && t.Reference != "task://"+t.ID {
+	if t.Reference != "" && t.Reference != "tlc://"+t.ID {
 		parts = append(parts, "ref:"+t.Reference)
 	}
 	if t.ProjectID != nil && *t.ProjectID != "" {
@@ -285,24 +285,24 @@ func formatStatus(status core.TaskStatus) string {
 }
 
 // resolveTaskReference returns the absolute reference URI for a task.
-// If the stored reference is relative (task://T-XXXX), it is expanded using the
+// If the stored reference is relative (tlc://T-XXXX), it is expanded using the
 // task's project_id or the currently detected project.
 func resolveTaskReference(t *core.Task) string {
 	ref := t.Reference
 	if ref == "" {
-		ref = fmt.Sprintf("task://%s", t.ID)
+		ref = fmt.Sprintf("tlc://%s", t.ID)
 	}
 	// Already absolute: contains a path segment beyond the task ID.
-	if !strings.HasPrefix(ref, "task://T-") {
+	if !strings.HasPrefix(ref, "tlc://T-") {
 		return ref
 	}
-	// Relative form: task://T-XXXX — expand with project ID.
-	taskID := strings.TrimPrefix(ref, "task://")
+	// Relative form: tlc://T-XXXX — expand with project ID.
+	taskID := strings.TrimPrefix(ref, "tlc://")
 	if t.ProjectID != nil && *t.ProjectID != "" {
-		return fmt.Sprintf("task://%s/%s", *t.ProjectID, taskID)
+		return fmt.Sprintf("tlc://%s/%s", *t.ProjectID, taskID)
 	}
 	if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
-		return fmt.Sprintf("task://%s/%s", proj.ProjectID, taskID)
+		return fmt.Sprintf("tlc://%s/%s", proj.ProjectID, taskID)
 	}
 	return ref
 }

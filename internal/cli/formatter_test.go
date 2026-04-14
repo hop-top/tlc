@@ -11,17 +11,17 @@ func TestResolveTaskReference(t *testing.T) {
 	projectID := "myorg/myrepo"
 
 	t.Run("AbsoluteRefUnchanged", func(t *testing.T) {
-		task := &core.Task{ID: "T-0001", Reference: "task://myorg/myrepo/T-0001"}
+		task := &core.Task{ID: "T-0001", Reference: "tlc://myorg/myrepo/T-0001"}
 		got := resolveTaskReference(task)
-		if got != "task://myorg/myrepo/T-0001" {
-			t.Errorf("got %q, want task://myorg/myrepo/T-0001", got)
+		if got != "tlc://myorg/myrepo/T-0001" {
+			t.Errorf("got %q, want tlc://myorg/myrepo/T-0001", got)
 		}
 	})
 
 	t.Run("RelativeExpandedWithTaskProjectID", func(t *testing.T) {
-		task := &core.Task{ID: "T-0001", Reference: "task://T-0001", ProjectID: &projectID}
+		task := &core.Task{ID: "T-0001", Reference: "tlc://T-0001", ProjectID: &projectID}
 		got := resolveTaskReference(task)
-		want := "task://myorg/myrepo/T-0001"
+		want := "tlc://myorg/myrepo/T-0001"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
@@ -36,7 +36,7 @@ func TestResolveTaskReference(t *testing.T) {
 	})
 
 	t.Run("EmptyRefFallsBackToRelative", func(t *testing.T) {
-		// No project available in test env; falls back to task://T-XXXX.
+		// No project available in test env; falls back to tlc://T-XXXX.
 		task := &core.Task{ID: "T-0001", Reference: ""}
 		got := resolveTaskReference(task)
 		if got == "" {

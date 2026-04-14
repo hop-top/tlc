@@ -454,14 +454,14 @@ func TestBuildTaskReference(t *testing.T) {
 	t.Run("WithProject", func(t *testing.T) {
 		proj := &core.ProjectDetection{ProjectID: "myorg/myrepo"}
 		got := buildTaskReference("T-0042", proj)
-		want := "task://myorg/myrepo/T-0042"
+		want := "tlc://myorg/myrepo/T-0042"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	})
 	t.Run("WithoutProject", func(t *testing.T) {
 		got := buildTaskReference("T-0042", nil)
-		want := "task://T-0042"
+		want := "tlc://T-0042"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
@@ -469,7 +469,7 @@ func TestBuildTaskReference(t *testing.T) {
 	t.Run("EmptyProjectID", func(t *testing.T) {
 		proj := &core.ProjectDetection{ProjectID: ""}
 		got := buildTaskReference("T-0042", proj)
-		want := "task://T-0042"
+		want := "tlc://T-0042"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
