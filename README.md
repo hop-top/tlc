@@ -453,6 +453,49 @@ TLC includes a comprehensive workflow suite with capability-based task assignmen
 
 See [docs/flows-and-assignees.md](docs/flows-and-assignees.md) for complete documentation.
 
+### Agent Execution
+
+TLC supports delegating tasks, tracks, and flows to registered AI agents:
+
+**Run agents directly:**
+```bash
+tlc agent run --agent code-analyst --task T-0042
+tlc agent run --agent code-analyst --track browser-rendering
+tlc agent run --agent code-analyst --flow deploy.yaml
+```
+
+**Execute from task/track/flow context:**
+```bash
+tlc task exec T-0042 --agent code-analyst
+tlc track exec browser-rendering --agent code-analyst
+tlc flow exec deploy.yaml --agent code-analyst
+```
+
+**Monitor and manage agent runs:**
+```bash
+tlc agent list                # registered agents
+tlc agent status              # active agent runs
+tlc agent watch               # live tail of agent output
+tlc agent cancel <run-id>     # cancel a running agent
+```
+
+**Agent registry** (`.tlc/agents.yaml`):
+```yaml
+agents:
+  code-analyst:
+    capabilities: [analyze, review]
+    model: claude-sonnet
+  engineer:
+    capabilities: [implement, test]
+    model: claude-opus
+```
+
+**Modes:**
+- `--local` — run agent in-process (default)
+- `--async` — dispatch and return immediately; poll with `agent status`
+
+See [docs/plans/2026-04-02-flowtest-agent-dispatch.md](docs/plans/2026-04-02-flowtest-agent-dispatch.md) for design details.
+
 ### Interactive TUI
 Launch the interactive terminal interface:
 ```bash
