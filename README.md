@@ -118,33 +118,35 @@ The HTML report will be available at `coverage/all.html`.
 ### Quick Start
 
 ```bash
-make tools    # Install dev tools (golangci-lint, air)
-make dev      # Run all checks (format, lint, test)
-make watch    # Auto-rebuild on changes
+just tools    # Install dev tools (golangci-lint, air)
+just dev      # Run all checks (format, lint, test)
+just watch    # Auto-rebuild on changes
 ```
 
 See [docs/development-setup.md](docs/development-setup.md) for comprehensive development workflow, watch modes, and editor integration.
 
-### Available Make Targets
+### Available Recipes
 
 | Command | Description |
 |---------|-------------|
-| `make build` | Build binary to `bin/tlc` |
-| `make test` | Run tests with race detector |
-| `make lint` | Run golangci-lint |
-| `make fmt` | Format code with gofmt + goimports |
-| `make watch` | Watch and rebuild on changes |
-| `make watch-lint` | Watch and lint on changes |
-| `make dev` | Run format + lint + test |
-| `make tools` | Install development tools |
+| `just build` | Build binary to `bin/tlc` |
+| `just test` | Run tests with race detector |
+| `just lint` | Run golangci-lint |
+| `just fmt` | Format code with gofmt + goimports |
+| `just watch` | Watch and rebuild on changes |
+| `just watch-lint` | Watch and lint on changes |
+| `just dev` | Run format + lint + test |
+| `just tools` | Install development tools |
+| `just check` | Run lint + test (CI-like) |
+| `just validate-docs` | Validate doc command examples |
 
 ### Watch Mode (Auto-detection)
 
 Get instant feedback while coding:
 ```bash
-make watch-lint  # Lint on file save
-make watch       # Build on file save
-make watch-test  # Test on file save
+just watch-lint  # Lint on file save
+just watch       # Build on file save
+just watch-test  # Test on file save
 ```
 
 ## 📖 Usage
