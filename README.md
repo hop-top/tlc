@@ -468,31 +468,37 @@ tlc agent run --agent code-analyst --flow deploy.yaml
 ```bash
 tlc task exec T-0042 --agent code-analyst
 tlc track exec browser-rendering --agent code-analyst
-tlc flow exec deploy.yaml --agent code-analyst
+tlc flow run deploy.yaml --agent code-analyst
 ```
 
 **Monitor and manage agent runs:**
 ```bash
-tlc agent list                # registered agents
-tlc agent status              # active agent runs
+tlc agent status <job-id>     # check async job status
+tlc agent cancel <job-id>     # cancel queued job
+tlc agent list                # list agent run audit records
 tlc agent watch               # live tail of agent output
-tlc agent cancel <run-id>     # cancel a running agent
 ```
 
 **Agent registry** (`.tlc/agents.yaml`):
 ```yaml
 agents:
   code-analyst:
-    capabilities: [analyze, review]
-    model: claude-sonnet
+    image: ghcr.io/org/code-analyst:latest
+    binary: ./bin/analyst
+    env:
+      TIMEOUT: "300"
+    default_timeout: 300
   engineer:
-    capabilities: [implement, test]
-    model: claude-opus
+    image: ghcr.io/org/engineer:latest
+    binary: ./bin/engineer
+    env:
+      TIMEOUT: "600"
+    default_timeout: 600
 ```
 
 **Modes:**
-- `--local` — run agent in-process (default)
-- `--async` — dispatch and return immediately; poll with `agent status`
+- Container mode is the default (uses `image` from agents.yaml)
+- `--local` — opt-in: run agent in-process using `binary` path
 
 See [docs/plans/2026-04-02-flowtest-agent-dispatch.md](docs/plans/2026-04-02-flowtest-agent-dispatch.md) for design details.
 
