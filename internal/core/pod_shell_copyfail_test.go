@@ -7,10 +7,11 @@ import (
 	"testing"
 )
 
-// T-0587: When CopyTo fails, Exec must never be called.
-// Simulates the container execution flow where context upload
-// fails before the agent binary runs.
-func TestPodShell_CopyToFailure_ExecNeverCalled(t *testing.T) {
+// T-0587: CopyTo returns an error on runner failure.
+// Verifies the PodShell.CopyTo contract: a non-zero exit from the
+// runner surfaces as an error to the caller. The orchestration layer
+// (which decides whether to call Exec) is not exercised here.
+func TestPodShell_CopyToFailure_ReturnsError(t *testing.T) {
 	// Mock runner: create succeeds, cp fails.
 	r := &mockRunner{results: []mockResult{
 		// Create → success
@@ -45,9 +46,7 @@ func TestPodShell_CopyToFailure_ExecNeverCalled(t *testing.T) {
 		t.Errorf("unexpected error: %q", err)
 	}
 
-	// Step 3: Exec must NOT have been called.
-	// We have exactly 2 calls (create, cp). If Exec were called, we'd
-	// have 3+.
+	// Verify exactly 2 runner calls were made (create, cp).
 	if len(r.calls) != 2 {
 		t.Errorf("expected 2 calls (create, cp), got %d", len(r.calls))
 		for i, c := range r.calls {
@@ -55,7 +54,7 @@ func TestPodShell_CopyToFailure_ExecNeverCalled(t *testing.T) {
 		}
 	}
 
-	// Verify the second call was "cp", not "exec".
+	// Verify the second call was "cp".
 	if len(r.calls) >= 2 {
 		if r.calls[1].Args[0] != "cp" {
 			t.Errorf("second call should be cp, got %q", r.calls[1].Args[0])
@@ -63,8 +62,9 @@ func TestPodShell_CopyToFailure_ExecNeverCalled(t *testing.T) {
 	}
 }
 
-// T-0587: VerifyFile failure after successful CopyTo also prevents Exec.
-func TestPodShell_VerifyFileFails_ContextUploadFailed(t *testing.T) {
+// T-0587: VerifyFile returns a "context upload failed" error when the
+// file check exits non-zero. Tests the VerifyFile contract directly.
+func TestPodShell_VerifyFileFails_ReturnsUploadError(t *testing.T) {
 	r := &mockRunner{results: []mockResult{
 		// CopyTo → success
 		{ExitCode: 0},
@@ -95,8 +95,8 @@ func TestPodShell_VerifyFileFails_ContextUploadFailed(t *testing.T) {
 	}
 }
 
-// T-0587: End-to-end flow — CopyTo exec error prevents Exec.
-func TestPodShell_CopyToExecError_ExecNeverCalled(t *testing.T) {
+// T-0587: CopyTo wraps runner exec errors with "exec failed".
+func TestPodShell_CopyToExecError_ReturnsExecError(t *testing.T) {
 	r := &mockRunner{results: []mockResult{
 		// CopyTo → exec error (binary not found)
 		{Err: fmt.Errorf("exec: pod binary not found")},
@@ -113,7 +113,7 @@ func TestPodShell_CopyToExecError_ExecNeverCalled(t *testing.T) {
 		t.Errorf("error should mention exec failure: %q", err)
 	}
 
-	// Only 1 call made (failed cp); no exec call.
+	// Only 1 call made (failed cp).
 	if len(r.calls) != 1 {
 		t.Errorf("expected 1 call, got %d", len(r.calls))
 	}

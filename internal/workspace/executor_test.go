@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -343,20 +344,14 @@ func TestQueryAcross_StatusPriorityPreservesINPROGRESSFirst(t *testing.T) {
 	}
 
 	// QueryAcross ignores StatusPriority; the caller (runTaskListWorkspace)
-	// applies a post-merge stable sort. Replicate that here.
+	// applies a post-merge stable sort. Use the same sort.SliceStable call
+	// as task_list.go to avoid reimplementing the comparator.
 	prio := core.TaskStatus(q.StatusPriority)
-	// Insertion-based stable sort: bubble priority tasks forward.
-	for i := 1; i < len(tasks); i++ {
-		for j := i; j > 0; j-- {
-			ip := tasks[j].Status == prio
-			jp := tasks[j-1].Status == prio
-			if ip && !jp {
-				tasks[j], tasks[j-1] = tasks[j-1], tasks[j]
-			} else {
-				break
-			}
-		}
-	}
+	sort.SliceStable(tasks, func(i, j int) bool {
+		ip := tasks[i].Status == prio
+		jp := tasks[j].Status == prio
+		return ip && !jp
+	})
 
 	// First two must be IN_PROGRESS.
 	if tasks[0].Status != core.StatusInProgress {

@@ -61,7 +61,11 @@ func TestIsDefaultRef_SuppressesAllForms(t *testing.T) {
 		{"", "T-0001", false},
 	}
 	for _, tt := range tests {
-		t.Run(tt.ref, func(t *testing.T) {
+		name := tt.ref
+		if name == "" {
+			name = "<empty>"
+		}
+		t.Run(name, func(t *testing.T) {
 			got := isDefaultRef(tt.ref, tt.taskID)
 			if got != tt.want {
 				t.Errorf("isDefaultRef(%q, %q) = %v, want %v",

@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// T-0589: In track mode, StateUpdater.Update must be called with
-// targetType="task" (not "track") for each individual task.
-// StateUpdater.Update no-ops on non-"task" targetType, so passing
-// "track" would silently skip the transition. This test verifies
-// the task-level path is exercised.
-func TestStateUpdater_TrackMode_UsesTaskTargetType(t *testing.T) {
+// T-0589: Verifies that StateUpdater.Update transitions tasks when called
+// with targetType="task". The updateType selection logic lives in
+// agent_run.go (targetType="track" + non-empty TaskID → "task"); this test
+// exercises the StateUpdater contract, not the CLI dispatch path.
+// TODO: extract resolveUpdateType from agent_run.go and test it directly.
+func TestStateUpdater_TaskTargetType_TransitionsTasks(t *testing.T) {
 	su, repo, _, _ := setupStateUpdater(t)
 	ctx := context.Background()
 
@@ -59,6 +59,7 @@ func TestStateUpdater_TrackMode_UsesTaskTargetType(t *testing.T) {
 
 // T-0589: Passing targetType="track" to Update is a no-op — verifies
 // the guard clause that makes the task path essential.
+// Note: does not exercise the CLI dispatch in agent_run.go; see TODO above.
 func TestStateUpdater_TrackTargetType_NoOp(t *testing.T) {
 	su, repo, _, _ := setupStateUpdater(t)
 	ctx := context.Background()

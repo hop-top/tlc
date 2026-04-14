@@ -236,8 +236,8 @@ func TestFlagSchema_DefaultPopulatedFromPflag(t *testing.T) {
 	}
 }
 
-// T-0597 (cont): FlagSchema.Default is empty for flags without defaults.
-func TestFlagSchema_DefaultEmptyWhenNoDefault(t *testing.T) {
+// T-0597 (cont): Bool flag --mine has DefValue "false" — verify it is captured.
+func TestFlagSchema_BoolDefaultCaptured(t *testing.T) {
 	schemas := GenerateTaskSchema()
 	index := make(map[string]CommandSchema, len(schemas))
 	for _, s := range schemas {
