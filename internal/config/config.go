@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -40,6 +41,7 @@ type TrackHealthConfig struct {
 
 // TrackConfig holds track-related configuration.
 type TrackConfig struct {
+	Dir            string           `yaml:"dir,omitempty"`
 	StaleThreshold time.Duration    `yaml:"stale_threshold"`
 	Health         TrackHealthConfig `yaml:"health"`
 	PlanExtractor  string           `yaml:"plan_extractor,omitempty"`
@@ -47,8 +49,30 @@ type TrackConfig struct {
 	DefaultType    string           `yaml:"default_type,omitempty"`
 }
 
+// TracksDir returns the configured tracks directory or the default "tracks".
+func (tc *TrackConfig) TracksDir() string {
+	if tc.Dir != "" {
+		return tc.Dir
+	}
+	return "tracks"
+}
+
+// validateRelativePath checks that a path is relative (not absolute) when set.
+func validateRelativePath(field, value string) error {
+	if value != "" && filepath.IsAbs(value) {
+		return fmt.Errorf(
+			"%s must be a relative path, got %q",
+			field, value,
+		)
+	}
+	return nil
+}
+
 // Validate validates the track configuration.
 func (tc *TrackConfig) Validate() error {
+	if err := validateRelativePath("tracks.dir", tc.Dir); err != nil {
+		return err
+	}
 	if tc.StaleThreshold < 0 {
 		return fmt.Errorf(
 			"tracks.stale_threshold must be >= 0, got %s",
@@ -96,12 +120,46 @@ func (tc *TrackConfig) Validate() error {
 	return nil
 }
 
+// FlowConfig holds flow-related configuration.
+type FlowConfig struct {
+	Dir          string `yaml:"dir,omitempty"`
+	AssigneesDir string `yaml:"assignees_dir,omitempty"`
+}
+
+// Validate validates the flow configuration.
+func (fc *FlowConfig) Validate() error {
+	if err := validateRelativePath("flow.dir", fc.Dir); err != nil {
+		return err
+	}
+	if err := validateRelativePath("flow.assignees_dir", fc.AssigneesDir); err != nil {
+		return err
+	}
+	return nil
+}
+
+// FlowsDir returns the configured flows directory or the default.
+func (fc *FlowConfig) FlowsDir() string {
+	if fc.Dir != "" {
+		return fc.Dir
+	}
+	return filepath.Join("examples", "flows")
+}
+
+// AssigneesDirectory returns the configured assignees directory or the default.
+func (fc *FlowConfig) AssigneesDirectory() string {
+	if fc.AssigneesDir != "" {
+		return fc.AssigneesDir
+	}
+	return filepath.Join("examples", "assignees")
+}
+
 type Config struct {
 	Version    string            `yaml:"version"`
 	Project    ProjectConfig     `yaml:"project"`
 	Output     OutputConfig      `yaml:"output"`
 	Task       TaskConfig        `yaml:"task"`
 	Tracks     TrackConfig       `yaml:"tracks"`
+	Flow       FlowConfig        `yaml:"flow,omitempty"`
 	Git        GitConfig         `yaml:"git"`
 	Sync       SyncConfig        `yaml:"sync"`
 	Storage    StorageConfig     `yaml:"storage"`
@@ -137,6 +195,12 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := c.Tracks.Validate(); err != nil {
+		return err
+	}
+	if err := c.Flow.Validate(); err != nil {
+		return err
+	}
+	if err := c.Storage.Inbox.Validate(); err != nil {
 		return err
 	}
 	if err := c.Sync.Validate(); err != nil {
@@ -301,11 +365,28 @@ type TaskConfig struct {
 	AutoAssign       bool                        `yaml:"auto_assign"`
 	RequireReference bool                        `yaml:"require_reference"`
 	TodoFile         string                      `yaml:"todo_file"`
+	ProjectionDir    string                      `yaml:"projection_dir,omitempty"`
 	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
 	StateMachine     *WorkflowDefinition         `yaml:"state_machine,omitempty"`
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
+}
+
+// ProjectionDirectory returns the configured projection directory or "tasks".
+func (t *TaskConfig) ProjectionDirectory() string {
+	if t.ProjectionDir != "" {
+		return t.ProjectionDir
+	}
+	return "tasks"
+}
+
+// TodoFilePath returns the configured todo file path or the default "todo.txt".
+func (t *TaskConfig) TodoFilePath() string {
+	if t.TodoFile != "" {
+		return t.TodoFile
+	}
+	return "todo.txt"
 }
 
 // GetDefaultStatuses returns the four default task statuses.
@@ -358,6 +439,10 @@ func GetDefaultStateMachine() *WorkflowDefinition {
 
 // Validate validates the task configuration.
 func (t *TaskConfig) Validate() error {
+	if err := validateRelativePath("task.projection_dir", t.ProjectionDir); err != nil {
+		return err
+	}
+
 	// Apply default stale timeout if not set
 	if t.Stale.DefaultTimeout == 0 {
 		t.Stale.DefaultTimeout = 6 * time.Hour
@@ -503,7 +588,21 @@ type LinearSyncConfig struct {
 
 // InboxConfig controls inbox-based task creation and transitions.
 type InboxConfig struct {
-	AutoProcess bool `yaml:"auto_process"`
+	Dir         string `yaml:"dir,omitempty"`
+	AutoProcess bool   `yaml:"auto_process"`
+}
+
+// Validate validates the inbox configuration.
+func (ic *InboxConfig) Validate() error {
+	return validateRelativePath("storage.inbox.dir", ic.Dir)
+}
+
+// InboxDir returns the configured inbox directory or the default "inbox".
+func (ic *InboxConfig) InboxDir() string {
+	if ic.Dir != "" {
+		return ic.Dir
+	}
+	return "inbox"
 }
 
 // StorageConfig contains storage configuration.
@@ -513,6 +612,14 @@ type StorageConfig struct {
 	ConnectionString string           `yaml:"connection_string"`
 	Filesystem       FilesystemConfig `yaml:"filesystem"`
 	Inbox            InboxConfig      `yaml:"inbox"`
+}
+
+// DBFilePath returns the configured database path or the default "db.sqlite".
+func (s *StorageConfig) DBFilePath() string {
+	if s.DBPath != "" {
+		return s.DBPath
+	}
+	return "db.sqlite"
 }
 
 // FilesystemConfig controls filesystem projection of tasks.
