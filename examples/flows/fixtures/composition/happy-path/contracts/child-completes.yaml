@@ -1,0 +1,15 @@
+name: child_flow_completes
+provider: filesystem
+evaluators:
+  - name: step_status
+    step: checkout
+    expected: SUCCEEDED
+  - name: step_status
+    step: quality-gate
+    expected: SUCCEEDED
+  - name: step_status
+    step: report-results
+    expected: SUCCEEDED
+  - name: contains
+    substring: "test_report"
+    mode: binary

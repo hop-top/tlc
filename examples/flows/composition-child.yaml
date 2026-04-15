@@ -1,0 +1,45 @@
+flow_id: "flow:composition-child:1.0"
+name: "Composition Child — Lint & Test"
+version: "1.0"
+description: |
+  Reusable child flow that runs lint then test. Designed to be invoked
+  by a parent flow via `type: flow` step, but also runnable standalone.
+entry_step: "lint"
+
+config:
+  category: "quality"
+  inputs:
+    working_dir:
+      description: "Directory to lint and test"
+      required: true
+
+steps:
+
+  lint:
+    step_id: "lint"
+    type: "task"
+    title: "Run linter"
+    task_template:
+      title: "Lint codebase"
+      description: |
+        Run project linter on the working directory.
+      requirements:
+        capabilities: ["linting"]
+        tools: ["golangci-lint"]
+
+  test:
+    step_id: "test"
+    type: "task"
+    title: "Run tests"
+    depends_on: ["lint"]
+    task_template:
+      title: "Run test suite"
+      description: |
+        Execute the project test suite.
+        Output: `test_report` with pass/fail summary.
+      requirements:
+        capabilities: ["testing"]
+        tools: ["go"]
+      outputs:
+        test_report:
+          description: "JSON test summary with pass/fail counts"
