@@ -18,18 +18,19 @@ type ReconcileResult struct {
 
 // reconcileCtx bundles shared state for a single reconciliation pass.
 type reconcileCtx struct {
-	svc       *TrackService
-	ctx       context.Context
-	trackID   string
-	projectID string
-	idGen     IDGenerator
-	now       time.Time
-	existing  map[string]*Task
-	titleIdx  map[string]string
-	oldMap    map[int]string
-	matched   map[string]bool
-	newMap    map[int]string
-	result    *ReconcileResult
+	svc             *TrackService
+	ctx             context.Context
+	trackID         string
+	projectID       string
+	idGen           IDGenerator
+	now             time.Time
+	existing        map[string]*Task
+	titleIdx        map[string]string
+	duplicateTitles map[string]bool
+	oldMap          map[int]string
+	matched         map[string]bool
+	newMap          map[int]string
+	result          *ReconcileResult
 }
 
 // ReconcileTasksFromPlan reconciles an existing plan mapping with
@@ -87,6 +88,7 @@ func (s *TrackService) ReconcileTasksFromPlan(
 func (rc *reconcileCtx) loadExistingTasks() error {
 	rc.existing = make(map[string]*Task, len(rc.oldMap))
 	rc.titleIdx = make(map[string]string, len(rc.oldMap))
+	rc.duplicateTitles = make(map[string]bool)
 
 	for _, taskID := range rc.oldMap {
 		t, err := rc.svc.taskRepo.GetTask(rc.ctx, taskID)
@@ -97,7 +99,14 @@ func (rc *reconcileCtx) loadExistingTasks() error {
 			continue
 		}
 		rc.existing[taskID] = t
-		rc.titleIdx[t.Title] = taskID
+		if _, dup := rc.titleIdx[t.Title]; dup {
+			// Multiple mapped tasks share this title; remove from
+			// titleIdx so those tasks fall back to index matching.
+			rc.duplicateTitles[t.Title] = true
+			delete(rc.titleIdx, t.Title)
+		} else if !rc.duplicateTitles[t.Title] {
+			rc.titleIdx[t.Title] = taskID
+		}
 	}
 	return nil
 }
@@ -237,7 +246,23 @@ func needsUpdate(task *Task, spec PlanTaskSpec) bool {
 	if task.Priority != Priority(spec.Priority) {
 		return true
 	}
+	if !assigneeEqual(task.AssignedTo, spec.AssignedTo) {
+		return true
+	}
 	return !tagsEqual(task.Tags, spec.Tags)
+}
+
+// assigneeEqual compares the task's assignee with the spec's.
+func assigneeEqual(taskAssignee *string, specAssignee string) bool {
+	normalized := specAssignee
+	if len(normalized) > 1 && normalized[0] == '@' {
+		normalized = normalized[1:]
+	}
+	current := ""
+	if taskAssignee != nil {
+		current = *taskAssignee
+	}
+	return current == normalized
 }
 
 // applySpecToTask updates a task's mutable fields from a plan spec.
@@ -247,6 +272,15 @@ func applySpecToTask(task *Task, spec PlanTaskSpec, now time.Time) {
 	task.Effort = Effort(spec.Effort)
 	task.Priority = Priority(spec.Priority)
 	task.Tags = spec.Tags
+	if spec.AssignedTo != "" {
+		a := spec.AssignedTo
+		if len(a) > 1 && a[0] == '@' {
+			a = a[1:]
+		}
+		task.AssignedTo = &a
+	} else {
+		task.AssignedTo = nil
+	}
 	task.UpdatedAt = now
 }
 
@@ -274,13 +308,12 @@ func (s *TrackService) resolveBlockedByFromMapping(
 	mapping map[int]string,
 ) error {
 	for i, spec := range specs {
-		if len(spec.BlockedBy) == 0 {
-			continue
-		}
 		taskID, ok := mapping[i]
 		if !ok {
 			continue
 		}
+		// Always resolve — when spec.BlockedBy is empty, this clears
+		// any stale blocked_by on the task.
 		if err := s.resolveOneTaskBlockedBy(ctx, taskID, spec.BlockedBy, mapping); err != nil {
 			return err
 		}
@@ -295,21 +328,16 @@ func (s *TrackService) resolveOneTaskBlockedBy(
 	mapping map[int]string,
 ) error {
 	task, err := s.taskRepo.GetTask(ctx, taskID)
-	if err != nil || task == nil {
-		return nil //nolint:nilerr // task may have been deleted; skip
+	if err != nil {
+		return fmt.Errorf("get task %s for blocked-by: %w", taskID, err)
+	}
+	if task == nil {
+		return nil // task may have been deleted; skip
 	}
 
-	var blockedBy []string
-	for _, ref := range refs {
-		switch {
-		case ref.IsIndex():
-			if depID, found := mapping[ref.Index]; found {
-				blockedBy = append(blockedBy, depID)
-			}
-		case ref.TaskID != "":
-			blockedBy = append(blockedBy, ref.TaskID)
-		}
-		// Cross-track refs handled by existing phase-2 resolution.
+	blockedBy, unresolved, err := s.resolveRefList(ctx, taskID, refs, mapping)
+	if err != nil {
+		return err
 	}
 
 	if task.Meta == nil {
@@ -320,9 +348,50 @@ func (s *TrackService) resolveOneTaskBlockedBy(
 	} else {
 		delete(task.Meta, "blocked_by")
 	}
+	if len(unresolved) > 0 {
+		task.Meta[metaKeyUnresolved] = unresolved
+	} else {
+		delete(task.Meta, metaKeyUnresolved)
+	}
 	task.UpdatedAt = time.Now().UTC()
 	if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
 		return fmt.Errorf("update blocked-by for %s: %w", taskID, err)
 	}
 	return nil
+}
+
+// resolveRefList resolves a slice of BlockedByRef into concrete IDs
+// and deferred (unresolved) raw strings.
+func (s *TrackService) resolveRefList(
+	ctx context.Context,
+	taskID string,
+	refs []BlockedByRef,
+	mapping map[int]string,
+) (blockedBy, unresolved []string, err error) {
+	for _, ref := range refs {
+		switch {
+		case ref.IsIndex():
+			if depID, found := mapping[ref.Index]; found {
+				blockedBy = append(blockedBy, depID)
+			}
+		case ref.TaskID != "":
+			blockedBy = append(blockedBy, ref.TaskID)
+		case ref.CrossTrack != nil:
+			id, deferred, rErr := s.resolveCrossTrackRef(
+				ctx, ref.CrossTrack,
+			)
+			if rErr != nil {
+				return nil, nil, fmt.Errorf(
+					"cross-track ref %s for task %s: %w",
+					ref.Raw(), taskID, rErr,
+				)
+			}
+			if deferred {
+				unresolved = append(unresolved, ref.Raw())
+			} else {
+				blockedBy = append(blockedBy, id)
+			}
+		}
+	}
+	return blockedBy, unresolved, nil
 }

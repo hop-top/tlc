@@ -116,7 +116,7 @@ var trackUpdateCmd = &cobra.Command{
 			}
 		}
 
-		if len(taskSpecs) > 0 {
+		if len(taskSpecs) > 0 || (addPlanChanged && trackUpdateAddPlan != "") {
 			var projectID string
 			if proj := core.DetectProject(); proj != nil &&
 				proj.ProjectID != "" {
@@ -152,7 +152,36 @@ var trackUpdateCmd = &cobra.Command{
 						len(rec.Kept),
 					)
 				}
-			} else {
+
+				// Phase 2: resolve pending cross-track refs after
+				// reconciliation, same as first-run path.
+				phase2, p2Err := svc.ResolvePendingCrossTrackRefs(
+					ctx, projectID, nil,
+				)
+				if p2Err != nil {
+					return fmt.Errorf("phase 2 resolution: %w", p2Err)
+				}
+				if phase2.PromotedTasks > 0 {
+					_, _ = fmt.Fprintf(
+						w, "Resolved deferred refs on %d tasks\n",
+						phase2.PromotedTasks,
+					)
+				}
+				for _, p := range phase2.PlansRewritten {
+					_, _ = fmt.Fprintf(
+						w, "Rewrote plan %s with resolved refs\n", p,
+					)
+				}
+				if len(phase2.StillUnresolved) > 0 {
+					for _, u := range phase2.StillUnresolved {
+						_, _ = fmt.Fprintf(
+							w,
+							"Warning: task %s still waiting on %q\n",
+							u.TaskID, u.Ref,
+						)
+					}
+				}
+			} else if len(taskSpecs) > 0 {
 				// First-time ingest.
 				result, createErr := svc.CreateTasksFromPlan(
 					ctx, id, taskSpecs, projectID, s,
@@ -208,12 +237,12 @@ var trackUpdateCmd = &cobra.Command{
 						)
 					}
 				}
+			} else {
+				_, _ = fmt.Fprintf(
+					w, "Linked plan %s (no tasks extracted)\n",
+					trackUpdateAddPlan,
+				)
 			}
-		} else if addPlanChanged && trackUpdateAddPlan != "" {
-			_, _ = fmt.Fprintf(
-				w, "Linked plan %s (no tasks extracted)\n",
-				trackUpdateAddPlan,
-			)
 		}
 
 		return nil

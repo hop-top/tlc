@@ -32,10 +32,12 @@ func (g *failingIDGen) GetNextSequenceID(
 // CreateTasksFromPlan can persist the plan mapping.
 func ensureTrack(t *testing.T, repo *stubTrackRepo, id string) {
 	t.Helper()
-	_ = repo.CreateTrack(context.Background(), &Track{
+	if err := repo.CreateTrack(context.Background(), &Track{
 		ID: id, Title: id, Type: TrackTypeFeature,
 		Status: TrackStatusPending,
-	})
+	}); err != nil {
+		t.Fatalf("ensureTrack(%s): %v", id, err)
+	}
 }
 
 func TestCreateTasksFromPlan_Basic(t *testing.T) {

@@ -34,6 +34,11 @@ type PlanIngestResult struct {
 	// not exist yet). Ingestion still succeeds; the caller should
 	// run ResolvePendingCrossTrackRefs afterwards to retry.
 	UnresolvedRefs []string
+	// MappingErr is non-nil when tasks were created successfully
+	// but the plan mapping could not be persisted on the track.
+	// The caller receives both the result and the error so it can
+	// decide whether to warn or abort.
+	MappingErr error `json:"-"`
 }
 
 // CreateTasksFromPlan creates tasks from plan specs for trackID
@@ -214,18 +219,25 @@ func (s *TrackService) CreateTasksFromPlan(
 	for i, id := range createdIDs {
 		mapping[i] = id
 	}
+
+	result := &PlanIngestResult{
+		CreatedIDs:     createdIDs,
+		ResolvedRefs:   resolved,
+		UnresolvedRefs: unresolved,
+	}
+
 	if err := s.UpdateTrack(ctx, trackID, func(t *Track) error {
 		t.PlanMapping = mapping
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("persist plan mapping: %w", err)
+		// Tasks were created successfully but mapping persistence
+		// failed. Return the result so the caller can see what was
+		// created, alongside a non-nil error.
+		result.MappingErr = fmt.Errorf("persist plan mapping: %w", err)
+		return result, result.MappingErr
 	}
 
-	return &PlanIngestResult{
-		CreatedIDs:     createdIDs,
-		ResolvedRefs:   resolved,
-		UnresolvedRefs: unresolved,
-	}, nil
+	return result, nil
 }
 
 // preflightCrossTrackRef validates a cross-track ref for *hard*
