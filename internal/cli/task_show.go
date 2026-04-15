@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -72,7 +73,14 @@ var TaskShowCmd = &cobra.Command{
 
 			blockedBy, blocking := collectTaskRelations(ctx, s, res.Storage, task)
 			renderTaskDetail(cmd.OutOrStdout(), task, logs)
-			renderTaskRelations(cmd.OutOrStdout(), blockedBy, blocking)
+
+			currentProjectID := ""
+			if task.ProjectID != nil && *task.ProjectID != "" {
+				currentProjectID = *task.ProjectID
+			} else if proj := core.DetectProject(); proj != nil {
+				currentProjectID = proj.ProjectID
+			}
+			renderTaskRelations(cmd.OutOrStdout(), blockedBy, blocking, currentProjectID)
 		}
 
 		if len(errs) > 0 {
@@ -228,7 +236,7 @@ func sameProject(left, right *string) bool {
 	return *left == *right
 }
 
-func renderTaskRelations(w io.Writer, blockedBy, blocking []relatedTaskSummary) {
+func renderTaskRelations(w io.Writer, blockedBy, blocking []relatedTaskSummary, currentProjectID string) {
 	if len(blockedBy) > 0 {
 		_, _ = fmt.Fprintln(w, "\nBlocked By:")
 		for _, item := range blockedBy {
@@ -236,7 +244,8 @@ func renderTaskRelations(w io.Writer, blockedBy, blocking []relatedTaskSummary) 
 			if item.Status != "" {
 				status = fmt.Sprintf(" [%s]", item.Status)
 			}
-			_, _ = fmt.Fprintf(w, "  - %s%s %s\n", item.Ref, status, item.Title)
+			ref := shortenTaskRef(item.Ref, currentProjectID)
+			_, _ = fmt.Fprintf(w, "  - %s%s %s\n", ref, status, item.Title)
 		}
 	}
 
@@ -247,9 +256,67 @@ func renderTaskRelations(w io.Writer, blockedBy, blocking []relatedTaskSummary) 
 			if item.Status != "" {
 				status = fmt.Sprintf(" [%s]", item.Status)
 			}
-			_, _ = fmt.Fprintf(w, "  - %s%s %s\n", item.Ref, status, item.Title)
+			ref := shortenTaskRef(item.Ref, currentProjectID)
+			_, _ = fmt.Fprintf(w, "  - %s%s %s\n", ref, status, item.Title)
 		}
 	}
+}
+
+// bareTaskIDRe matches bare task IDs like T-0013, GH-1, ABC-42.
+var bareTaskIDRe = regexp.MustCompile(`^[A-Z]+-\d+$`)
+
+// shortenTaskRef returns a display-friendly ref. Same-project refs are
+// shortened to the bare task ID (e.g. "T-0013"); cross-project refs
+// use the "project#T-NNNN" convention. Legacy task:// URIs are normalised.
+// Non-task refs (e.g. HTTP URLs) are returned unchanged.
+func shortenTaskRef(ref, currentProjectID string) string {
+	// Strip known URI schemes.
+	stripped := ref
+	for _, prefix := range []string{"tlc://", "task://"} {
+		if strings.HasPrefix(stripped, prefix) {
+			stripped = strings.TrimPrefix(stripped, prefix)
+			// Remove leading slash from tlc:///T-NNNN form.
+			stripped = strings.TrimPrefix(stripped, "/")
+			break
+		}
+	}
+
+	// Non-task URI schemes — return unchanged.
+	if strings.Contains(stripped, "://") {
+		return ref
+	}
+
+	// Bare task ID — already short.
+	if !strings.Contains(stripped, "/") && !strings.Contains(stripped, "#") {
+		return stripped
+	}
+
+	// Split "org/repo/T-NNNN" or "org/repo#T-NNNN" into project + task.
+	var projectID, taskID string
+	if idx := strings.LastIndex(stripped, "#"); idx >= 0 {
+		projectID = stripped[:idx]
+		taskID = stripped[idx+1:]
+	} else if idx := strings.LastIndex(stripped, "/"); idx >= 0 {
+		projectID = stripped[:idx]
+		taskID = stripped[idx+1:]
+	}
+
+	if taskID == "" {
+		return ref
+	}
+
+	// Guard: only rewrite when tail looks like a task ID.
+	if !bareTaskIDRe.MatchString(taskID) {
+		return ref
+	}
+
+	// Same project → short form.
+	if currentProjectID != "" && projectID == currentProjectID {
+		return taskID
+	}
+
+	// Cross project → project#task convention.
+	return projectID + "#" + taskID
 }
 
 func init() {

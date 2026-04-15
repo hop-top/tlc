@@ -385,6 +385,142 @@ func TestTaskShowNotFound(t *testing.T) {
 	}
 }
 
+func TestShortenTaskRef(t *testing.T) {
+	tests := []struct {
+		name             string
+		ref              string
+		currentProjectID string
+		want             string
+	}{
+		{
+			name:             "same project slash form",
+			ref:              "hop-top/tlc/T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "T-0013",
+		},
+		{
+			name:             "cross project slash form",
+			ref:              "hop-top/c12n/T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "hop-top/c12n#T-0013",
+		},
+		{
+			name:             "bare task ID unchanged",
+			ref:              "T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "T-0013",
+		},
+		{
+			name:             "tlc URI same project",
+			ref:              "tlc://hop-top/tlc/T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "T-0013",
+		},
+		{
+			name:             "tlc URI cross project",
+			ref:              "tlc://hop-top/c12n/T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "hop-top/c12n#T-0013",
+		},
+		{
+			name:             "legacy task URI same project",
+			ref:              "task://hop-top/tlc/T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "T-0013",
+		},
+		{
+			name:             "legacy task URI cross project",
+			ref:              "task://hop-top/c12n/T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "hop-top/c12n#T-0013",
+		},
+		{
+			name:             "local tlc URI triple slash",
+			ref:              "tlc:///T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "T-0013",
+		},
+		{
+			name:             "hash form same project",
+			ref:              "hop-top/tlc#T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "T-0013",
+		},
+		{
+			name:             "hash form cross project",
+			ref:              "hop-top/c12n#T-0013",
+			currentProjectID: "hop-top/tlc",
+			want:             "hop-top/c12n#T-0013",
+		},
+		{
+			name:             "empty project context converts slash to hash form",
+			ref:              "hop-top/tlc/T-0013",
+			currentProjectID: "",
+			want:             "hop-top/tlc#T-0013",
+		},
+		{
+			name:             "http URL returned unchanged",
+			ref:              "https://github.com/org/repo/issues/42",
+			currentProjectID: "hop-top/tlc",
+			want:             "https://github.com/org/repo/issues/42",
+		},
+		{
+			name:             "non-task tail returned unchanged",
+			ref:              "hop-top/tlc/not-a-task",
+			currentProjectID: "hop-top/tlc",
+			want:             "hop-top/tlc/not-a-task",
+		},
+		{
+			name:             "custom URI scheme returned unchanged",
+			ref:              "myapp://some/resource",
+			currentProjectID: "hop-top/tlc",
+			want:             "myapp://some/resource",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shortenTaskRef(tt.ref, tt.currentProjectID)
+			if got != tt.want {
+				t.Errorf("shortenTaskRef(%q, %q) = %q, want %q",
+					tt.ref, tt.currentProjectID, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderTaskRelations_ShortRefs(t *testing.T) {
+	buf := new(bytes.Buffer)
+	blockedBy := []relatedTaskSummary{
+		{Ref: "hop-top/tlc/T-0001", Title: "Same proj", Status: core.StatusTodo},
+		{Ref: "hop-top/c12n/T-0005", Title: "Cross proj", Status: core.StatusInProgress},
+	}
+	blocking := []relatedTaskSummary{
+		{Ref: "T-0099", Title: "Bare ref", Status: core.StatusDone},
+	}
+
+	renderTaskRelations(buf, blockedBy, blocking, "hop-top/tlc")
+	output := buf.String()
+
+	// Same-project ref should be shortened
+	if !contains(output, "T-0001") {
+		t.Errorf("expected short ref T-0001 in output, got: %s", output)
+	}
+	if contains(output, "hop-top/tlc/T-0001") {
+		t.Errorf("expected same-project ref to be shortened, got: %s", output)
+	}
+
+	// Cross-project ref should use hash form
+	if !contains(output, "hop-top/c12n#T-0005") {
+		t.Errorf("expected cross-project ref hop-top/c12n#T-0005 in output, got: %s", output)
+	}
+
+	// Bare ref should pass through
+	if !contains(output, "T-0099") {
+		t.Errorf("expected bare ref T-0099 in output, got: %s", output)
+	}
+}
+
 // TestTaskDelete tests the delete command.
 func TestTaskDelete(t *testing.T) {
 	t.Run("DeleteTask", func(t *testing.T) {
