@@ -28,8 +28,19 @@ func (g *failingIDGen) GetNextSequenceID(
 	return 0, fmt.Errorf("id generation failed")
 }
 
+// ensureTrack creates a minimal track in the stub repo so
+// CreateTasksFromPlan can persist the plan mapping.
+func ensureTrack(t *testing.T, repo *stubTrackRepo, id string) {
+	t.Helper()
+	_ = repo.CreateTrack(context.Background(), &Track{
+		ID: id, Title: id, Type: TrackTypeFeature,
+		Status: TrackStatusPending,
+	})
+}
+
 func TestCreateTasksFromPlan_Basic(t *testing.T) {
 	trackRepo := newStubTrackRepo()
+	ensureTrack(t, trackRepo, "test-track")
 	taskRepo := &stubTaskRepo{}
 	svc := NewTrackService(trackRepo, taskRepo)
 	ctx := context.Background()
@@ -82,6 +93,7 @@ func TestCreateTasksFromPlan_Basic(t *testing.T) {
 
 func TestCreateTasksFromPlan_BlockedByResolution(t *testing.T) {
 	trackRepo := newStubTrackRepo()
+	ensureTrack(t, trackRepo, "trk")
 	taskRepo := &creatingTaskRepo{}
 	svc := NewTrackService(trackRepo, taskRepo)
 	ctx := context.Background()
@@ -164,8 +176,10 @@ func TestCreateTasksFromPlan_IDGenFailure(t *testing.T) {
 }
 
 func TestCreateTasksFromPlan_AssigneeNormalization(t *testing.T) {
+	trackRepo := newStubTrackRepo()
+	ensureTrack(t, trackRepo, "trk")
 	taskRepo := &creatingTaskRepo{}
-	svc := NewTrackService(newStubTrackRepo(), taskRepo)
+	svc := NewTrackService(trackRepo, taskRepo)
 	ctx := context.Background()
 
 	specs := []PlanTaskSpec{
@@ -187,8 +201,10 @@ func TestCreateTasksFromPlan_AssigneeNormalization(t *testing.T) {
 }
 
 func TestCreateTasksFromPlan_TrackIDSet(t *testing.T) {
+	trackRepo := newStubTrackRepo()
+	ensureTrack(t, trackRepo, "my-track")
 	taskRepo := &creatingTaskRepo{}
-	svc := NewTrackService(newStubTrackRepo(), taskRepo)
+	svc := NewTrackService(trackRepo, taskRepo)
 	ctx := context.Background()
 
 	specs := []PlanTaskSpec{{Title: "A"}}

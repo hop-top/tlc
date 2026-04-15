@@ -287,10 +287,14 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_agent_runs_target ON agent_runs(target_type, target_id);
 		`,
 	},
+	{
+		version: 11,
+		query:   `ALTER TABLE tracks ADD COLUMN plan_mapping TEXT;`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 10
+const LatestMigrationVersion = 11
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

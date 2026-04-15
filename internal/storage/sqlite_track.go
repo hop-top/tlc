@@ -23,16 +23,23 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 			projectID = *track.ProjectID
 		}
 
+		var planMappingSQL sql.NullString
+		if len(track.PlanMapping) > 0 {
+			pmJSON, _ := json.Marshal(track.PlanMapping) //nolint:errcheck // marshaling known-valid map
+			planMappingSQL = sql.NullString{String: string(pmJSON), Valid: true}
+		}
+
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO tracks (id, title, type, status, assigned_to,
-				created_at, updated_at, project_id, meta)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				created_at, updated_at, project_id, meta, plan_mapping)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			track.ID, track.Title, track.Type, track.Status,
 			track.AssignedTo,
 			track.CreatedAt.Format(time.RFC3339),
 			track.UpdatedAt.Format(time.RFC3339),
 			projectID,
 			string(metaJSON),
+			planMappingSQL,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert track: %w", err)
@@ -46,12 +53,12 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 	if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
 		row = s.db.QueryRowContext(ctx, `
 			SELECT id, title, type, status, assigned_to,
-				created_at, updated_at, project_id, meta
+				created_at, updated_at, project_id, meta, plan_mapping
 			FROM tracks WHERE id = ? AND project_id = ?`, id, proj.ProjectID)
 	} else {
 		row = s.db.QueryRowContext(ctx, `
 			SELECT id, title, type, status, assigned_to,
-				created_at, updated_at, project_id, meta
+				created_at, updated_at, project_id, meta, plan_mapping
 			FROM tracks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
 	}
 
@@ -62,7 +69,7 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID string) (*core.Track, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, title, type, status, assigned_to,
-			created_at, updated_at, project_id, meta
+			created_at, updated_at, project_id, meta, plan_mapping
 		FROM tracks WHERE id = ? AND project_id = ?`, id, projectID)
 	return scanTrackFromRow(row)
 }
@@ -75,15 +82,23 @@ func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) erro
 		if track.ProjectID != nil {
 			projectID = *track.ProjectID
 		}
+
+		var planMappingSQL sql.NullString
+		if len(track.PlanMapping) > 0 {
+			pmJSON, _ := json.Marshal(track.PlanMapping) //nolint:errcheck // marshaling known-valid map
+			planMappingSQL = sql.NullString{String: string(pmJSON), Valid: true}
+		}
+
 		res, err := tx.ExecContext(ctx, `
 			UPDATE tracks
 			SET title = ?, type = ?, status = ?, assigned_to = ?,
-				updated_at = ?, project_id = ?, meta = ?
+				updated_at = ?, project_id = ?, meta = ?, plan_mapping = ?
 			WHERE id = ? AND project_id = ?`,
 			track.Title, track.Type, track.Status, track.AssignedTo,
 			track.UpdatedAt.Format(time.RFC3339),
 			projectID,
 			string(metaJSON),
+			planMappingSQL,
 			track.ID, projectID,
 		)
 		if err != nil {
@@ -167,7 +182,7 @@ func (s *SQLiteStorage) ListTracks(
 	query core.TrackQuery,
 ) ([]*core.Track, error) {
 	sqlQuery := `SELECT id, title, type, status, assigned_to,
-		created_at, updated_at, project_id, meta FROM tracks`
+		created_at, updated_at, project_id, meta, plan_mapping FROM tracks`
 	var args []interface{}
 	var whereClauses []string
 
@@ -238,11 +253,12 @@ func (s *SQLiteStorage) ListTracks(
 func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 	var track core.Track
 	var createdAtStr, updatedAtStr string
-	var assignedTo, projectID, metaStr sql.NullString
+	var assignedTo, projectID, metaStr, planMappingStr sql.NullString
 
 	err := row.Scan(
 		&track.ID, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
+		&planMappingStr,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -269,6 +285,11 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 			return nil, fmt.Errorf("failed to unmarshal track meta: %w", err)
 		}
 	}
+	if planMappingStr.Valid && planMappingStr.String != "" {
+		if err := json.Unmarshal([]byte(planMappingStr.String), &track.PlanMapping); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal plan_mapping: %w", err)
+		}
+	}
 
 	return &track, nil
 }
@@ -277,11 +298,12 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 	var track core.Track
 	var createdAtStr, updatedAtStr string
-	var assignedTo, projectID, metaStr sql.NullString
+	var assignedTo, projectID, metaStr, planMappingStr sql.NullString
 
 	err := rows.Scan(
 		&track.ID, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
+		&planMappingStr,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan track row: %w", err)
@@ -303,6 +325,11 @@ func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 	if metaStr.Valid && metaStr.String != "null" {
 		if err := json.Unmarshal([]byte(metaStr.String), &track.Meta); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal track meta: %w", err)
+		}
+	}
+	if planMappingStr.Valid && planMappingStr.String != "" {
+		if err := json.Unmarshal([]byte(planMappingStr.String), &track.PlanMapping); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal plan_mapping: %w", err)
 		}
 	}
 

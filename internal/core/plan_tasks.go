@@ -209,6 +209,18 @@ func (s *TrackService) CreateTasksFromPlan(
 		createdIDs = append(createdIDs, taskID)
 	}
 
+	// Persist plan mapping on the track: index → task ID.
+	mapping := make(map[int]string, len(createdIDs))
+	for i, id := range createdIDs {
+		mapping[i] = id
+	}
+	if err := s.UpdateTrack(ctx, trackID, func(t *Track) error {
+		t.PlanMapping = mapping
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("persist plan mapping: %w", err)
+	}
+
 	return &PlanIngestResult{
 		CreatedIDs:     createdIDs,
 		ResolvedRefs:   resolved,
