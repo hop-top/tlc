@@ -80,15 +80,16 @@ func TrackTypeList(configTypes ...[]string) string {
 
 // Track represents a grouping of related tasks toward a deliverable.
 type Track struct {
-	ID         string         `json:"id" yaml:"id" table:"ID"`
-	Title      string         `json:"title" yaml:"title" table:"Title"`
-	Type       string         `json:"type" yaml:"type" table:"Type"`
-	Status     TrackStatus    `json:"status" yaml:"status" table:"Status"`
-	AssignedTo *string        `json:"assigned_to,omitempty" yaml:"assigned_to,omitempty" table:"Assigned"`
-	CreatedAt  time.Time      `json:"created_at" yaml:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at" yaml:"updated_at"`
-	ProjectID  *string        `json:"project_id,omitempty" yaml:"project_id,omitempty"`
-	Meta       map[string]any `json:"meta,omitempty" yaml:"meta,omitempty"`
+	ID          string         `json:"id" yaml:"id" table:"ID"`
+	Title       string         `json:"title" yaml:"title" table:"Title"`
+	Type        string         `json:"type" yaml:"type" table:"Type"`
+	Status      TrackStatus    `json:"status" yaml:"status" table:"Status"`
+	AssignedTo  *string        `json:"assigned_to,omitempty" yaml:"assigned_to,omitempty" table:"Assigned"`
+	CreatedAt   time.Time      `json:"created_at" yaml:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at" yaml:"updated_at"`
+	ProjectID   *string        `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	Meta        map[string]any `json:"meta,omitempty" yaml:"meta,omitempty"`
+	PlanMapping map[int]string `json:"plan_mapping,omitempty" yaml:"plan_mapping,omitempty"`
 }
 
 // trackIDRe matches lowercase alphanumeric characters and hyphens, 3-64 chars.
