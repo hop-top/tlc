@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/uriutil"
+	"hop.top/uri"
 )
 
 // PlanFrontmatter represents the YAML frontmatter of a plan document.
@@ -32,8 +34,9 @@ type PlanTaskSpec struct {
 
 // BlockedByRef is one entry in a PlanTaskSpec.BlockedBy list. It
 // represents either an intra-track index (int, 0-based), an
-// explicit task ID ("T-NNNN"), or a cross-track reference
-// ("<track-id>#N", 1-based task number).
+// explicit task ID ("T-NNNN"), a cross-track reference
+// ("<track-id>#N", 1-based task number), or a cross-project
+// reference ("org/project#T-NNNN" or "tlc://org/project/T-NNNN").
 type BlockedByRef struct {
 	// Index is >= 0 when this entry is an intra-track index.
 	Index int
@@ -41,6 +44,16 @@ type BlockedByRef struct {
 	TaskID string
 	// CrossTrack is set when the entry is "<track-id>#N".
 	CrossTrack *CrossTrackRef
+	// CrossProject is set when the entry references a task in
+	// another project (e.g. "hop-top/c12n#T-0018" or
+	// "tlc://hop-top/c12n/T-0018").
+	CrossProject *CrossProjectRef
+}
+
+// CrossProjectRef identifies a task in another project.
+type CrossProjectRef struct {
+	ProjectID string // e.g. "hop-top/c12n"
+	TaskID    string // e.g. "T-0018"
 }
 
 // CrossTrackRef identifies a task in another track by its 1-based
@@ -54,6 +67,8 @@ type CrossTrackRef struct {
 // appears (or would appear) in plan YAML.
 func (r BlockedByRef) Raw() string {
 	switch {
+	case r.CrossProject != nil:
+		return fmt.Sprintf("%s#%s", r.CrossProject.ProjectID, r.CrossProject.TaskID)
 	case r.CrossTrack != nil:
 		return fmt.Sprintf("%s#%d", r.CrossTrack.TrackID, r.CrossTrack.TaskNum)
 	case r.TaskID != "":
@@ -65,7 +80,7 @@ func (r BlockedByRef) Raw() string {
 
 // IsIndex reports whether this ref is an intra-track index.
 func (r BlockedByRef) IsIndex() bool {
-	return r.CrossTrack == nil && r.TaskID == ""
+	return r.CrossTrack == nil && r.CrossProject == nil && r.TaskID == ""
 }
 
 var (
@@ -75,6 +90,12 @@ var (
 	// are lowercase alphanumerics with hyphens.
 	crossTrackPattern = regexp.MustCompile(
 		`^([a-z0-9][a-z0-9-]*)#(\d+)$`,
+	)
+	// crossProjectPattern matches "<org/project>#<T-NNNN>" refs.
+	// Project IDs contain a slash separating org and project
+	// segments (each: alphanumerics, hyphens, underscores).
+	crossProjectPattern = regexp.MustCompile(
+		`^([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)#(T-\d+)$`,
 	)
 )
 
@@ -116,13 +137,31 @@ func parseBlockedByRef(raw interface{}) (BlockedByRef, error) {
 				CrossTrack: &CrossTrackRef{TrackID: m[1], TaskNum: n},
 			}, nil
 		}
+		// Cross-project shorthand: "org/project#T-NNNN".
+		if m := crossProjectPattern.FindStringSubmatch(s); m != nil {
+			return BlockedByRef{
+				CrossProject: &CrossProjectRef{
+					ProjectID: m[1],
+					TaskID:    m[2],
+				},
+			}, nil
+		}
+		// Full URI: "tlc://org/project/T-NNNN".
+		if strings.HasPrefix(s, "tlc://") {
+			ref, uriErr := parseTLCURIRef(s)
+			if uriErr != nil {
+				return BlockedByRef{}, uriErr
+			}
+			return ref, nil
+		}
 		// Allow bare integers as strings too (yaml quirks).
 		if n, err := strconv.Atoi(s); err == nil && n >= 0 {
 			return BlockedByRef{Index: n}, nil
 		}
 		return BlockedByRef{}, fmt.Errorf(
 			"blocked-by entry %q is not a valid form; expected an int "+
-				"index, \"T-NNNN\", or \"<track-id>#<N>\"",
+				"index, \"T-NNNN\", \"<track-id>#<N>\", "+
+				"\"<org/project>#<T-NNNN>\", or \"tlc://<org>/<project>/<T-NNNN>\"",
 			s,
 		)
 	default:
@@ -132,6 +171,48 @@ func parseBlockedByRef(raw interface{}) (BlockedByRef, error) {
 		)
 	}
 }
+
+// parseTLCURIRef parses a "tlc://..." URI into a BlockedByRef. It
+// uses hop.top/uri.Parse for structural decomposition.
+//
+// Accepted forms:
+//   - tlc://org/project/T-NNNN → CrossProject{org/project, T-NNNN}
+//   - tlc:///T-NNNN            → TaskID (local bare ref)
+func parseTLCURIRef(s string) (BlockedByRef, error) {
+	u, err := uri.Parse(s)
+	if err != nil {
+		return BlockedByRef{}, fmt.Errorf(
+			"blocked-by entry %q: invalid tlc URI; %w", s, err,
+		)
+	}
+
+	// Extract project and task from parsed URI. The uri library
+	// places the host in Space and the path (minus leading /) in
+	// ID. For "tlc://org/project/T-NNNN": Space=org, ID=project/T-NNNN.
+	// For "tlc:///T-NNNN": Space="", ID=T-NNNN.
+	projectID, taskID := uriutil.SplitProjectTask(u.Space, u.ID)
+
+	if taskID == "" || !taskIDPattern.MatchString(taskID) {
+		return BlockedByRef{}, fmt.Errorf(
+			"blocked-by entry %q: missing or invalid task ID; "+
+				"expected tlc://<org>/<project>/<T-NNNN> or tlc:///T-NNNN",
+			s,
+		)
+	}
+
+	if projectID == "" {
+		// Local task ref: tlc:///T-NNNN
+		return BlockedByRef{TaskID: taskID}, nil
+	}
+
+	return BlockedByRef{
+		CrossProject: &CrossProjectRef{
+			ProjectID: projectID,
+			TaskID:    taskID,
+		},
+	}, nil
+}
+
 
 // UnmarshalYAML implements yaml.Unmarshaler so BlockedByRef can be
 // decoded from either a scalar int or a scalar string inside a

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
+	"hop.top/tlc/internal/uriutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,7 @@ func TestSplitProjectTask(t *testing.T) {
 		{"", "proj/T-0002", "proj", "T-0002"},
 	}
 	for _, tc := range cases {
-		proj, task := splitProjectTask(tc.space, tc.id)
+		proj, task := uriutil.SplitProjectTask(tc.space, tc.id)
 		assert.Equal(t, tc.wantProj, proj, "space=%q id=%q → projectID", tc.space, tc.id)
 		assert.Equal(t, tc.wantTask, task, "space=%q id=%q → taskID", tc.space, tc.id)
 	}
