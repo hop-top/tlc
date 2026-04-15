@@ -39,6 +39,8 @@ The flow file defines a workflow with steps that reference tasks.
 Steps can be executed sequentially, in parallel, with branching logic,
 retries, and other control flow patterns.
 
+Use --dry-run to preview the execution plan without dispatching agents.
+
 Example flow file (flow.yaml):
   flow_id: "flow:example:1.0"
   name: "Example Flow"
@@ -59,11 +61,16 @@ Example flow file (flow.yaml):
 
 Usage:
   tlc flow run flow.yaml
+  tlc flow run flow.yaml --dry-run
   tlc flow run tlc://hop-top/tlc/flow:example:1.0
   tlc flow run tests/fixtures/parallel-flow.yaml`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flowRef := args[0]
+
+		if flowDryRun {
+			return dryRunFlow(cmd.OutOrStdout(), flowRef)
+		}
 
 		s, err := getStorage()
 		if err != nil {
