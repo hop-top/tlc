@@ -453,10 +453,28 @@ func TestShortenTaskRef(t *testing.T) {
 			want:             "hop-top/c12n#T-0013",
 		},
 		{
-			name:             "empty project context keeps as-is",
+			name:             "empty project context converts slash to hash form",
 			ref:              "hop-top/tlc/T-0013",
 			currentProjectID: "",
 			want:             "hop-top/tlc#T-0013",
+		},
+		{
+			name:             "http URL returned unchanged",
+			ref:              "https://github.com/org/repo/issues/42",
+			currentProjectID: "hop-top/tlc",
+			want:             "https://github.com/org/repo/issues/42",
+		},
+		{
+			name:             "non-task tail returned unchanged",
+			ref:              "hop-top/tlc/not-a-task",
+			currentProjectID: "hop-top/tlc",
+			want:             "hop-top/tlc/not-a-task",
+		},
+		{
+			name:             "custom URI scheme returned unchanged",
+			ref:              "myapp://some/resource",
+			currentProjectID: "hop-top/tlc",
+			want:             "myapp://some/resource",
 		},
 	}
 

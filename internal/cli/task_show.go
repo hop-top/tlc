@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -261,9 +262,13 @@ func renderTaskRelations(w io.Writer, blockedBy, blocking []relatedTaskSummary, 
 	}
 }
 
+// bareTaskIDRe matches bare task IDs like T-0013, GH-1, ABC-42.
+var bareTaskIDRe = regexp.MustCompile(`^[A-Z]+-\d+$`)
+
 // shortenTaskRef returns a display-friendly ref. Same-project refs are
 // shortened to the bare task ID (e.g. "T-0013"); cross-project refs
 // use the "project#T-NNNN" convention. Legacy task:// URIs are normalised.
+// Non-task refs (e.g. HTTP URLs) are returned unchanged.
 func shortenTaskRef(ref, currentProjectID string) string {
 	// Strip known URI schemes.
 	stripped := ref
@@ -274,6 +279,11 @@ func shortenTaskRef(ref, currentProjectID string) string {
 			stripped = strings.TrimPrefix(stripped, "/")
 			break
 		}
+	}
+
+	// Non-task URI schemes — return unchanged.
+	if strings.Contains(stripped, "://") {
+		return ref
 	}
 
 	// Bare task ID — already short.
@@ -292,6 +302,11 @@ func shortenTaskRef(ref, currentProjectID string) string {
 	}
 
 	if taskID == "" {
+		return ref
+	}
+
+	// Guard: only rewrite when tail looks like a task ID.
+	if !bareTaskIDRe.MatchString(taskID) {
 		return ref
 	}
 
