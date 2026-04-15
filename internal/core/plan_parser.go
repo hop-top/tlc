@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"hop.top/tlc/internal/uriutil"
 	"hop.top/uri"
 )
 
@@ -189,12 +190,12 @@ func parseTLCURIRef(s string) (BlockedByRef, error) {
 	// places the host in Space and the path (minus leading /) in
 	// ID. For "tlc://org/project/T-NNNN": Space=org, ID=project/T-NNNN.
 	// For "tlc:///T-NNNN": Space="", ID=T-NNNN.
-	projectID, taskID := splitURIProjectTask(u.Space, u.ID)
+	projectID, taskID := uriutil.SplitProjectTask(u.Space, u.ID)
 
 	if taskID == "" || !taskIDPattern.MatchString(taskID) {
 		return BlockedByRef{}, fmt.Errorf(
 			"blocked-by entry %q: missing or invalid task ID; "+
-				"expected tlc://<org>/<project>/<T-NNNN>",
+				"expected tlc://<org>/<project>/<T-NNNN> or tlc:///T-NNNN",
 			s,
 		)
 	}
@@ -212,20 +213,6 @@ func parseTLCURIRef(s string) (BlockedByRef, error) {
 	}, nil
 }
 
-// splitURIProjectTask derives (projectID, taskID) from the Space
-// and ID fields of a parsed hop.top/uri.URI. The task ID is always
-// the last slash-delimited segment; everything before it is the
-// project ID.
-func splitURIProjectTask(space, id string) (string, string) {
-	combined := id
-	if space != "" {
-		combined = space + "/" + id
-	}
-	if idx := strings.LastIndex(combined, "/"); idx >= 0 {
-		return combined[:idx], combined[idx+1:]
-	}
-	return "", combined
-}
 
 // UnmarshalYAML implements yaml.Unmarshaler so BlockedByRef can be
 // decoded from either a scalar int or a scalar string inside a

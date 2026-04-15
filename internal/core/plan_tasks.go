@@ -20,6 +20,13 @@ type IDGenerator interface {
 // resolvable.
 const metaKeyUnresolved = "blocked_by_unresolved"
 
+// metaKeyCrossProject is the task.Meta key for cross-project
+// blocked-by refs (e.g. "hop-top/tlc#T-0001"). These are stored
+// separately from cross-track unresolved refs so that
+// ResolvePendingCrossTrackRefs does not treat them as corrupted.
+// A dedicated cross-project resolver can process them later.
+const metaKeyCrossProject = "blocked_by_cross_project"
+
 // PlanIngestResult describes the outcome of a single
 // CreateTasksFromPlan call (phase 1).
 type PlanIngestResult struct {
@@ -141,6 +148,7 @@ func (s *TrackService) CreateTasksFromPlan(
 
 		var blockedBy []string
 		var taskUnresolved []string
+		var taskCrossProject []string
 		for _, ref := range spec.BlockedBy {
 			switch {
 			case ref.IsIndex():
@@ -170,9 +178,11 @@ func (s *TrackService) CreateTasksFromPlan(
 			case ref.CrossProject != nil:
 				// Cross-project refs are always deferred; the
 				// external project's DB is not available during
-				// phase 1 ingestion.
+				// phase 1 ingestion. Store under a separate meta
+				// key so ResolvePendingCrossTrackRefs doesn't
+				// treat them as corrupted cross-track entries.
 				raw := ref.Raw()
-				taskUnresolved = append(taskUnresolved, raw)
+				taskCrossProject = append(taskCrossProject, raw)
 				unresolved = append(unresolved, raw)
 			}
 		}
@@ -183,6 +193,9 @@ func (s *TrackService) CreateTasksFromPlan(
 		}
 		if len(taskUnresolved) > 0 {
 			meta[metaKeyUnresolved] = taskUnresolved
+		}
+		if len(taskCrossProject) > 0 {
+			meta[metaKeyCrossProject] = taskCrossProject
 		}
 
 		var assignee *string

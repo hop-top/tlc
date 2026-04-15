@@ -86,10 +86,9 @@ func TestBlockedByRef_Raw(t *testing.T) {
 
 func TestParseBlockedByRef_CrossProject(t *testing.T) {
 	tests := []struct {
-		input     string
-		wantProj  string
-		wantTask  string
-		wantIsIdx bool
+		input    string
+		wantProj string
+		wantTask string
 	}{
 		{
 			input:    "hop-top/c12n#T-0018",
@@ -108,10 +107,9 @@ func TestParseBlockedByRef_CrossProject(t *testing.T) {
 		},
 		{
 			// Local URI: tlc:///T-0018 → bare task ID
-			input:     "tlc:///T-0018",
-			wantProj:  "",
-			wantTask:  "T-0018",
-			wantIsIdx: false,
+			input:    "tlc:///T-0018",
+			wantProj: "",
+			wantTask: "T-0018",
 		},
 	}
 	for _, tt := range tests {
