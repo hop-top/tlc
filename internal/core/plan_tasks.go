@@ -115,6 +115,10 @@ func (s *TrackService) CreateTasksFromPlan(
 						i, spec.Title, err,
 					)
 				}
+			case ref.CrossProject != nil:
+				// Cross-project refs are always deferred during
+				// phase 1 — resolution requires the external
+				// project's DB, which may not be available.
 			}
 		}
 	}
@@ -163,6 +167,13 @@ func (s *TrackService) CreateTasksFromPlan(
 					blockedBy = append(blockedBy, id)
 					resolved[ref.Raw()] = id
 				}
+			case ref.CrossProject != nil:
+				// Cross-project refs are always deferred; the
+				// external project's DB is not available during
+				// phase 1 ingestion.
+				raw := ref.Raw()
+				taskUnresolved = append(taskUnresolved, raw)
+				unresolved = append(unresolved, raw)
 			}
 		}
 
