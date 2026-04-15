@@ -1,0 +1,15 @@
+name: production_steps_only
+provider: filesystem
+evaluators:
+  - name: step_status
+    step: deploy-production
+    expected: SUCCEEDED
+  - name: step_status
+    step: verify-production
+    expected: SUCCEEDED
+  - name: step_status
+    step: deploy-staging
+    expected: SKIPPED
+  - name: step_status
+    step: verify-staging
+    expected: SKIPPED
