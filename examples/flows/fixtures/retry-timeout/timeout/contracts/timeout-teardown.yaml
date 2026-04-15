@@ -1,0 +1,18 @@
+name: timeout_triggers_teardown
+provider: filesystem
+evaluators:
+  - name: step_status
+    step: setup
+    expected: SUCCEEDED
+  - name: step_status
+    step: deploy-service
+    expected: SUCCEEDED
+  - name: step_status
+    step: health-check
+    expected: FAILED
+  - name: step_failure_reason
+    step: health-check
+    expected: timeout
+  - name: step_status
+    step: teardown
+    expected: SUCCEEDED

@@ -1,0 +1,8 @@
+name: timeout
+description: >
+  Deploy succeeds but health-check exceeds its 5s timeout and is killed.
+  Flow continues to teardown (on_failure: continue + run_always).
+  Exit 0 because on_failure=continue prevents hard failure.
+expected_exit: 0
+inputs:
+  service_url: https://staging.example.com
