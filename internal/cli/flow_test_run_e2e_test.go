@@ -69,8 +69,6 @@ steps:
 // directory layout for `flow test` consumption: fixtures/<name>/
 // happy-path/contracts/*.yaml exist on disk.
 func TestFlowTestRun_ContractFixtureStructure(t *testing.T) {
-	t.Parallel()
-
 	fixtureBase := filepath.Join(
 		"..", "..", "examples", "flows", "fixtures",
 		"test-run", "happy-path",

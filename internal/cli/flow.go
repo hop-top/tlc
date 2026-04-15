@@ -68,10 +68,6 @@ Usage:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flowRef := args[0]
 
-		if flowDryRun {
-			return dryRunFlow(cmd.OutOrStdout(), flowRef)
-		}
-
 		s, err := getStorage()
 		if err != nil {
 			return err
@@ -86,6 +82,10 @@ Usage:
 			return err
 		}
 		flow := res.Flow
+
+		if flowDryRun {
+			return dryRunFlow(cmd.OutOrStdout(), flow)
+		}
 
 		executor := core.NewFlowExecutor(s, s).WithEvaKey(os.Getenv("EVA_KEY"))
 		if runner := buildFlowAgentRunner(); runner != nil {

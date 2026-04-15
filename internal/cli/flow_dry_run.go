@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 
@@ -12,20 +11,9 @@ import (
 
 var flowDryRun bool
 
-// dryRunFlow parses, validates, and prints the execution plan for a flow
-// without opening storage or dispatching agents.
-func dryRunFlow(out io.Writer, filePath string) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("cannot open %s: %w", filePath, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	flow, err := core.ParseFlow(f, filePath)
-	if err != nil {
-		return err
-	}
-
+// dryRunFlow validates and prints the execution plan for a parsed flow
+// without dispatching agents.
+func dryRunFlow(out io.Writer, flow *core.Flow) error {
 	order, err := flowTopoSort(flow)
 	if err != nil {
 		return err
@@ -65,10 +53,10 @@ func flowTopoSort(flow *core.Flow) ([]string, error) {
 	for id := range flow.Steps {
 		inDegree[id] = 0
 	}
-	for _, step := range flow.Steps {
+	for id, step := range flow.Steps {
 		for _, dep := range step.DependsOn {
-			inDegree[step.ID]++
-			_ = dep // edge from dep → step.ID
+			inDegree[id]++
+			_ = dep // edge from dep → id
 		}
 	}
 

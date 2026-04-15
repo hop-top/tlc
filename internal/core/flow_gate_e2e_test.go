@@ -31,9 +31,15 @@ func TestFlowGate_E2E_Pass(t *testing.T) {
 	ctx := context.Background()
 
 	// Pre-create tasks for each step.
-	_ = repo.CreateTask(ctx, &Task{ID: "T-gate-produce", Title: "Produce", Status: StatusTodo})
-	_ = repo.CreateTask(ctx, &Task{ID: "T-gate-check", Title: "Gate check", Status: StatusTodo})
-	_ = repo.CreateTask(ctx, &Task{ID: "T-gate-final", Title: "Final", Status: StatusTodo})
+	if err := repo.CreateTask(ctx, &Task{ID: "T-gate-produce", Title: "Produce", Status: StatusTodo}); err != nil {
+		t.Fatalf("CreateTask T-gate-produce: %v", err)
+	}
+	if err := repo.CreateTask(ctx, &Task{ID: "T-gate-check", Title: "Gate check", Status: StatusTodo}); err != nil {
+		t.Fatalf("CreateTask T-gate-check: %v", err)
+	}
+	if err := repo.CreateTask(ctx, &Task{ID: "T-gate-final", Title: "Final", Status: StatusTodo}); err != nil {
+		t.Fatalf("CreateTask T-gate-final: %v", err)
+	}
 
 	flow := &Flow{
 		ID:        "flow:gate-checkpoint:1.0",
@@ -78,7 +84,13 @@ func TestFlowGate_E2E_Pass(t *testing.T) {
 
 	// All tasks should be DONE.
 	for _, tid := range []string{"T-gate-produce", "T-gate-check", "T-gate-final"} {
-		task, _ := repo.GetTask(ctx, tid)
+		task, err := repo.GetTask(ctx, tid)
+		if err != nil {
+			t.Fatalf("GetTask %s: %v", tid, err)
+		}
+		if task == nil {
+			t.Fatalf("task not found: %s", tid)
+		}
 		if task.Status != StatusDone {
 			t.Errorf("task %s: expected DONE, got %s", tid, task.Status)
 		}
@@ -127,9 +139,15 @@ func TestFlowGate_E2E_Fail(t *testing.T) {
 	logRepo := NewMockLogRepository()
 	ctx := context.Background()
 
-	_ = repo.CreateTask(ctx, &Task{ID: "T-gf-produce", Title: "Produce", Status: StatusTodo})
-	_ = repo.CreateTask(ctx, &Task{ID: "T-gf-check", Title: "Gate check", Status: StatusTodo})
-	_ = repo.CreateTask(ctx, &Task{ID: "T-gf-final", Title: "Final", Status: StatusTodo})
+	if err := repo.CreateTask(ctx, &Task{ID: "T-gf-produce", Title: "Produce", Status: StatusTodo}); err != nil {
+		t.Fatalf("CreateTask T-gf-produce: %v", err)
+	}
+	if err := repo.CreateTask(ctx, &Task{ID: "T-gf-check", Title: "Gate check", Status: StatusTodo}); err != nil {
+		t.Fatalf("CreateTask T-gf-check: %v", err)
+	}
+	if err := repo.CreateTask(ctx, &Task{ID: "T-gf-final", Title: "Final", Status: StatusTodo}); err != nil {
+		t.Fatalf("CreateTask T-gf-final: %v", err)
+	}
 
 	flow := &Flow{
 		ID:        "flow:gate-checkpoint:1.0",
@@ -183,13 +201,25 @@ func TestFlowGate_E2E_Fail(t *testing.T) {
 	}
 
 	// Produce step should be DONE (it ran before the gate).
-	produce, _ := repo.GetTask(ctx, "T-gf-produce")
+	produce, err := repo.GetTask(ctx, "T-gf-produce")
+	if err != nil {
+		t.Fatalf("GetTask T-gf-produce: %v", err)
+	}
+	if produce == nil {
+		t.Fatal("task not found: T-gf-produce")
+	}
 	if produce.Status != StatusDone {
 		t.Errorf("produce task: expected DONE, got %s", produce.Status)
 	}
 
 	// Final step should NOT be DONE (blocked by failed gate).
-	final, _ := repo.GetTask(ctx, "T-gf-final")
+	final, err := repo.GetTask(ctx, "T-gf-final")
+	if err != nil {
+		t.Fatalf("GetTask T-gf-final: %v", err)
+	}
+	if final == nil {
+		t.Fatal("task not found: T-gf-final")
+	}
 	if final.Status == StatusDone {
 		t.Error("final task should not have completed after gate failure")
 	}
