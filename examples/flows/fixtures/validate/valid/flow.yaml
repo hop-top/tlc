@@ -1,0 +1,41 @@
+flow_id: "flow:validate-test:1.0"
+name: "Validate Test Flow"
+version: "1.0"
+description: "A structurally valid 4-step flow used by validate e2e tests"
+entry_step: "step-a"
+
+steps:
+  step-a:
+    step_id: "step-a"
+    type: "task"
+    title: "First step"
+    task_template:
+      title: "Do step A"
+      description: "Entry point"
+
+  step-b:
+    step_id: "step-b"
+    type: "task"
+    title: "Second step"
+    depends_on: ["step-a"]
+    task_template:
+      title: "Do step B"
+      description: "Depends on A"
+
+  step-c:
+    step_id: "step-c"
+    type: "task"
+    title: "Third step"
+    depends_on: ["step-a"]
+    task_template:
+      title: "Do step C"
+      description: "Also depends on A"
+
+  step-d:
+    step_id: "step-d"
+    type: "task"
+    title: "Fourth step"
+    depends_on: ["step-b", "step-c"]
+    task_template:
+      title: "Do step D"
+      description: "Depends on B and C"

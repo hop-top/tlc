@@ -20,8 +20,12 @@ User stories organized by feature area, persona, and priority. Each story define
 #### External Sync (010-019)
 - [010 - GitHub Sync](010-github-sync.md) — Bidirectional GitHub issue sync
 
-#### Flow Orchestration (020-029)
+#### Flow Orchestration (020-029, 077-079)
 - [020 - Flow Execution](020-flow-execution.md) — Orchestrate multi-task workflows
+- [077 - Conditional Branching](077-conditional-branching.md) — Input-driven step selection
+- [078 - Flow Composition](078-flow-composition.md) — Sub-flow invocation
+- [079 - Retry Timeout Error Handling](079-retry-timeout-error-handling.md)
+  — Retry, timeout, teardown
 
 #### TUI Interface (030-039)
 - [030 - TUI Navigation](030-tui-navigation.md) — Terminal UI interaction patterns

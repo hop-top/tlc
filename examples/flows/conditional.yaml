@@ -1,0 +1,108 @@
+flow_id: "flow:conditional:1.0"
+name: "Conditional Deploy"
+version: "1.0"
+description: |
+  Demonstrates conditional branching. One flow handles both staging and
+  production deploys based on the `target` input. Steps with unmet
+  conditions are skipped entirely (status SKIPPED, not FAILED).
+entry_step: "validate-config"
+
+config:
+  category: "deployment"
+  triggers:
+    - "deploy staging"
+    - "deploy production"
+
+  inputs:
+    target:
+      description: "Deploy target: staging or production"
+      required: true
+
+  procedure: |
+    ## Conditional Deploy
+
+    Single flow definition for staging and production. The `target` input
+    selects which branch executes; the other branch is skipped.
+
+    ### Flow graph
+
+    ```
+    validate-config
+        ├── deploy-staging     (condition: target == staging)
+        │     └── verify-staging
+        └── deploy-production  (condition: target == production)
+              └── verify-production
+    ```
+
+steps:
+
+  validate-config:
+    step_id: "validate-config"
+    type: "task"
+    title: "Validate deployment configuration"
+    task_template:
+      title: "Validate deploy config"
+      description: |
+        Check that required config files exist and environment
+        variables are set for the selected target.
+      requirements:
+        capabilities: ["config-validation"]
+        tools: ["cat", "env"]
+
+  deploy-staging:
+    step_id: "deploy-staging"
+    type: "task"
+    title: "Deploy to staging"
+    depends_on: ["validate-config"]
+    condition: "inputs.target == 'staging'"
+    task_template:
+      title: "Deploy to staging environment"
+      description: |
+        Push build artifacts to the staging environment.
+      requirements:
+        capabilities: ["deployment"]
+        tools: ["wrangler", "curl"]
+
+  verify-staging:
+    step_id: "verify-staging"
+    type: "task"
+    title: "Verify staging deployment"
+    depends_on: ["deploy-staging"]
+    condition: "inputs.target == 'staging'"
+    task_template:
+      title: "Run smoke tests on staging"
+      description: |
+        Hit staging health endpoint, verify version matches.
+      requirements:
+        capabilities: ["verification"]
+        tools: ["curl"]
+
+  deploy-production:
+    step_id: "deploy-production"
+    type: "task"
+    title: "Deploy to production"
+    depends_on: ["validate-config"]
+    condition: "inputs.target == 'production'"
+    task_template:
+      title: "Deploy to production environment"
+      description: |
+        Push build artifacts to the production environment with
+        canary rollout.
+      requirements:
+        capabilities: ["deployment"]
+        tools: ["wrangler", "curl"]
+
+  verify-production:
+    step_id: "verify-production"
+    type: "task"
+    title: "Verify production deployment"
+    depends_on: ["deploy-production"]
+    condition: "inputs.target == 'production'"
+    task_template:
+      title: "Run smoke tests on production"
+      description: |
+        Hit production health endpoint, verify version matches,
+        check error rates.
+      requirements:
+        capabilities: ["verification"]
+        tools: ["curl", "datadog"]

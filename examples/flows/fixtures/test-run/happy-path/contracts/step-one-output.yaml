@@ -1,0 +1,9 @@
+name: step_one_output_valid
+provider: filesystem
+evaluators:
+  - name: contains
+    substring: "step-one"
+    mode: binary
+  - name: regex
+    pattern: 'task.*created|invoked successfully'
+    mode: binary

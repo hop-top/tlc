@@ -1,0 +1,72 @@
+flow_id: "flow:composition:1.0"
+name: "Composition — Build Pipeline"
+version: "1.0"
+description: |
+  Demonstrates flow composition. A parent flow invokes a child flow
+  (lint + test) as a single step, then uses its outputs in subsequent
+  steps. Proves that flows can be reusable building blocks.
+entry_step: "checkout"
+
+config:
+  category: "ci"
+  triggers:
+    - "build pipeline"
+    - "ci run"
+
+  inputs:
+    repo:
+      description: "Repository path"
+      required: true
+
+  procedure: |
+    ## Build Pipeline (Composition)
+
+    Three-phase pipeline:
+    1. Checkout source
+    2. Run child flow (lint + test)
+    3. Report results using child flow outputs
+
+    ### Flow graph
+
+    ```
+    checkout
+        └── quality-gate  (type: flow → composition-child)
+              └── report-results
+    ```
+
+steps:
+
+  checkout:
+    step_id: "checkout"
+    type: "task"
+    title: "Checkout source code"
+    task_template:
+      title: "Checkout repository"
+      description: |
+        Clone or update the repository to the working directory.
+      requirements:
+        capabilities: ["git"]
+        tools: ["git"]
+
+  quality-gate:
+    step_id: "quality-gate"
+    type: "flow"
+    title: "Run quality gate (child flow)"
+    depends_on: ["checkout"]
+    flow_ref: "composition-child.yaml"
+    inputs:
+      working_dir: "{{ inputs.repo }}"
+
+  report-results:
+    step_id: "report-results"
+    type: "task"
+    title: "Report pipeline results"
+    depends_on: ["quality-gate"]
+    task_template:
+      title: "Generate pipeline report"
+      description: |
+        Summarize pipeline results using child flow outputs.
+        Read test report from: {{ steps.quality-gate.outputs.test_report }}
+      requirements:
+        capabilities: ["reporting"]
+        tools: ["echo"]

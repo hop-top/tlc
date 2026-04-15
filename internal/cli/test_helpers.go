@@ -385,6 +385,7 @@ func resetTaskFlags() {
 // flags. Without this, --var values (and --by) leak between tests because
 // FlowRunCmd / FlowInvokeCmd are package globals shared across test commands.
 func resetFlowFlags() {
+	flowDryRun = false
 	flowRunBy = ""
 	flowRunVars = nil
 	flowStatusAll = false

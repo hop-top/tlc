@@ -1,0 +1,49 @@
+flow_id: "flow:gate-checkpoint:1.0"
+name: "Gate Checkpoint"
+version: "1.0"
+description: "Three-step flow with an EVA quality gate between producer and consumer"
+entry_step: "produce-output"
+agent: claude
+
+config:
+  category: "quality-assurance"
+  triggers:
+    - "quality gate needed"
+    - "checkpoint before proceed"
+
+steps:
+  produce-output:
+    step_id: "produce-output"
+    type: "task"
+    title: "Produce output for gate evaluation"
+    task_template:
+      title: "Generate artifact"
+      description: |
+        Produce an output artifact that will be evaluated by the
+        quality-check gate before the flow proceeds.
+
+  gated-step:
+    step_id: "gated-step"
+    type: "task"
+    title: "Quality gate checkpoint"
+    depends_on: ["produce-output"]
+    gate:
+      contract: "quality-check"
+      eva_url: "{{eva_url}}"
+    task_template:
+      title: "Pass quality gate"
+      description: |
+        This step is gated by the quality-check EVA contract.
+        The step output must satisfy the contract before the
+        flow can continue to downstream steps.
+
+  final-step:
+    step_id: "final-step"
+    type: "task"
+    title: "Post-gate work"
+    depends_on: ["gated-step"]
+    task_template:
+      title: "Continue after gate"
+      description: |
+        This step only executes if the quality gate passed.
+        If the gate rejected the output, this step is never reached.

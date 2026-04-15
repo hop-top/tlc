@@ -1,0 +1,22 @@
+flow_id: "flow:validate-cycle:1.0"
+name: "Cycle Flow"
+version: "1.0"
+description: "Flow with a dependency cycle for validate e2e tests"
+entry_step: "step-a"
+
+steps:
+  step-a:
+    step_id: "step-a"
+    type: "task"
+    title: "Step A"
+    depends_on: ["step-b"]
+    task_template:
+      title: "Do A"
+
+  step-b:
+    step_id: "step-b"
+    type: "task"
+    title: "Step B"
+    depends_on: ["step-a"]
+    task_template:
+      title: "Do B"
