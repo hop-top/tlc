@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	charm.land/bubbles/v2 v2.1.0
-	charm.land/bubbletea/v2 v2.0.5
+	charm.land/bubbletea/v2 v2.0.6
 	charm.land/glamour/v2 v2.0.0
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.3
@@ -27,10 +27,10 @@ require (
 	golang.org/x/term v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/hdl v0.0.1-alpha.1
-	hop.top/kit v0.3.1-alpha.1
+	hop.top/kit v0.3.2-patch.3
 	hop.top/uri v0.0.1-alpha.1
 	hop.top/xrr v0.1.0-alpha.3
-	modernc.org/sqlite v1.48.2
+	modernc.org/sqlite v1.49.1
 )
 
 require (
@@ -41,7 +41,7 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20260414011438-8c69ec811b1e // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20260416155717-489999b90468 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260413165052-6921c759c913 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
@@ -52,7 +52,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -77,7 +77,7 @@ require (
 	github.com/openai/openai-go v1.12.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
