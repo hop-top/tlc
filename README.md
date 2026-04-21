@@ -4,6 +4,15 @@
     <h3><em>Task </em></h3>
 </div>
 
+> [!WARNING]
+> **🚧 Do Not Use — History Will Be Rewritten 🚧**
+>
+> This repo is undergoing major restructuring as we selectively
+> open-source internal tools built at
+> [Idea Crafters LLC](https://ideacrafters.com). Git history **will be
+> force-pushed and rewritten** multiple times. Do not fork, clone, or
+> depend on this repo in any capacity until we tag a stable release.
+
 <p align="center">
     <strong>An open source toolkit that allows you to focus on product scenarios and predictable outcomes instead of vibe coding every piece from scratch.</strong>
 </p>
