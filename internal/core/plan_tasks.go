@@ -92,12 +92,20 @@ func (s *TrackService) CreateTasksFromPlan(
 		for _, ref := range spec.BlockedBy {
 			switch {
 			case ref.IsIndex():
-				if ref.Index < 0 || ref.Index >= i {
+				if ref.Index < 0 || ref.Index >= len(specs) {
 					return nil, fmt.Errorf(
 						"plan task %d (%q): blocked-by index %d out "+
 							"of range (must be 0..%d); fix the plan "+
 							"frontmatter",
-						i, spec.Title, ref.Index, i-1,
+						i, spec.Title, ref.Index, len(specs)-1,
+					)
+				}
+				if ref.Index == i {
+					return nil, fmt.Errorf(
+						"plan task %d (%q): blocked-by index %d "+
+							"is a self-reference; tasks cannot block "+
+							"themselves",
+						i, spec.Title, ref.Index,
 					)
 				}
 			case ref.TaskID != "":
@@ -130,21 +138,28 @@ func (s *TrackService) CreateTasksFromPlan(
 		}
 	}
 
+	// --- Pre-allocate IDs --------------------------------------------
+	// Generate all IDs upfront so forward blocked-by refs (index > i)
+	// can be resolved during task creation without an extra pass.
+	createdIDs := make([]string, len(specs))
+	for i := range specs {
+		seq, err := idGen.GetNextSequenceID(ctx, projectID)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"plan task %d (%q): failed to generate ID; %w",
+				i, specs[i].Title, err,
+			)
+		}
+		createdIDs[i] = fmt.Sprintf("T-%04d", seq)
+	}
+
 	// --- Create tasks + resolve refs ---------------------------------
-	createdIDs := make([]string, 0, len(specs))
 	resolved := make(map[string]string)
 	unresolved := make([]string, 0)
 	now := time.Now().UTC()
 
 	for i, spec := range specs {
-		seq, err := idGen.GetNextSequenceID(ctx, projectID)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"plan task %d (%q): failed to generate ID; %w",
-				i, spec.Title, err,
-			)
-		}
-		taskID := fmt.Sprintf("T-%04d", seq)
+		taskID := createdIDs[i]
 
 		var blockedBy []string
 		var taskUnresolved []string
@@ -234,8 +249,6 @@ func (s *TrackService) CreateTasksFromPlan(
 				i, spec.Title, err,
 			)
 		}
-
-		createdIDs = append(createdIDs, taskID)
 	}
 
 	// Persist plan mapping on the track: index → task ID.
