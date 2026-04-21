@@ -1,0 +1,7 @@
+xrr: "1"
+adapter: exec
+fingerprint: f47f89ab
+recorded_at: "2026-04-02T08:34:55Z"
+payload:
+    argv:
+        - "-20"

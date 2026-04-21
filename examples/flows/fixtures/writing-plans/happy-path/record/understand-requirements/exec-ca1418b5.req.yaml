@@ -1,0 +1,14 @@
+xrr: "1"
+adapter: exec
+fingerprint: ca1418b5
+recorded_at: "2026-04-02T08:36:20Z"
+payload:
+    argv:
+        - "-20"
+    stdin: |
+        89:check "flow test"        $TLC flow test
+        92:echo "-- flow test flags --"
+        93:check_flag "flow test --record"        $TLC flow test --record
+        94:check_flag "flow test --passthrough"   $TLC flow test --passthrough
+        95:check_flag "flow test --keep-sandbox"  $TLC flow test --keep-sandbox
+        96:check_flag "flow test --steps"         $TLC flow test --steps

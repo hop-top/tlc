@@ -21,6 +21,7 @@ Each flow conforms to `task-flow-spec-0.1.md`.
 | [brainstorming.yaml](brainstorming.yaml) | Divergent idea generation | — |
 | [finishing-development-branch.yaml](finishing-development-branch.yaml) | Branch completion + integration | `verify-completion` |
 | [pr-review-loop.yaml](pr-review-loop.yaml) | Automated reviewer→fixer loop until PR approved | `load-pr-context` |
+| [track-plan-review.yaml](track-plan-review.yaml) | Pre-implementation plan review: gaps, anti-patterns, security, conflicts | `load-track` |
 
 ### Validated variants (`-validated.yaml`)
 

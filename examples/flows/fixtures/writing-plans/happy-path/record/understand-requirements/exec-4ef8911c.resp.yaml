@@ -1,0 +1,18 @@
+xrr: "1"
+adapter: exec
+fingerprint: 4ef8911c
+recorded_at: "2026-04-02T08:32:00Z"
+payload:
+    stdout: |
+        2026-01-16-tui-refactoring-design.md
+        2026-01-17-documentation-review-report.md
+        2026-01-17-flow-assignee-plugin-system-design.md
+        2026-01-17-flows-and-assignees-design.md
+        2026-01-17-plugin-infrastructure-phase1.md
+        2026-02-19-event-hook-agent-system.md
+        2026-03-07-summary-format-flag.md
+        2026-03-08-workspace-model-design.md
+        2026-03-30-batch-task-operations.md
+        2026-04-01-flow-test-subcommand.md
+        2026-04-02-flow-test-subcommand-v2.md
+    exit_code: 0

@@ -1,0 +1,45 @@
+xrr: "1"
+adapter: exec
+fingerprint: 4689a315
+recorded_at: "2026-04-02T08:31:57Z"
+payload:
+    stdout: |
+        bugs
+        config-discovery.md
+        dev-workflow-conventions-0.1.md
+        development-setup.md
+        docker.md
+        e2e-taskflow-0.1.md
+        editor-setup.md
+        flows-and-assignees.md
+        GETTING-STARTED.md
+        git-branch-convention-0.1.md
+        git-commit-convention-0.1.md
+        git-worktree-convention-0.1.md
+        github-label-convention-0.1.md
+        github-milestone-convention-0.1.md
+        glossary-0.1.md
+        multi-clone-setup.md
+        personas
+        plans
+        project-detection.md
+        README.md
+        research
+        spec-breakdown-design.md
+        stories
+        sync-architecture-0.1.md
+        task-collab-spec-0.1.md
+        task-crud-spec-0.1.md
+        task-exec-spec-0.1.md
+        task-flow-spec-0.1-dev.md
+        task-flow-spec-0.1.md
+        task-line-spec-0.1.md
+        task-log-spec-0.1.md
+        tlc-auth-spec-0.1.md
+        tlc-cli-spec-0.1.md
+        tlc-config-spec-0.1.md
+        tlc-plugin-spec-0.1.md
+        tlc-query-spec-0.1.md
+        tlc-tui-spec-0.1.md
+        tlc-uri-spec-0.1.md
+    exit_code: 0
