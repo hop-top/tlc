@@ -214,6 +214,7 @@ func resetTestDB(t *testing.T) string {
 		cfgFile = ""
 		_ = os.Chdir(origDir) //nolint:errcheck // test cleanup
 		core.ResetDetectionCache()
+		ResetSynonymCache()
 		_ = os.RemoveAll(tmpDir)
 	})
 
@@ -258,12 +259,14 @@ func resetTestEnvWithScheduling(t *testing.T, extraYAML string) (string, string)
 		cfgFile = ""
 		_ = os.Chdir(origDir)
 		core.ResetDetectionCache()
+		ResetSynonymCache()
 		_ = os.RemoveAll(tmpDir)
 	})
 
 	cfgPath := filepath.Join(tmpDir, ".tlc.yaml")
 	todoPath := filepath.Join(tmpDir, "todo.txt")
-	cfgContent := "storage:\n  backend: sqlite\n  db_path: " + dbPath + "\n" + extraYAML + "\n"
+	// extraYAML is appended inside the task: block (must be indented 2+ spaces).
+	cfgContent := "storage:\n  backend: sqlite\n  db_path: " + dbPath + "\ntask:\n  todo_file: " + todoPath + "\n" + extraYAML + "\n"
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
 	}

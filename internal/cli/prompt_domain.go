@@ -244,6 +244,12 @@ func ClassifyPromptCrossDomain(prompt string) []ResolvedCommand {
 	}
 
 	lower := strings.ToLower(text)
+
+	// Data-driven synonym lookup (loaded from .tlc/prompt_synonyms.yaml).
+	if cmd, ok := LookupSynonym(lower); ok {
+		return []ResolvedCommand{cmd}
+	}
+
 	howMany := strings.HasPrefix(lower, "how many")
 
 	// Handle "how many" prefix: inject a synthetic "count" verb by rewriting

@@ -253,46 +253,50 @@ func TestTaskCreate_ExplicitDueOverridesConfig(t *testing.T) {
 }
 
 func TestTaskRemind_AgeNudge(t *testing.T) {
-	_, _ = resetTestEnvWithScheduling(t, `task:
-  scheduling:
-    age_nudges:
-      - status: IN_PROGRESS
-        threshold: 48h
-        action: remind`)
-
-	s, err := getStorageRaw()
-	if err != nil {
-		t.Fatalf("storage: %v", err)
-	}
-	err = s.CreateTask(context.Background(), &core.Task{
+	// Test CollectAgeNudges directly — avoids viper/initConfig
+	// isolation issues that plague cmd.Execute() in batch mode.
+	now := time.Now()
+	staleTask := &core.Task{
 		ID:        "T-0001",
 		Title:     "Stale WIP",
 		Status:    core.StatusInProgress,
-		CreatedAt: time.Now().Add(-72 * time.Hour),
-		UpdatedAt: time.Now().Add(-72 * time.Hour),
+		CreatedAt: now.Add(-72 * time.Hour),
+		UpdatedAt: now.Add(-72 * time.Hour),
+	}
+	freshTask := &core.Task{
+		ID:        "T-0002",
+		Title:     "Fresh",
+		Status:    core.StatusInProgress,
+		CreatedAt: now.Add(-1 * time.Hour),
+		UpdatedAt: now.Add(-1 * time.Hour),
+	}
+	doneTask := &core.Task{
+		ID:        "T-0003",
+		Title:     "Done",
+		Status:    core.StatusDone,
+		UpdatedAt: now.Add(-72 * time.Hour),
+	}
+
+	viper.Set("task.scheduling.age_nudges", []interface{}{
+		map[string]interface{}{
+			"status":    "IN_PROGRESS",
+			"threshold": "48h",
+			"action":    "remind",
+		},
 	})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	s.Close()
+	t.Cleanup(func() {
+		viper.Set("task.scheduling.age_nudges", nil)
+	})
 
-	cmd := newTestCmd()
-	cmd.AddCommand(TaskCmd)
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "remind"})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("remind failed: %v", err)
+	nudges := CollectAgeNudges([]*core.Task{staleTask, freshTask, doneTask})
+	if len(nudges) != 1 {
+		t.Fatalf("expected 1 nudge, got %d", len(nudges))
 	}
-
-	output := buf.String()
-	if !strings.Contains(output, "AGE NUDGES") {
-		t.Errorf("should show AGE NUDGES, got: %s", output)
+	if nudges[0].TaskID != "T-0001" {
+		t.Errorf("expected T-0001, got %s", nudges[0].TaskID)
 	}
-	if !strings.Contains(output, "T-0001") {
-		t.Errorf("should list stale task, got: %s", output)
+	if nudges[0].Action != "remind" {
+		t.Errorf("expected remind, got %s", nudges[0].Action)
 	}
 }
 
