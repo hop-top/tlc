@@ -239,6 +239,47 @@ func resetTestDB(t *testing.T) string {
 	return dbPath
 }
 
+// resetTestEnvWithScheduling is like resetTestDB but appends extra
+// YAML (scheduling config) to the test config file so it survives
+// initConfig during cmd.Execute().
+func resetTestEnvWithScheduling(t *testing.T, extraYAML string) (string, string) {
+	t.Helper()
+	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(tmpDir, "test.sqlite")
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		cfgFile = ""
+		_ = os.Chdir(origDir)
+		core.ResetDetectionCache()
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	cfgPath := filepath.Join(tmpDir, ".tlc.yaml")
+	todoPath := filepath.Join(tmpDir, "todo.txt")
+	cfgContent := "storage:\n  backend: sqlite\n  db_path: " + dbPath + "\n" + extraYAML + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	cfgFile = cfgPath
+
+	viper.Reset()
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("task.todo_file", todoPath)
+	viper.Set("storage.db_path", dbPath)
+	dbSyncOnce = sync.Once{}
+	touchOnce = sync.Once{}
+	core.ResetDetectionCache()
+	resetTaskFlags()
+	return tmpDir, dbPath
+}
+
 var (
 	testMu sync.Mutex
 )

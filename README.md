@@ -219,6 +219,13 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Clear blocked: `tlc task update T-0042 --unblock`
 - Set stale timeout: `tlc task update T-0042 --timeout 2h`
 - Create with timeout: `tlc task create "Task title" --timeout 4h`
+- Create with due date: `tlc task create "Task title" --due tomorrow`
+- Create with reminder: `tlc task create "Ship v2" --due "in 3d" --remind-every 1h`
+- Suppress auto-remind: `tlc task create "Review" --due friday --no-auto-remind`
+- Update due date: `tlc task update T-0042 --due "2025-05-01"`
+- Clear due date: `tlc task update T-0042 --due -`
+- View reminders: `tlc task remind` (upcoming + overdue)
+- Check overdue: `tlc task remind --check` (exits 1 if overdue)
 - Complete: `tlc task complete T-0042`
 - Assign: `tlc task assign T-0042 codex`
 - Claim: `tlc task claim T-0042`
@@ -356,6 +363,69 @@ Per-task timeout via CLI:
 tlc task update T-0042 --timeout 2h
 tlc task create "Design API schema" --timeout 4h
 ```
+
+### Due Dates & Reminders
+
+Set deadlines and reminders on tasks:
+
+```bash
+# Due date (flexible parsing: "tomorrow", "in 3d", "+2w", "friday", ISO 8601)
+tlc task create "Ship v2" --due "in 3 days"
+tlc task update T-0042 --due friday
+tlc task update T-0042 --due -                    # clear due date
+
+# One-shot reminder
+tlc task create "Review PR" --remind-at "2025-05-01T14:00:00Z"
+
+# Recurring reminder
+tlc task create "Check CI" --remind-every 1h
+
+# Auto-remind: 12h before due (on by default)
+tlc task create "Release" --due "2025-05-01" --no-auto-remind  # suppress
+
+# View upcoming + overdue
+tlc task remind
+
+# Scriptable overdue check (exit 1 if any overdue)
+tlc task remind --check
+```
+
+Due dates appear in `task list` (Due column) and `task show` (overdue
+indicator). Overdue tasks are prefixed with `!` in list output.
+
+### Auto-Scheduling by Priority
+
+Configure automatic due dates and reminders per priority level in
+`.tlc/config.yaml`:
+
+```yaml
+task:
+  scheduling:
+    by_priority:
+      P0:
+        due: 24h
+        remind_every: 2h
+      P1:
+        due: 72h
+        remind_every: 12h
+      P2:
+        due: 168h
+        remind_every: 24h
+    age_nudges:
+      - status: IN_PROGRESS
+        threshold: 48h
+        action: remind
+      - status: TODO
+        threshold: 168h
+        action: remind
+```
+
+**Priority defaults** apply at task creation — if `--due` is not
+explicitly set and the task has a priority, the configured duration
+is added to `created_at`. Explicit `--due` always takes precedence.
+
+**Age nudges** trigger in `tlc task remind` for tasks without
+explicit due dates. Surfaced as "AGE NUDGES" section.
 
 ### Workspaces
 

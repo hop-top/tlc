@@ -86,6 +86,16 @@ var (
 	taskTrack       string
 	taskListTrack   string
 	taskUpdateTrack string
+
+	taskDue          string
+	taskRemindAt     string
+	taskRemindEvery  string
+	taskNoAutoRemind bool
+
+	taskUpdateDue          string
+	taskUpdateRemindAt     string
+	taskUpdateRemindEvery  string
+	taskUpdateNoAutoRemind bool
 )
 
 // appendNote appends a note to the task's description, separated by a newline.

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v69/github"
 )
@@ -48,6 +50,27 @@ func withLabels(names ...string) func(*github.Issue) {
 	}
 }
 
+func withMilestone(title string, dueOn *time.Time) func(*github.Issue) {
+	return func(i *github.Issue) {
+		ms := &github.Milestone{Title: &title}
+		if dueOn != nil {
+			ts := github.Timestamp{Time: *dueOn}
+			ms.DueOn = &ts
+		}
+		i.Milestone = ms
+	}
+}
+
+func timePtr(t time.Time) *time.Time { return &t }
+
+func mustDate(s string) time.Time {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
 // --- MapGitHubIssueToTask ---
 
 func TestMapGitHubIssueToTask(t *testing.T) {
@@ -60,6 +83,7 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 		wantBlocked   *string
 		wantTags      []string
 		wantBlockedBy []string // Meta["blocked_by"]
+		wantDueAt     *time.Time
 	}{
 		{
 			name:       "open issue → TODO",
@@ -133,6 +157,36 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 			wantBlocked:   strPtr("blocked by #10, #20"),
 			wantBlockedBy: []string{"10", "20"},
 		},
+		{
+			name:       "due date from body footer",
+			issue:      makeIssue(withBody("some text\n\n<!-- tlc:due 2025-05-01 -->")),
+			wantStatus: "TODO",
+			wantDueAt:  timePtr(mustDate("2025-05-01")),
+		},
+		{
+			name:       "no due date footer → nil",
+			issue:      makeIssue(withBody("just a description")),
+			wantStatus: "TODO",
+			wantDueAt:  nil,
+		},
+		{
+			name: "milestone due date fallback",
+			issue: makeIssue(
+				withBody("no footer here"),
+				withMilestone("v1.0", timePtr(mustDate("2025-06-15"))),
+			),
+			wantStatus: "TODO",
+			wantDueAt:  timePtr(mustDate("2025-06-15")),
+		},
+		{
+			name: "body footer takes precedence over milestone",
+			issue: makeIssue(
+				withBody("text\n\n<!-- tlc:due 2025-05-01 -->"),
+				withMilestone("v1.0", timePtr(mustDate("2025-06-15"))),
+			),
+			wantStatus: "TODO",
+			wantDueAt:  timePtr(mustDate("2025-05-01")),
+		},
 	}
 
 	for _, tt := range tests {
@@ -147,6 +201,16 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 			}
 			if task.Effort != tt.wantEffort {
 				t.Errorf("Effort = %q, want %q", task.Effort, tt.wantEffort)
+			}
+
+			// DueAt
+			switch {
+			case tt.wantDueAt == nil && task.DueAt != nil:
+				t.Errorf("DueAt = %v, want nil", *task.DueAt)
+			case tt.wantDueAt != nil && task.DueAt == nil:
+				t.Errorf("DueAt = nil, want %v", *tt.wantDueAt)
+			case tt.wantDueAt != nil && !task.DueAt.Equal(*tt.wantDueAt):
+				t.Errorf("DueAt = %v, want %v", *task.DueAt, *tt.wantDueAt)
 			}
 
 			// BlockedReason
@@ -194,6 +258,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 		wantStateReason string
 		wantLabels      []string
 		wantBodyPrefix  string
+		wantBodySuffix  string
 	}{
 		{
 			name:       "TODO → open, no status labels",
@@ -264,6 +329,23 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 			wantState:      "open",
 			wantBodyPrefix: "Blocked by #42\nBlocked by #99\n",
 		},
+		{
+			name: "DueAt → body contains footer",
+			task: &Task{
+				Title:       "t",
+				Status:      "TODO",
+				Description: "some desc",
+				DueAt:       timePtr(mustDate("2025-05-01")),
+			},
+			wantState:      "open",
+			wantBodySuffix: "<!-- tlc:due 2025-05-01 -->",
+		},
+		{
+			name:       "no DueAt → no footer",
+			task:       &Task{Title: "t", Status: "TODO", Description: "some desc"},
+			wantState:  "open",
+			wantLabels: nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -292,6 +374,14 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 					body[:len(tt.wantBodyPrefix)] != tt.wantBodyPrefix {
 					t.Errorf("Body prefix = %q, want prefix %q",
 						body, tt.wantBodyPrefix)
+				}
+			}
+
+			if tt.wantBodySuffix != "" {
+				body := req.GetBody()
+				if !strings.HasSuffix(body, tt.wantBodySuffix) {
+					t.Errorf("Body suffix = %q, want suffix %q",
+						body, tt.wantBodySuffix)
 				}
 			}
 		})
@@ -345,6 +435,27 @@ func TestBuildPushBody(t *testing.T) {
 			name: "backtick unescape",
 			task: &Task{Description: "use \\`code\\` here"},
 			want: "use `code` here",
+		},
+		{
+			name: "due date appended as footer",
+			task: &Task{
+				Description: "original",
+				DueAt:       timePtr(mustDate("2025-05-01")),
+			},
+			want: "original\n\n<!-- tlc:due 2025-05-01 -->",
+		},
+		{
+			name: "existing due footer replaced",
+			task: &Task{
+				Description: "text\n\n<!-- tlc:due 2025-01-01 -->",
+				DueAt:       timePtr(mustDate("2025-05-01")),
+			},
+			want: "text\n\n<!-- tlc:due 2025-05-01 -->",
+		},
+		{
+			name: "no due date → no footer",
+			task: &Task{Description: "just text"},
+			want: "just text",
 		},
 	}
 

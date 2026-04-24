@@ -51,6 +51,19 @@ tlc task create "Title" --effort M -d "Details"
 | `--blocked-by` | task ID (repeatable) | dependency |
 | `--assigned-to` | profile/username | ownership |
 | `--timeout` | `2h`, `30m` | per-task stale timeout |
+| `--due` | `tomorrow`, `in 3d`, ISO | deadline |
+| `--remind-at` | datetime | one-shot reminder |
+| `--remind-every` | `1h`, `30m` | recurring reminder |
+| `--no-auto-remind` | flag | suppress 12h auto-remind |
+
+---
+
+## Reminders
+
+```bash
+tlc task remind                          # upcoming + overdue
+tlc task remind --check                  # exit 1 if overdue
+```
 
 ---
 

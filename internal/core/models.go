@@ -73,6 +73,10 @@ type Task struct {
 	BlockedReason *string                `json:"blocked_reason,omitempty" yaml:"blocked_reason,omitempty"`
 	StaleFiredAt  *time.Time             `json:"stale_fired_at,omitempty" yaml:"stale_fired_at,omitempty"`
 	TrackID       *string                `json:"track_id,omitempty" yaml:"track_id,omitempty" table:"Track"`
+	DueAt         *time.Time             `json:"due_at,omitempty" yaml:"due_at,omitempty"`
+	RemindAt      *time.Time             `json:"remind_at,omitempty" yaml:"remind_at,omitempty"`
+	RemindEvery   *time.Duration         `json:"remind_every,omitempty" yaml:"remind_every,omitempty"`
+	NoAutoRemind  bool                   `json:"no_auto_remind,omitempty" yaml:"no_auto_remind,omitempty"`
 }
 
 type RegisteredProject struct {

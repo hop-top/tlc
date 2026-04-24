@@ -192,6 +192,7 @@ func fetchLinearIssues(teamName, lastSyncAt string) ([]interface{}, error) {
 					identifier
 					title
 					description
+					dueDate
 					url
 					state {
 						name
@@ -293,11 +294,15 @@ func createLinearIssue(client *graphql.Client, ctx context.Context, apiKey, team
 			}
 		}
 	`)
-	req.Var("input", map[string]interface{}{
+	input := map[string]interface{}{
 		"teamId":      teamID,
 		"title":       task.Title,
 		"description": task.Description,
-	})
+	}
+	if task.DueAt != nil {
+		input["dueDate"] = task.DueAt.Format("2006-01-02")
+	}
+	req.Var("input", input)
 	req.Header.Set("Authorization", apiKey)
 
 	var resp struct {
@@ -338,10 +343,14 @@ func updateLinearIssue(client *graphql.Client, ctx context.Context, apiKey, issu
 		}
 	`)
 	req.Var("id", issueID)
-	req.Var("input", map[string]interface{}{
+	input := map[string]interface{}{
 		"title":       task.Title,
 		"description": task.Description,
-	})
+	}
+	if task.DueAt != nil {
+		input["dueDate"] = task.DueAt.Format("2006-01-02")
+	}
+	req.Var("input", input)
 	req.Header.Set("Authorization", apiKey)
 
 	var resp struct {

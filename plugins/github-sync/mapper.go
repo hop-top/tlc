@@ -24,6 +24,7 @@ type Task struct {
 	Priority      string                 `json:"priority,omitempty"`
 	Effort        string                 `json:"effort,omitempty"`
 	BlockedReason *string                `json:"blocked_reason,omitempty"`
+	DueAt         *time.Time             `json:"due_at,omitempty"`
 	CreatedAt     time.Time              `json:"created_at"`
 	UpdatedAt     time.Time              `json:"updated_at"`
 	Meta          map[string]interface{} `json:"meta,omitempty"`
@@ -62,6 +63,9 @@ var effortToLabel = map[string]string{
 	"L":  "effort:l",
 	"XL": "effort:xl",
 }
+
+// dueBodyRe matches the due date footer convention in issue bodies.
+var dueBodyRe = regexp.MustCompile(`<!-- tlc:due (\d{4}-\d{2}-\d{2}) -->`)
 
 // blockedByRe matches "blocked by #N" or "depends on #N" patterns.
 var blockedByRe = regexp.MustCompile(`(?i)(?:blocked by|depends on)\s+#(\d+)`)
@@ -109,6 +113,17 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 
 	// Parse body for blocked-by references
 	parseBlockedBy(body, task)
+
+	// Parse due date from body footer: <!-- tlc:due YYYY-MM-DD -->
+	if dueAt := parseDueFromBody(body); dueAt != nil {
+		task.DueAt = dueAt
+	}
+
+	// Fallback: milestone due date
+	if task.DueAt == nil && issue.Milestone != nil && issue.Milestone.DueOn != nil {
+		d := issue.Milestone.DueOn.Time
+		task.DueAt = &d
+	}
 
 	// Derive BlockedReason from actual refs when available
 	if task.BlockedReason != nil {
@@ -213,6 +228,19 @@ func parseBlockedBy(body string, task *Task) {
 	task.Meta["blocked_by"] = refs
 }
 
+// parseDueFromBody extracts a due date from the <!-- tlc:due YYYY-MM-DD --> footer.
+func parseDueFromBody(body string) *time.Time {
+	m := dueBodyRe.FindStringSubmatch(body)
+	if m == nil {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", m[1])
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
 // MapTaskToGitHubIssueRequest maps a TLC task to a GitHub issue request.
 func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
 	state, stateReason := mapTaskStatusToGitHub(task)
@@ -287,29 +315,39 @@ func buildPushLabels(task *Task) []string {
 	return labels
 }
 
-// buildPushBody prepends blocked-by references to the task description.
-// Existing "Blocked by #N" / "Depends on #N" header lines are stripped first
-// to prevent duplication across pull-push sync cycles.
+// buildPushBody prepends blocked-by references to the task description and
+// appends a due-date footer. Existing blocked-by header lines and due-date
+// footers are stripped first to prevent duplication across sync cycles.
 func buildPushBody(task *Task) string {
 	// Unescape backticks that were shell-escaped during task creation.
 	body := strings.ReplaceAll(task.Description, "\\`", "`")
 
 	// Strip existing blocked-by/depends-on header lines to avoid duplication.
 	body = blockedByLineRe.ReplaceAllString(body, "")
+
+	// Strip existing due-date footer to avoid duplication.
+	body = dueBodyRe.ReplaceAllString(body, "")
+
 	body = strings.TrimLeft(body, "\n")
+	body = strings.TrimRight(body, "\n ")
 
 	refs := extractBlockedByRefs(task)
-	if len(refs) == 0 {
-		return body
+	if len(refs) > 0 {
+		var sb strings.Builder
+		for _, ref := range refs {
+			sb.WriteString(fmt.Sprintf("Blocked by #%s\n", ref))
+		}
+		sb.WriteString("\n")
+		sb.WriteString(body)
+		body = sb.String()
 	}
 
-	var sb strings.Builder
-	for _, ref := range refs {
-		sb.WriteString(fmt.Sprintf("Blocked by #%s\n", ref))
+	// Append due-date footer
+	if task.DueAt != nil {
+		body += "\n\n<!-- tlc:due " + task.DueAt.Format("2006-01-02") + " -->"
 	}
-	sb.WriteString("\n")
-	sb.WriteString(body)
-	return sb.String()
+
+	return body
 }
 
 // extractBlockedByRefs returns the blocked_by refs from task Meta, if any.

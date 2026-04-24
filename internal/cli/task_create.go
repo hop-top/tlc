@@ -44,7 +44,12 @@ var TaskCreateCmd = &cobra.Command{
 			staleTimeout = &d
 		}
 
-		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout)
+		var sched taskScheduling
+		if err := sched.parse(taskDue, taskRemindAt, taskRemindEvery, taskNoAutoRemind); err != nil {
+			return err
+		}
+
+		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched)
 		if err != nil {
 			return err
 		}
@@ -143,14 +148,14 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta, nil)
+	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta, nil, nil)
 	if err != nil {
 		return err
 	}
 	return syncToTODO()
 }
 
-func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration) error {
+func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling) error {
 	description = unescapeMarkdown(description)
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 	if !core.ValidEffort(core.Effort(effort)) {
@@ -225,6 +230,15 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		Meta:         meta,
 		StaleTimeout: staleTimeout,
 	}
+	if sched != nil {
+		task.DueAt = sched.dueAt
+		task.RemindAt = sched.remindAt
+		task.RemindEvery = sched.remindEvery
+		task.NoAutoRemind = sched.noAutoRemind
+	}
+
+	// Apply priority-based scheduling defaults from config.
+	applySchedulingConfig(task)
 
 	// Auto-assign project_id if in a project context.
 	if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
@@ -322,6 +336,10 @@ func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&taskInteractive, "interactive", "i", false, "Interactive prompt mode")
 	cmd.Flags().StringVar(&taskCreateTimeout, "timeout", "", "Stale timeout (e.g. 2h)")
 	cmd.Flags().StringVar(&taskTrack, "track", "", "Link task to a track ID")
+	cmd.Flags().StringVar(&taskDue, "due", "", "Due date (tomorrow, in 3d, 2025-05-01)")
+	cmd.Flags().StringVar(&taskRemindAt, "remind-at", "", "One-shot reminder time")
+	cmd.Flags().StringVar(&taskRemindEvery, "remind-every", "", "Recurring reminder interval (1h, 30m)")
+	cmd.Flags().BoolVar(&taskNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
 }
 
 func init() {

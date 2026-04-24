@@ -55,6 +55,8 @@ Use `tlc` exclusively for all task operations.
 | `tlc task delete <id> [<id>...] --yes` | Delete (skip prompt) |
 | `tlc task "<prompt>"` | NL → classify → route → execute |
 | `tlc task prompt <id>` | Enriched context dump (markdown/JSON) |
+| `tlc task remind` | Show upcoming + overdue reminders |
+| `tlc task remind --check` | Exit 1 if overdue (scriptable) |
 
 ### Track lifecycle
 
@@ -155,6 +157,30 @@ tlc task update T-0046 --assigned-to -       # clear assignee
 tlc task unassign T-0046 --note "reason"     # --note required
 ```
 
+### 7 · Due dates and reminders
+
+```bash
+# Set due date (flexible: "tomorrow", "in 3d", "+2w", "friday", ISO 8601)
+tlc task create "Ship v2" --due "in 3 days"
+tlc task update T-0046 --due friday
+
+# Recurring reminder
+tlc task create "Check CI" --due "in 1 week" --remind-every 1h
+
+# Suppress auto-remind (12h before due, on by default)
+tlc task create "Review" --due friday --no-auto-remind
+
+# View upcoming + overdue
+tlc task remind
+
+# Scriptable overdue check
+tlc task remind --check   # exit 1 if any overdue
+
+# Clear scheduling
+tlc task update T-0046 --due -
+tlc task update T-0046 --remind-every -
+```
+
 ### 8 · Batch operations
 
 ```bash
@@ -253,6 +279,10 @@ description (audit block stripped), recent activity log.
 | `--blocked-by` | | Blocking task ID (repeatable; local ID or cross-project `project/task`) |
 | `--reference` | `-r` | Reference pointer (URL or path) |
 | `--track` | | Link task to a track |
+| `--due` | | Due date (tomorrow, in 3d, friday, ISO 8601) |
+| `--remind-at` | | One-shot reminder time |
+| `--remind-every` | | Recurring reminder interval (1h, 30m) |
+| `--no-auto-remind` | | Suppress 12h-before-due auto-reminder |
 
 ### task update — blocker flags
 

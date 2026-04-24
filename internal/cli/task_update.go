@@ -188,6 +188,54 @@ var TaskUpdateCmd = &cobra.Command{
 				changed = true
 			}
 
+			if cmd.Flags().Changed("due") {
+				if taskUpdateDue == "-" || taskUpdateDue == "" {
+					task.DueAt = nil
+				} else {
+					t, err := parseFlexTime(taskUpdateDue)
+					if err != nil {
+						errs = append(errs, fmt.Sprintf("%s: invalid --due: %v", task.ID, err))
+						continue
+					}
+					task.DueAt = &t
+				}
+				changed = true
+			}
+			if cmd.Flags().Changed("remind-at") {
+				if taskUpdateRemindAt == "-" || taskUpdateRemindAt == "" {
+					task.RemindAt = nil
+				} else {
+					t, err := parseFlexTime(taskUpdateRemindAt)
+					if err != nil {
+						errs = append(errs, fmt.Sprintf("%s: invalid --remind-at: %v", task.ID, err))
+						continue
+					}
+					task.RemindAt = &t
+				}
+				changed = true
+			}
+			if cmd.Flags().Changed("remind-every") {
+				if taskUpdateRemindEvery == "-" || taskUpdateRemindEvery == "" {
+					task.RemindEvery = nil
+				} else {
+					d, err := time.ParseDuration(taskUpdateRemindEvery)
+					if err != nil {
+						errs = append(errs, fmt.Sprintf("%s: invalid --remind-every: %v", task.ID, err))
+						continue
+					}
+					if d <= 0 {
+						errs = append(errs, fmt.Sprintf("%s: --remind-every must be positive", task.ID))
+						continue
+					}
+					task.RemindEvery = &d
+				}
+				changed = true
+			}
+			if cmd.Flags().Changed("no-auto-remind") {
+				task.NoAutoRemind = taskUpdateNoAutoRemind
+				changed = true
+			}
+
 			if !changed {
 				continue
 			}
@@ -345,6 +393,10 @@ func init() {
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateUnblock, "unblock", false, "Clear blocked reason")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateTimeout, "timeout", "", "Stale timeout (e.g. 2h, 30m)")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateTrack, "track", "", "Link to track ID (use '-' to unlink)")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateDue, "due", "", "Due date (tomorrow, in 3d, 2025-05-01)")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindAt, "remind-at", "", "One-shot reminder time")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindEvery, "remind-every", "", "Recurring reminder interval (1h, 30m)")
+	TaskUpdateCmd.Flags().BoolVar(&taskUpdateNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 }

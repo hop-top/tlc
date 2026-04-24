@@ -142,13 +142,22 @@ func formatDuration(d time.Duration) string {
 }
 
 func renderTable(w io.Writer, tasks []*core.Task) {
-	headers := []string{"ID", "Title", "Status", "Assigned", "Stale", "Blocked"}
+	headers := []string{"ID", "Title", "Status", "Assigned", "Due", "Stale", "Blocked"}
 
 	rows := make([][]string, 0, len(tasks))
 	for _, t := range tasks {
 		assignee := "-"
 		if t.AssignedTo != nil {
 			assignee = *t.AssignedTo
+		}
+
+		dueCol := "-"
+		if t.DueAt != nil {
+			if t.IsOverdue() {
+				dueCol = "! " + t.DueAt.Format("2006-01-02")
+			} else {
+				dueCol = t.DueAt.Format("2006-01-02")
+			}
 		}
 
 		staleCol := "-"
@@ -168,6 +177,7 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			t.Title,
 			formatStatusPlain(t.Status),
 			assignee,
+			dueCol,
 			staleCol,
 			blockedCol,
 		})
@@ -373,6 +383,22 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Track:"), *t.TrackID)
+	}
+	if t.DueAt != nil {
+		dueLabel := "Due:"
+		if t.IsOverdue() {
+			dueLabel = "Due (OVERDUE):"
+		}
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render(dueLabel), t.DueAt.Format(time.RFC3339))
+	}
+	if t.RemindAt != nil {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Remind At:"), t.RemindAt.Format(time.RFC3339))
+	}
+	if t.RemindEvery != nil {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Remind Every:"), t.RemindEvery.String())
+	}
+	if t.NoAutoRemind {
+		_, _ = fmt.Fprintf(w, "%s yes\n", labelStyle.Render("No Auto-Remind:"))
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))

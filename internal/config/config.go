@@ -358,6 +358,25 @@ type StaleConfig struct {
 	Hooks          []StaleHook   `yaml:"hooks,omitempty"`
 }
 
+// PriorityScheduleRule defines auto-due and auto-remind for a priority.
+type PriorityScheduleRule struct {
+	Due         time.Duration `yaml:"due"`
+	RemindEvery time.Duration `yaml:"remind_every"`
+}
+
+// AgeNudgeRule defines age-based reminders for tasks without explicit due.
+type AgeNudgeRule struct {
+	Status    string        `yaml:"status"`
+	Threshold time.Duration `yaml:"threshold"`
+	Action    string        `yaml:"action"` // "remind" or "escalate"
+}
+
+// SchedulingConfig holds auto-scheduling rules by priority and age.
+type SchedulingConfig struct {
+	ByPriority map[string]PriorityScheduleRule `yaml:"by_priority,omitempty"`
+	AgeNudges  []AgeNudgeRule                  `yaml:"age_nudges,omitempty"`
+}
+
 // TaskConfig contains task-related configuration.
 type TaskConfig struct {
 	DefaultStatus    string                      `yaml:"default_status"`
@@ -371,6 +390,7 @@ type TaskConfig struct {
 	StateMachine     *WorkflowDefinition         `yaml:"state_machine,omitempty"`
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
+	Scheduling       SchedulingConfig            `yaml:"scheduling,omitempty"`
 }
 
 // ProjectionDirectory returns the configured projection directory or "tasks".

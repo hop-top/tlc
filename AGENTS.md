@@ -49,6 +49,15 @@ tlc task update <id> --remove-blocked-by T-0041
 tlc task update <id> --clear-blocked-by
 tlc task update <id> --status IN_PROGRESS --force  # force status (bypass state machine)
 tlc task delete <id>                     # delete task
+tlc task create "title" --due tomorrow   # set due date
+tlc task create "title" --due "in 3d" --remind-every 1h  # due + recurring
+tlc task create "title" --due friday --no-auto-remind     # suppress 12h auto-remind
+tlc task update <id> --due "2025-05-01"  # set/change due date
+tlc task update <id> --due -             # clear due date
+tlc task update <id> --remind-at "2025-05-01T14:00:00Z"   # one-shot
+tlc task update <id> --remind-every 30m  # recurring reminder
+tlc task remind                          # show upcoming + overdue
+tlc task remind --check                  # exit 1 if overdue (scriptable)
 ```
 
 Valid statuses (uppercase): `TODO` · `IN_PROGRESS` · `DONE` · `SKIPPED`

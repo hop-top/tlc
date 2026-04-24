@@ -13,6 +13,7 @@ type Task struct {
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
 	Meta        map[string]interface{} `json:"meta,omitempty"`
+	DueAt       *time.Time             `json:"due_at,omitempty"`
 }
 
 // MapLinearIssueToTask maps a Linear issue to a TLC task.
@@ -67,6 +68,12 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 				}
 			}
 			task.Tags = tags
+		}
+	}
+
+	if dueDateStr, ok := issue["dueDate"].(string); ok && dueDateStr != "" {
+		if t, err := time.Parse("2006-01-02", dueDateStr); err == nil {
+			task.DueAt = &t
 		}
 	}
 

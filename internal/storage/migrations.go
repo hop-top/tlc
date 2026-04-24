@@ -291,10 +291,20 @@ var migrations = []migration{
 		version: 11,
 		query:   `ALTER TABLE tracks ADD COLUMN plan_mapping TEXT;`,
 	},
+	{
+		version: 12,
+		query: `
+		ALTER TABLE tasks ADD COLUMN due_at TEXT;
+		ALTER TABLE tasks ADD COLUMN remind_at TEXT;
+		ALTER TABLE tasks ADD COLUMN remind_every INTEGER;
+		ALTER TABLE tasks ADD COLUMN no_auto_remind INTEGER DEFAULT 0;
+		CREATE INDEX IF NOT EXISTS idx_tasks_due_at ON tasks(due_at);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 11
+const LatestMigrationVersion = 12
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
