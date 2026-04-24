@@ -345,6 +345,10 @@ func resetTaskFlags() {
 	taskUpdateAddBlockedBy = []string{}
 	taskUpdateRemoveBlockedBy = []string{}
 	taskUpdateClearBlockedBy = false
+	taskUpdateAddEva = []string{}
+	taskUpdateRemoveEva = []string{}
+	taskUpdateClearEva = false
+	taskEva = []string{}
 	taskUpdateAddTags = []string{}
 	taskUpdateRemoveTags = []string{}
 

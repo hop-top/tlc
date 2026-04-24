@@ -110,6 +110,10 @@ func formatTLS(t *core.Task) string {
 			if blockedBy := t.BlockedBy(); len(blockedBy) > 0 {
 				parts = append(parts, "blocked_by="+strings.Join(blockedBy, ","))
 			}
+		case "eva":
+			if eva := t.Eva(); len(eva) > 0 {
+				parts = append(parts, "eva="+strings.Join(eva, ","))
+			}
 		case "prio":
 			// Skip: priority is now a first-class field serialised above.
 		case "domain":
@@ -399,6 +403,16 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	}
 	if t.NoAutoRemind {
 		_, _ = fmt.Fprintf(w, "%s yes\n", labelStyle.Render("No Auto-Remind:"))
+	}
+	if eva := t.Eva(); len(eva) > 0 {
+		currentUser := core.GetCurrentUser()
+		assignee := ""
+		if t.AssignedTo != nil {
+			assignee = *t.AssignedTo
+		}
+		if currentUser != assignee {
+			_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Eva:"), strings.Join(eva, ", "))
+		}
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))

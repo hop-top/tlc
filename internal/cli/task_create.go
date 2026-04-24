@@ -34,6 +34,9 @@ var TaskCreateCmd = &cobra.Command{
 		if blockedBy := core.NormalizeBlockedBy(taskBlockedBy); len(blockedBy) > 0 {
 			meta["blocked_by"] = blockedBy
 		}
+		if eva := core.NormalizeStringSliceMeta(taskEva); len(eva) > 0 {
+			meta["eva"] = eva
+		}
 
 		var staleTimeout *time.Duration
 		if taskCreateTimeout != "" {
@@ -340,6 +343,7 @@ func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&taskRemindAt, "remind-at", "", "One-shot reminder time")
 	cmd.Flags().StringVar(&taskRemindEvery, "remind-every", "", "Recurring reminder interval (1h, 30m)")
 	cmd.Flags().BoolVar(&taskNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
+	cmd.Flags().StringSliceVar(&taskEva, "eva", []string{}, "Eva annotations (repeatable)")
 }
 
 func init() {

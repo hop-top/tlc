@@ -167,6 +167,93 @@ func (t *Task) AddBlockedBy(ids []string) {
 	t.SetBlockedBy(combined)
 }
 
+// normalizeStringSliceMeta converts supported meta value representations
+// into a canonical ordered, deduplicated string slice. Shared by
+// BlockedBy, Eva, and any future string-slice meta fields.
+func NormalizeStringSliceMeta(value interface{}) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case string:
+		return normalizeBlockedByStrings(parseBlockedByString(v))
+	case []string:
+		return normalizeBlockedByStrings(v)
+	case []interface{}:
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				items = append(items, s)
+			}
+		}
+		return normalizeBlockedByStrings(items)
+	default:
+		return nil
+	}
+}
+
+// Eva returns the task's eva annotations as a canonical string slice.
+func (t *Task) Eva() []string {
+	if t == nil || t.Meta == nil {
+		return nil
+	}
+	return NormalizeStringSliceMeta(t.Meta["eva"])
+}
+
+// SetEva updates eva metadata, removing the key when empty.
+func (t *Task) SetEva(values []string) {
+	if t == nil {
+		return
+	}
+
+	normalized := normalizeBlockedByStrings(values)
+	if len(normalized) == 0 {
+		if t.Meta != nil {
+			delete(t.Meta, "eva")
+		}
+		return
+	}
+
+	if t.Meta == nil {
+		t.Meta = make(map[string]interface{})
+	}
+	t.Meta["eva"] = normalized
+}
+
+// AddEva appends eva values while preserving order and uniqueness.
+func (t *Task) AddEva(values []string) {
+	combined := append(append([]string{}, t.Eva()...), values...)
+	t.SetEva(combined)
+}
+
+// RemoveEva removes eva values from metadata.
+func (t *Task) RemoveEva(values []string) {
+	if t == nil {
+		return
+	}
+
+	toRemove := make(map[string]struct{}, len(values))
+	for _, v := range normalizeBlockedByStrings(values) {
+		toRemove[v] = struct{}{}
+	}
+	if len(toRemove) == 0 {
+		return
+	}
+
+	current := t.Eva()
+	if len(current) == 0 {
+		return
+	}
+
+	filtered := make([]string, 0, len(current))
+	for _, v := range current {
+		if _, ok := toRemove[v]; ok {
+			continue
+		}
+		filtered = append(filtered, v)
+	}
+	t.SetEva(filtered)
+}
+
 // RemoveBlockedBy removes blocker IDs from blocked_by metadata.
 func (t *Task) RemoveBlockedBy(ids []string) {
 	if t == nil {

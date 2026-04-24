@@ -96,6 +96,11 @@ var (
 	taskUpdateRemindAt     string
 	taskUpdateRemindEvery  string
 	taskUpdateNoAutoRemind bool
+
+	taskEva              []string
+	taskUpdateAddEva     []string
+	taskUpdateRemoveEva  []string
+	taskUpdateClearEva   bool
 )
 
 // appendNote appends a note to the task's description, separated by a newline.

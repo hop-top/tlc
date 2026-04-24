@@ -110,6 +110,21 @@ var TaskUpdateCmd = &cobra.Command{
 				changed = true
 			}
 
+			if taskUpdateClearEva {
+				task.SetEva(nil)
+				changed = true
+			}
+
+			if len(taskUpdateAddEva) > 0 {
+				task.AddEva(taskUpdateAddEva)
+				changed = true
+			}
+
+			if len(taskUpdateRemoveEva) > 0 {
+				task.RemoveEva(taskUpdateRemoveEva)
+				changed = true
+			}
+
 			if len(taskUpdateAddBlockedBy) > 0 {
 				validated, err := validateBlockedByRefs(ctx, s, res.Storage, taskUpdateAddBlockedBy)
 				if err != nil {
@@ -386,6 +401,9 @@ func init() {
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddBlockedBy, "add-blocked-by", []string{}, "Add blocking task IDs")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveBlockedBy, "remove-blocked-by", []string{}, "Remove blocking task IDs")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateClearBlockedBy, "clear-blocked-by", false, "Clear all blocking task IDs")
+	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddEva, "add-eva", []string{}, "Add eva annotations")
+	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveEva, "remove-eva", []string{}, "Remove eva annotations")
+	TaskUpdateCmd.Flags().BoolVar(&taskUpdateClearEva, "clear-eva", false, "Clear all eva annotations")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
