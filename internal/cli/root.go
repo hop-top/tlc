@@ -139,14 +139,19 @@ func kitRoot() *kitcli.Root {
 			}
 			token := os.Getenv("TLC_BUS_TOKEN")
 			if token == "" {
-				token = "dpkms-dev-token"
+				token = os.Getenv("BUS_TOKEN")
 			}
-			eventBus = bus.New(
-				bus.WithNetwork(addr),
-				bus.WithNetworkOption(
-					bus.WithAuth(&bus.StaticTokenAuth{Token_: token}),
-				),
-			)
+			if token != "" {
+				eventBus = bus.New(
+					bus.WithNetwork(addr),
+					bus.WithNetworkOption(
+						bus.WithAuth(&bus.StaticTokenAuth{Token_: token}),
+					),
+				)
+			} else {
+				log.Warn("bus auth: BUS_TOKEN or TLC_BUS_TOKEN not set; bus disabled")
+				eventBus = bus.New()
+			}
 			busPublisher = events.NewBusPublisher(eventBus)
 		}
 
