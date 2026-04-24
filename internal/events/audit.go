@@ -63,7 +63,8 @@ func (s *AuditSubscriber) handle(ctx context.Context, e bus.Event) error {
 // isTaskTopic returns true for task lifecycle topics.
 func isTaskTopic(topic string) bool {
 	switch topic {
-	case TaskCreated, TaskClaimed, TaskCompleted, TaskStatusChanged:
+	case TaskCreated, TaskClaimed, TaskCompleted, TaskStatusChanged,
+		string(TopicTaskReopened):
 		return true
 	}
 	return false
@@ -88,6 +89,8 @@ func topicToAction(topic string) string {
 		return core.ActionDone
 	case TaskStatusChanged:
 		return core.ActionUpdated
+	case string(TopicTaskReopened):
+		return "REOPENED"
 	case TrackCreated:
 		return "TRACK_CREATED"
 	case TrackActivated:
