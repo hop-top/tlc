@@ -106,3 +106,37 @@ steps:
       requirements:
         capabilities: ["verification"]
         tools: ["curl", "datadog"]
+
+  staging-only:
+    step_id: "staging-only"
+    type: "join"
+    title: "Aggregate staging-only deploy outputs"
+    depends_on: ["deploy-staging", "verify-staging", "deploy-production", "verify-production"]
+    wait_for: ["deploy-staging", "verify-staging", "deploy-production", "verify-production"]
+    contract: "staging-only"
+
+  production-only:
+    step_id: "production-only"
+    type: "join"
+    title: "Aggregate production-only deploy outputs"
+    depends_on: ["deploy-staging", "verify-staging", "deploy-production", "verify-production"]
+    wait_for: ["deploy-staging", "verify-staging", "deploy-production", "verify-production"]
+    contract: "production-only"
+
+  staging-branch:
+    step_id: "staging-branch"
+    type: "join"
+    title: "Aggregate full conditional run (validate + both branches)"
+    depends_on:
+      - "validate-config"
+      - "deploy-staging"
+      - "verify-staging"
+      - "deploy-production"
+      - "verify-production"
+    wait_for:
+      - "validate-config"
+      - "deploy-staging"
+      - "verify-staging"
+      - "deploy-production"
+      - "verify-production"
+    contract: "staging-branch"
