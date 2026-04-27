@@ -9,6 +9,7 @@ Each flow conforms to `task-flow-spec-0.1.md`.
 
 | File | Purpose | Entry |
 |------|---------|-------|
+| [exec-cli-smoke.yaml](exec-cli-smoke.yaml) | Canonical `exec` step example — runs `tlc --version` + `tlc --help` for an eva contract assertion (no LLM dispatch) | `version` |
 | [oss-release-prep.yaml](oss-release-prep.yaml) | Prepare a codebase for initial OSS release | `audit-repo` |
 | [cheatsheet-update.yaml](cheatsheet-update.yaml) | Create/update human + agent cheatsheets | `audit-surface` |
 | [create-agent-skill.yaml](create-agent-skill.yaml) | Create a folder-based agent skill for any tool | `decide-shape` |

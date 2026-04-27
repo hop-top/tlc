@@ -58,7 +58,7 @@ Cross-references:
 - `id`, `title`, `type` (feature / fix / bug / refactor / chore / ci / docs / style / perf / test / build), `status` (pending / active / completed / abandoned / archived), `assigned_to`, timestamps, `meta`
 
 **Flow** (`flow.go`):
-- `AgentRef`, `FlowStatus` (queued / running / succeeded / failed / canceled / paused), `StepType` (task / parallel / branch / join / retry / subflow), `StepStatus`
+- `AgentRef`, `FlowStatus` (queued / running / succeeded / failed / canceled / paused), `StepType` (task / exec / parallel / branch / join / retry / subflow), `StepStatus`
 
 **LogEntry** (`models.go`):
 - task log: `timestamp`, `by`, `action` (incl. SYNC_*), `note`, `meta`
@@ -126,6 +126,42 @@ contract. `FlowTest` sandbox uses cassette recording for
 replay testing. Shim binaries (`cmd/shims/`) intercept tool
 invocations (claude, git, docker, npm, uv, pip, etc.).
 `AgentRegistry` enforces trust policies.
+
+#### Flow step types
+
+| Type | Runner | What it does |
+|---|---|---|
+| `task` | `SandboxAgentRunner` | Dispatches an LLM agent subprocess (claude, codex, ...) to execute a task per `task-exec-spec-0.1`. Output is the agent's structured task result. |
+| `exec` | `ExecAgentRunner` | Runs a literal command (argv array) via `os/exec`. Captures `{exit_code, stdout, stderr, duration_ms, truncated}` as structured step output. **No LLM dispatch** — for deterministic CLI checks (smoke tests, lints, regex/exit-code gates). See `task-flow-spec-0.1-dev.md` and `examples/flows/exec-cli-smoke.yaml`. |
+| `parallel` | (control-flow) | Fan-out children with optional `max_concurrency`. Output ordering deterministic by `step_id`. |
+| `branch` | (control-flow) | Selects one path from `cases` based on condition expressions. Non-selected steps marked `skipped`. |
+| `join` | (control-flow) | Waits for multiple upstream steps; aggregates outputs for a single downstream consumer (e.g. an eva contract assertion). |
+| `retry` | (control-flow) | Re-runs a child step up to `max_attempts` with backoff. |
+| `subflow` | (control-flow) | Invokes another flow as a nested step (composition). |
+
+The `exec` step type lets flows express deterministic checks (CLI
+smoke, branch-name regex, release-please file protection, etc.)
+without paying the LLM tax for work that doesn't need judgement.
+Cassettes still apply via the existing xrr catchall shim, so replay
+remains hermetic.
+
+#### Contract evaluation (eva integration)
+
+Flows can attach an eva contract to any step via a `<stepID>.yaml`
+contract file in the flow's `contracts/` directory. After the step
+completes, `internal/flowtest/hook.go` POSTs the step output to the
+eva gateway at `{EVA_URL}/v1/contract/invoke`.
+
+**`EVA_URL` is required.** Without it, contract evaluation is
+**silently skipped** — the step's contract file is found, parsed,
+and then dropped on the floor. There is no warning logged. Set
+`EVA_URL` (and `EVA_KEY` if your gateway requires auth) in the
+environment before running `tlc flow test` if you want contracts
+to actually be checked.
+
+For CI use without standing up the full gateway, the standalone
+`eva run --contract foo.yaml --input data.json` CLI is the intended
+escape hatch (tracked in `hop-top/eva` T-0258 — not yet shipped).
 
 ### Plan management (`internal/core/plan_*`)
 
@@ -319,6 +355,25 @@ Plans: [track-registry-design](plans/2026-04-03-track-registry-design.md), [task
 
 - `T-0717` — cross-project blocked-by refs reject multi-segment project IDs (split-on-first-slash bug)
 - `T-0719` — `tlc project init` produces literal `'unknown'` project_id when no git remote configured
+
+### Troubleshooting
+
+**My flow's contract is not being checked / I changed the contract
+and nothing changed.**
+`EVA_URL` is probably not set. The hook in `internal/flowtest/hook.go`
+silently passes when `EVA_URL` is empty, even if a `<stepID>.yaml`
+contract file exists. Confirm with `echo $EVA_URL`. Set it (and
+`EVA_KEY` if needed), then re-run. For CI where you don't want to
+stand up the gateway, use the standalone `eva run` CLI
+(`hop-top/eva` T-0258) once it ships.
+
+**My `step_status` evaluator is rejected by eva.**
+`step_status` was an aspirational evaluator that never landed in eva.
+Existing fixtures in `examples/flows/fixtures/{conditional,
+composition-child}/` were rewritten 2026-04-27 to use `contains`
+against the joined step output. Use the same pattern, or wait for
+the `status_code` evaluator (`hop-top/eva#flow-exec-evaluators`
+T-0257) to ship.
 
 ### Known limits
 

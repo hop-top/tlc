@@ -1,12 +1,23 @@
+# Rewrote from step_status (never landed in eva) — 2026-04-27.
+# Track: hop-top/eva#flow-exec-evaluators T-0257.
+#
+# Original used `step_status` evaluator to assert step terminal states
+# (SUCCEEDED). That evaluator was never implemented in eva. Until eva
+# ships `status_code` (T-0257) we assert against the joined step
+# output blob using `contains` — which IS implemented today.
+#
+# Convention used by the flow runner: when a step ends, its terminal
+# state is appended to the join output as a line of the form
+# `<step_id>: <STATE>` (e.g. `lint: SUCCEEDED`).
 name: lint_and_test_succeed
 provider: filesystem
 evaluators:
-  - name: step_status
-    step: lint
-    expected: SUCCEEDED
-  - name: step_status
-    step: test
-    expected: SUCCEEDED
+  - name: contains
+    substring: "lint: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "test: SUCCEEDED"
+    mode: binary
   - name: contains
     substring: "test_report"
     mode: binary

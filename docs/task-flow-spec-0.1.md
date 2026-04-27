@@ -82,6 +82,13 @@ A flow definition MUST be rejected if:
 
 ## Step Types (Normative)
 
+> **Note (2026-04-27):** A new `exec` step type for running literal
+> commands (no LLM dispatch) is being added in
+> `task-flow-spec-0.1-dev.md`. It will be promoted to this release
+> spec once stable. Until then, see the dev spec and
+> `examples/flows/exec-cli-smoke.yaml` for the canonical shape.
+> Track: `hop-top/tlc#flow-exec-step`.
+
 All steps share a common base schema with type-specific extensions.
 
 ### Base Step Schema
