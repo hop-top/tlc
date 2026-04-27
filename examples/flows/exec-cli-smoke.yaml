@@ -28,21 +28,23 @@ steps:
     step_id: "version"
     type: "exec"
     title: "Capture tlc --version"
-    argv: ["tlc", "--version"]
-    timeout_sec: 10
+    exec:
+      argv: ["tlc", "--version"]
+      timeout_sec: 10
 
   help:
     step_id: "help"
     type: "exec"
     title: "Capture tlc --help"
     depends_on: ["version"]
-    argv: ["tlc", "--help"]
-    timeout_sec: 10
-    stdout_max_bytes: 65536
+    exec:
+      argv: ["tlc", "--help"]
+      timeout_sec: 10
+      stdout_max_bytes: 65536
 
   smoke-report:
     step_id: "smoke-report"
     type: "join"
     title: "Join smoke outputs for contract evaluation"
-    depends_on: ["version", "help"]
+    wait_for: ["version", "help"]
     contract: "cli-smoke-contract"
