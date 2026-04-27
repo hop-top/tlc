@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,42 @@ type AgentRunner interface {
 	// If false, executeTemplateStep falls through to the DB-only ephemeral path.
 	CanHandle(step Step) bool
 	Run(ctx context.Context, step Step, prompt string) (map[string]any, error)
+}
+
+// CompositeAgentRunner dispatches to the first registered runner whose
+// CanHandle returns true for the step. Use this to combine runners that
+// handle different step types (e.g. SandboxAgentRunner for `task` and
+// ExecAgentRunner for `exec`) behind FlowExecutor.WithAgentRunner.
+type CompositeAgentRunner struct {
+	runners []AgentRunner
+}
+
+// NewCompositeAgentRunner constructs a composite from the given runners.
+// Order matters: earlier runners win on overlapping CanHandle.
+func NewCompositeAgentRunner(runners ...AgentRunner) *CompositeAgentRunner {
+	return &CompositeAgentRunner{runners: runners}
+}
+
+// CanHandle returns true if any inner runner can handle the step.
+func (c *CompositeAgentRunner) CanHandle(step Step) bool {
+	for _, r := range c.runners {
+		if r.CanHandle(step) {
+			return true
+		}
+	}
+	return false
+}
+
+// Run dispatches to the first inner runner whose CanHandle returns true.
+// Returns an error if no inner runner can handle the step.
+func (c *CompositeAgentRunner) Run(ctx context.Context, step Step, prompt string) (map[string]any, error) {
+	for _, r := range c.runners {
+		if r.CanHandle(step) {
+			return r.Run(ctx, step, prompt)
+		}
+	}
+	return nil, fmt.Errorf("composite agent runner: no runner handles step %q (type=%s)",
+		step.ID, step.Type)
 }
 
 // FlowExecutor handles the execution of flow definitions.
@@ -172,7 +209,7 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 		}
 
 		// Execute the ready step
-		output, err := e.executeStep(ctx, flow, run, readyStepID, statuses, mu, by)
+		output, err := e.executeStep(ctx, flow, run, readyStepID, statuses, stepOutputs, mu, by)
 		if output != nil {
 			stepOutputs[readyStepID] = output
 		}
@@ -207,7 +244,7 @@ func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, _ string) 
 	}
 }
 
-func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, mu *sync.Mutex, by string) (map[string]any, error) {
+func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) (map[string]any, error) {
 	step := flow.Steps[stepID]
 
 	mu.Lock()
@@ -224,14 +261,18 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 	case StepTypeTask:
 		output, err = e.executeTaskStep(ctx, step, by)
 	case StepTypeParallel:
-		err = e.executeParallelStep(ctx, flow, run, step, statuses, mu, by)
+		err = e.executeParallelStep(ctx, flow, run, step, statuses, stepOutputs, mu, by)
 	case StepTypeRetry:
-		err = e.executeRetryStep(ctx, flow, run, step, statuses, mu, by)
+		err = e.executeRetryStep(ctx, flow, run, step, statuses, stepOutputs, mu, by)
 	case StepTypeBranch:
 		err = e.executeBranchStep(ctx, flow, step, statuses, mu, by)
 	case StepTypeJoin:
-		// All wait_for deps are already enforced by the depends_on scheduler.
-		// Nothing to execute — the step succeeds immediately.
+		// Aggregate predecessor outputs + states into a structured map.
+		// Predecessors are step.WaitFor (explicit) or step.DependsOn (fallback).
+		// See docs/task-flow-spec-0.1-dev.md "Step Type: join" for schema.
+		output = aggregateJoinOutput(step, statuses, stepOutputs, mu)
+	case StepTypeExec:
+		output, err = e.executeExecStep(ctx, step)
 	default:
 		return nil, fmt.Errorf("unsupported step type for execution: %s", step.Type)
 	}
@@ -282,7 +323,7 @@ func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *Flow
 	}
 }
 
-func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
+func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) error {
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -303,7 +344,13 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 				defer func() { <-sem }()
 			}
 
-			if _, err := e.executeStep(ctx, flow, run, cid, statuses, mu, by); err != nil {
+			out, err := e.executeStep(ctx, flow, run, cid, statuses, stepOutputs, mu, by)
+			if out != nil {
+				mu.Lock()
+				stepOutputs[cid] = out
+				mu.Unlock()
+			}
+			if err != nil {
 				errOnce.Do(func() {
 					firstErr = err
 				})
@@ -315,7 +362,7 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 	return firstErr
 }
 
-func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
+func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) error {
 	maxAttempts := 1
 	backoffMS := 0
 	if step.Policy != nil {
@@ -338,14 +385,40 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 			mu.Unlock()
 		}
 
-		_, err := e.executeStep(ctx, flow, run, step.Child, statuses, mu, by)
+		out, err := e.executeStep(ctx, flow, run, step.Child, statuses, stepOutputs, mu, by)
 		if err == nil {
+			if out != nil {
+				mu.Lock()
+				stepOutputs[step.Child] = out
+				mu.Unlock()
+			}
 			return nil
 		}
 		lastErr = err
 	}
 
 	return fmt.Errorf("retry exhausted after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// executeExecStep dispatches a `type: exec` step to the registered agent
+// runner. Unlike `task` steps, exec steps require a runner — there is no
+// DB-only fallback because the step's contract is "produce stdout/stderr/
+// exit_code from a literal argv". If no runner is registered (or the runner
+// declines), the step fails fast with a clear error.
+func (e *FlowExecutor) executeExecStep(ctx context.Context, step Step) (map[string]any, error) {
+	if step.Exec == nil || len(step.Exec.Argv) == 0 {
+		return nil, fmt.Errorf("flow exec step %q: missing or empty exec.argv", step.ID)
+	}
+	if e.agentRunner == nil {
+		return nil, fmt.Errorf(
+			"flow exec step %q: no agent runner registered; exec steps require a runner",
+			step.ID)
+	}
+	if !e.agentRunner.CanHandle(step) {
+		return nil, fmt.Errorf(
+			"flow exec step %q: registered runner cannot handle exec steps", step.ID)
+	}
+	return e.agentRunner.Run(ctx, step, "")
 }
 
 func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string) (map[string]any, error) {
@@ -602,7 +675,8 @@ func (e *FlowExecutor) ExecuteForTest(
 	by string,
 ) error {
 	mu := &sync.Mutex{}
-	_, err := e.executeStep(ctx, flow, run, flow.EntryStep, statuses, mu, by)
+	stepOutputs := make(map[string]map[string]any)
+	_, err := e.executeStep(ctx, flow, run, flow.EntryStep, statuses, stepOutputs, mu, by)
 	return err
 }
 
@@ -611,4 +685,54 @@ func generateTaskID() string {
 	// Simple UUID-based ID for now
 	// In production, this should use a counter from the database
 	return fmt.Sprintf("T-%s", uuid.New().String()[:8])
+}
+
+// aggregateJoinOutput builds the join step's structured output from its
+// predecessor steps. Predecessor IDs come from step.WaitFor (canonical) or
+// fall back to step.DependsOn when WaitFor is empty.
+//
+// Output schema (consumed by EVA contracts on the impl branch):
+//
+//	{
+//	  "steps": {
+//	    "<id>": {"state": "<UPPER>", "output": {...}|null},
+//	    ...
+//	  },
+//	  "summary": "<id>: <UPPER>\n..."
+//	}
+//
+// State names are uppercased (SUCCEEDED, FAILED, SKIPPED, …) so `contains`
+// evaluators can assert on `<id>: SUCCEEDED` without case juggling.
+// Predecessor order in `summary` follows the declared list (stable for
+// deterministic test assertions). Missing predecessors render as PENDING.
+func aggregateJoinOutput(step Step, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex) map[string]any {
+	preds := step.WaitFor
+	if len(preds) == 0 {
+		preds = step.DependsOn
+	}
+
+	steps := make(map[string]any, len(preds))
+	lines := make([]string, 0, len(preds))
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, id := range preds {
+		state := strings.ToUpper(string(statuses[id]))
+		if state == "" {
+			state = "PENDING"
+		}
+		entry := map[string]any{"state": state}
+		if out, ok := stepOutputs[id]; ok && out != nil {
+			entry["output"] = out
+		} else {
+			entry["output"] = nil
+		}
+		steps[id] = entry
+		lines = append(lines, fmt.Sprintf("%s: %s", id, state))
+	}
+
+	return map[string]any{
+		"steps":   steps,
+		"summary": strings.Join(lines, "\n"),
+	}
 }

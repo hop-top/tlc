@@ -97,7 +97,35 @@ const (
 	StepTypeJoin     StepType = "join"
 	StepTypeRetry    StepType = "retry"
 	StepTypeSubflow  StepType = "subflow"
+	StepTypeExec     StepType = "exec"
 )
+
+// ExecStep configures a `type: exec` step. Defined by task-flow-spec-0.1-dev
+// (Step Type: exec). Runs argv literally and captures structured output.
+type ExecStep struct {
+	// Argv is the command and its arguments. argv[0] is resolved against PATH.
+	// Required; MUST contain at least one element.
+	Argv []string `json:"argv" yaml:"argv"`
+
+	// Env is extra env merged onto the parent environment for the child.
+	// Empty value unsets the variable. Optional.
+	Env map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+
+	// Cwd is the working directory for the child. Default = flow workdir.
+	// Relative paths resolve against the flow workdir. Optional.
+	Cwd string `json:"cwd,omitempty" yaml:"cwd,omitempty"`
+
+	// TimeoutSec caps wall-clock runtime in seconds. Default 60. 0 = default.
+	TimeoutSec int `json:"timeout_sec,omitempty" yaml:"timeout_sec,omitempty"`
+
+	// AllowNonzeroExit, when true, treats non-zero exit as success.
+	// Default false. Timeout always fails regardless.
+	AllowNonzeroExit bool `json:"allow_nonzero_exit,omitempty" yaml:"allow_nonzero_exit,omitempty"`
+
+	// StdoutMaxBytes truncates captured stdout/stderr beyond this limit.
+	// Default 1 MiB. 0 = default.
+	StdoutMaxBytes int `json:"stdout_max_bytes,omitempty" yaml:"stdout_max_bytes,omitempty"`
+}
 
 // Flow represents a declarative workflow definition.
 type Flow struct {
@@ -200,6 +228,9 @@ type Step struct {
 	// Subflow specific
 	FlowRef string         `json:"flow_ref,omitempty" yaml:"flow_ref,omitempty"`
 	Inputs  map[string]any `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+
+	// Exec specific. Set when Type == StepTypeExec.
+	Exec *ExecStep `json:"exec,omitempty" yaml:"exec,omitempty"`
 
 	// Task template for task generation (flows & assignees feature)
 	TaskTemplate *TaskTemplate `json:"task_template,omitempty" yaml:"task_template,omitempty"`

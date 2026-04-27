@@ -313,11 +313,58 @@ Waits for multiple upstream steps to succeed before proceeding.
    - Any step in `wait_for` is `failed` → Join `failed`
    - Any step in `wait_for` is `canceled` → Join `canceled`
 4. Join acts as a synchronization barrier for downstream steps
+5. Join produces an aggregated `output` (see Output Schema below) so EVA
+   contracts and downstream steps can assert on predecessor states without
+   stepping into per-step contract files
+
+#### Output Schema
+
+```json
+{
+  "steps": {
+    "<step_id>": {
+      "state":  "<UPPER>",
+      "output": {...}|null
+    },
+    ...
+  },
+  "summary": "<step_id>: <UPPER>\n..."
+}
+```
+
+- `steps` — keyed by predecessor step ID; each entry has uppercased
+  terminal `state` (SUCCEEDED, FAILED, SKIPPED, CANCELED, …) plus the
+  raw per-step `output` map (or `null` when the step produced none)
+- `summary` — newline-joined `<step_id>: <STATE>` lines, predecessor
+  order follows the declared `wait_for` list (or `depends_on` fallback);
+  intended for `contains` evaluators that don't traverse nested JSON
+
+Example (3-step fan-in: lint OK, test failed, scan skipped):
+
+```json
+{
+  "steps": {
+    "lint":          {"state": "SUCCEEDED", "output": {"warnings": 0}},
+    "test":          {"state": "FAILED",    "output": {"failures": 3}},
+    "security-scan": {"state": "SKIPPED",   "output": null}
+  },
+  "summary": "lint: SUCCEEDED\ntest: FAILED\nsecurity-scan: SKIPPED"
+}
+```
+
+#### Predecessor Identification
+
+Canonical: `wait_for`. Fallback: `depends_on` (used when `wait_for` is
+empty so simple chains aggregate the same way without re-declaring
+predecessors). Missing entries render as `PENDING` (defensive — should
+never trigger in practice; scheduler waits for terminal state).
 
 #### Notes
 
 - Join is primarily a readability construct (equivalent to `depends_on` on downstream step)
 - Useful for visualizing fan-in patterns in flow graphs
+- Empty `wait_for` yields `{"steps": {}, "summary": ""}` (still
+  succeeds — no predecessors to aggregate)
 
 #### Logging
 
@@ -440,6 +487,120 @@ Executes another flow as a nested step.
 - All subflow logs are emitted with nested context
 - `FLOW_END(<flow_ref>, run_id=...)` when nested flow completes
 - `STEP_END(subflow)` when subflow step completes
+
+---
+
+### Step Type: `exec`
+
+Runs a literal command (argv array) and captures its result as structured
+step output. Distinct from `task`: `exec` runs a deterministic external
+process; `task` dispatches an LLM agent subprocess via the agent adapter
+layer. Use `exec` for regex/CLI checks, smoke commands, lint/test invocations,
+and any deterministic shell-level work that does not need an LLM.
+
+#### Schema
+
+```json
+{
+  "type": "exec",
+  "step_id": "...",
+  "title": "...",
+  "exec": {
+    "argv": ["<bin>", "<arg>", ...],
+    "env": { "<KEY>": "<value>" },
+    "cwd": "<path>",
+    "timeout_sec": 60,
+    "allow_nonzero_exit": false,
+    "stdout_max_bytes": 1048576
+  }
+}
+```
+
+#### Fields
+
+- `argv` (array of strings, required): Command and arguments to execute
+  - MUST contain at least one element (the binary)
+  - First element is resolved against PATH (or absolute path)
+  - No shell expansion; arguments are passed literally
+- `env` (object, optional): Extra environment variables for the child process
+  - Merged on top of the parent process environment
+  - Keys with empty values unset that variable in the child
+  - Default: parent environment unmodified
+- `cwd` (string, optional): Working directory for the child process
+  - Default: flow workdir (sandbox repo dir in flow-test mode)
+  - Relative paths are resolved against the flow workdir
+- `timeout_sec` (integer, optional): Maximum runtime in seconds
+  - Default: `60`
+  - On timeout, the process is signalled (SIGTERM, then SIGKILL) and
+    the step fails with a timeout error regardless of `allow_nonzero_exit`
+  - Set to `0` to use the default; negative values are rejected
+- `allow_nonzero_exit` (bool, optional): When `true`, a non-zero exit
+  code does not fail the step
+  - Default: `false` (non-zero exit fails the step)
+  - The exit code is always available in the step output
+- `stdout_max_bytes` (integer, optional): Truncate captured stdout
+  beyond this limit
+  - Default: `1048576` (1 MiB)
+  - Truncation MUST set `truncated: true` in step output
+  - The same limit applies independently to stderr
+
+#### Output Schema
+
+Every `exec` step emits the following structured output:
+
+```json
+{
+  "exit_code": <int>,
+  "stdout": "<string>",
+  "stderr": "<string>",
+  "duration_ms": <int>,
+  "truncated": <bool>
+}
+```
+
+- `exit_code` (integer): Process exit code (`0` on success)
+- `stdout` (string): Captured stdout, possibly truncated
+- `stderr` (string): Captured stderr, possibly truncated
+- `duration_ms` (integer): Wall-clock runtime in milliseconds
+- `truncated` (bool): `true` if stdout or stderr was truncated
+
+#### Execution Semantics
+
+1. Step transitions to `running`
+2. Resolve `argv[0]` against PATH using `cwd` and merged env
+3. Spawn child process with merged env, configured cwd, empty stdin
+4. Capture stdout and stderr into bounded buffers
+5. Wait for the process to exit OR for the timeout to expire
+6. Emit structured output as defined above
+7. Step outcome:
+   - Timeout → step `failed`
+   - Exit `0` → step `succeeded`
+   - Non-zero exit AND `allow_nonzero_exit: true` → step `succeeded`
+   - Non-zero exit AND `allow_nonzero_exit: false` → step `failed`
+
+#### Determinism
+
+- Output is deterministic given identical `argv`, `env`, `cwd`, and
+  binary version
+- Test harnesses MAY cassette `exec` steps via the cross-runtime
+  recorder. Replay returns the recorded `{exit_code, stdout, stderr}`
+  without invoking the binary
+- `duration_ms` is NOT replayed deterministically; consumers MUST NOT
+  assert on its exact value
+
+#### Cassette Integration (Informative)
+
+In `tlc flow test`, `exec` steps run inside the sandbox and are
+intercepted by the catchall shim — the same path used for arbitrary
+binaries spawned by `task` steps. Replay determinism therefore mirrors
+the existing `task` semantics: same `argv` plus same env produces the
+same recorded `{exit_code, stdout, stderr}` payload.
+
+#### Logging
+
+- `STEP_START` when step begins, with `argv` and `cwd`
+- `STEP_END` when step completes, with `exit_code`, `duration_ms`,
+  and `truncated`
 
 ---
 
