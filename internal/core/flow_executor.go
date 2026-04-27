@@ -56,6 +56,20 @@ func (c *CompositeAgentRunner) Run(ctx context.Context, step Step, prompt string
 		step.ID, step.Type)
 }
 
+// dependencySatisfied reports whether a predecessor's StepStatus is one
+// that allows a descendant to proceed past its `depends_on:` constraint.
+// SUCCEEDED is the normal completion state. SKIPPED also satisfies: a
+// predecessor pruned by branch routing or gated off by a falsy
+// `condition:` will never produce output, but its absence should not
+// deadlock the rest of the graph (descendants whose inputs reference a
+// missing output already render that input as PENDING via the join
+// aggregator). FAILED is intentionally NOT satisfying: the scheduler
+// surfaces FAILED predecessors as terminal errors before reaching this
+// check, which is the safer default until per-step error policies land.
+func dependencySatisfied(s StepStatus) bool {
+	return s == StepStatusSucceeded || s == StepStatusSkipped
+}
+
 // FlowExecutor handles the execution of flow definitions.
 type FlowExecutor struct {
 	repo        Repository
@@ -185,10 +199,15 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 				return fmt.Errorf("step %s reached terminal failure state: %s", id, statuses[id])
 			}
 
-			// Check dependencies
+			// Check dependencies. A predecessor satisfies depends_on when it
+			// has reached a non-blocking terminal state — either SUCCEEDED
+			// (normal completion) or SKIPPED (e.g. pruned branch arm or
+			// gated by a falsy `condition:`). FAILED predecessors are
+			// caught earlier in this loop and abort the run, so they never
+			// reach this check.
 			ready := true
 			for _, dep := range step.DependsOn {
-				if statuses[dep] != StepStatusSucceeded {
+				if !dependencySatisfied(statuses[dep]) {
 					ready = false
 					break
 				}

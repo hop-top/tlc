@@ -112,10 +112,19 @@ And MAY include:
   - MUST be a valid key (no spaces, use kebab-case or underscores)
 - `type` (string, required): Step type from the vocabulary below
 - `title` (string, required): Human-readable step description
-- `depends_on` (array of strings, optional): Step IDs that must succeed before this step starts
+- `depends_on` (array of strings, optional): Step IDs that must reach a non-blocking
+  terminal state before this step starts
   - Default: `[]` (no dependencies)
   - If empty, step starts when flow execution reaches it
-  - If non-empty, step waits until all dependencies reach `succeeded` state
+  - If non-empty, step waits until **every** dependency reaches `succeeded` **or**
+    `skipped`. `skipped` satisfies because a predecessor pruned by branch routing
+    or gated off by a falsy `condition:` will never produce output, but its absence
+    must not deadlock descendants. Inputs that reference a `skipped` predecessor's
+    output render as `pending` via the join aggregator (see Joins below).
+  - `failed` does **not** satisfy `depends_on`. The scheduler aborts the run as
+    soon as any reachable step reaches `failed` (terminal-failure). Per-step error
+    policies that allow descendants to continue past a failed predecessor are out
+    of scope for v0.1.
 
 ---
 
