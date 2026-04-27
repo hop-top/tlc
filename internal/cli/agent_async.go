@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"hop.top/kit/output"
+	"hop.top/kit/go/console/output"
 	"hop.top/tlc/internal/core"
 )
 

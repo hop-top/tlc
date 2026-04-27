@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"hop.top/kit/sqlstore"
+	"hop.top/kit/go/storage/sqlstore"
 )
 
 type migration struct {

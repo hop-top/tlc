@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/kit/domain"
+	"hop.top/kit/go/runtime/domain"
 )
 
 // mockDomainRepo implements domain.Repository[Task] for testing.

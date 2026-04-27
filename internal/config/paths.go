@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/viper"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/xdg"
 )
 
 const (

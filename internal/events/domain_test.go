@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 	"hop.top/tlc/internal/core"
 )
 

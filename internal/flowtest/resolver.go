@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/xdg"
 	"hop.top/tlc/internal/core"
 )
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/kit/domain"
+	"hop.top/kit/go/runtime/domain"
 	"hop.top/tlc/internal/core"
 )
 

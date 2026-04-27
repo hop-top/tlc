@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"hop.top/kit/domain"
+	"hop.top/kit/go/runtime/domain"
 )
 
 // TaskService provides business logic for task lifecycle management.

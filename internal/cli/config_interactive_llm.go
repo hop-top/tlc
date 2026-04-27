@@ -10,8 +10,8 @@ import (
 
 	"charm.land/huh/v2"
 
-	"hop.top/kit/llm"
-	llmerrors "hop.top/kit/llm/errors"
+	"hop.top/kit/go/ai/llm"
+	llmerrors "hop.top/kit/go/ai/llm/errors"
 )
 
 // providerAuthInfo maps URI schemes to auth requirements.

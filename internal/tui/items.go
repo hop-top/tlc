@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	kitcli "hop.top/kit/cli"
-	kittui "hop.top/kit/tui"
+	kitcli "hop.top/kit/go/console/cli"
+	kittui "hop.top/kit/go/console/tui"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 )

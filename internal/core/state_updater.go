@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 )
 
 // AgentRunRecord is an audit trail entry for a single agent execution,

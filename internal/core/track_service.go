@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"hop.top/kit/domain"
+	"hop.top/kit/go/runtime/domain"
 )
 
 // TrackService provides business logic for track lifecycle management.

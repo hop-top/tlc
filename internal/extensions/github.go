@@ -1,7 +1,7 @@
 package extensions
 
 import (
-	"hop.top/kit/ext"
+	"hop.top/kit/go/ai/ext"
 	"hop.top/tlc/internal/auth"
 )
 

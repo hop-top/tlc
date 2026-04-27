@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
-	"hop.top/kit/output"
+	"hop.top/kit/go/console/output"
 	"hop.top/tlc/internal/core"
 )
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"hop.top/kit/llm"
+	"hop.top/kit/go/ai/llm"
 )
 
 // systemPromptTemplate is the instruction set sent to the LLM for command

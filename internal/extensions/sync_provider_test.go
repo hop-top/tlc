@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"hop.top/kit/ext"
+	"hop.top/kit/go/ai/ext"
 	"hop.top/tlc/internal/auth"
 )
 

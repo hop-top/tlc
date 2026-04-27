@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	kitconfig "hop.top/kit/config"
+	kitconfig "hop.top/kit/go/core/config"
 )
 
 func DefaultConfig() *Config {

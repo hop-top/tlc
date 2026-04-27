@@ -8,8 +8,8 @@ import (
 	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/huh/v2"
 	"github.com/spf13/viper"
-	kitcli "hop.top/kit/cli"
-	kittui "hop.top/kit/tui"
+	kitcli "hop.top/kit/go/console/cli"
+	kittui "hop.top/kit/go/console/tui"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/tui/styles"
 )

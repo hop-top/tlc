@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
-	"hop.top/kit/llm"
+	"hop.top/kit/go/ai/llm"
 
 	// Register adapters for resolvePromptLLM tests.
-	_ "hop.top/kit/llm/anthropic"
-	_ "hop.top/kit/llm/ollama"
-	_ "hop.top/kit/llm/openai"
+	_ "hop.top/kit/go/ai/llm/anthropic"
+	_ "hop.top/kit/go/ai/llm/ollama"
+	_ "hop.top/kit/go/ai/llm/openai"
 )
 
 // ---------------------------------------------------------------------------

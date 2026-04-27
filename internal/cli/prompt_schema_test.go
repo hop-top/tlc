@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"hop.top/kit/toolspec"
+	"hop.top/kit/go/ai/toolspec"
 )
 
 func TestCobraToToolSpec_HasCommands(t *testing.T) {

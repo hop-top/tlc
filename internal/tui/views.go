@@ -8,7 +8,7 @@ import (
 	glamour "charm.land/glamour/v2"
 	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
-	kittui "hop.top/kit/tui"
+	kittui "hop.top/kit/go/console/tui"
 	"hop.top/tlc/internal/core"
 )
 

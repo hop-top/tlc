@@ -1,6 +1,6 @@
 package core
 
-import "hop.top/kit/domain"
+import "hop.top/kit/go/runtime/domain"
 
 // Compile-time assertions: Task, Track, and FlowRun implement domain.Entity.
 var (

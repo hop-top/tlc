@@ -3,7 +3,7 @@ package events
 import (
 	"testing"
 
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 )
 
 func TestTopicConstants_NonEmpty(t *testing.T) {
