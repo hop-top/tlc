@@ -300,18 +300,21 @@ Waits for multiple upstream steps to succeed before proceeding.
 
 #### Fields
 
-- `wait_for` (array of strings, required): Step IDs that must succeed
-  - MUST contain at least 1 step ID
-  - All steps MUST exist in the flow
+- `wait_for` (array of strings, optional): Step IDs that must succeed
+  - All listed steps MUST exist in the flow
+  - When omitted/empty, the parser falls back to `depends_on` for the
+    predecessor list (see Predecessor Identification below)
+  - At least one of `wait_for` or `depends_on` MUST be non-empty
 
 #### Execution Semantics
 
 1. Join step transitions to `running`
-2. Wait for all steps in `wait_for` to reach terminal state
-3. Join outcome:
-   - All steps in `wait_for` are `succeeded` → Join `succeeded`
-   - Any step in `wait_for` is `failed` → Join `failed`
-   - Any step in `wait_for` is `canceled` → Join `canceled`
+2. Wait for all predecessor steps (`wait_for`, or `depends_on` when
+   `wait_for` is empty) to reach terminal state
+3. Join outcome (evaluated against the resolved predecessor list):
+   - All predecessors are `succeeded` → Join `succeeded`
+   - Any predecessor is `failed` → Join `failed`
+   - Any predecessor is `canceled` → Join `canceled`
 4. Join acts as a synchronization barrier for downstream steps
 5. Join produces an aggregated `output` (see Output Schema below) so EVA
    contracts and downstream steps can assert on predecessor states without
@@ -356,8 +359,13 @@ Example (3-step fan-in: lint OK, test failed, scan skipped):
 
 Canonical: `wait_for`. Fallback: `depends_on` (used when `wait_for` is
 empty so simple chains aggregate the same way without re-declaring
-predecessors). Missing entries render as `PENDING` (defensive — should
-never trigger in practice; scheduler waits for terminal state).
+predecessors). Both the parser validator and the runtime aggregator
+honor this fallback — a join step with only `depends_on: [a, b]`
+parses, validates, and aggregates identically to one with
+`wait_for: [a, b]`. If both are present, `wait_for` wins. If neither
+is present, the parser rejects the flow. Missing entries render as
+`PENDING` (defensive — should never trigger in practice; scheduler
+waits for terminal state).
 
 #### Notes
 

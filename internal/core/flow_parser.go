@@ -91,8 +91,12 @@ func ValidateFlow(f *Flow) error {
 				return fmt.Errorf("retry step %s references non-existent child %s", id, step.Child)
 			}
 		case StepTypeJoin:
-			if len(step.WaitFor) == 0 {
-				return fmt.Errorf("join step %s must contain at least one step in wait_for", id)
+			// Predecessors come from wait_for (canonical) or depends_on
+			// (fallback) — runtime aggregator in flow_executor.go does the
+			// same. Validator must accept either; if both present, wait_for
+			// wins (we still validate both lists for existence).
+			if len(step.WaitFor) == 0 && len(step.DependsOn) == 0 {
+				return fmt.Errorf("join step %s must contain at least one predecessor in wait_for or depends_on", id)
 			}
 			for _, w := range step.WaitFor {
 				if _, ok := f.Steps[w]; !ok {

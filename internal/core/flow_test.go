@@ -484,3 +484,78 @@ steps:
 		})
 	}
 }
+
+// TestParseFlow_JoinPredecessors covers T-0754: validator must accept
+// either wait_for or depends_on as the source of join predecessors,
+// matching the runtime aggregator's fallback behaviour
+// (flow_executor.go aggregateJoinOutput).
+func TestParseFlow_JoinPredecessors(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr string // empty = expect success
+	}{
+		{
+			name: "join with wait_for only — passes",
+			input: `
+flow_id: test
+entry_step: a
+steps:
+  a: { step_id: a, type: task }
+  b: { step_id: b, type: task }
+  j: { step_id: j, type: join, wait_for: [a, b] }
+`,
+			wantErr: "",
+		},
+		{
+			name: "join with depends_on only — passes (T-0754)",
+			input: `
+flow_id: test
+entry_step: a
+steps:
+  a: { step_id: a, type: task }
+  b: { step_id: b, type: task }
+  j: { step_id: j, type: join, depends_on: [a, b] }
+`,
+			wantErr: "",
+		},
+		{
+			name: "join with both — passes (wait_for wins)",
+			input: `
+flow_id: test
+entry_step: a
+steps:
+  a: { step_id: a, type: task }
+  b: { step_id: b, type: task }
+  j: { step_id: j, type: join, wait_for: [a], depends_on: [b] }
+`,
+			wantErr: "",
+		},
+		{
+			name: "join with neither — fails",
+			input: `
+flow_id: test
+entry_step: a
+steps:
+  a: { step_id: a, type: task }
+  j: { step_id: j, type: join }
+`,
+			wantErr: "must contain at least one predecessor in wait_for or depends_on",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseFlow(strings.NewReader(tt.input), "test.yaml")
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ParseFlow() unexpected error = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("ParseFlow() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
