@@ -1,0 +1,6 @@
+name: happy-path
+description: >
+  Quality gate accepts producer output. Producer + gated step + final
+  step all SUCCEED. Mirrors the "pass" scenario as the canonical
+  happy path.
+expected_exit: 0
