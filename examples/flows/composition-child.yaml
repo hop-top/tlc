@@ -43,3 +43,11 @@ steps:
       outputs:
         test_report:
           description: "JSON test summary with pass/fail counts"
+
+  lint-and-test:
+    step_id: "lint-and-test"
+    type: "join"
+    title: "Aggregate lint + test outputs"
+    depends_on: ["lint", "test"]
+    wait_for: ["lint", "test"]
+    contract: "lint-and-test"
