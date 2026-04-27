@@ -15,7 +15,7 @@ require (
 	github.com/google/go-github/v69 v69.2.0
 	github.com/google/uuid v1.6.0
 	github.com/machinebox/graphql v0.2.2
-	github.com/mattn/go-isatty v0.0.21
+	github.com/mattn/go-isatty v0.0.22
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -30,7 +30,7 @@ require (
 	hop.top/kit v0.3.2-patch.3
 	hop.top/uri v0.0.1-alpha.1
 	hop.top/xrr v0.1.0-alpha.3
-	modernc.org/sqlite v1.48.2
+	modernc.org/sqlite v1.50.0
 )
 
 require (
