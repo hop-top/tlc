@@ -1,0 +1,15 @@
+name: plan_approved
+provider: filesystem
+evaluators:
+  - name: step_status
+    step: load-track
+    expected: SUCCEEDED
+  - name: step_status
+    step: synthesise-findings
+    expected: SUCCEEDED
+  - name: step_status
+    step: gate-review
+    expected: SUCCEEDED
+  - name: contains
+    substring: "PLAN APPROVED"
+    mode: binary
