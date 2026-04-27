@@ -133,27 +133,9 @@ func kitRoot() *kitcli.Root {
 		}
 
 		// Initialise the event bus once per process.
-		// Connects to dpkms hub when available; falls back to local-only.
+		// Local-only until kit publishes a tag with bus.WithNetwork/Auth APIs (T-0748).
 		if eventBus == nil {
-			addr := os.Getenv("TLC_BUS_ADDR")
-			if addr == "" {
-				addr = "ws://localhost:8080/ws/bus"
-			}
-			token := os.Getenv("TLC_BUS_TOKEN")
-			if token == "" {
-				token = os.Getenv("BUS_TOKEN")
-			}
-			if token != "" {
-				eventBus = bus.New(
-					bus.WithNetwork(addr),
-					bus.WithNetworkOption(
-						bus.WithAuth(&bus.StaticTokenAuth{Token_: token}),
-					),
-				)
-			} else {
-				log.Warn("bus auth: BUS_TOKEN or TLC_BUS_TOKEN not set; bus disabled")
-				eventBus = bus.New()
-			}
+			eventBus = bus.New()
 			busPublisher = events.NewBusPublisher(eventBus)
 		}
 
