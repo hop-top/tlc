@@ -191,17 +191,29 @@ func handleRequest(req Request) Response {
 	}
 }
 
+// parseRepo splits "owner/repo" into its two components. Both halves
+// must be non-empty; the input may not contain a leading or trailing
+// slash. GitHub permits hyphens in owner/repo names so the only
+// structural rule enforced here is "exactly one slash, both halves
+// non-empty".
+func parseRepo(repoFull string) (string, string, error) {
+	parts := strings.SplitN(repoFull, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[1], "/") {
+		return "", "", fmt.Errorf("invalid repo format %q: expected owner/repo", repoFull)
+	}
+	return parts[0], parts[1], nil
+}
+
 func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("GITHUB_TOKEN environment variable not set")
 	}
 
-	parts := strings.Split(repoFull, "/")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid repo format, expected owner/repo")
+	owner, repo, err := parseRepo(repoFull)
+	if err != nil {
+		return nil, err
 	}
-	owner, repo := parts[0], parts[1]
 
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
@@ -252,11 +264,10 @@ func createGitHubIssue(repoFull string, task *Task) error {
 		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
 	}
 
-	parts := strings.Split(repoFull, "/")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid repo format")
+	owner, repo, err := parseRepo(repoFull)
+	if err != nil {
+		return err
 	}
-	owner, repo := parts[0], parts[1]
 
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
@@ -286,11 +297,10 @@ func updateGitHubIssue(repoFull string, task *Task) error {
 		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
 	}
 
-	parts := strings.Split(repoFull, "/")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid repo format")
+	owner, repo, err := parseRepo(repoFull)
+	if err != nil {
+		return err
 	}
-	owner, repo := parts[0], parts[1]
 
 	originIDStr, ok := task.Meta["origin_id"].(string)
 	if !ok {
@@ -308,8 +318,7 @@ func updateGitHubIssue(repoFull string, task *Task) error {
 	client := github.NewClient(tc)
 
 	req := MapTaskToGitHubIssueRequest(task)
-	_, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req)
-	if err != nil {
+	if _, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req); err != nil {
 		return fmt.Errorf("failed to edit github issue: %w", err)
 	}
 	return nil
@@ -321,11 +330,10 @@ func deleteGitHubIssue(repoFull string, task *Task) error {
 		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
 	}
 
-	parts := strings.Split(repoFull, "/")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid repo format")
+	owner, repo, err := parseRepo(repoFull)
+	if err != nil {
+		return err
 	}
-	owner, repo := parts[0], parts[1]
 
 	originIDStr, ok := task.Meta["origin_id"].(string)
 	if !ok {
@@ -347,8 +355,7 @@ func deleteGitHubIssue(repoFull string, task *Task) error {
 		State: &closed,
 	}
 
-	_, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req)
-	if err != nil {
+	if _, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req); err != nil {
 		return fmt.Errorf("failed to close github issue: %w", err)
 	}
 	return nil
