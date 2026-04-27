@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/log/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -62,7 +63,7 @@ func (h *Hook) WithEvaURL(url string) *Hook {
 // it invokes POST {EVA_URL}/v1/contract/invoke with the step output.
 //
 //   - No contract file → nil (silent pass).
-//   - EVA_URL not set → nil (silent pass; contract validation skipped).
+//   - EVA_URL not set → nil + WARN log (contract validation skipped, user notified).
 //   - EVA 200 → nil.
 //   - EVA 422 (contract_violation) → ContractError.
 //   - Other EVA errors → wrapped error.
@@ -74,12 +75,8 @@ func (h *Hook) Run(stepID string, output map[string]any) error {
 		return fmt.Errorf("flowtest: hook: stat contract %s: %w", contractPath, err)
 	}
 
-	if h.evaURL == "" {
-		// EVA gateway not configured — skip contract evaluation silently.
-		return nil
-	}
-
-	// Read contract file to get the contract name.
+	// Read contract file to get the contract name. Done before the EVA_URL
+	// gate so the warning can name the contract the user thought was checked.
 	data, err := os.ReadFile(contractPath)
 	if err != nil {
 		return fmt.Errorf("flowtest: hook: read contract %s: %w", contractPath, err)
@@ -90,8 +87,18 @@ func (h *Hook) Run(stepID string, output map[string]any) error {
 	}
 	contractName := cf.Contract
 	if contractName == "" {
-		// Fall back to step ID as contract name.
-		contractName = stepID
+		contractName = stepID // fall back to step ID as contract name
+	}
+
+	if h.evaURL == "" {
+		log.Warn(
+			"contract present but EVA_URL not set; skipping evaluation. "+
+				"Use 'eva run --contract <path> --input <path>' for standalone CI invocation.",
+			"contract", contractName,
+			"step", stepID,
+			"path", contractPath,
+		)
+		return nil
 	}
 
 	return h.invokeEvaGate(stepID, contractName, output)
