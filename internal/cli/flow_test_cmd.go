@@ -243,8 +243,12 @@ func executeRun(
 	}
 	resolver := flowtest.NewAdapterResolver(adapters, flow, globalCfg)
 	sandboxRunner := flowtest.NewSandboxAgentRunner(sb, mode, &runWithPassthrough, resolver)
+	execRunner := flowtest.NewExecAgentRunner(sb.RepoDir)
+	// Composite: dispatch task→sandbox, exec→exec runner. SandboxAgentRunner
+	// declines exec steps via its CanHandle, so order here is illustrative.
+	composite := core.NewCompositeAgentRunner(sandboxRunner, execRunner)
 	agentRunner := &loggingAgentRunner{
-		inner:  sandboxRunner,
+		inner:  composite,
 		stderr: os.Stderr,
 		total:  len(flow.Steps),
 	}

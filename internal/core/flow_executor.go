@@ -19,6 +19,42 @@ type AgentRunner interface {
 	Run(ctx context.Context, step Step, prompt string) (map[string]any, error)
 }
 
+// CompositeAgentRunner dispatches to the first registered runner whose
+// CanHandle returns true for the step. Use this to combine runners that
+// handle different step types (e.g. SandboxAgentRunner for `task` and
+// ExecAgentRunner for `exec`) behind FlowExecutor.WithAgentRunner.
+type CompositeAgentRunner struct {
+	runners []AgentRunner
+}
+
+// NewCompositeAgentRunner constructs a composite from the given runners.
+// Order matters: earlier runners win on overlapping CanHandle.
+func NewCompositeAgentRunner(runners ...AgentRunner) *CompositeAgentRunner {
+	return &CompositeAgentRunner{runners: runners}
+}
+
+// CanHandle returns true if any inner runner can handle the step.
+func (c *CompositeAgentRunner) CanHandle(step Step) bool {
+	for _, r := range c.runners {
+		if r.CanHandle(step) {
+			return true
+		}
+	}
+	return false
+}
+
+// Run dispatches to the first inner runner whose CanHandle returns true.
+// Returns an error if no inner runner can handle the step.
+func (c *CompositeAgentRunner) Run(ctx context.Context, step Step, prompt string) (map[string]any, error) {
+	for _, r := range c.runners {
+		if r.CanHandle(step) {
+			return r.Run(ctx, step, prompt)
+		}
+	}
+	return nil, fmt.Errorf("composite agent runner: no runner handles step %q (type=%s)",
+		step.ID, step.Type)
+}
+
 // FlowExecutor handles the execution of flow definitions.
 type FlowExecutor struct {
 	repo        Repository
@@ -232,6 +268,8 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 	case StepTypeJoin:
 		// All wait_for deps are already enforced by the depends_on scheduler.
 		// Nothing to execute — the step succeeds immediately.
+	case StepTypeExec:
+		output, err = e.executeExecStep(ctx, step)
 	default:
 		return nil, fmt.Errorf("unsupported step type for execution: %s", step.Type)
 	}
@@ -346,6 +384,27 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 	}
 
 	return fmt.Errorf("retry exhausted after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// executeExecStep dispatches a `type: exec` step to the registered agent
+// runner. Unlike `task` steps, exec steps require a runner — there is no
+// DB-only fallback because the step's contract is "produce stdout/stderr/
+// exit_code from a literal argv". If no runner is registered (or the runner
+// declines), the step fails fast with a clear error.
+func (e *FlowExecutor) executeExecStep(ctx context.Context, step Step) (map[string]any, error) {
+	if step.Exec == nil || len(step.Exec.Argv) == 0 {
+		return nil, fmt.Errorf("flow exec step %q: missing or empty exec.argv", step.ID)
+	}
+	if e.agentRunner == nil {
+		return nil, fmt.Errorf(
+			"flow exec step %q: no agent runner registered; exec steps require a runner",
+			step.ID)
+	}
+	if !e.agentRunner.CanHandle(step) {
+		return nil, fmt.Errorf(
+			"flow exec step %q: registered runner cannot handle exec steps", step.ID)
+	}
+	return e.agentRunner.Run(ctx, step, "")
 }
 
 func (e *FlowExecutor) executeTaskStep(ctx context.Context, step Step, by string) (map[string]any, error) {
