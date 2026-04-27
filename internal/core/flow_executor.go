@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -208,7 +209,7 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 		}
 
 		// Execute the ready step
-		output, err := e.executeStep(ctx, flow, run, readyStepID, statuses, mu, by)
+		output, err := e.executeStep(ctx, flow, run, readyStepID, statuses, stepOutputs, mu, by)
 		if output != nil {
 			stepOutputs[readyStepID] = output
 		}
@@ -243,7 +244,7 @@ func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, _ string) 
 	}
 }
 
-func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, mu *sync.Mutex, by string) (map[string]any, error) {
+func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) (map[string]any, error) {
 	step := flow.Steps[stepID]
 
 	mu.Lock()
@@ -260,14 +261,16 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 	case StepTypeTask:
 		output, err = e.executeTaskStep(ctx, step, by)
 	case StepTypeParallel:
-		err = e.executeParallelStep(ctx, flow, run, step, statuses, mu, by)
+		err = e.executeParallelStep(ctx, flow, run, step, statuses, stepOutputs, mu, by)
 	case StepTypeRetry:
-		err = e.executeRetryStep(ctx, flow, run, step, statuses, mu, by)
+		err = e.executeRetryStep(ctx, flow, run, step, statuses, stepOutputs, mu, by)
 	case StepTypeBranch:
 		err = e.executeBranchStep(ctx, flow, step, statuses, mu, by)
 	case StepTypeJoin:
-		// All wait_for deps are already enforced by the depends_on scheduler.
-		// Nothing to execute — the step succeeds immediately.
+		// Aggregate predecessor outputs + states into a structured map.
+		// Predecessors are step.WaitFor (explicit) or step.DependsOn (fallback).
+		// See docs/task-flow-spec-0.1-dev.md "Step Type: join" for schema.
+		output = aggregateJoinOutput(step, statuses, stepOutputs, mu)
 	case StepTypeExec:
 		output, err = e.executeExecStep(ctx, step)
 	default:
@@ -320,7 +323,7 @@ func (e *FlowExecutor) updateProgress(ctx context.Context, flow *Flow, run *Flow
 	}
 }
 
-func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
+func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) error {
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -341,7 +344,13 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 				defer func() { <-sem }()
 			}
 
-			if _, err := e.executeStep(ctx, flow, run, cid, statuses, mu, by); err != nil {
+			out, err := e.executeStep(ctx, flow, run, cid, statuses, stepOutputs, mu, by)
+			if out != nil {
+				mu.Lock()
+				stepOutputs[cid] = out
+				mu.Unlock()
+			}
+			if err != nil {
 				errOnce.Do(func() {
 					firstErr = err
 				})
@@ -353,7 +362,7 @@ func (e *FlowExecutor) executeParallelStep(ctx context.Context, flow *Flow, run 
 	return firstErr
 }
 
-func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, mu *sync.Mutex, by string) error {
+func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *FlowRun, step Step, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) error {
 	maxAttempts := 1
 	backoffMS := 0
 	if step.Policy != nil {
@@ -376,8 +385,13 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 			mu.Unlock()
 		}
 
-		_, err := e.executeStep(ctx, flow, run, step.Child, statuses, mu, by)
+		out, err := e.executeStep(ctx, flow, run, step.Child, statuses, stepOutputs, mu, by)
 		if err == nil {
+			if out != nil {
+				mu.Lock()
+				stepOutputs[step.Child] = out
+				mu.Unlock()
+			}
 			return nil
 		}
 		lastErr = err
@@ -661,7 +675,8 @@ func (e *FlowExecutor) ExecuteForTest(
 	by string,
 ) error {
 	mu := &sync.Mutex{}
-	_, err := e.executeStep(ctx, flow, run, flow.EntryStep, statuses, mu, by)
+	stepOutputs := make(map[string]map[string]any)
+	_, err := e.executeStep(ctx, flow, run, flow.EntryStep, statuses, stepOutputs, mu, by)
 	return err
 }
 
@@ -670,4 +685,54 @@ func generateTaskID() string {
 	// Simple UUID-based ID for now
 	// In production, this should use a counter from the database
 	return fmt.Sprintf("T-%s", uuid.New().String()[:8])
+}
+
+// aggregateJoinOutput builds the join step's structured output from its
+// predecessor steps. Predecessor IDs come from step.WaitFor (canonical) or
+// fall back to step.DependsOn when WaitFor is empty.
+//
+// Output schema (consumed by EVA contracts on the impl branch):
+//
+//	{
+//	  "steps": {
+//	    "<id>": {"state": "<UPPER>", "output": {...}|null},
+//	    ...
+//	  },
+//	  "summary": "<id>: <UPPER>\n..."
+//	}
+//
+// State names are uppercased (SUCCEEDED, FAILED, SKIPPED, …) so `contains`
+// evaluators can assert on `<id>: SUCCEEDED` without case juggling.
+// Predecessor order in `summary` follows the declared list (stable for
+// deterministic test assertions). Missing predecessors render as PENDING.
+func aggregateJoinOutput(step Step, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex) map[string]any {
+	preds := step.WaitFor
+	if len(preds) == 0 {
+		preds = step.DependsOn
+	}
+
+	steps := make(map[string]any, len(preds))
+	lines := make([]string, 0, len(preds))
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, id := range preds {
+		state := strings.ToUpper(string(statuses[id]))
+		if state == "" {
+			state = "PENDING"
+		}
+		entry := map[string]any{"state": state}
+		if out, ok := stepOutputs[id]; ok && out != nil {
+			entry["output"] = out
+		} else {
+			entry["output"] = nil
+		}
+		steps[id] = entry
+		lines = append(lines, fmt.Sprintf("%s: %s", id, state))
+	}
+
+	return map[string]any{
+		"steps":   steps,
+		"summary": strings.Join(lines, "\n"),
+	}
 }
