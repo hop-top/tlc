@@ -277,16 +277,20 @@ var TaskUpdateCmd = &cobra.Command{
 
 			task.UpdatedAt = now
 
+			// Local DB is the source of truth; commit it first.
+			if err := res.Storage.UpdateTask(ctx, task); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: failed to update: %v", task.ID, err))
+				continue
+			}
+
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
-				if err := updateSyncedTask(ctx, task, res.Storage); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
-					continue
+				// Mirror to the origin system as a best-effort side
+				// effect. Sync failure surfaces as a warning but does
+				// not roll back local truth (T-0750).
+				if err := pushSyncedTask(ctx, task, res.Storage); err != nil {
+					_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: %v (local state saved; sync needs retry)\n", err)
 				}
 			} else {
-				if err := res.Storage.UpdateTask(ctx, task); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: failed to update: %v", task.ID, err))
-					continue
-				}
 				fmt.Printf("Updated task %s\n", task.ID)
 			}
 		}
