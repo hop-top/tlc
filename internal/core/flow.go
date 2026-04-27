@@ -203,6 +203,12 @@ type Step struct {
 	DependsOn []string       `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Meta      map[string]any `json:"meta,omitempty" yaml:"meta,omitempty"`
 
+	// Condition gates step execution against flow inputs. Empty = always run.
+	// Syntax: `<lhs> == '<value>'` or `<lhs> != '<value>'` where lhs is
+	// `inputs.<key>` or bare `<key>`. See docs/task-flow-spec-0.1-dev.md
+	// "Conditional execution" for full grammar.
+	Condition string `json:"condition,omitempty" yaml:"condition,omitempty"`
+
 	// Agent overrides the flow-level default adapter for this step.
 	// Accepts string shorthand or struct with config. Zero value = inherit.
 	Agent AgentRef `json:"agent,omitempty" yaml:"agent,omitempty"`
