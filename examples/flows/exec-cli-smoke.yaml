@@ -1,0 +1,48 @@
+flow_id: "flow:exec-cli-smoke:1.0"
+name: "CLI Smoke (exec)"
+version: "1.0"
+description: |
+  Canonical example of the `exec` step type. Runs `tlc --version` and
+  `tlc --help` as deterministic CLI subprocesses (no LLM dispatch),
+  joins their structured outputs, and exposes them for an eva contract
+  assertion.
+
+  Each `exec` step captures `{exit_code, stdout, stderr, duration_ms,
+  truncated}` per the exec output schema in
+  `task-flow-spec-0.1-dev.md`. The downstream `join` aggregates the two
+  outputs so a single eva contract (`cli-smoke-contract`) can assert on
+  both invocations together.
+
+  Companion contract YAML lives in eva (not yet registered — see
+  `hop-top/eva#flow-exec-evaluators` T-0257). Until then, this flow
+  runs successfully but contract evaluation is silently skipped unless
+  `EVA_URL` is set AND the contract name resolves at the gateway.
+entry_step: "version"
+
+agent:
+  name: claude
+
+steps:
+
+  version:
+    step_id: "version"
+    type: "exec"
+    title: "Capture tlc --version"
+    argv: ["tlc", "--version"]
+    timeout_sec: 10
+
+  help:
+    step_id: "help"
+    type: "exec"
+    title: "Capture tlc --help"
+    depends_on: ["version"]
+    argv: ["tlc", "--help"]
+    timeout_sec: 10
+    stdout_max_bytes: 65536
+
+  smoke-report:
+    step_id: "smoke-report"
+    type: "join"
+    title: "Join smoke outputs for contract evaluation"
+    depends_on: ["version", "help"]
+    contract: "cli-smoke-contract"
