@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -97,8 +98,9 @@ func writePlanMD(w io.Writer, track *core.Track, configDir, trackDir string) {
 	if track.AssignedTo != nil {
 		assignedTo = "@" + *track.AssignedTo
 	}
-	// Relative path from project root to the plan file for the hint.
-	relBase := filepath.Base(configDir)
+	// Relative path from project root to the config dir for the hint.
+	// In hop mode this is ".hop/tlc"; in standalone mode ".tlc".
+	relBase := configDirRelToCwd(configDir)
 	content := fmt.Sprintf(`---
 title: %q
 tracks:
@@ -170,8 +172,23 @@ func updateTracksRegistry(w io.Writer, track *core.Track, configDir string) {
 	}
 }
 
+// configDirRelToCwd returns configDir relative to cwd when possible,
+// preserving multi-segment prefixes like ".hop/tlc". Falls back to the
+// basename of configDir if cwd is unknown or configDir is unrelated.
+func configDirRelToCwd(configDir string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return filepath.Base(configDir)
+	}
+	rel, err := filepath.Rel(cwd, configDir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return filepath.Base(configDir)
+	}
+	return rel
+}
+
 func printNextSteps(w io.Writer, track *core.Track, configDir, trackDir string) {
-	relBase := filepath.Base(configDir)
+	relBase := configDirRelToCwd(configDir)
 	_, _ = fmt.Fprintf(w, "\nScaffolded:\n")
 	_, _ = fmt.Fprintf(w, "  %s/\n", trackDir)
 	_, _ = fmt.Fprintf(w, "    metadata.json  — track identity\n")

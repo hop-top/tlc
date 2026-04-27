@@ -5,8 +5,12 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 
+	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 )
 
@@ -449,6 +453,113 @@ func TestTrackLifecycle_E2E_InvalidID(t *testing.T) {
 		}
 		if !contains(err.Error(), "min 3") {
 			t.Errorf("expected 'min 3' in error, got: %v", err)
+		}
+	})
+}
+
+// TestTrackLifecycle_E2E_HopModeScaffoldPaths verifies that in hop mode
+// (.hop/tlc/ config layout), scaffold output and registry references
+// use the full ".hop/tlc/" prefix — not just "tlc/" — so users can
+// follow the printed next-step commands and find the files.
+//
+// Regression for: https://github.com/hop-top/tlc/issues/T-0723
+// Symptom: printed hints said "tlc/tracks/<id>/plan.md" instead of
+// ".hop/tlc/tracks/<id>/plan.md", causing users to look in the wrong
+// place (and sometimes manually create a top-level "tracks/" dir).
+func TestTrackLifecycle_E2E_HopModeScaffoldPaths(t *testing.T) {
+	withTestLock(func() {
+		// Build a hop-shaped temp project: <tmp>/.hop/tlc/config.yaml.
+		tmpDir, err := os.MkdirTemp("", "tlc-hop-test-*")
+		if err != nil {
+			t.Fatalf("mkdir temp: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		hopCfgDir := filepath.Join(tmpDir, ".hop", "tlc")
+		if err := os.MkdirAll(hopCfgDir, 0o755); err != nil {
+			t.Fatalf("mkdir .hop/tlc: %v", err)
+		}
+		dbPath := filepath.Join(hopCfgDir, "test.sqlite")
+		todoPath := filepath.Join(hopCfgDir, "todo.txt")
+		cfgPath := filepath.Join(hopCfgDir, "config.yaml")
+		cfgYAML := "storage:\n  backend: sqlite\n  db_path: " + dbPath +
+			"\ntask:\n  todo_file: " + todoPath + "\n"
+		if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o600); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+
+		origDir, _ := os.Getwd()
+		if err := os.Chdir(tmpDir); err != nil {
+			t.Fatalf("chdir: %v", err)
+		}
+		t.Setenv("TLC_MODE", "hop")
+		t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+		viper.Reset()
+		viper.SetConfigFile(cfgPath)
+		viper.Set("storage.backend", "sqlite")
+		viper.Set("storage.db_path", dbPath)
+		viper.Set("task.todo_file", todoPath)
+		_ = viper.ReadInConfig()
+		dbSyncOnce = sync.Once{}
+		touchOnce = sync.Once{}
+		core.ResetDetectionCache()
+		resetTrackFlags()
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{
+			"track", "create", "Hop Demo",
+			"--type", "feature", "--id", "hop-demo",
+		})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track create: %v", err)
+		}
+
+		out := buf.String()
+
+		// 1) Printed scaffold path must use full .hop/tlc/ prefix.
+		if !contains(out, ".hop/tlc/tracks/tracks.md") {
+			t.Errorf(
+				"expected printed registry path to include "+
+					"'.hop/tlc/tracks/tracks.md'; got:\n%s", out,
+			)
+		}
+		if !contains(out, ".hop/tlc/tracks/hop-demo/plan.md") {
+			t.Errorf(
+				"expected printed plan path to include "+
+					"'.hop/tlc/tracks/hop-demo/plan.md'; got:\n%s", out,
+			)
+		}
+		// Negative: must NOT print "tlc/tracks/..." without the .hop/
+		// prefix (i.e., a 'tlc/tracks/' substring not preceded by '.hop/').
+		// We check by ensuring no occurrence of "  tlc/tracks/" or
+		// "Edit tlc/tracks/".
+		if contains(out, "Edit tlc/tracks/") || contains(out, " tlc/tracks/tracks.md") {
+			t.Errorf(
+				"unexpected stripped 'tlc/tracks/' prefix in hint output; "+
+					"should always include '.hop/' prefix:\n%s", out,
+			)
+		}
+
+		// 2) Files must actually land at <tmp>/.hop/tlc/tracks/hop-demo/.
+		wantTrackDir := filepath.Join(tmpDir, ".hop", "tlc", "tracks", "hop-demo")
+		if _, err := os.Stat(filepath.Join(wantTrackDir, "metadata.json")); err != nil {
+			t.Errorf("metadata.json not at %s: %v", wantTrackDir, err)
+		}
+		if _, err := os.Stat(filepath.Join(wantTrackDir, "plan.md")); err != nil {
+			t.Errorf("plan.md not at %s: %v", wantTrackDir, err)
+		}
+
+		// 3) Files must NOT land at top-level <tmp>/tracks/.
+		if _, err := os.Stat(filepath.Join(tmpDir, "tracks", "hop-demo")); err == nil {
+			t.Errorf(
+				"track scaffold leaked to top-level tracks/ dir at %s; "+
+					"should be inside .hop/tlc/tracks/", tmpDir,
+			)
 		}
 	})
 }
