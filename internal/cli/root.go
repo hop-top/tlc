@@ -85,9 +85,9 @@ func kitRoot() *kitcli.Root {
 	cmd.Long = "TLC provides commands for task management, flow execution, and collaboration."
 
 	// --- TLC-specific persistent flags ---
-	// kit already provides --quiet, --no-color, and --format.
+	// kit already provides --quiet, --no-color, --format, and --verbose/-V
+	// (count flag).
 	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
-	cmd.PersistentFlags().BoolP("verbose", "V", false, "verbose logging")
 
 	// Add -f shorthand to kit's --format flag.
 	if f := cmd.PersistentFlags().Lookup("format"); f != nil {
@@ -98,6 +98,8 @@ func kitRoot() *kitcli.Root {
 	if err := viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format")); err != nil {
 		log.Warn("Failed to bind format flag", "error", err)
 	}
+	// kit binds --verbose to its own viper as a count; alias the flat
+	// "verbose" key on the global viper to TLC's namespaced key.
 	if err := viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose")); err != nil {
 		log.Warn("Failed to bind verbose flag", "error", err)
 	}
