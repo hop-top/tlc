@@ -353,5 +353,11 @@ func (s *SQLiteStorage) migrate() error {
 			}
 		}
 	}
+
+	// Data migrations run after schema is at HEAD. Each is independently
+	// idempotent via its own marker; safe to invoke on every open.
+	if err := s.runStatusDataMigration(); err != nil {
+		return err
+	}
 	return nil
 }
