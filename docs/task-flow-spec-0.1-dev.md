@@ -313,11 +313,58 @@ Waits for multiple upstream steps to succeed before proceeding.
    - Any step in `wait_for` is `failed` → Join `failed`
    - Any step in `wait_for` is `canceled` → Join `canceled`
 4. Join acts as a synchronization barrier for downstream steps
+5. Join produces an aggregated `output` (see Output Schema below) so EVA
+   contracts and downstream steps can assert on predecessor states without
+   stepping into per-step contract files
+
+#### Output Schema
+
+```json
+{
+  "steps": {
+    "<step_id>": {
+      "state":  "<UPPER>",
+      "output": {...}|null
+    },
+    ...
+  },
+  "summary": "<step_id>: <UPPER>\n..."
+}
+```
+
+- `steps` — keyed by predecessor step ID; each entry has uppercased
+  terminal `state` (SUCCEEDED, FAILED, SKIPPED, CANCELED, …) plus the
+  raw per-step `output` map (or `null` when the step produced none)
+- `summary` — newline-joined `<step_id>: <STATE>` lines, predecessor
+  order follows the declared `wait_for` list (or `depends_on` fallback);
+  intended for `contains` evaluators that don't traverse nested JSON
+
+Example (3-step fan-in: lint OK, test failed, scan skipped):
+
+```json
+{
+  "steps": {
+    "lint":          {"state": "SUCCEEDED", "output": {"warnings": 0}},
+    "test":          {"state": "FAILED",    "output": {"failures": 3}},
+    "security-scan": {"state": "SKIPPED",   "output": null}
+  },
+  "summary": "lint: SUCCEEDED\ntest: FAILED\nsecurity-scan: SKIPPED"
+}
+```
+
+#### Predecessor Identification
+
+Canonical: `wait_for`. Fallback: `depends_on` (used when `wait_for` is
+empty so simple chains aggregate the same way without re-declaring
+predecessors). Missing entries render as `PENDING` (defensive — should
+never trigger in practice; scheduler waits for terminal state).
 
 #### Notes
 
 - Join is primarily a readability construct (equivalent to `depends_on` on downstream step)
 - Useful for visualizing fan-in patterns in flow graphs
+- Empty `wait_for` yields `{"steps": {}, "summary": ""}` (still
+  succeeds — no predecessors to aggregate)
 
 #### Logging
 
