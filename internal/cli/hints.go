@@ -2,8 +2,8 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	kitcli "hop.top/kit/cli"
-	"hop.top/kit/output"
+	kitcli "hop.top/kit/go/console/cli"
+	"hop.top/kit/go/console/output"
 )
 
 // registerHints wires contextual next-step hints for key commands.

@@ -1,6 +1,6 @@
 package events
 
-import "hop.top/kit/domain"
+import "hop.top/kit/go/runtime/domain"
 
 // DomainOptions returns domain.Option slice with the bus publisher wired.
 // Returns nil if the publisher is nil, allowing callers to safely spread

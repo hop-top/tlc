@@ -4,7 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
-	kitcli "hop.top/kit/cli"
+	kitcli "hop.top/kit/go/console/cli"
 )
 
 // DefaultTagColors are the ANSI color codes used for tag rendering

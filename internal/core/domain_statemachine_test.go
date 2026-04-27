@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"hop.top/kit/domain"
+	"hop.top/kit/go/runtime/domain"
 	"hop.top/tlc/internal/config"
 )
 

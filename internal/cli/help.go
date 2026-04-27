@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"hop.top/kit/toolspec"
+	"hop.top/kit/go/ai/toolspec"
 )
 
 var helpLLMFormat string

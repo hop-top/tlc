@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"hop.top/kit/xdg"
-	"hop.top/kit/upgrade"
-	"hop.top/kit/upgrade/skill"
+	"hop.top/kit/go/core/xdg"
+	"hop.top/kit/go/core/upgrade"
+	"hop.top/kit/go/core/upgrade/skill"
 )
 
 const tlcGitHubRepo = "hop-top/tlc"

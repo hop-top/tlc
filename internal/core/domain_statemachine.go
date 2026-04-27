@@ -1,7 +1,7 @@
 package core
 
 import (
-	"hop.top/kit/domain"
+	"hop.top/kit/go/runtime/domain"
 	"hop.top/tlc/internal/config"
 )
 

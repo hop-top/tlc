@@ -5,7 +5,7 @@ package events
 import (
 	"time"
 
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 )
 
 // Typed topic constants (bus.Topic) per domain-events.md.

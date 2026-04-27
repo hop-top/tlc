@@ -9,8 +9,8 @@ import (
 	"fmt"
 
 	"charm.land/log/v2"
-	"hop.top/kit/bus"
-	"hop.top/kit/ext"
+	"hop.top/kit/go/runtime/bus"
+	"hop.top/kit/go/ai/ext"
 )
 
 // Manager wraps ext.Manager with tlc-specific configuration and

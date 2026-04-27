@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 )
 
 // mockBus records published events for assertions.

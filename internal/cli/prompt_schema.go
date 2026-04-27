@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"hop.top/kit/toolspec"
+	"hop.top/kit/go/ai/toolspec"
 )
 
 // CobraToToolSpec builds a toolspec.ToolSpec from a cobra command tree.
