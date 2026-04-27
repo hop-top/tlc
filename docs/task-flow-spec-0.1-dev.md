@@ -101,7 +101,8 @@ And MAY include:
 ```json
 {
   "depends_on": ["<step_id>", ...],
-  "meta": { /* arbitrary metadata */ }
+  "meta": { /* arbitrary metadata */ },
+  "condition": "<condition_expr>"
 }
 ```
 
@@ -125,6 +126,55 @@ And MAY include:
     soon as any reachable step reaches `failed` (terminal-failure). Per-step error
     policies that allow descendants to continue past a failed predecessor are out
     of scope for v0.1.
+- `condition` (string, optional): Expression gating step execution against flow inputs
+  - Default: `""` (always run)
+  - Evaluated immediately before the step would transition to `running`
+  - On `true` → step runs normally
+  - On `false` → step transitions to `skipped` (no STEP_START emitted)
+  - On parse / unknown-key error → step transitions to `failed` and the flow run fails
+  - See "Conditional execution" below for grammar
+
+#### Conditional execution
+
+The `condition` field on any step gates dispatch using a tiny pure-Go
+expression language (no CEL / expr / extension hooks):
+
+```
+expr   := lhs OP rhs
+lhs    := "inputs." IDENT  |  IDENT
+OP     := "=="  |  "!="
+rhs    := "'" STRING "'"  |  "\"" STRING "\""  |  IDENT
+```
+
+Whitespace around tokens is tolerated. RHS quoting is optional; bare
+identifiers compare as their literal text. LHS is looked up in the resolved
+flow `inputs` map (the `inputs.` prefix is optional and stripped). Values
+are stringified via `fmt.Sprintf("%v", v)` before comparison, so `n == '7'`
+matches an integer input `7`.
+
+Examples:
+
+```yaml
+condition: "inputs.target == 'staging'"
+condition: "target != 'production'"
+condition: "env == staging"
+```
+
+Errors:
+
+- Missing operator → `failed` with `expected '==' or '!='`
+- Unknown input key → `failed` with `references unknown input key`
+- Empty operand → `failed` with `empty operand`
+
+Limits (intentional, MVP scope — see T-0755):
+
+- No boolean composition (`&&`, `||`, `not`)
+- No comparison operators beyond `==` / `!=` (no `<`, `>`, `in`, regex)
+- No nested field / index access (`inputs.foo.bar`, `inputs.list[0]`)
+- No reference to upstream step outputs (only `inputs.*`)
+
+If you hit these limits, file a follow-up task; do not bypass with
+hand-rolled meta-step gymnastics.
 
 ---
 

@@ -74,9 +74,10 @@ func dependencySatisfied(s StepStatus) bool {
 type FlowExecutor struct {
 	repo        Repository
 	logRepo     LogRepository
-	evaKey      string      // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
-	testMode    bool        // when true, unresolved task_ref falls back to ephemeral task
-	agentRunner AgentRunner // nil → DB-only ephemeral path; set by WithAgentRunner
+	evaKey      string         // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
+	testMode    bool           // when true, unresolved task_ref falls back to ephemeral task
+	agentRunner AgentRunner    // nil → DB-only ephemeral path; set by WithAgentRunner
+	inputs      map[string]any // resolved flow inputs; consulted by step.Condition
 }
 
 func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
@@ -108,9 +109,28 @@ func (e *FlowExecutor) WithAgentRunner(r AgentRunner) *FlowExecutor {
 	return e
 }
 
+// WithInputs supplies resolved flow inputs (from ResolveFlowInputs) so that
+// per-step `condition:` expressions can reference them. When unset, any step
+// with a non-empty Condition that references an input key will fail.
+func (e *FlowExecutor) WithInputs(inputs map[string]any) *FlowExecutor {
+	e.inputs = inputs
+	return e
+}
+
 // Execute initiates a flow run and returns the run record, per-step output
 // maps (stepID → parsed JSON output), and any error.
 func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*FlowRun, map[string]map[string]any, error) {
+	run, outputs, _, err := e.executeInternal(ctx, flow, by)
+	return run, outputs, err
+}
+
+// ExecuteWithStatuses is like Execute but additionally returns the final
+// per-step status map. Intended for tests that need to assert SKIPPED steps.
+func (e *FlowExecutor) ExecuteWithStatuses(ctx context.Context, flow *Flow, by string) (*FlowRun, map[string]map[string]any, map[string]StepStatus, error) {
+	return e.executeInternal(ctx, flow, by)
+}
+
+func (e *FlowExecutor) executeInternal(ctx context.Context, flow *Flow, by string) (*FlowRun, map[string]map[string]any, map[string]StepStatus, error) {
 	runID := "run:" + uuid.New().String()
 
 	run := &FlowRun{
@@ -122,7 +142,7 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 	}
 
 	if err := e.repo.CreateFlowRun(ctx, run); err != nil {
-		return nil, nil, fmt.Errorf("failed to create flow run: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create flow run: %w", err)
 	}
 
 	e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_START", fmt.Sprintf("Starting flow: %s", flow.Name), nil)
@@ -159,19 +179,19 @@ func (e *FlowExecutor) Execute(ctx context.Context, flow *Flow, by string) (*Flo
 	if err != nil {
 		run.Status = FlowStatusFailed
 		if updateErr := e.repo.UpdateFlowRun(ctx, run); updateErr != nil {
-			return nil, stepOutputs, fmt.Errorf("flow failed and update failed: %v (original error: %w)", updateErr, err)
+			return nil, stepOutputs, stepStatuses, fmt.Errorf("flow failed and update failed: %v (original error: %w)", updateErr, err)
 		}
 		e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_END", fmt.Sprintf("Flow failed: %v", err), map[string]any{"status": "failed", "error": err.Error()})
-		return run, stepOutputs, err
+		return run, stepOutputs, stepStatuses, err
 	}
 
 	run.Status = FlowStatusSucceeded
 	if updateErr := e.repo.UpdateFlowRun(ctx, run); updateErr != nil {
-		return nil, stepOutputs, fmt.Errorf("flow succeeded but update failed: %w", updateErr)
+		return nil, stepOutputs, stepStatuses, fmt.Errorf("flow succeeded but update failed: %w", updateErr)
 	}
 	e.emitFlowLog(ctx, flow.ID, runID, by, "FLOW_END", "Flow completed successfully", map[string]any{"status": "succeeded"})
 
-	return run, stepOutputs, nil
+	return run, stepOutputs, stepStatuses, nil
 }
 
 func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowRun, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, isChild map[string]bool, by string) error {
@@ -204,7 +224,7 @@ func (e *FlowExecutor) runSequential(ctx context.Context, flow *Flow, run *FlowR
 			// (normal completion) or SKIPPED (e.g. pruned branch arm or
 			// gated by a falsy `condition:`). FAILED predecessors are
 			// caught earlier in this loop and abort the run, so they never
-			// reach this check.
+			// reach this check. See task-flow-spec-0.1-dev.md.
 			ready := true
 			for _, dep := range step.DependsOn {
 				if !dependencySatisfied(statuses[dep]) {
@@ -265,6 +285,31 @@ func (e *FlowExecutor) checkStatus(ctx context.Context, run *FlowRun, _ string) 
 
 func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun, stepID string, statuses map[string]StepStatus, stepOutputs map[string]map[string]any, mu *sync.Mutex, by string) (map[string]any, error) {
 	step := flow.Steps[stepID]
+
+	// Condition gate: evaluate before transitioning to RUNNING so a skipped
+	// step never appears to start. Empty Condition → run normally.
+	if step.Condition != "" {
+		ok, err := EvalCondition(step.Condition, e.inputs)
+		if err != nil {
+			mu.Lock()
+			statuses[stepID] = StepStatusFailed
+			mu.Unlock()
+			e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END",
+				fmt.Sprintf("Step failed: condition error: %v", err),
+				map[string]any{"status": "failed", "condition_error": err.Error()})
+			return nil, fmt.Errorf("step %q condition: %w", stepID, err)
+		}
+		if !ok {
+			mu.Lock()
+			statuses[stepID] = StepStatusSkipped
+			mu.Unlock()
+			e.emitStepLog(ctx, flow.ID, run.ID, stepID, by, "STEP_END",
+				fmt.Sprintf("Step skipped: condition false (%s)", step.Condition),
+				map[string]any{"status": "skipped", "condition": step.Condition})
+			e.updateProgress(ctx, flow, run, statuses, mu)
+			return nil, nil
+		}
+	}
 
 	mu.Lock()
 	statuses[stepID] = StepStatusRunning
