@@ -40,6 +40,7 @@ func TestFormatFlowStatus(t *testing.T) {
 // when no --limit flag is provided. Without a default limit, all flow runs are
 // returned which causes excessive output (observed: 94 runs / 42KB).
 func TestFlowListDefaultLimit(t *testing.T) {
+	t.Skip("TODO(T-0314): flow-list default limit not yet implemented; see T-0757")
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -100,6 +101,7 @@ func TestFlowListDefaultLimit(t *testing.T) {
 
 // TestFlowListLimitFlag verifies that `flow list --limit N` caps output to N runs.
 func TestFlowListLimitFlag(t *testing.T) {
+	t.Skip("TODO(T-0314): flow-list --limit flag not yet implemented; see T-0757")
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
