@@ -85,9 +85,10 @@ func kitRoot() *kitcli.Root {
 	cmd.Long = "TLC provides commands for task management, flow execution, and collaboration."
 
 	// --- TLC-specific persistent flags ---
-	// kit already provides --quiet, --no-color, --format, and --verbose/-V
-	// (count flag).
+	// kit provides --quiet, --no-color, --format. tlc owns --verbose/-V
+	// (count flag) so verbosity is independent of kit's flag surface.
 	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
+	cmd.PersistentFlags().CountP("verbose", "V", "Increase log verbosity (-V, -VV, -VVV)")
 
 	// Add -f shorthand to kit's --format flag.
 	if f := cmd.PersistentFlags().Lookup("format"); f != nil {
