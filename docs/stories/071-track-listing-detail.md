@@ -62,6 +62,11 @@ monitor work stream progress.
 12. **Given** tracks, **When** `tlc track list --all-projects`,
     **Then** Project column appears in output.
 
+13. **Given** user inside a `.tlc/`-configured project root with tracks
+    belonging to multiple projects, **When**
+    `tlc track list --all-projects` runs, **Then** tracks from all
+    projects appear without erroring on cross-project state re-fetch.
+
 ## Tests
 
 ### E2E
@@ -75,6 +80,7 @@ monitor work stream progress.
   - `TestTrackShow_E2E_EmptyTrack` (scenario 9)
   - `TestTrackShow_E2E_NotFound` (scenario 10)
   - `TestTrackList_E2E_DefaultScopeCurrentProject` (scenario 11)
+  - `TestTrackList_E2E_AllProjectsFromInsideProject` (scenario 13)
   - `TestTrackSummary_E2E_StatusCounts` (summary coverage)
 
 ### Unit
@@ -99,3 +105,4 @@ monitor work stream progress.
 | 10 | Not found error | `TestTrackShow_E2E_NotFound` | Pending |
 | 11 | Default project scope | `TestTrackList_E2E_DefaultScopeCurrentProject` | Pending |
 | 12 | --all-projects | `TestTrackList_AllProjects` | Covered |
+| 13 | --all-projects from inside project | `TestTrackList_E2E_AllProjectsFromInsideProject` | Covered |
