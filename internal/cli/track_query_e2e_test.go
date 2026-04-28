@@ -5,6 +5,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -760,6 +761,160 @@ func TestTrackSummary_E2E_StatusCounts(t *testing.T) {
 		}
 		if !contains(out, "Pending: 1") {
 			t.Errorf("expected Pending: 1, got:\n%s", out)
+		}
+	})
+}
+
+// TestTrackList_E2E_DefaultScopeCurrentProject verifies that when
+// running `tlc track list` (no --all-projects flag) inside a
+// .tlc/-configured project, only tracks belonging to the current
+// detected project are returned. Tracks from other projects must
+// be filtered out by storage.ListTracks via core.DetectProject().
+func TestTrackList_E2E_DefaultScopeCurrentProject(t *testing.T) {
+	withTestLock(func() {
+		// Establish project context: cwd has .tlc/config.yaml with
+		// project.id=hop-top/tlc, so DetectProject() returns InProject=true.
+		setupProjectScopedTestDir(t, "tlc-track-list-default-scope-", "hop-top/tlc")
+		resetTrackListFlags()
+		resetTrackFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+		now := time.Now().UTC()
+		svc := core.NewTrackService(s, s)
+		inProj := "hop-top/tlc"
+		otherProj := "other-org/foo"
+		for _, tr := range []*core.Track{
+			{
+				ID: "in-proj-track", Title: "In Project",
+				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+				ProjectID: &inProj, CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: "other-proj-track", Title: "Other Project",
+				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+				ProjectID: &otherProj, CreatedAt: now, UpdatedAt: now,
+			},
+		} {
+			if err := svc.CreateTrack(ctx, tr); err != nil {
+				t.Fatalf("create track %s: %v", tr.ID, err)
+			}
+		}
+
+		// Sanity: detection must place us in the in-project context.
+		if det := core.DetectProject(); det == nil || !det.InProject ||
+			det.ProjectID != inProj {
+			t.Fatalf("expected DetectProject to return InProject=true with id=%s, got %+v",
+				inProj, det)
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "list"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track list: %v", err)
+		}
+
+		out := buf.String()
+		if !contains(out, "in-proj-track") {
+			t.Errorf("expected in-proj-track in default-scope output, got:\n%s", out)
+		}
+		if contains(out, "other-proj-track") {
+			t.Errorf("unexpected other-proj-track in default-scope output, got:\n%s", out)
+		}
+	})
+}
+
+// TestTrackList_E2E_DefaultScopeOtherProjectTrackPersisted is the
+// sanity-check sibling of the default-scope test. Same two-project
+// fixture, but instead of going through the CLI it queries the
+// storage layer directly with AllProjects=true to prove the
+// other-project track was actually persisted. This isolates the
+// default-scope assertion: its failure mode would be "other track
+// silently missing from the DB" — this test rules that out.
+//
+// Direct storage call is used (not `tlc track list --all-projects`)
+// because, when run inside a project context, the post-query
+// state-compute step in runTrackList re-fetches each track via
+// GetTrack which scopes to current project (sqlite_track.go:51-66)
+// and would fail on the cross-project row. That re-fetch path is
+// out of scope for this test.
+func TestTrackList_E2E_DefaultScopeOtherProjectTrackPersisted(t *testing.T) {
+	withTestLock(func() {
+		setupProjectScopedTestDir(t, "tlc-track-list-persisted-", "hop-top/tlc")
+		resetTrackListFlags()
+		resetTrackFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+		now := time.Now().UTC()
+		svc := core.NewTrackService(s, s)
+		inProj := "hop-top/tlc"
+		otherProj := "other-org/foo"
+		for _, tr := range []*core.Track{
+			{
+				ID: "in-proj-track", Title: "In Project",
+				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+				ProjectID: &inProj, CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: "other-proj-track", Title: "Other Project",
+				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+				ProjectID: &otherProj, CreatedAt: now, UpdatedAt: now,
+			},
+		} {
+			if err := svc.CreateTrack(ctx, tr); err != nil {
+				t.Fatalf("create track %s: %v", tr.ID, err)
+			}
+		}
+
+		// AllProjects=true bypasses the auto project filter and returns
+		// every track regardless of owning project.
+		all, err := s.ListTracks(ctx, core.TrackQuery{AllProjects: true})
+		if err != nil {
+			t.Fatalf("ListTracks AllProjects=true: %v", err)
+		}
+		seen := map[string]bool{}
+		for _, tr := range all {
+			seen[tr.ID] = true
+		}
+		if !seen["in-proj-track"] {
+			t.Errorf("expected in-proj-track persisted, got tracks: %v", seen)
+		}
+		if !seen["other-proj-track"] {
+			t.Errorf("expected other-proj-track persisted, got tracks: %v", seen)
+		}
+
+		// Default-scoped storage query (no AllProjects, no ProjectID
+		// override) must also exclude the cross-project row — this is
+		// the core behavior the parent test asserts via the CLI.
+		scoped, err := s.ListTracks(ctx, core.TrackQuery{})
+		if err != nil {
+			t.Fatalf("ListTracks default scope: %v", err)
+		}
+		scopedIDs := map[string]bool{}
+		for _, tr := range scoped {
+			scopedIDs[tr.ID] = true
+		}
+		if !scopedIDs["in-proj-track"] {
+			t.Errorf("expected in-proj-track in default-scope storage list, got: %v", scopedIDs)
+		}
+		if scopedIDs["other-proj-track"] {
+			t.Errorf("unexpected other-proj-track in default-scope storage list, got: %v", scopedIDs)
 		}
 	})
 }
