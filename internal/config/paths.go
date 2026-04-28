@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/viper"
 	"hop.top/kit/go/core/xdg"
@@ -47,8 +48,22 @@ func EnsureCacheDir() (string, error) {
 
 // UserStateDir returns the user-level state directory for tlc
 // via kit/xdg.StateDir.
+//
+// darwin workaround: adrg/xdg maps XDG_STATE_HOME to
+// ~/Library/Application Support (same as data/config), losing the
+// "/state" suffix the old kit appended explicitly. Restore it when
+// XDG_STATE_HOME is not set so existing state paths are not broken.
+// Remove once kit/xdg grows a darwin-native StateDir that re-adds the
+// suffix (kit regression tracked separately).
 func UserStateDir() (string, error) {
-	return xdg.StateDir(toolName)
+	dir, err := xdg.StateDir(toolName)
+	if err != nil {
+		return "", err
+	}
+	if runtime.GOOS == "darwin" && os.Getenv("XDG_STATE_HOME") == "" {
+		dir = filepath.Join(dir, "state")
+	}
+	return dir, nil
 }
 
 // EnsureStateDir returns the state directory path, creating it if needed.
