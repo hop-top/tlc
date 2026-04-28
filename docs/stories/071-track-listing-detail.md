@@ -18,38 +18,43 @@ monitor work stream progress.
 1. **Given** tracks exist, **When** `tlc track list`, **Then** table
    shows columns: ID, Title, Type, Status, State, Progress, Assignee.
 
-2. **Given** active and pending tracks, **When**
+2. **Given** tracks of all statuses (pending, active, completed,
+   abandoned, archived), **When** `tlc track list` runs with no
+   `--status` flag, **Then** only pending + active tracks shown;
+   terminal statuses (completed, abandoned, archived) excluded.
+
+3. **Given** active and pending tracks, **When**
    `tlc track list --status active`, **Then** only active tracks
    shown.
 
-3. **Given** tracks of different types, **When**
+4. **Given** tracks of different types, **When**
    `tlc track list --type feature`, **Then** only feature tracks
    shown.
 
-4. **Given** stale and healthy tracks, **When**
+5. **Given** stale and healthy tracks, **When**
    `tlc track list --state stale`, **Then** only stale tracks shown.
 
-5. **Given** tracks, **When** `tlc track list --format json`,
+6. **Given** tracks, **When** `tlc track list --format json`,
    **Then** JSON array output with all fields.
 
-6. **Given** track "browser-rendering" with phased tasks, **When**
+7. **Given** track "browser-rendering" with phased tasks, **When**
    `tlc track show browser-rendering`, **Then** detail view shows:
    header (type, status, state, assignee), progress %, per-phase
    breakdown with task listings, unphased section.
 
-7. **Given** track with tasks in phases 1-3, **When**
+8. **Given** track with tasks in phases 1-3, **When**
    `tlc track show <id>`, **Then** completed phases show checkmark,
    current phase shows progress, tasks colored by status.
 
-8. **Given** track with no linked tasks, **When**
+9. **Given** track with no linked tasks, **When**
    `tlc track show <id>`, **Then** shows "no tasks linked" and state
    "unlinked".
 
-9. **Given** nonexistent track, **When**
-   `tlc track show nonexistent`, **Then** error with actionable
-   message containing "not found".
+10. **Given** nonexistent track, **When**
+    `tlc track show nonexistent`, **Then** error with actionable
+    message containing "not found".
 
-10. **Given** tracks, **When** `tlc track list --all-projects`,
+11. **Given** tracks, **When** `tlc track list --all-projects`,
     **Then** Project column appears in output.
 
 ## Tests
@@ -57,17 +62,18 @@ monitor work stream progress.
 ### E2E
 - `internal/cli/track_query_e2e_test.go`:
   - `TestTrackList_E2E_BasicTable` (scenario 1)
-  - `TestTrackList_E2E_FilterByStatus` (scenario 2)
-  - `TestTrackList_E2E_FilterByType` (scenario 3)
-  - `TestTrackList_E2E_FilterByState` (scenario 4)
-  - `TestTrackList_E2E_JSONOutput` (scenario 5)
-  - `TestTrackShow_E2E_PhaseBreakdown` (scenarios 6, 7)
-  - `TestTrackShow_E2E_EmptyTrack` (scenario 8)
-  - `TestTrackShow_E2E_NotFound` (scenario 9)
+  - `TestTrackList_E2E_FilterByStatus` (scenario 3)
+  - `TestTrackList_E2E_FilterByType` (scenario 4)
+  - `TestTrackList_E2E_FilterByState` (scenario 5)
+  - `TestTrackList_E2E_JSONOutput` (scenario 6)
+  - `TestTrackShow_E2E_PhaseBreakdown` (scenarios 7, 8)
+  - `TestTrackShow_E2E_EmptyTrack` (scenario 9)
+  - `TestTrackShow_E2E_NotFound` (scenario 10)
   - `TestTrackSummary_E2E_StatusCounts` (summary coverage)
 
 ### Unit
-- `internal/cli/track_list_test.go` — existing table/filter tests
+- `internal/cli/track_list_test.go` — existing table/filter tests;
+  includes `TestTrackList_DefaultFilterExcludesTerminal` (scenario 2)
 - `internal/cli/track_show_test.go` — existing detail/phase tests
 - `internal/cli/track_summary_test.go` — existing summary tests
 
@@ -76,12 +82,13 @@ monitor work stream progress.
 | Scenario | Criteria | Test | Status |
 |---|---|---|---|
 | 1 | Table columns | `TestTrackList_E2E_BasicTable` | Pending |
-| 2 | --status filter | `TestTrackList_E2E_FilterByStatus` | Pending |
-| 3 | --type filter | `TestTrackList_E2E_FilterByType` | Pending |
-| 4 | --state filter | `TestTrackList_E2E_FilterByState` | Pending |
-| 5 | JSON output | `TestTrackList_E2E_JSONOutput` | Pending |
-| 6 | Phase detail view | `TestTrackShow_E2E_PhaseBreakdown` | Pending |
-| 7 | Phase checkmarks | `TestTrackShow_E2E_PhaseBreakdown` | Pending |
-| 8 | Empty track | `TestTrackShow_E2E_EmptyTrack` | Pending |
-| 9 | Not found error | `TestTrackShow_E2E_NotFound` | Pending |
-| 10 | --all-projects | `TestTrackList_AllProjects` | Covered |
+| 2 | Default filter excludes terminal | `TestTrackList_DefaultFilterExcludesTerminal` | Covered |
+| 3 | --status filter | `TestTrackList_E2E_FilterByStatus` | Pending |
+| 4 | --type filter | `TestTrackList_E2E_FilterByType` | Pending |
+| 5 | --state filter | `TestTrackList_E2E_FilterByState` | Pending |
+| 6 | JSON output | `TestTrackList_E2E_JSONOutput` | Pending |
+| 7 | Phase detail view | `TestTrackShow_E2E_PhaseBreakdown` | Pending |
+| 8 | Phase checkmarks | `TestTrackShow_E2E_PhaseBreakdown` | Pending |
+| 9 | Empty track | `TestTrackShow_E2E_EmptyTrack` | Pending |
+| 10 | Not found error | `TestTrackShow_E2E_NotFound` | Pending |
+| 11 | --all-projects | `TestTrackList_AllProjects` | Covered |
