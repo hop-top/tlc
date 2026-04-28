@@ -49,7 +49,12 @@ monitor work stream progress.
    `tlc track show nonexistent`, **Then** error with actionable
    message containing "not found".
 
-10. **Given** tracks, **When** `tlc track list --all-projects`,
+10. **Given** user inside a `.tlc/`-configured project root with tracks
+    belonging to multiple projects, **When** `tlc track list` runs with
+    no `--all-projects` flag, **Then** only the current project's tracks
+    are shown.
+
+11. **Given** tracks, **When** `tlc track list --all-projects`,
     **Then** Project column appears in output.
 
 ## Tests
@@ -64,6 +69,7 @@ monitor work stream progress.
   - `TestTrackShow_E2E_PhaseBreakdown` (scenarios 6, 7)
   - `TestTrackShow_E2E_EmptyTrack` (scenario 8)
   - `TestTrackShow_E2E_NotFound` (scenario 9)
+  - `TestTrackList_E2E_DefaultScopeCurrentProject` (scenario 10)
   - `TestTrackSummary_E2E_StatusCounts` (summary coverage)
 
 ### Unit
@@ -84,4 +90,5 @@ monitor work stream progress.
 | 7 | Phase checkmarks | `TestTrackShow_E2E_PhaseBreakdown` | Pending |
 | 8 | Empty track | `TestTrackShow_E2E_EmptyTrack` | Pending |
 | 9 | Not found error | `TestTrackShow_E2E_NotFound` | Pending |
-| 10 | --all-projects | `TestTrackList_AllProjects` | Covered |
+| 10 | Default project scope | `TestTrackList_E2E_DefaultScopeCurrentProject` | Pending |
+| 11 | --all-projects | `TestTrackList_AllProjects` | Covered |
