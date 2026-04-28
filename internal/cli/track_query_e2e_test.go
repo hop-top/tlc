@@ -834,6 +834,85 @@ func TestTrackList_E2E_DefaultScopeCurrentProject(t *testing.T) {
 	})
 }
 
+// TestTrackList_E2E_AllProjectsFromInsideProject verifies that running
+// `tlc track list --all-projects` from inside a .tlc/-configured project
+// returns tracks from ALL projects (current + others) without erroring
+// when re-fetching cross-project tracks for state computation.
+//
+// Regression test for T-0765: prior to the fix, the post-query
+// state-compute step in runTrackList re-fetched each track via
+// GetTrack which auto-scopes to the current project, causing
+// "track <id> not found" for any track from a different project.
+func TestTrackList_E2E_AllProjectsFromInsideProject(t *testing.T) {
+	withTestLock(func() {
+		setupProjectScopedTestDir(t, "tlc-track-list-all-projects-inside-", "hop-top/tlc")
+		resetTrackListFlags()
+		resetTrackFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		ctx := context.Background()
+		now := time.Now().UTC()
+		svc := core.NewTrackService(s, s)
+		inProj := "hop-top/tlc"
+		otherProj := "other-org/foo"
+		for _, tr := range []*core.Track{
+			{
+				ID: "in-proj-track", Title: "In Project",
+				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+				ProjectID: &inProj, CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: "other-proj-track", Title: "Other Project",
+				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+				ProjectID: &otherProj, CreatedAt: now, UpdatedAt: now,
+			},
+		} {
+			if err := svc.CreateTrack(ctx, tr); err != nil {
+				t.Fatalf("create track %s: %v", tr.ID, err)
+			}
+		}
+
+		// Sanity: detection must place us in the in-project context.
+		if det := core.DetectProject(); det == nil || !det.InProject ||
+			det.ProjectID != inProj {
+			t.Fatalf("expected DetectProject to return InProject=true with id=%s, got %+v",
+				inProj, det)
+		}
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TrackCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"track", "list", "--all-projects"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("track list --all-projects: %v", err)
+		}
+
+		out := buf.String()
+		if !contains(out, "in-proj-track") {
+			t.Errorf("expected in-proj-track in --all-projects output, got:\n%s", out)
+		}
+		if !contains(out, "other-proj-track") {
+			t.Errorf("expected other-proj-track in --all-projects output, got:\n%s", out)
+		}
+		// Project column should appear when --all-projects is set.
+		if !contains(out, "Project") {
+			t.Errorf("expected 'Project' column header, got:\n%s", out)
+		}
+		// Both project IDs should appear in the rendered table.
+		if !contains(out, otherProj) {
+			t.Errorf("expected project id %q in output, got:\n%s", otherProj, out)
+		}
+	})
+}
+
 // TestTrackList_E2E_DefaultScopeOtherProjectTrackPersisted is the
 // sanity-check sibling of the default-scope test. Same two-project
 // fixture, but instead of going through the CLI it queries the

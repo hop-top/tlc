@@ -311,16 +311,31 @@ func (s *TrackService) GetTrackWithState(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	tasks, err := s.linkedTasks(ctx, track)
+	flags, progress, err := s.ComputeStateForTrack(ctx, track, staleThreshold)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	return track, flags, progress, nil
+}
 
+// ComputeStateForTrack returns state flags and progress for an already-
+// fetched track. Unlike GetTrackWithState, this skips the re-fetch via
+// GetTrack — required for callers that iterate over cross-project track
+// lists (e.g. `tlc track list --all-projects` from inside a project),
+// where GetTrack's auto-scoping to the current project would error on
+// rows that belong to other projects.
+func (s *TrackService) ComputeStateForTrack(
+	ctx context.Context,
+	track *Track,
+	staleThreshold time.Duration,
+) ([]TrackStateFlag, *TrackProgress, error) {
+	tasks, err := s.linkedTasks(ctx, track)
+	if err != nil {
+		return nil, nil, err
+	}
 	flags := ComputeTrackState(track, tasks, staleThreshold)
 	progress := ComputeTrackProgress(tasks)
-
-	return track, flags, &progress, nil
+	return flags, &progress, nil
 }
 
 // linkedTasks returns all tasks linked to a track, scoped by both track_id

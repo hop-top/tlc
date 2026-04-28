@@ -87,7 +87,10 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 	}
 	rows := make([]trackRowData, 0, len(tracks))
 	for _, t := range tracks {
-		_, flags, progress, err := svc.GetTrackWithState(ctx, t.ID, staleThreshold)
+		// Use the already-fetched track to avoid GetTrack auto-scoping
+		// to the current project — required for --all-projects from
+		// inside a project context.
+		flags, progress, err := svc.ComputeStateForTrack(ctx, t, staleThreshold)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to compute state for track %q: %w", t.ID, err,
@@ -179,7 +182,6 @@ type trackRowData struct {
 	State    []core.TrackStateFlag
 	Progress core.TrackProgress
 }
-
 
 func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 	if len(rows) == 0 {
