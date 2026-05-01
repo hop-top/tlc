@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 063 - Hierarchical Config Discovery
 
 **ID**: 063

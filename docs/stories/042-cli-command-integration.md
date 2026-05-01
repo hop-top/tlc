@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 042 - CLI Command Integration
 
 **ID**: 042

@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 010 - GitHub Sync
 
 **ID**: 010

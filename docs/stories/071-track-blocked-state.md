@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 071 - Track Blocked State Detection
 
 **ID**: 071

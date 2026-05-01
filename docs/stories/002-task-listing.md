@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 002 - Task Listing
 
 **ID**: 002

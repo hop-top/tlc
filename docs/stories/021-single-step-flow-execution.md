@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 021 - Single-Step Flow Execution
 
 **ID**: 021

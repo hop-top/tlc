@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 071 - Track Listing and Detail View
 
 **ID**: 071

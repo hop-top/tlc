@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 003 - Task Claiming
 
 **ID**: 003

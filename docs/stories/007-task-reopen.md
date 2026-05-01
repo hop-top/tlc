@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 007 - Task Reopen
 
 **ID**: 007

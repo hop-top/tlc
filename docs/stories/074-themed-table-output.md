@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 074 - Themed Table Output
 
 **ID**: 074

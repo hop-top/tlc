@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # US-NL-001 - NL Prompt Happy Path
 
 **ID**: US-NL-001

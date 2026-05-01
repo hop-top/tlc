@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # US-NL-006 - NL Prompt — Cross-domain Classifier: Flow Queries
 
 **ID**: US-NL-006

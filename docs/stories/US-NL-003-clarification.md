@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # US-NL-003 - Clarification
 
 **ID**: US-NL-003

@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 072 - Track Directory Scaffold on Create
 
 **ID**: 072

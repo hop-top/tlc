@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 027 - Flow Data Refs (Cross-Step Variable Passing)
 
 **ID**: 027
