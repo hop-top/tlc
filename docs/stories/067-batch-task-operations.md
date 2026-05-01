@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 067 - Batch Task Operations
 
 **ID**: 067

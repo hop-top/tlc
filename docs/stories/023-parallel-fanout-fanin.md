@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 023 - Parallel Fan-Out and Fan-In
 
 **ID**: 023

@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 072 - Task Track Integration
 
 **ID**: 072

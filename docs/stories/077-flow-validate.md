@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 077 - Flow Validate
 
 **ID**: 077

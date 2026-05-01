@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 079 - Retry, Timeout, and Error Handling
 
 **ID**: 079

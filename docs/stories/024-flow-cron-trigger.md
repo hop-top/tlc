@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 024 - Flow Cron Trigger
 
 **ID**: 024

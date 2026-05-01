@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 069 - Case-Insensitive + Alias + Fuzzy Field Matching
 
 **ID**: 069

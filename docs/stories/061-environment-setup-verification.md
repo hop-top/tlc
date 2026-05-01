@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 061 - Environment Setup Verification
 
 **ID**: 061

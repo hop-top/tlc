@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 077 - Gate Step with EVA Contract
 
 **ID**: 077

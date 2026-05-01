@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 078 - Flow Test-Run with Contracts
 
 **ID**: 078

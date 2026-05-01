@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # US-NL-005 - NL Prompt — Cross-domain Classifier: Track Queries
 
 **ID**: US-NL-005

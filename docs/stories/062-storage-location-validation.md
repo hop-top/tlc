@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 062 - Storage Location Validation
 
 **ID**: 062

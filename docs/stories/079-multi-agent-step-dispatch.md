@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 079 - Multi-Agent Step Dispatch
 
 **ID**: 079

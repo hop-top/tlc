@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 030 - TUI Navigation
 
 **ID**: 030

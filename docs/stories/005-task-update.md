@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 005 - Task Update
 
 **ID**: 005

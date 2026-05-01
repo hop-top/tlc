@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # US-NL-002 - Router Escalation
 
 **ID**: US-NL-002

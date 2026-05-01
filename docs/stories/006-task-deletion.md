@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 006 - Task Deletion
 
 **ID**: 006

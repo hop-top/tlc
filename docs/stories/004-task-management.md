@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 004 - Task Management (Update, Show, Delete)
 
 **ID**: 004

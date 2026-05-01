@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # 001 - Task Creation
 
 **ID**: 001

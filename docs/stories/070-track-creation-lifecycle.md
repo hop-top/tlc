@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 070 - Track Creation & Lifecycle
 
 **ID**: 070

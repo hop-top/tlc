@@ -1,3 +1,7 @@
+---
+status: paper
+---
+
 # 060 - Configuration Validation
 
 **ID**: 060

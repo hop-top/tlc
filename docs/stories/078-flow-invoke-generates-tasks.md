@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 078 - Flow Invoke Generates Tasks
 
 **ID**: 078

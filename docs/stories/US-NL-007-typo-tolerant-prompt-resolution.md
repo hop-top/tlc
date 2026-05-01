@@ -1,3 +1,7 @@
+---
+status: shipped-no-e2e
+---
+
 # US-NL-007 - NL Prompt — Cross-domain Classifier: Typo-tolerant Resolution
 
 **ID**: US-NL-007

@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 076 - Cross-Track `blocked-by` References in Plan Ingestion
 
 **ID**: 076

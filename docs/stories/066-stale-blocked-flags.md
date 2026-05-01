@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # 066 - Stale Timeout and Blocked Reason Flags
 
 **ID**: 066
