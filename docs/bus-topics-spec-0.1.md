@@ -66,6 +66,12 @@ Recommended additions for v0.2 (NOT yet emitted — consumers tolerant):
 - `event_id` (uuid v7) — dedupe key for at-least-once delivery
 - `session_id` — links event to originating CLI session
 - `schema_version` — `"0.1"` until bumped
+- `workspace_id` (string, ULID) — scopes event to a wsm workspace.
+  Subscribers MAY filter by active workspace; null = global event.
+  Emit-side: publishers MUST set from current aps profile's
+  `WorkspaceLink.name`; if profile has no link, leave nil. Cross-ref:
+  `~/.ops/docs/research/wsm-integration-audit-2026-04-30.md` (T-0179)
+  and T-0192 (this spec evolution).
 
 Until v0.2 lands, consumers SHOULD synthesize a dedupe key from
 `(topic, source, timestamp, payload.task_id|track_id|flow_id)`.
