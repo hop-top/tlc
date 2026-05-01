@@ -2,6 +2,8 @@
 
 User stories organized by feature area, persona, and priority. Each story defines acceptance criteria and links to test coverage.
 
+Authoring convention: see [Story → e2e test linkage](../conventions/stories.md).
+
 ## Quick Navigation
 
 ### By Feature Area
