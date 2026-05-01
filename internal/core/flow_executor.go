@@ -72,12 +72,14 @@ func dependencySatisfied(s StepStatus) bool {
 
 // FlowExecutor handles the execution of flow definitions.
 type FlowExecutor struct {
-	repo        Repository
-	logRepo     LogRepository
-	evaKey      string         // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
-	testMode    bool           // when true, unresolved task_ref falls back to ephemeral task
-	agentRunner AgentRunner    // nil → DB-only ephemeral path; set by WithAgentRunner
-	inputs      map[string]any // resolved flow inputs; consulted by step.Condition
+	repo         Repository
+	logRepo      LogRepository
+	evaKey       string         // X-Eva-Key sent to EVA gateway; read from EVA_KEY env var
+	testMode     bool           // when true, unresolved task_ref falls back to ephemeral task
+	agentRunner  AgentRunner    // nil → DB-only ephemeral path; set by WithAgentRunner
+	inputs       map[string]any // resolved flow inputs; consulted by step.Condition
+	approvals    ApprovalStore  // nil → human steps fail with descriptive error
+	approvalPoll time.Duration  // polling interval for human-step waits; default 1s
 }
 
 func NewFlowExecutor(repo Repository, logRepo LogRepository) *FlowExecutor {
@@ -114,6 +116,21 @@ func (e *FlowExecutor) WithAgentRunner(r AgentRunner) *FlowExecutor {
 // with a non-empty Condition that references an input key will fail.
 func (e *FlowExecutor) WithInputs(inputs map[string]any) *FlowExecutor {
 	e.inputs = inputs
+	return e
+}
+
+// WithApprovalStore sets the ApprovalStore used by `type: human` steps.
+// When unset, encountering a human step fails with a descriptive error.
+// Polling interval defaults to 1 second; override with WithApprovalPoll.
+func (e *FlowExecutor) WithApprovalStore(s ApprovalStore) *FlowExecutor {
+	e.approvals = s
+	return e
+}
+
+// WithApprovalPoll overrides the default 1s polling interval for
+// human-step approval waits. Mainly used by tests.
+func (e *FlowExecutor) WithApprovalPoll(d time.Duration) *FlowExecutor {
+	e.approvalPoll = d
 	return e
 }
 
@@ -337,6 +354,8 @@ func (e *FlowExecutor) executeStep(ctx context.Context, flow *Flow, run *FlowRun
 		output = aggregateJoinOutput(step, statuses, stepOutputs, mu)
 	case StepTypeExec:
 		output, err = e.executeExecStep(ctx, step)
+	case StepTypeHuman:
+		output, err = e.executeHumanStep(ctx, run, step)
 	default:
 		return nil, fmt.Errorf("unsupported step type for execution: %s", step.Type)
 	}
@@ -464,6 +483,76 @@ func (e *FlowExecutor) executeRetryStep(ctx context.Context, flow *Flow, run *Fl
 	return fmt.Errorf("retry exhausted after %d attempts: %w", maxAttempts, lastErr)
 }
 
+// executeHumanStep persists an awaiting-approval record via the
+// ApprovalStore, then blocks polling until the gate is resolved by an
+// out-of-process CLI signal (`tlc flow approve|reject|cancel`). The
+// per-step Human config defines the timeout; absent timeout means
+// block until external resolution.
+//
+// Returns map output {status, by, reason, resolved_at} on approve.
+// Rejected → returns error so the executor surfaces FAILED. Canceled
+// → returns error so the run transitions to FAILED (downstream marked
+// CANCELED by run-level cancel signal in checkStatus).
+func (e *FlowExecutor) executeHumanStep(ctx context.Context, run *FlowRun, step Step) (map[string]any, error) {
+	if e.approvals == nil {
+		return nil, fmt.Errorf(
+			"flow human step %q: no approval store configured; "+
+				"human steps require WithApprovalStore on the executor",
+			step.ID)
+	}
+
+	if err := e.approvals.Open(ctx, run.ID, step.ID, step.Title); err != nil {
+		return nil, fmt.Errorf("flow human step %q: open approval: %w", step.ID, err)
+	}
+
+	deadline := time.Now().Add(365 * 24 * time.Hour) // effectively unbounded
+	if step.Human != nil && step.Human.Timeout != "" {
+		if d, err := time.ParseDuration(step.Human.Timeout); err == nil {
+			deadline = time.Now().Add(d)
+		}
+	}
+
+	poll := e.approvalPoll
+	if poll <= 0 {
+		poll = 1 * time.Second
+	}
+
+	rec, err := e.approvals.WaitFor(ctx, run.ID, step.ID, poll, deadline)
+	if err != nil {
+		// Apply on_timeout policy when waiting failed due to deadline.
+		if step.Human != nil && step.Human.OnTimeout == HumanTimeoutApprove {
+			now := time.Now().UTC()
+			return map[string]any{
+				"status":      "approved",
+				"by":          "timeout",
+				"resolved_at": now.Format(time.RFC3339),
+			}, nil
+		}
+		return nil, fmt.Errorf("flow human step %q: %w", step.ID, err)
+	}
+
+	switch rec.Status {
+	case ApprovalStateApproved:
+		out := map[string]any{
+			"status": string(rec.Status),
+			"by":     rec.By,
+		}
+		if rec.ResolvedAt != nil {
+			out["resolved_at"] = rec.ResolvedAt.Format(time.RFC3339)
+		}
+		return out, nil
+	case ApprovalStateRejected:
+		return nil, fmt.Errorf("flow human step %q rejected by %s: %s",
+			step.ID, rec.By, rec.Reason)
+	case ApprovalStateCanceled:
+		return nil, fmt.Errorf("flow human step %q canceled by %s",
+			step.ID, rec.By)
+	default:
+		return nil, fmt.Errorf("flow human step %q: unexpected status %q",
+			step.ID, rec.Status)
+	}
+}
+
 // executeExecStep dispatches a `type: exec` step to the registered agent
 // runner. Unlike `task` steps, exec steps require a runner — there is no
 // DB-only fallback because the step's contract is "produce stdout/stderr/
@@ -475,7 +564,9 @@ func (e *FlowExecutor) executeExecStep(ctx context.Context, step Step) (map[stri
 	}
 	if e.agentRunner == nil {
 		return nil, fmt.Errorf(
-			"flow exec step %q: no agent runner registered; exec steps require a runner",
+			"flow exec step %q: no agent runner registered; "+
+				"register an agent in agents.yaml (tlc agent register --help) "+
+				"and pass --agent <name> to tlc flow run",
 			step.ID)
 	}
 	if !e.agentRunner.CanHandle(step) {
