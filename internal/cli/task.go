@@ -188,43 +188,37 @@ func appendAuditLog(task *core.Task, author, action, details, note string, ts ti
 	}
 }
 
+// saveTaskWithLog persists the task and audit log atomically, then (if
+// the task is mirrored to an external system) attempts a best-effort
+// push. Sync failures surface as warnings but never roll back local
+// truth: the local DB is the source of truth, the remote is a downstream
+// mirror. See T-0750.
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
 	core.Repository
 	core.LogRepository
 }) error {
+	// Step 1: atomic local commit — task row + audit log entry in one tx.
+	// This is the source of truth; nothing downstream may invalidate it.
+	if err := s.UpdateTaskWithLog(ctx, task, log); err != nil {
+		return fmt.Errorf("failed to update task: %w", err)
+	}
+
+	// Step 2: if the task is mirrored to a remote system, attempt the
+	// push as a best-effort side effect. Failures become warnings.
 	if task.OriginSystem != nil && *task.OriginSystem != "" {
-		if err := updateSyncedTask(ctx, task, s); err != nil {
-			return err
-		}
-		if err := s.AddLog(ctx, log); err != nil {
-			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
-		}
-	} else {
-		if err := s.UpdateTask(ctx, task); err != nil {
-			return fmt.Errorf("failed to update task: %w", err)
-		}
-		if err := s.AddLog(ctx, log); err != nil {
-			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to write log: %v\n", err)
+		if err := pushSyncedTask(ctx, task, s); err != nil {
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: %v (local state saved; sync needs retry)\n", err)
 		}
 	}
 	return nil
 }
 
-func updateSyncedTask(ctx context.Context, task *core.Task, s core.Repository) error {
-	if task.OriginSystem == nil || *task.OriginSystem == "" {
-		return fmt.Errorf("task does not have an origin system")
-	}
+// syncPushFn pushes a task to its origin system. It is wired here so
+// tests can inject a fake without spawning a plugin binary. Returns
+// non-nil error on RPC failure, plugin error, or per-task failure.
+var syncPushFn = defaultSyncPush
 
-	system := *task.OriginSystem
-	if system == syncSystemGitHub {
-		ensureGitHubToken()
-	}
-	fmt.Printf("Syncing task %s to %s...\n", task.ID, system)
-
-	if err := s.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("failed to update task: %w", err)
-	}
-
+func defaultSyncPush(_ context.Context, system string, task *core.Task) error {
 	binPath := getPluginPath(system)
 	client, err := rpc.NewClient(binPath)
 	if err != nil {
@@ -250,6 +244,27 @@ func updateSyncedTask(ctx context.Context, task *core.Task, s core.Repository) e
 		if errMsg, ok := result.Failed[task.ID]; ok {
 			return fmt.Errorf("failed to push to %s: %s", system, errMsg)
 		}
+	}
+	return nil
+}
+
+// pushSyncedTask mirrors a previously-committed local change to the
+// origin system. It MUST NOT mutate the source-of-truth fields (status,
+// description, audit log) on failure — only LastSyncAt on success. The
+// local DB has already committed when this runs.
+func pushSyncedTask(ctx context.Context, task *core.Task, s core.Repository) error {
+	if task.OriginSystem == nil || *task.OriginSystem == "" {
+		return fmt.Errorf("task does not have an origin system")
+	}
+
+	system := *task.OriginSystem
+	if system == syncSystemGitHub {
+		ensureGitHubToken()
+	}
+	fmt.Printf("Syncing task %s to %s...\n", task.ID, system)
+
+	if err := syncPushFn(ctx, system, task); err != nil {
+		return err
 	}
 
 	now := time.Now().UTC()
@@ -312,6 +327,9 @@ func deleteSyncedTask(_ context.Context, task *core.Task, _ core.Repository) err
 	}
 
 	system := *task.OriginSystem
+	if system == syncSystemGitHub {
+		ensureGitHubToken()
+	}
 	fmt.Printf("Deleting task %s from %s...\n", task.ID, system)
 
 	binPath := getPluginPath(system)
