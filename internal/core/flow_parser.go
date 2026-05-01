@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -109,6 +110,29 @@ func ValidateFlow(f *Flow) error {
 	// Cycle detection (simple DFS)
 	if err := detectCycles(f); err != nil {
 		return err
+	}
+
+	// Cron trigger validation (story 024). Fail fast on invalid expr or policy.
+	if f.Triggers != nil {
+		for i, ct := range f.Triggers.Cron {
+			if err := ValidateCronTrigger(ct); err != nil {
+				return fmt.Errorf("triggers.cron[%d]: %w", i, err)
+			}
+		}
+	}
+	if f.Timezone != "" {
+		if _, err := time.LoadLocation(f.Timezone); err != nil {
+			return fmt.Errorf("timezone %q: %w", f.Timezone, err)
+		}
+	}
+
+	// Human step validation (story 025). Validate per-step config.
+	for id, step := range f.Steps {
+		if step.Type == StepTypeHuman {
+			if err := ValidateHumanStep(step); err != nil {
+				return fmt.Errorf("step %s: %w", id, err)
+			}
+		}
 	}
 
 	return nil

@@ -145,6 +145,13 @@ type Flow struct {
 	// Adapters configures capability-based adapter selection and the default
 	// fallback for this flow. Takes precedence over the global adapter config.
 	Adapters *FlowAdapters `json:"adapters,omitempty" yaml:"adapters,omitempty"`
+
+	// Triggers groups all trigger sources on the flow (cron, keywords).
+	// Story 024 — flow cron trigger.
+	Triggers *FlowTriggers `json:"triggers,omitempty" yaml:"triggers,omitempty"`
+
+	// Timezone is the IANA tz name applied to cron triggers. Default: system tz.
+	Timezone string `json:"timezone,omitempty" yaml:"timezone,omitempty"`
 }
 
 // FlowAdapters holds capability-based adapter mappings and a default adapter
@@ -244,6 +251,10 @@ type Step struct {
 	// Gate is optional. When set, the step output is validated by EVA before
 	// the step is marked succeeded.
 	Gate *StepGate `json:"gate,omitempty" yaml:"gate,omitempty"`
+
+	// Human is config for type:human steps (story 025). Optional;
+	// missing means "no timeout, no capability gate, no webhook".
+	Human *HumanStepConfig `json:"human,omitempty" yaml:"human,omitempty"`
 }
 
 // TaskTemplate defines how to generate tasks from flow steps.
