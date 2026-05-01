@@ -98,7 +98,8 @@ Usage:
 
 		executor := core.NewFlowExecutor(s, s).
 			WithEvaKey(os.Getenv("EVA_KEY")).
-			WithInputs(inputs)
+			WithInputs(inputs).
+			WithApprovalStore(approvalStore())
 		if runner := buildFlowAgentRunner(); runner != nil {
 			executor = executor.WithAgentRunner(runner)
 		}
