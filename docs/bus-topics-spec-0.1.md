@@ -76,6 +76,42 @@ Recommended additions for v0.2 (NOT yet emitted — consumers tolerant):
 Until v0.2 lands, consumers SHOULD synthesize a dedupe key from
 `(topic, source, timestamp, payload.task_id|track_id|flow_id)`.
 
+### 4.1 Payload type erasure (cross-process)
+
+`payload` is typed `any` in Go (`kit/bus.Event.Payload`). Publishers
+pass typed structs (e.g. `events.TaskCreatedPayload`); in-process
+subscribers receive the exact Go value. Cross-process subscribers
+(NetworkAdapter, SQLiteAdapter, dpkms hub) receive the JSON-decoded
+form: objects → `map[string]any`, arrays → `[]any`, numbers →
+`float64`. The publisher's Go struct type is NOT preserved on the
+wire — by design (T-0178).
+
+Recommended consumer pattern (Go) — re-marshal hop:
+
+```go
+// e.Payload is map[string]any after wire decode
+raw, _ := json.Marshal(e.Payload)
+var p events.TaskCreatedPayload
+if err := json.Unmarshal(raw, &p); err != nil { /* skip */ }
+```
+
+Non-Go consumers (Python aps listener, future webhook bridge) read
+the JSON object directly — no special treatment needed; this section
+is for Go subscribers who want struct-typed access.
+
+Publisher rules:
+
+- Use payload structs that round-trip cleanly via `encoding/json`.
+- Avoid `time.Duration` (encodes as int64 ns), channels, funcs,
+  unexported fields — they will not survive the wire.
+- Field names MUST be lowercase JSON tags (per §4) so re-marshal
+  hop yields the expected keys regardless of the consumer language.
+
+Future enhancement (out of scope for v0.1): typed payload registry
+(`bus.RegisterPayload(topic, reflect.TypeOf(...))`) would let the
+network read loop unmarshal into the registered concrete type. Not
+planned until cross-language payload schemas are stable.
+
 ## 5. Delivery + ordering guarantees
 
 - **Delivery**: at-least-once. kit/bus may redeliver on subscriber
