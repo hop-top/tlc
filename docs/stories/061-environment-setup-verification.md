@@ -45,6 +45,14 @@ As a System, I want to verify that environment variables are properly loaded and
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/env_setup_test.go::TestEnv_TLCPrefixOverridesConfig`
+- planned: `tests/e2e/env_setup_test.go::TestEnv_MissingEditorUsesDefault`
+- planned: `tests/e2e/env_setup_test.go::TestEnv_EDITORVarUsedWhenSet`
+- planned: `tests/e2e/env_setup_test.go::TestEnv_XDGPathsResolveOrDefault`
+- planned: `tests/e2e/env_setup_test.go::TestEnv_MissingExternalToolFailsClearly`
+- planned: `tests/e2e/env_setup_test.go::TestEnv_GlobalMergesWithProjectLocal`
+
 ### Unit
 - ❌ `internal/system/env_test.go` — NOT YET CREATED (package doesn't exist)
   - Needed: `TestRequiredEnvVarsMissing`, `TestExternalDependencyMissing`, `TestDependencyVersionMismatch`, `TestEnvVarInvalidValue`

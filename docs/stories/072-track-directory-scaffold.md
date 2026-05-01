@@ -66,3 +66,12 @@ Next steps:
   [optional] Add tracks/<id>/spec.md — detailed spec / ADR
   [optional] tlc task create "..." --track <id>  — link tasks manually
 ```
+
+## Tests
+
+### E2E
+- planned: `tests/e2e/track_scaffold_test.go::TestTrackCreate_ScaffoldsDirAndRegistry`
+- planned: `tests/e2e/track_scaffold_test.go::TestTrackCreate_IdempotentDoesNotOverwritePlan`
+- planned: `tests/e2e/track_scaffold_test.go::TestTrackCreate_PermissionFailureWarnsAndExitsZero`
+- planned: `tests/e2e/track_scaffold_test.go::TestTrackCreate_BootstrapsTracksDirAndRegistry`
+- planned: `tests/e2e/track_scaffold_test.go::TestTrackCreate_AssignedToNotedInPlan`

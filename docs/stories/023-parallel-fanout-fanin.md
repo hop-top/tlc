@@ -46,10 +46,16 @@ complete faster without sacrificing correctness at the join point.
 ## Tests
 
 ### E2E
-- `examples/flows/fixtures/parallel-fanout/happy-path/`
-  - `test.yaml` — expected_exit: 0
-  - `record/` — cassettes per step (prepare, lint, test,
-    security-scan, merge-results)
+- `tests/e2e/flow_parallel_test.go::TestFlow_FanOut_StartsConcurrently`
+- planned: `tests/e2e/flow_parallel_test.go::TestFlow_FanIn_WaitsForAllParallel`
+- planned: `tests/e2e/flow_parallel_test.go::TestFlow_Parallel_AllSucceededReportsSucceeded`
+- planned: `tests/e2e/flow_parallel_test.go::TestFlow_Parallel_OneFailSkipsFanIn`
+- planned: `tests/e2e/flow_parallel_test.go::TestFlow_Parallel_TimestampWindowsOverlap`
+
+Fixture: `examples/flows/fixtures/parallel-fanout/happy-path/`
+- `test.yaml` — expected_exit: 0
+- `record/` — cassettes per step (prepare, lint, test,
+  security-scan, merge-results)
 - Run via: `tlc flow test examples/flows/parallel-fanout.yaml happy-path`
 
 ### Unit

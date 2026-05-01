@@ -59,6 +59,14 @@ values and cross-field constraints. Environment variable overrides
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/config_validation_test.go::TestConfig_DefaultCascadePaths`
+- planned: `tests/e2e/config_validation_test.go::TestConfig_InvalidValuesFail`
+- planned: `tests/e2e/config_validation_test.go::TestConfig_EnvOverridesPrecedence`
+- planned: `tests/e2e/config_validation_test.go::TestConfig_ProjectLocalTakesPrecedence`
+- planned: `tests/e2e/config_validation_test.go::TestConfig_ValidateCommandReportsErrors`
+- planned: `tests/e2e/config_validation_test.go::TestConfig_GlobalWriteFallsBackToUserPath`
+
 ### Unit
 - ✅ `internal/config/config_test.go` — `TestLoadConfig_Merging`, `TestApplyEnvOverrides`, `TestConfig_Validate`
 - ❌ `internal/config/validation_test.go` — NOT YET CREATED

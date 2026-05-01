@@ -29,6 +29,14 @@ rules, so that my team's process is enforced by the tool.
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/workflow_test.go::TestWorkflow_DefaultStatuses`
+- planned: `tests/e2e/workflow_test.go::TestWorkflow_CustomStatusesListed`
+- planned: `tests/e2e/workflow_test.go::TestWorkflow_InvalidTransitionRejected`
+- planned: `tests/e2e/workflow_test.go::TestWorkflow_ForceFlagBypassesRules`
+- planned: `tests/e2e/workflow_test.go::TestWorkflow_PerTagOverrideApplies`
+- planned: `tests/e2e/workflow_test.go::TestWorkflow_TLSMarkerExport`
+
 ### Unit
 - `internal/core/workflow_test.go` — TestValidateTransition*,
   TestStatusForRole, TestStatusForTLSMarker, TestGetAllStatuses,

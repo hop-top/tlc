@@ -38,3 +38,13 @@ to tasks so I can track sizing for planning and velocity measurement.
 - Effort stored as `TEXT NOT NULL DEFAULT ''` column (migration v3).
 - Validated against enum: XS, S, M, L, XL, or empty.
 - Persisted via `core.Effort` type; accessible in JSON/YAML export.
+
+## Tests
+
+### E2E
+- planned: `tests/e2e/task_effort_test.go::TestTaskEffort_UpdateSetsEffort`
+- planned: `tests/e2e/task_effort_test.go::TestTaskEffort_CreateWithEffortFlag`
+- planned: `tests/e2e/task_effort_test.go::TestTaskEffort_TLSExportEmitsEffortToken`
+- planned: `tests/e2e/task_effort_test.go::TestTaskEffort_TLSImportRoundtrip`
+- planned: `tests/e2e/task_effort_test.go::TestTaskEffort_InvalidValueRejected`
+- planned: `tests/e2e/task_effort_test.go::TestTaskEffort_UnsetOmitsLineFromShow`

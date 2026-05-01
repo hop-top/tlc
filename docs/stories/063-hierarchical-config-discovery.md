@@ -129,6 +129,18 @@ paths.
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_NestedDirsDiscoveredAndMerged`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_DeepNestingTraversal`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_ChildOverridesParent`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_TasksMergedAcrossDirs`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_TasksDedupedClosestWins`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_TraversalToFilesystemRoot`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_WindowsPaths`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_UnixPaths`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_NoTlcDirsFallsBackToGlobal`
+- planned: `tests/e2e/config_hierarchy_test.go::TestConfigHierarchy_ConfigListShowsSourceAnnotations`
+
 ### Unit
 
 **Path Handling (`internal/config/paths_test.go`):**

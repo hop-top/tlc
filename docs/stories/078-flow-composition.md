@@ -38,10 +38,17 @@ duplicating step definitions across flow files.
 ## Tests
 
 ### E2E
+- `tests/e2e/flow_composition_test.go::TestFlow_Composition_ChildExecutesInParent`
+- planned: `tests/e2e/flow_composition_test.go::TestFlow_Composition_ChildOutputsAvailableToParent`
+- planned: `tests/e2e/flow_composition_test.go::TestFlow_Composition_ChildFailureFailsParent`
+- planned: `tests/e2e/flow_composition_test.go::TestFlow_Composition_PreChildPostOrdering`
+- planned: `tests/e2e/flow_composition_test.go::TestFlow_Composition_ChildStandaloneRunPasses`
+
+Fixtures:
 - `examples/flows/composition.yaml` — parent flow definition
 - `examples/flows/composition-child.yaml` — reusable child flow
 - `examples/flows/fixtures/composition/happy-path/` — happy path run
-- `tlc flow test examples/flows/composition.yaml happy-path`
+- Run via: `tlc flow test examples/flows/composition.yaml happy-path`
 
 ### Unit
 - Sub-flow step type resolution

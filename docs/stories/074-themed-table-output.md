@@ -144,6 +144,12 @@ wins:
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/task_list_theme_test.go::TestTaskList_FourColorDefault`
+- planned: `tests/e2e/task_list_theme_test.go::TestTaskList_NonPrimaryBlockerPink`
+- planned: `tests/e2e/task_list_theme_test.go::TestTaskList_SingleStatusFilterNoEmphasis`
+- planned: `tests/e2e/task_list_theme_test.go::TestTaskList_HeadersAndBordersMuted`
+
 ### Unit
 - `internal/cli/ttytable_test.go`
   - `TestTTYTableRendersHeaders` — headers present

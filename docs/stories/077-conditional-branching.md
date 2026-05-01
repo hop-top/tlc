@@ -39,12 +39,19 @@ staging vs production deploy) without duplicating definitions.
 ## Tests
 
 ### E2E
+- `tests/e2e/flow_conditional_test.go::TestFlow_ConditionalStaging`
+- `tests/e2e/flow_conditional_test.go::TestFlow_ConditionalProduction`
+- planned: `tests/e2e/flow_conditional_test.go::TestFlow_ConditionalSkipPropagatesToDependents`
+- planned: `tests/e2e/flow_conditional_test.go::TestFlow_ConditionalMutuallyExclusivePaths`
+
+Fixtures:
 - `examples/flows/conditional.yaml` — flow definition
 - `examples/flows/fixtures/conditional/staging/` — staging run cassettes
 - `examples/flows/fixtures/conditional/production/` — production run
   cassettes
-- `tlc flow test examples/flows/conditional.yaml staging`
-- `tlc flow test examples/flows/conditional.yaml production`
+- Run via:
+  - `tlc flow test examples/flows/conditional.yaml staging`
+  - `tlc flow test examples/flows/conditional.yaml production`
 
 ### Unit
 - Condition evaluation with string equality
