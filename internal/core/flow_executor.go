@@ -475,7 +475,9 @@ func (e *FlowExecutor) executeExecStep(ctx context.Context, step Step) (map[stri
 	}
 	if e.agentRunner == nil {
 		return nil, fmt.Errorf(
-			"flow exec step %q: no agent runner registered; exec steps require a runner",
+			"flow exec step %q: no agent runner registered; "+
+				"register an agent in agents.yaml (tlc agent register --help) "+
+				"and pass --agent <name> to tlc flow run",
 			step.ID)
 	}
 	if !e.agentRunner.CanHandle(step) {
