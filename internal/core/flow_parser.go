@@ -126,6 +126,15 @@ func ValidateFlow(f *Flow) error {
 		}
 	}
 
+	// Human step validation (story 025). Validate per-step config.
+	for id, step := range f.Steps {
+		if step.Type == StepTypeHuman {
+			if err := ValidateHumanStep(step); err != nil {
+				return fmt.Errorf("step %s: %w", id, err)
+			}
+		}
+	}
+
 	return nil
 }
 

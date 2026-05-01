@@ -251,6 +251,10 @@ type Step struct {
 	// Gate is optional. When set, the step output is validated by EVA before
 	// the step is marked succeeded.
 	Gate *StepGate `json:"gate,omitempty" yaml:"gate,omitempty"`
+
+	// Human is config for type:human steps (story 025). Optional;
+	// missing means "no timeout, no capability gate, no webhook".
+	Human *HumanStepConfig `json:"human,omitempty" yaml:"human,omitempty"`
 }
 
 // TaskTemplate defines how to generate tasks from flow steps.
