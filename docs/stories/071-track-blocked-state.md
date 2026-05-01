@@ -76,3 +76,16 @@ Intra-track `blocked_by` references (one track task blocking another) are
 plan sequencing and must NOT trigger the blocked flag.
 Terminal statuses (DONE, SKIPPED) are excluded from the check.
 Multiple state flags can coexist (e.g. `stale` + `blocked`).
+
+## Tests
+
+### E2E
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_BlockedFlagOnExternalBlocker`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_HealthyWhenNoBlockers`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_StateFilterBlocked`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackShow_StateHeaderBlocked`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_JSONStateBlocked`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_TerminalTasksIgnored`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_ZeroTasksUnlinkedNotBlocked`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_IntraTrackDepNotBlocking`
+- planned: `tests/e2e/track_blocked_test.go::TestTrackList_IntraPlusExternalBlockerStillBlocks`

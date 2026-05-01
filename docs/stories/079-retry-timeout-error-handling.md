@@ -43,13 +43,22 @@ teardown steps always run regardless of prior failures.
 ## Tests
 
 ### E2E
+- `tests/e2e/flow_retry_timeout_test.go::TestFlow_RetrySucceedsOnThirdAttempt`
+- `tests/e2e/flow_retry_timeout_test.go::TestFlow_RetryExhaustionFailsStep`
+- `tests/e2e/flow_retry_timeout_test.go::TestFlow_TimeoutKillsStep`
+- planned: `tests/e2e/flow_retry_timeout_test.go::TestFlow_OnFailureContinue`
+- planned: `tests/e2e/flow_retry_timeout_test.go::TestFlow_RunAlwaysAfterFailure`
+- planned: `tests/e2e/flow_retry_timeout_test.go::TestFlow_HappyPathWithTeardown`
+
+Fixtures:
 - `examples/flows/retry-timeout.yaml` — flow definition
 - `examples/flows/fixtures/retry-timeout/happy-path/` — flaky step
   succeeds on 3rd attempt; teardown runs
 - `examples/flows/fixtures/retry-timeout/timeout/` — step exceeds
   timeout; teardown runs
-- `tlc flow test examples/flows/retry-timeout.yaml happy-path`
-- `tlc flow test examples/flows/retry-timeout.yaml timeout`
+- Run via:
+  - `tlc flow test examples/flows/retry-timeout.yaml happy-path`
+  - `tlc flow test examples/flows/retry-timeout.yaml timeout`
 
 ### Unit
 - Retry counter and backoff calculation

@@ -44,9 +44,15 @@ auditable result.
 ## Tests
 
 ### E2E
-- `examples/flows/fixtures/sequential-chain/happy-path/`
-  - `test.yaml` — expected_exit: 0
-  - `record/` — cassettes per step (analyze, transform, report)
+- `tests/e2e/flow_sequential_test.go::TestFlow_Sequential_OrderRespected`
+- planned: `tests/e2e/flow_sequential_test.go::TestFlow_Sequential_AllSucceededReportsRunSucceeded`
+- planned: `tests/e2e/flow_sequential_test.go::TestFlow_Sequential_StepBFailureSkipsC`
+- planned: `tests/e2e/flow_sequential_test.go::TestFlow_Sequential_StrictTimestampOrdering`
+- planned: `tests/e2e/flow_sequential_test.go::TestFlow_Sequential_PerStepTaskTemplate`
+
+Fixture: `examples/flows/fixtures/sequential-chain/happy-path/`
+- `test.yaml` — expected_exit: 0
+- `record/` — cassettes per step (analyze, transform, report)
 - Run via: `tlc flow test examples/flows/sequential-chain.yaml happy-path`
 
 ### Unit

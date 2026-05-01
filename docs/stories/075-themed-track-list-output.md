@@ -102,6 +102,11 @@ matching task list and fang help output style.
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/track_list_theme_test.go::TestTrackList_FourColorDefault`
+- planned: `tests/e2e/track_list_theme_test.go::TestTrackList_StatusActiveFilterPreservesColors`
+- planned: `tests/e2e/track_list_theme_test.go::TestTrackList_HeadersAndBordersMuted`
+
 ### Unit
 - `internal/cli/track_list_test.go`
   - Existing tests cover listing and filtering

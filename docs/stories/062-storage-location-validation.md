@@ -49,6 +49,13 @@ As a System, I want to validate that the database directory is accessible and cr
 
 ## Tests
 
+### E2E
+- planned: `tests/e2e/storage_location_test.go::TestStorage_UnsupportedBackendErrors`
+- planned: `tests/e2e/storage_location_test.go::TestStorage_DefaultDBPathFromXDG`
+- planned: `tests/e2e/storage_location_test.go::TestStorage_CreatesDirWith0755`
+- planned: `tests/e2e/storage_location_test.go::TestStorage_DirCreationFailureReportsError`
+- planned: `tests/e2e/storage_location_test.go::TestStorage_HierarchicalConfigMerged`
+
 ### Unit
 - ❌ `internal/storage/locations_test.go` — NOT YET CREATED (package doesn't exist)
   - Needed: `TestStorageDirCreation`, `TestStoragePermissions`, `TestLogLocationFallback`, `TestSyncStateCorruption`, `TestDiskSpaceCheck`

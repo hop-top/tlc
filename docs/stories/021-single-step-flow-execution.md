@@ -38,9 +38,14 @@ definition and verify the engine handles the simplest case correctly.
 ## Tests
 
 ### E2E
-- `examples/flows/fixtures/single-step/happy-path/`
-  - `test.yaml` — expected_exit: 0
-  - `record/` — cassettes for the single step execution
+- `tests/e2e/flow_single_step_test.go::TestFlow_SingleStep_HappyPath`
+- planned: `tests/e2e/flow_single_step_test.go::TestFlow_SingleStep_StatusReportsSucceeded`
+- planned: `tests/e2e/flow_single_step_test.go::TestFlow_SingleStep_AgentReceivesTaskTemplate`
+- planned: `tests/e2e/flow_single_step_test.go::TestFlow_SingleStep_RecordsTimestampsAndExitCode`
+
+Fixture: `examples/flows/fixtures/single-step/happy-path/`
+- `test.yaml` — expected_exit: 0
+- `record/` — cassettes for the single step execution
 - Run via: `tlc flow test examples/flows/single-step.yaml happy-path`
 
 ### Unit

@@ -27,6 +27,23 @@ It is written to be executable by:
   - step statuses
   - required log events (from task-log-spec-0.1.md)
 
+## E2E Tests
+
+Convention: each `E2E-NN` plan section below maps to one test function.
+
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E01_SequentialOrdering`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E02_DependencyGateBlocksDownstreamOnFailure`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E03_ParallelChildrenNoOrdering`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E04_MaxConcurrencyEnforced`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E05_JoinWaitsForUpstream`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E06_BranchSelectsFirstMatch`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E07_BranchDefaultPath`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E08_BranchFailsNoMatchNoDefault`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E09_RetrySucceedsEarlyAndStops`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E10_RetryExhaustionFailsFlow`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E11_CancellationPropagatesSafely`
+- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E12_DeterminismOnRerun`
+
 ## Required Observability
 
 The system under test MUST expose at least one of:
