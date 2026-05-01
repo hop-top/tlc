@@ -10,6 +10,7 @@ import (
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
+	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
@@ -207,7 +208,7 @@ var TaskUpdateCmd = &cobra.Command{
 				if taskUpdateDue == "-" || taskUpdateDue == "" {
 					task.DueAt = nil
 				} else {
-					t, err := parseFlexTime(taskUpdateDue)
+					t, err := util.ParseUntil(taskUpdateDue)
 					if err != nil {
 						errs = append(errs, fmt.Sprintf("%s: invalid --due: %v", task.ID, err))
 						continue
@@ -220,7 +221,7 @@ var TaskUpdateCmd = &cobra.Command{
 				if taskUpdateRemindAt == "-" || taskUpdateRemindAt == "" {
 					task.RemindAt = nil
 				} else {
-					t, err := parseFlexTime(taskUpdateRemindAt)
+					t, err := util.ParseUntil(taskUpdateRemindAt)
 					if err != nil {
 						errs = append(errs, fmt.Sprintf("%s: invalid --remind-at: %v", task.ID, err))
 						continue
