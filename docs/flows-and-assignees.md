@@ -145,7 +145,76 @@ RunEvaGate(ctx, gate *StepGate, stepOutput map[string]any, apiKey string) error
 - violation → actionable error with evaluator details + retry hint
 - non-200 non-violation → wrapped error with HTTP status + gateway URL
 
-### 4. Assignee Capabilities
+### 4. Conditional Steps
+
+Step-level skip-on-condition. Field name: `condition:` (string). Empty
+= always run. Non-empty = evaluated against flow inputs immediately
+before the step would transition to `running`.
+
+**Outcomes:**
+
+- truthy → step runs normally
+- falsy → step transitions to `skipped` (no STEP_START emitted)
+- parse error / unknown input key → step `failed`; flow run fails
+
+`skipped` satisfies `depends_on` for downstream steps — pruned
+predecessors do not deadlock the graph. See
+`task-flow-spec-0.1-dev.md` "Conditional execution" for full grammar.
+
+**Grammar (tiny pure-Go expr; no CEL / extension hooks):**
+
+```
+expr := lhs OP rhs
+lhs  := "inputs." IDENT  |  IDENT
+OP   := "==" | "!="
+rhs  := "'" STRING "'"  |  "\"" STRING "\""  |  IDENT
+```
+
+`inputs.` prefix optional. Values stringified via `%v` before compare;
+`n == '7'` matches integer input `7`. Bare RHS identifiers compared as
+literal text.
+
+**Example — single flow handles staging + production:**
+
+```yaml
+steps:
+  deploy-staging:
+    type: task
+    title: Deploy to staging
+    depends_on: [validate-config]
+    condition: "inputs.target == 'staging'"
+
+  deploy-production:
+    type: task
+    title: Deploy to production
+    depends_on: [validate-config]
+    condition: "inputs.target == 'production'"
+```
+
+When invoked with `target=staging`, the production branch is marked
+`skipped` and its descendants are pruned cleanly. Full working example:
+`examples/flows/conditional.yaml`.
+
+**Limits (MVP — track follow-ups in T-0755):**
+
+- No boolean composition (`&&`, `||`, `not`)
+- No comparison beyond `==` / `!=`
+- No nested field / index access (`inputs.foo.bar`, `inputs.list[0]`)
+- No reference to upstream step outputs (only `inputs.*`)
+
+**Distinction — `condition:` vs `when:`:**
+
+`condition:` (string, this section) gates dispatch on any step type.
+`when:` (string) is a different field — it lives inside `BranchCase`
+entries on a `branch` step (`cases: [{when: <expr>, next: <step_id>}]`)
+to choose a downstream path. They are not interchangeable.
+
+Source refs:
+- field def: `internal/core/flow.go#198-247`
+- evaluator: `internal/core/flow_condition.go`
+- runtime gate: `internal/core/flow_executor.go#289-310`
+
+### 5. Assignee Capabilities
 
 Assignees declare what they can do:
 
@@ -153,7 +222,7 @@ Assignees declare what they can do:
 - **Domains**: Areas of expertise
 - **Tools**: Tools they have access to
 
-### 5. Assignment Engine
+### 6. Assignment Engine
 
 The assignment engine matches tasks to assignees using weighted scoring:
 
@@ -163,7 +232,7 @@ The assignment engine matches tasks to assignees using weighted scoring:
 
 Best-scoring assignee gets auto-assigned to the task.
 
-### 6. Delegation & Hand-offs
+### 7. Delegation & Hand-offs
 
 #### Flow-to-Flow Hand-offs (via Subflow)
 
