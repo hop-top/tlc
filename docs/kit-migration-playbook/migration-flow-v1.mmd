@@ -1,0 +1,14 @@
+%% kit migration flow — six steps + hold-state for unpublished kit
+%% v1 — 2026-05-01
+
+flowchart LR
+  A[flat kit imports<br/>hop.top/kit/&lt;area&gt;] --> B[1. audit<br/>xray + grep]
+  B --> C[2. rewrite imports<br/>sed per package]
+  C --> D[3. replace directive<br/>local kit + hdl]
+  D --> E[4. go mod tidy<br/>transitives]
+  E --> F[5. fix API drift<br/>--verbose / xdg / etc.]
+  F --> G[6. smoke + tests]
+  G --> H{kit tag<br/>published?}
+  H -- no --> I[hold replace<br/>local-only build<br/>PR draft]
+  H -- yes --> J[drop replace<br/>pin version<br/>undraft PR]
+  I --> H

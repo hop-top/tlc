@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### chore
+- kit: migrate to role-based hierarchy (`hop.top/kit/go/<role>/<pkg>`).
+  All 16 kit packages tlc imports moved from flat to role-based paths
+  (e.g. `hop.top/kit/log` → `hop.top/kit/go/console/log`). Replace
+  directive in `go.mod` carries the local kit + hdl worktrees until
+  upstream tags publish. See `docs/kit-migration-playbook.md` for
+  the migration procedure other consumers can reuse. Refs: T-0757,
+  T-0794, PR #92.
+
 ### feat
 - Plan ingestion: two-phase cross-track ref resolution handles
   circular plan references. Phase 1 creates tasks and captures
