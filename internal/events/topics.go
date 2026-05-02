@@ -18,6 +18,10 @@ const (
 	TopicTrackCreated   bus.Topic = "tlc.track.created"
 	TopicTrackActivated bus.Topic = "tlc.track.activated"
 	TopicTrackCompleted bus.Topic = "tlc.track.completed"
+
+	TopicAgentStarted   bus.Topic = "tlc.agent.started"
+	TopicAgentCompleted bus.Topic = "tlc.agent.completed"
+	TopicAgentFailed    bus.Topic = "tlc.agent.failed"
 )
 
 // Subscription topics for cross-app events.

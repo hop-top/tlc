@@ -245,8 +245,8 @@ func TestStateUpdater_CreateRun(t *testing.T) {
 		t.Fatalf("event count = %d, want 1", b.eventCount())
 	}
 	evt := b.lastEvent()
-	if string(evt.Topic) != "agent.started" {
-		t.Errorf("topic = %q, want agent.started", evt.Topic)
+	if string(evt.Topic) != "tlc.agent.started" {
+		t.Errorf("topic = %q, want tlc.agent.started", evt.Topic)
 	}
 }
 
@@ -285,8 +285,8 @@ func TestStateUpdater_UpdateRun_Succeeded(t *testing.T) {
 
 	// Check bus event.
 	evt := b.lastEvent()
-	if string(evt.Topic) != "agent.completed" {
-		t.Errorf("topic = %q, want agent.completed", evt.Topic)
+	if string(evt.Topic) != "tlc.agent.completed" {
+		t.Errorf("topic = %q, want tlc.agent.completed", evt.Topic)
 	}
 }
 
@@ -320,8 +320,8 @@ func TestStateUpdater_UpdateRun_Failed(t *testing.T) {
 	}
 
 	evt := b.lastEvent()
-	if string(evt.Topic) != "agent.failed" {
-		t.Errorf("topic = %q, want agent.failed", evt.Topic)
+	if string(evt.Topic) != "tlc.agent.failed" {
+		t.Errorf("topic = %q, want tlc.agent.failed", evt.Topic)
 	}
 }
 

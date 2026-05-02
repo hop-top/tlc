@@ -164,7 +164,9 @@ func (u *StateUpdater) CreateRun(ctx context.Context, record *AgentRunRecord) er
 			return fmt.Errorf("state updater: create run: %w", err)
 		}
 	}
-	u.publishEvent(ctx, "agent.started", &AgentEvent{
+	// Topic mirrors events.TopicAgentStarted; kept as string literal here
+	// because internal/events imports internal/core (would create cycle).
+	u.publishEvent(ctx, "tlc.agent.started", &AgentEvent{
 		RunID:      record.ID,
 		Agent:      record.Agent,
 		TargetType: record.TargetType,
@@ -203,7 +205,8 @@ func (u *StateUpdater) UpdateRun(
 
 	switch result.Status {
 	case AgentStatusSucceeded, AgentStatusPartial:
-		u.publishEvent(ctx, "agent.completed", &AgentEvent{
+		// Mirrors events.TopicAgentCompleted (string literal: avoid import cycle).
+		u.publishEvent(ctx, "tlc.agent.completed", &AgentEvent{
 			RunID:      runID,
 			Agent:      record.Agent,
 			TargetType: record.TargetType,
@@ -213,7 +216,8 @@ func (u *StateUpdater) UpdateRun(
 			DurationMs: durationMs,
 		})
 	case AgentStatusFailed, AgentStatusTimeout:
-		u.publishEvent(ctx, "agent.failed", &AgentEvent{
+		// Mirrors events.TopicAgentFailed (string literal: avoid import cycle).
+		u.publishEvent(ctx, "tlc.agent.failed", &AgentEvent{
 			RunID:      runID,
 			Agent:      record.Agent,
 			TargetType: record.TargetType,
