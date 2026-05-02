@@ -38,7 +38,7 @@ func scanTaskFields(s scanner) (core.Task, error) {
 	var blockedReason, staleFired, trackID sql.NullString
 
 	err := s.Scan(
-		&t.ID, &t.Title, &t.Description, &t.Status,
+		&t.ID, &t.Seq, &t.Title, &t.Description, &t.Status,
 		&t.AssignedTo, &t.Reference, &createdAt, &updatedAt,
 		&metaStr, &tagsStr, &originSys, &lastSync,
 		&t.Archived, &projectID, &effortStr, &priorityStr,
@@ -90,13 +90,13 @@ func BindTask(t core.Task) (cols []string, vals []any) {
 	}
 
 	cols = []string{
-		"id", "title", "description", "status", "assigned_to", "reference",
+		"id", "seq", "title", "description", "status", "assigned_to", "reference",
 		"created_at", "updated_at", "meta", "tags", "origin_system",
 		"last_sync_at", "archived", "project_id", "effort", "priority",
 		"stale_timeout", "blocked_reason", "stale_fired_at", "track_id",
 	}
 	vals = []any{
-		t.ID, t.Title, t.Description, string(t.Status), t.AssignedTo,
+		t.ID, t.Seq, t.Title, t.Description, string(t.Status), t.AssignedTo,
 		t.Reference, t.CreatedAt.Format(time.RFC3339),
 		t.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
 		t.OriginSystem, lastSync, t.Archived, pid, string(t.Effort),

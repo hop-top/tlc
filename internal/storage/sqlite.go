@@ -155,16 +155,28 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			noAutoRemind = 1
 		}
 
-		// Coalesce nil ProjectID to empty string to prevent NULL composite PK duplication
+		// Coalesce nil ProjectID to empty string for consistent scoping.
 		var projectID string
 		if task.ProjectID != nil {
 			projectID = *task.ProjectID
 		}
 
+		// Allocate a sequence number for the T-NNNN+ display alias if one
+		// hasn't already been assigned. Allocation runs in the same write
+		// transaction as the insert so concurrent creates can never collide
+		// on (project_id, seq).
+		if task.Seq == 0 {
+			seq, err := allocSeqInTx(ctx, tx, projectID)
+			if err != nil {
+				return fmt.Errorf("failed to allocate task sequence: %w", err)
+			}
+			task.Seq = int64(seq)
+		}
+
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO tasks (id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			task.ID, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
+			INSERT INTO tasks (id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			task.ID, task.Seq, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
 			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
 			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
 			string(task.Effort), string(task.Priority), staleTimeout, task.BlockedReason, staleFiredAt,
@@ -186,12 +198,12 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	proj := core.DetectProject()
 	var row *sql.Row
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
+		row = s.db.QueryRowContext(ctx, "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
 	} else {
 		// Prefer the global bucket (project_id='') over project-scoped rows so that
 		// tasks created outside any project context are consistently resolved even
 		// when sync has duplicated them into project-specific rows.
-		row = s.db.QueryRowContext(ctx, "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
+		row = s.db.QueryRowContext(ctx, "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
 	}
 
 	var task core.Task
@@ -202,7 +214,7 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	var dueAtStr, remindAtStr sql.NullString
 	var remindEveryNs, noAutoRemindInt sql.NullInt64
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt)
+	err := row.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -275,7 +287,7 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID string) (*core.Task, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		"SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks WHERE id = ? AND project_id = ?",
+		"SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks WHERE id = ? AND project_id = ?",
 		id, projectID,
 	)
 
@@ -287,7 +299,7 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 	var dueAtStr, remindAtStr sql.NullString
 	var remindEveryNs, noAutoRemindInt sql.NullInt64
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt)
+	err := row.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -636,7 +648,7 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks"
+	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind FROM tasks"
 
 	whereClauses, args := buildFilterClauses(query.Filters)
 
@@ -790,7 +802,7 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 
 func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID string) (*core.Task, error) {
 	sqlQuery := `
-		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind
+		SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind
 		FROM tasks
 		WHERE origin_system = ? AND json_extract(meta, '$.origin_id') = ?
 		LIMIT 1
@@ -805,7 +817,7 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 	var dueAtStr, remindAtStr sql.NullString
 	var remindEveryNs, noAutoRemindInt sql.NullInt64
 
-	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt)
+	err := row.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -902,7 +914,7 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 	// A task needs push if it has an origin system AND (it has never been synced OR updated_at > last_sync_at)
 	// AND it is NOT archived.
 	sqlQuery := `
-		SELECT id, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind
+		SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, remind_every, no_auto_remind
 		FROM tasks
 		WHERE origin_system IS NOT NULL AND origin_system != ''
 		AND (last_sync_at IS NULL OR updated_at > last_sync_at)
@@ -1100,33 +1112,48 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 
 func (s *SQLiteStorage) GetNextSequenceID(ctx context.Context, projectID string) (int, error) {
 	var nextID int
+	err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		nextID, err = allocSeqInTx(ctx, tx, projectID)
+		return err
+	})
+	return nextID, err
+}
 
+// allocSeqInTx reserves the next monotonically increasing sequence number
+// for projectID inside the given transaction. The seq → display-alias mapping
+// is "T-<seq>" with at-least-4-digit zero-padding (e.g. T-0042, T-12345).
+//
+// Empty projectID is normalized to "default" so the global bucket has its
+// own counter row. The increment must happen in the same tx as the INSERT
+// that consumes the value to avoid (project_id, seq) collisions under
+// concurrent creates.
+func allocSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error) {
 	if projectID == "" {
 		projectID = "default"
 	}
 
-	err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO task_sequences (project_id, next_id)
-			VALUES (?, 1)
-		`, projectID)
-		if err != nil {
-			return fmt.Errorf("failed to insert sequence: %w", err)
-		}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO task_sequences (project_id, next_id)
+		VALUES (?, 1)
+	`, projectID); err != nil {
+		return 0, fmt.Errorf("ensure sequence row: %w", err)
+	}
 
-		err = tx.QueryRowContext(ctx, "SELECT next_id FROM task_sequences WHERE project_id = ?", projectID).Scan(&nextID)
-		if err != nil {
-			return fmt.Errorf("failed to get next sequence id: %w", err)
-		}
+	var nextID int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT next_id FROM task_sequences WHERE project_id = ?`, projectID,
+	).Scan(&nextID); err != nil {
+		return 0, fmt.Errorf("read sequence: %w", err)
+	}
 
-		_, err = tx.ExecContext(ctx, "UPDATE task_sequences SET next_id = next_id + 1 WHERE project_id = ?", projectID)
-		if err != nil {
-			return fmt.Errorf("failed to update sequence: %w", err)
-		}
-		return nil
-	})
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE task_sequences SET next_id = next_id + 1 WHERE project_id = ?`, projectID,
+	); err != nil {
+		return 0, fmt.Errorf("bump sequence: %w", err)
+	}
 
-	return nextID, err
+	return nextID, nil
 }
 
 func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
@@ -1137,7 +1164,7 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	var blockedReasonStr, staleFiredAtStr, trackIDStr sql.NullString
 	var dueAtStr, remindAtStr sql.NullString
 	var remindEveryNs, noAutoRemindInt sql.NullInt64
-	if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt); err != nil {
+	if err := rows.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &remindEveryNs, &noAutoRemindInt); err != nil {
 		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)

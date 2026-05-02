@@ -30,10 +30,10 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 		}
 
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO tracks (id, title, type, status, assigned_to,
+			INSERT INTO tracks (id, slug, title, type, status, assigned_to,
 				created_at, updated_at, project_id, meta, plan_mapping)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			track.ID, track.Title, track.Type, track.Status,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			track.ID, track.Slug, track.Title, track.Type, track.Status,
 			track.AssignedTo,
 			track.CreatedAt.Format(time.RFC3339),
 			track.UpdatedAt.Format(time.RFC3339),
@@ -52,12 +52,12 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 	var row *sql.Row
 	if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
 		row = s.db.QueryRowContext(ctx, `
-			SELECT id, title, type, status, assigned_to,
+			SELECT id, slug, title, type, status, assigned_to,
 				created_at, updated_at, project_id, meta, plan_mapping
 			FROM tracks WHERE id = ? AND project_id = ?`, id, proj.ProjectID)
 	} else {
 		row = s.db.QueryRowContext(ctx, `
-			SELECT id, title, type, status, assigned_to,
+			SELECT id, slug, title, type, status, assigned_to,
 				created_at, updated_at, project_id, meta, plan_mapping
 			FROM tracks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
 	}
@@ -181,7 +181,7 @@ func (s *SQLiteStorage) ListTracks(
 	ctx context.Context,
 	query core.TrackQuery,
 ) ([]*core.Track, error) {
-	sqlQuery := `SELECT id, title, type, status, assigned_to,
+	sqlQuery := `SELECT id, slug, title, type, status, assigned_to,
 		created_at, updated_at, project_id, meta, plan_mapping FROM tracks`
 	var args []interface{}
 	var whereClauses []string
@@ -256,7 +256,7 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 	var assignedTo, projectID, metaStr, planMappingStr sql.NullString
 
 	err := row.Scan(
-		&track.ID, &track.Title, &track.Type, &track.Status,
+		&track.ID, &track.Slug, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
 		&planMappingStr,
 	)
@@ -301,7 +301,7 @@ func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 	var assignedTo, projectID, metaStr, planMappingStr sql.NullString
 
 	err := rows.Scan(
-		&track.ID, &track.Title, &track.Type, &track.Status,
+		&track.ID, &track.Slug, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
 		&planMappingStr,
 	)
