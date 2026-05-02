@@ -10,6 +10,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.3
 	charm.land/log/v2 v2.0.0
 	github.com/andygrunwald/go-jira v1.17.0
+	github.com/arran4/golang-ical v0.3.5
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/go-github/v69 v69.2.0

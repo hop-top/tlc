@@ -30,7 +30,7 @@ func (t *Task) AutoRemindAt() *time.Time {
 }
 
 // NextReminder returns the earliest upcoming reminder time.
-// Considers RemindAt, AutoRemindAt, and RemindEvery recurrence.
+// Considers RemindAt, AutoRemindAt, and RRule recurrence.
 func (t *Task) NextReminder() *time.Time {
 	now := time.Now()
 	var earliest *time.Time
@@ -45,15 +45,19 @@ func (t *Task) NextReminder() *time.Time {
 		}
 	}
 
-	if t.RemindEvery != nil && *t.RemindEvery > 0 {
-		elapsed := now.Sub(t.CreatedAt)
-		ticks := int(elapsed / *t.RemindEvery)
-		next := t.CreatedAt.Add(
-			time.Duration(ticks+1) * *t.RemindEvery,
-		)
-		if t.DueAt == nil || next.Before(*t.DueAt) {
-			if earliest == nil || next.Before(*earliest) {
-				earliest = &next
+	if t.RRule != "" {
+		// Walk forward from now (or CreatedAt, whichever is later)
+		// to find the next occurrence. Using `now` here matches the
+		// previous semantics of "next reminder strictly in the
+		// future" while letting the RRULE walker consult UNTIL/COUNT
+		// constraints encoded in the rule.
+		next, ok, _ := NextFireFromRRule(t.RRule, now)
+		if ok {
+			candidate := next
+			if t.DueAt == nil || candidate.Before(*t.DueAt) {
+				if earliest == nil || candidate.Before(*earliest) {
+					earliest = &candidate
+				}
 			}
 		}
 	}

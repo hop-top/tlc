@@ -76,7 +76,7 @@ type Task struct {
 	TrackID       *string                `json:"track_id,omitempty" yaml:"track_id,omitempty" table:"Track"`
 	DueAt         *time.Time             `json:"due_at,omitempty" yaml:"due_at,omitempty"`
 	RemindAt      *time.Time             `json:"remind_at,omitempty" yaml:"remind_at,omitempty"`
-	RemindEvery   *time.Duration         `json:"remind_every,omitempty" yaml:"remind_every,omitempty"`
+	RRule         string                 `json:"rrule,omitempty" yaml:"rrule,omitempty"`
 	NoAutoRemind  bool                   `json:"no_auto_remind,omitempty" yaml:"no_auto_remind,omitempty"`
 }
 

@@ -68,7 +68,6 @@ func TestNextReminder(t *testing.T) {
 	now := time.Now()
 	future := now.Add(24 * time.Hour)
 	farFuture := now.Add(48 * time.Hour)
-	hour := time.Hour
 
 	t.Run("no reminders", func(t *testing.T) {
 		task := &core.Task{}
@@ -92,31 +91,28 @@ func TestNextReminder(t *testing.T) {
 		// so remind_at (farFuture) should win
 		assert.Equal(t, farFuture.Unix(), r.Unix())
 	})
-	t.Run("remind_every recurrence", func(t *testing.T) {
-		created := now.Add(-150 * time.Minute)
+	t.Run("rrule recurrence", func(t *testing.T) {
+		// Hourly RRULE → next fire is +1h from now.
 		task := &core.Task{
-			CreatedAt:   created,
-			RemindEvery: &hour,
+			CreatedAt: now.Add(-150 * time.Minute),
+			RRule:     "FREQ=HOURLY",
 		}
 		r := task.NextReminder()
 		assert.NotNil(t, r)
-		// 150min elapsed, 2 full ticks, next at tick 3 = created + 3h
-		expected := created.Add(3 * time.Hour)
-		assert.InDelta(t, expected.Unix(), r.Unix(), 1)
+		// next-from-now is now + 1h (within ~1s tolerance).
+		assert.InDelta(t, now.Add(time.Hour).Unix(), r.Unix(), 2)
 	})
-	t.Run("remind_every stops at due", func(t *testing.T) {
-		created := now.Add(-30 * time.Minute)
+	t.Run("rrule stops at due", func(t *testing.T) {
+		// Next fire = now + 2h, but due is now + 10min, so
+		// the rrule-derived candidate is suppressed and
+		// auto-remind is in the past → no reminder.
 		dueAt := now.Add(10 * time.Minute)
-		twoHours := 2 * time.Hour
 		task := &core.Task{
-			CreatedAt:   created,
-			DueAt:       &dueAt,
-			RemindEvery: &twoHours,
+			CreatedAt: now.Add(-30 * time.Minute),
+			DueAt:     &dueAt,
+			RRule:     "FREQ=HOURLY;INTERVAL=2",
 		}
 		r := task.NextReminder()
-		// next tick = created + 2h = now + 90min, past due
-		// so remind_every should not produce a reminder
-		// but auto-remind = due - 12h is in the past too
 		assert.Nil(t, r)
 	})
 }

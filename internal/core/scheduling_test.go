@@ -11,20 +11,19 @@ import (
 func TestApplySchedulingDefaults(t *testing.T) {
 	now := time.Now().UTC()
 
-	t.Run("applies due and remind when empty", func(t *testing.T) {
+	t.Run("applies due and rrule when empty", func(t *testing.T) {
 		task := &core.Task{
 			Priority:  "P0",
 			CreatedAt: now,
 		}
 		defaults := &core.ScheduleDefaults{
-			Due:         24 * time.Hour,
-			RemindEvery: 2 * time.Hour,
+			Due:   24 * time.Hour,
+			RRule: "FREQ=HOURLY;INTERVAL=2",
 		}
 		core.ApplySchedulingDefaults(task, defaults)
 		assert.NotNil(t, task.DueAt)
 		assert.Equal(t, now.Add(24*time.Hour).Unix(), task.DueAt.Unix())
-		assert.NotNil(t, task.RemindEvery)
-		assert.Equal(t, 2*time.Hour, *task.RemindEvery)
+		assert.Equal(t, "FREQ=HOURLY;INTERVAL=2", task.RRule)
 	})
 
 	t.Run("does not override explicit due", func(t *testing.T) {
@@ -43,7 +42,7 @@ func TestApplySchedulingDefaults(t *testing.T) {
 		task := &core.Task{CreatedAt: now}
 		core.ApplySchedulingDefaults(task, nil)
 		assert.Nil(t, task.DueAt)
-		assert.Nil(t, task.RemindEvery)
+		assert.Empty(t, task.RRule)
 	})
 }
 

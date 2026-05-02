@@ -4,13 +4,13 @@ import "time"
 
 // ScheduleDefaults holds resolved scheduling defaults for a priority.
 type ScheduleDefaults struct {
-	Due         time.Duration
-	RemindEvery time.Duration
+	Due   time.Duration
+	RRule string
 }
 
-// ApplySchedulingDefaults sets DueAt and RemindEvery on a task when
-// not explicitly set, using priority-based defaults from config.
-// Called at create time. Does not override explicit values.
+// ApplySchedulingDefaults sets DueAt and RRule on a task when not
+// explicitly set, using priority-based defaults from config. Called at
+// create time. Does not override explicit values.
 func ApplySchedulingDefaults(t *Task, defaults *ScheduleDefaults) {
 	if defaults == nil {
 		return
@@ -19,8 +19,8 @@ func ApplySchedulingDefaults(t *Task, defaults *ScheduleDefaults) {
 		d := t.CreatedAt.Add(defaults.Due)
 		t.DueAt = &d
 	}
-	if t.RemindEvery == nil && defaults.RemindEvery > 0 {
-		t.RemindEvery = &defaults.RemindEvery
+	if t.RRule == "" && defaults.RRule != "" {
+		t.RRule = defaults.RRule
 	}
 }
 
