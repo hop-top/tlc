@@ -199,15 +199,11 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 		now := time.Now().UTC()
 
 		proj := core.DetectProject()
-		var projectID string
-		if proj != nil && proj.ProjectID != "" {
-			projectID = proj.ProjectID
-		}
 
-		id, err := m.service.NextTaskID(ctx, projectID)
-		if err != nil {
-			return fmt.Errorf("failed to create task: %w", err)
-		}
+		// Durable identity is the TypeID; storage allocates the
+		// per-project Seq for the T-NNNN display alias on insert.
+		// URIs embed the TypeID so they survive renames.
+		id := core.NewTaskID()
 
 		task := &core.Task{
 			ID:          id,
@@ -224,17 +220,15 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 			task.Reference = fmt.Sprintf("tlc://%s/%s", proj.ProjectID, id)
 		}
 
-		// Retry with a fresh sequence ID if the generated ID collides (mirrors CLI saveTask).
+		// Retry on the (astronomically unlikely) TypeID collision so a
+		// repeat insert still succeeds without surfacing a UNIQUE error.
 		for {
 			if err := m.service.CreateTask(ctx, task, core.GetCurrentUser(), "Created via TUI"); err == nil {
 				break
 			} else if !strings.Contains(err.Error(), "UNIQUE constraint failed") {
 				return fmt.Errorf("failed to create task: %w", err)
 			}
-			id, err = m.service.NextTaskID(ctx, projectID)
-			if err != nil {
-				return fmt.Errorf("failed to create task: %w", err)
-			}
+			id = core.NewTaskID()
 			task.ID = id
 			if proj != nil && proj.ProjectID != "" {
 				task.Reference = fmt.Sprintf("tlc://%s/%s", proj.ProjectID, id)

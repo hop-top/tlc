@@ -210,10 +210,11 @@ func (m Model) detailView() string {
 
 	var s strings.Builder
 	s.WriteString(m.styles.Title.Render(
-		fmt.Sprintf("Task %s: %s", task.ID, task.Title),
+		fmt.Sprintf("Task %s: %s", displayAlias(task), task.Title),
 	))
 	s.WriteString("\n\n")
 
+	fmt.Fprintf(&s, "ID:        %s\n", task.ID)
 	fmt.Fprintf(&s, "Status:    %s\n", m.formatStatus(task.Status))
 	fmt.Fprintf(&s, "Assigned:  %s\n", formatAssignee(task.AssignedTo))
 	fmt.Fprintf(&s, "Reference: %s\n", task.Reference)
