@@ -12,12 +12,12 @@ import (
 type taskScheduling struct {
 	dueAt        *time.Time
 	remindAt     *time.Time
-	remindEvery  *time.Duration
+	rrule        string
 	noAutoRemind bool
 }
 
 func (s *taskScheduling) parse(
-	due, remindAt, remindEvery string, noAutoRemind bool,
+	due, remindAt, rrule string, noAutoRemind bool,
 ) error {
 	if due != "" {
 		t, err := util.ParseUntil(due)
@@ -35,24 +35,15 @@ func (s *taskScheduling) parse(
 		}
 		s.remindAt = &t
 	}
-	if remindEvery != "" {
-		d, err := time.ParseDuration(remindEvery)
-		if err != nil {
-			return fmt.Errorf(
-				"invalid --remind-every %q: %w", remindEvery, err,
-			)
+	if rrule != "" {
+		if err := core.ValidateRRule(rrule); err != nil {
+			return fmt.Errorf("invalid --rrule: %w", err)
 		}
-		if d <= 0 {
-			return fmt.Errorf(
-				"--remind-every must be positive, got %q", remindEvery,
-			)
-		}
-		s.remindEvery = &d
+		s.rrule = rrule
 	}
 	s.noAutoRemind = noAutoRemind
 	return nil
 }
-
 
 // applySchedulingConfig applies priority-based scheduling defaults
 // from config. Does not override explicit values.
@@ -74,9 +65,10 @@ func applySchedulingConfig(task *core.Task) {
 			defaults.Due = d
 		}
 	}
-	if v, ok := sub["remind_every"]; ok {
-		if d, err := time.ParseDuration(fmt.Sprint(v)); err == nil {
-			defaults.RemindEvery = d
+	if v, ok := sub["rrule"]; ok {
+		rule := fmt.Sprint(v)
+		if err := core.ValidateRRule(rule); err == nil {
+			defaults.RRule = rule
 		}
 	}
 	core.ApplySchedulingDefaults(task, &defaults)

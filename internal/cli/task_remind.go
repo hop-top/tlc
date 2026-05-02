@@ -39,7 +39,7 @@ var TaskRemindCmd = &cobra.Command{
 				continue
 			}
 			if t.DueAt == nil && t.RemindAt == nil &&
-				t.RemindEvery == nil {
+				t.RRule == "" {
 				continue
 			}
 

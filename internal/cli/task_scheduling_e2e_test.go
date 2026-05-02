@@ -68,7 +68,7 @@ func TestTaskCreate_DueISO(t *testing.T) {
 	}
 }
 
-func TestTaskCreate_RemindEvery(t *testing.T) {
+func TestTaskCreate_RRule(t *testing.T) {
 	viper.Set("storage.db_path", resetTestDB(t))
 	cmd := newTestCmd()
 	cmd.AddCommand(TaskCmd)
@@ -77,21 +77,21 @@ func TestTaskCreate_RemindEvery(t *testing.T) {
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{
 		"task", "create", "Check CI",
-		"--remind-every", "1h",
+		"--rrule", "FREQ=HOURLY;INTERVAL=1",
 	})
 
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("task create --remind-every failed: %v", err)
+		t.Fatalf("task create --rrule failed: %v", err)
 	}
 
 	s, _ := getStorageRaw()
 	defer s.Close()
 	tasks, _ := s.ListTasks(context.Background(), core.Query{})
-	if tasks[0].RemindEvery == nil {
-		t.Fatal("RemindEvery should be set")
+	if tasks[0].RRule == "" {
+		t.Fatal("RRule should be set")
 	}
-	if *tasks[0].RemindEvery != time.Hour {
-		t.Errorf("expected 1h, got %v", *tasks[0].RemindEvery)
+	if tasks[0].RRule != "FREQ=HOURLY;INTERVAL=1" {
+		t.Errorf("expected FREQ=HOURLY;INTERVAL=1, got %v", tasks[0].RRule)
 	}
 }
 
@@ -187,8 +187,8 @@ func TestTaskCreate_AutoDueFromConfig(t *testing.T) {
 	viper.Set("storage.db_path", resetTestDB(t))
 	viper.Set("task.scheduling.by_priority", map[string]interface{}{
 		"P0": map[string]interface{}{
-			"due":          "24h",
-			"remind_every": "2h",
+			"due":   "24h",
+			"rrule": "FREQ=HOURLY;INTERVAL=2",
 		},
 	})
 	defer viper.Set("task.scheduling.by_priority", nil)
@@ -216,8 +216,8 @@ func TestTaskCreate_AutoDueFromConfig(t *testing.T) {
 	if diff < 23*time.Hour || diff > 25*time.Hour {
 		t.Errorf("auto-due should be ~24h, got %v", diff)
 	}
-	if tasks[0].RemindEvery == nil {
-		t.Fatal("auto-remind should be set from config")
+	if tasks[0].RRule == "" {
+		t.Fatal("auto-rrule should be set from config")
 	}
 }
 
