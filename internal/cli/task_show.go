@@ -75,6 +75,10 @@ var TaskShowCmd = &cobra.Command{
 				printTask(cmd, task, logs, format)
 				continue
 			}
+			if format == formatVtodo {
+				writeVtodo(cmd, []*core.Task{task}, nil, taskShowOutput, taskShowIncludeLogs)
+				continue
+			}
 
 			blockedBy, blocking := collectTaskRelations(ctx, s, res.Storage, task)
 			renderTaskDetail(cmd.OutOrStdout(), task, logs)
@@ -327,4 +331,6 @@ func shortenTaskRef(ref, currentProjectID string) string {
 func init() {
 	TaskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
 	TaskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
+	TaskShowCmd.Flags().StringVar(&taskShowOutput, "output", "", "Write output to a file instead of stdout")
+	TaskShowCmd.Flags().BoolVar(&taskShowIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
 }

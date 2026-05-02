@@ -37,6 +37,11 @@ var (
 	taskListSortDirection string
 	taskListLimit         int
 	taskListOffset        int
+	taskListOutput        string
+	taskListIncludeLogs   bool
+
+	taskShowOutput      string
+	taskShowIncludeLogs bool
 
 	taskShowLogs             bool
 	taskShowLogSortDirection string

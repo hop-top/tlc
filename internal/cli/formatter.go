@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"hop.top/kit/go/console/markdown"
 	"hop.top/kit/go/console/output"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/vtodo"
 )
 
 var (
@@ -101,9 +103,72 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 		renderSummary(out, tasks)
 	case formatCounters:
 		renderCounters(out, tasks)
+	case formatVtodo:
+		writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default: // table
 		renderTable(out, tasks)
 	}
+}
+
+// writeVtodo serialises the supplied tasks/tracks (and optionally logs)
+// into a VCALENDAR and writes the .ics output. When outputPath is empty
+// the calendar is written to cmd.OutOrStdout(); otherwise it is written
+// to that file path. includeLogs gates VJOURNAL emission.
+func writeVtodo(
+	cmd *cobra.Command,
+	tasks []*core.Task,
+	tracks []*core.Track,
+	outputPath string,
+	includeLogs bool,
+) {
+	var logs []*core.LogEntry
+	if includeLogs {
+		logs = collectVtodoLogs(tasks)
+	}
+	opts := []vtodo.Option{}
+	if includeLogs {
+		opts = append(opts, vtodo.WithIncludeLogs(true))
+	}
+	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "vtodo encode failed: %v\n", err)
+		return
+	}
+	body := cal.Serialize()
+	if outputPath == "" {
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), body)
+		return
+	}
+	if err := os.WriteFile(outputPath, []byte(body), 0o600); err != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "failed to write %s: %v\n", outputPath, err)
+	}
+}
+
+// collectVtodoLogs fetches log entries for each task that has an
+// established storage handle. Failures degrade silently — vtodo export
+// is a best-effort read path, not a write critical path.
+func collectVtodoLogs(tasks []*core.Task) []*core.LogEntry {
+	if len(tasks) == 0 {
+		return nil
+	}
+	s, err := getStorageRaw()
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = s.Close() }()
+	ctx := context.Background()
+	var out []*core.LogEntry
+	for _, t := range tasks {
+		if t == nil || t.ID == "" {
+			continue
+		}
+		entries, gErr := s.GetLogs(ctx, t.ID, "asc")
+		if gErr != nil {
+			continue
+		}
+		out = append(out, entries...)
+	}
+	return out
 }
 
 func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, format string) {

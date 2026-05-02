@@ -18,6 +18,9 @@ var (
 	trackUpdateAssignedTo string
 	trackUpdateType       string
 	trackUpdateAddPlan    string
+
+	trackShowOutputPath  string
+	trackShowIncludeLogs bool
 )
 
 // TrackCmd is the parent command for track operations.
@@ -136,6 +139,8 @@ func resetTrackFlags() {
 	trackUpdateAssignedTo = ""
 	trackUpdateType = ""
 	trackUpdateAddPlan = ""
+	trackShowOutputPath = ""
+	trackShowIncludeLogs = false
 	trackAbandonNoPrompt = false
 	resetTrackListFlags()
 }

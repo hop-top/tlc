@@ -19,6 +19,7 @@ const (
 	formatTable    = "table"
 	formatSummary  = "summary"
 	formatCounters = "counters"
+	formatVtodo    = "vtodo"
 	sortDesc       = "desc"
 )
 

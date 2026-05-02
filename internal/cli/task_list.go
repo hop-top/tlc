@@ -334,6 +334,8 @@ func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string)
 		renderSummary(out, tasks)
 	case formatCounters:
 		renderCounters(out, tasks)
+	case formatVtodo:
+		writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default:
 		renderWorkspaceTable(out, tasks)
 	}
@@ -361,6 +363,8 @@ func init() {
 	TaskListCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority (P0, P1, P2, P3)")
 	TaskListCmd.Flags().StringSliceVar(&taskListBlockedBy, "blocked-by", []string{}, "Show only tasks blocked by the given task IDs")
 	TaskListCmd.Flags().StringVar(&taskListTrack, "track", "", "Filter by track ID")
+	TaskListCmd.Flags().StringVar(&taskListOutput, "output", "", "Write output to a file instead of stdout")
+	TaskListCmd.Flags().BoolVar(&taskListIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
 }
 
 // taskBlockedByAny reports whether t is blocked by any of the given IDs.
