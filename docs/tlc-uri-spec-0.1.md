@@ -10,7 +10,7 @@ Date: 2026-03-28
 
 TLC uses a structured URI scheme to identify tasks and flows across projects.
 Backed by `hop.top/uri` — a lightweight identifier parser — and extended in
-`internal/uri/resolver.go`.
+`internal/uri/resolver.go`. For TypeID format and display alias rules, see [identifiers-spec-0.1.md](identifiers-spec-0.1.md).
 
 ---
 
