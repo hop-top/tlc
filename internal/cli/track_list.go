@@ -143,6 +143,7 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 
 type trackListOutput struct {
 	ID       string   `json:"id" yaml:"id"`
+	Slug     string   `json:"slug,omitempty" yaml:"slug,omitempty"`
 	Project  string   `json:"project,omitempty" yaml:"project,omitempty"`
 	Title    string   `json:"title" yaml:"title"`
 	Type     string   `json:"type" yaml:"type"`
@@ -167,6 +168,7 @@ func toTrackListOutput(t *core.Track, state []core.TrackStateFlag, p core.TrackP
 	}
 	return trackListOutput{
 		ID:       t.ID,
+		Slug:     t.Slug,
 		Project:  project,
 		Title:    t.Title,
 		Type:     t.Type,
@@ -207,7 +209,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 			stateStrs[i] = string(f)
 		}
 
-		row := []string{r.Track.ID}
+		row := []string{formatTrackAlias(r.Track)}
 		if showProject {
 			proj := "-"
 			if r.Track.ProjectID != nil && *r.Track.ProjectID != "" {

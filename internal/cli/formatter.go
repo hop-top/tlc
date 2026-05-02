@@ -30,6 +30,44 @@ var (
 	skippedStyle    = lipgloss.NewStyle().Foreground(warningColor)
 )
 
+// formatTaskAlias renders the human-readable task display alias
+// (e.g. "T-0042"). When the durable Task.ID is already a legacy "T-NNNN"
+// string (pre-typeid rows or CLI-allocated IDs) we surface it verbatim
+// so it stays consistent with the seq the row was created under;
+// otherwise we synthesise the alias from t.Seq via core.FormatTaskAlias.
+// As a final fallback we return the raw ID so output never silently
+// drops the identifier.
+func formatTaskAlias(t *core.Task) string {
+	if t == nil {
+		return ""
+	}
+	if t.ID != "" && !core.IsTaskID(t.ID) {
+		return t.ID
+	}
+	if alias := core.FormatTaskAlias(t); alias != "" {
+		return alias
+	}
+	return t.ID
+}
+
+// formatTrackAlias renders the human-readable track display alias (the
+// slug). Falls back to the durable typeid when Slug is unset.
+func formatTrackAlias(t *core.Track) string {
+	if t == nil {
+		return ""
+	}
+	if t.Slug != "" {
+		return t.Slug
+	}
+	return t.ID
+}
+
+// isVerboseOutput reports whether the user requested verbose output via
+// the --verbose / -V flag.
+func isVerboseOutput() bool {
+	return viper.GetBool("output.verbose")
+}
+
 func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
@@ -72,7 +110,7 @@ func formatTLS(t *core.Task) string {
 	status := fmt.Sprintf("[%s]", marker)
 
 	quotedTitle := fmt.Sprintf("%q", t.Title)
-	parts := []string{status, t.ID, quotedTitle}
+	parts := []string{status, formatTaskAlias(t), quotedTitle}
 
 	if t.AssignedTo != nil && *t.AssignedTo != "" {
 		parts = append(parts, "@"+*t.AssignedTo)
@@ -177,7 +215,7 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		}
 
 		rows = append(rows, []string{
-			t.ID,
+			formatTaskAlias(t),
 			t.Title,
 			formatStatusPlain(t.Status),
 			assignee,
@@ -245,7 +283,7 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 
 		rows = append(rows, []string{
 			proj,
-			t.ID,
+			formatTaskAlias(t),
 			t.Title,
 			formatStatus(t.Status),
 			assignee,
@@ -361,7 +399,10 @@ func isDefaultRef(ref, taskID string) bool {
 }
 
 func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
-	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Task: %s", t.ID)))
+	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Task: %s", formatTaskAlias(t))))
+	if isVerboseOutput() && t.ID != "" && t.ID != formatTaskAlias(t) {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("ID:"), t.ID)
+	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Status:"), formatStatus(t.Status))
 

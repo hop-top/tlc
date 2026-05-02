@@ -61,7 +61,8 @@ func runTrackGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(tasks) == 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks linked to track "+id)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(),
+			"No tasks linked to track "+formatTrackAlias(track))
 		return nil
 	}
 

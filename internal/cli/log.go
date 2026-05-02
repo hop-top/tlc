@@ -125,6 +125,11 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 
 	headers := []string{"Timestamp", "Task ID", "Action", "By", "Note"}
 
+	// Resolve display aliases for the task IDs we render. Looking up
+	// every log's task individually would be O(N) round-trips; instead
+	// we open storage once and cache by task ID.
+	aliasByTaskID := resolveLogTaskAliases(logs)
+
 	rows := make([][]string, 0, len(logs))
 	for _, l := range logs {
 		timestamp := l.Timestamp.Format("2006-01-02 15:04:05")
@@ -133,9 +138,14 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 			note = note[:47] + "..."
 		}
 
+		taskCell := l.TaskID
+		if alias, ok := aliasByTaskID[l.TaskID]; ok && alias != "" {
+			taskCell = alias
+		}
+
 		rows = append(rows, []string{
 			timestamp,
-			l.TaskID,
+			taskCell,
 			formatLogAction(l.Action),
 			l.By,
 			note,
@@ -144,6 +154,46 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 
 	renderTTYTable(w, headers, rows, termWidth())
 	_, _ = fmt.Fprintf(w, "\nShowing %d log entries\n", len(logs))
+}
+
+// resolveLogTaskAliases returns a map of task TypeID → display alias for
+// the unique task IDs referenced by the given log entries. Lookup errors
+// (or non-typeid keys) silently degrade — callers fall back to the raw
+// TaskID stored on the log row.
+func resolveLogTaskAliases(logs []*core.LogEntry) map[string]string {
+	if len(logs) == 0 {
+		return nil
+	}
+	uniq := make(map[string]struct{}, len(logs))
+	for _, l := range logs {
+		if l == nil || l.TaskID == "" {
+			continue
+		}
+		if !core.IsTaskID(l.TaskID) {
+			continue
+		}
+		uniq[l.TaskID] = struct{}{}
+	}
+	if len(uniq) == 0 {
+		return nil
+	}
+	s, err := getStorage()
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = s.Close() }()
+	ctx := context.Background()
+	out := make(map[string]string, len(uniq))
+	for id := range uniq {
+		t, gErr := s.GetTask(ctx, id)
+		if gErr != nil || t == nil {
+			continue
+		}
+		if alias := core.FormatTaskAlias(t); alias != "" {
+			out[id] = alias
+		}
+	}
+	return out
 }
 
 func formatLogAction(action string) string {

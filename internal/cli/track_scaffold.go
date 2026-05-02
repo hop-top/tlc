@@ -43,12 +43,22 @@ func resolveConfigDir() string {
 	return ""
 }
 
-// scaffoldTrackDir creates tracks/<id>/ with metadata.json and plan.md,
+// trackScaffoldDirName returns the directory name used for the on-disk
+// track scaffold. The slug is the human-friendly identifier; fall back
+// to the durable typeid only when no slug exists (legacy data).
+func trackScaffoldDirName(track *core.Track) string {
+	if track.Slug != "" {
+		return track.Slug
+	}
+	return track.ID
+}
+
+// scaffoldTrackDir creates tracks/<slug>/ with metadata.json and plan.md,
 // updates tracks/tracks.md registry, then prints next-step instructions.
 // configDir is the .tlc/ (or .hop/tlc/) directory containing config.yaml.
 // Scaffold errors are warnings — track creation already succeeded.
 func scaffoldTrackDir(w io.Writer, track *core.Track, configDir string) {
-	trackDir := filepath.Join(configDir, tracksDir(), track.ID)
+	trackDir := filepath.Join(configDir, tracksDir(), trackScaffoldDirName(track))
 	if err := os.MkdirAll(trackDir, 0o755); err != nil {
 		_, _ = fmt.Fprintf(w, "  Warning: could not create %s: %v\n", trackDir, err)
 		return
@@ -62,15 +72,17 @@ func scaffoldTrackDir(w io.Writer, track *core.Track, configDir string) {
 
 func writeMetadata(w io.Writer, track *core.Track, trackDir string) {
 	type meta struct {
-		ID         string     `json:"id"`
-		Title      string     `json:"title"`
-		Type       string     `json:"type"`
-		Status     string     `json:"status"`
-		AssignedTo *string    `json:"assigned_to,omitempty"`
-		CreatedAt  time.Time  `json:"created_at"`
+		ID         string    `json:"id"`
+		Slug       string    `json:"slug,omitempty"`
+		Title      string    `json:"title"`
+		Type       string    `json:"type"`
+		Status     string    `json:"status"`
+		AssignedTo *string   `json:"assigned_to,omitempty"`
+		CreatedAt  time.Time `json:"created_at"`
 	}
 	m := meta{
 		ID:         track.ID,
+		Slug:       track.Slug,
 		Title:      track.Title,
 		Type:       track.Type,
 		Status:     string(track.Status),
@@ -101,6 +113,7 @@ func writePlanMD(w io.Writer, track *core.Track, configDir, trackDir string) {
 	// Relative path from project root to the config dir for the hint.
 	// In hop mode this is ".hop/tlc"; in standalone mode ".tlc".
 	relBase := configDirRelToCwd(configDir)
+	dirName := trackScaffoldDirName(track)
 	content := fmt.Sprintf(`---
 title: %q
 tracks:
@@ -132,9 +145,9 @@ TODO: list what is in scope and out of scope.
 - Assigned: %s
 `,
 		track.Title,
-		track.ID,
+		dirName,
 		track.Title,
-		track.ID, relBase, track.ID,
+		dirName, relBase, dirName,
 		track.Type,
 		assignedTo,
 	)
@@ -165,8 +178,9 @@ func updateTracksRegistry(w io.Writer, track *core.Track, configDir string) {
 	}
 	defer f.Close()
 
+	dirName := trackScaffoldDirName(track)
 	line := fmt.Sprintf("| [%s](%s/) | %s | %s | %s |\n",
-		track.ID, track.ID, track.Title, track.Type, track.Status)
+		dirName, dirName, track.Title, track.Type, track.Status)
 	if _, err := f.WriteString(line); err != nil {
 		_, _ = fmt.Fprintf(w, "  Warning: could not update tracks.md: %v\n", err)
 	}
@@ -195,9 +209,10 @@ func printNextSteps(w io.Writer, track *core.Track, configDir, trackDir string) 
 	_, _ = fmt.Fprintf(w, "    plan.md        — spec + task frontmatter\n")
 	_, _ = fmt.Fprintf(w, "  %s/tracks/tracks.md — registry updated\n", relBase)
 	_, _ = fmt.Fprintf(w, "\nNext steps:\n")
-	_, _ = fmt.Fprintf(w, "  [required] Edit %s/tracks/%s/plan.md — fill objective, scope, tasks: frontmatter\n", relBase, track.ID)
-	_, _ = fmt.Fprintf(w, "  [required] tlc track update %s --add-plan %s/tracks/%s/plan.md\n", track.ID, relBase, track.ID)
+	dirName := trackScaffoldDirName(track)
+	_, _ = fmt.Fprintf(w, "  [required] Edit %s/tracks/%s/plan.md — fill objective, scope, tasks: frontmatter\n", relBase, dirName)
+	_, _ = fmt.Fprintf(w, "  [required] tlc track update %s --add-plan %s/tracks/%s/plan.md\n", dirName, relBase, dirName)
 	_, _ = fmt.Fprintf(w, "             (links plan + bulk-creates tasks from frontmatter)\n")
-	_, _ = fmt.Fprintf(w, "  [optional] Add %s/tracks/%s/spec.md — detailed spec / ADR\n", relBase, track.ID)
-	_, _ = fmt.Fprintf(w, "  [optional] tlc task create \"...\" --track %s  — link tasks manually\n", track.ID)
+	_, _ = fmt.Fprintf(w, "  [optional] Add %s/tracks/%s/spec.md — detailed spec / ADR\n", relBase, dirName)
+	_, _ = fmt.Fprintf(w, "  [optional] tlc task create \"...\" --track %s  — link tasks manually\n", dirName)
 }

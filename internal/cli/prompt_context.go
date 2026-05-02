@@ -79,6 +79,7 @@ type promptDep struct {
 // promptTrack holds track context for the prompt output.
 type promptTrack struct {
 	ID           string `json:"id"`
+	Slug         string `json:"slug,omitempty"`
 	Title        string `json:"title"`
 	Status       string `json:"status"`
 	CurrentPhase int    `json:"current_phase"`
@@ -170,11 +171,25 @@ func loadPromptTrack(ctx context.Context, s *storage.SQLiteStorage, trackID stri
 	}
 	return &promptTrack{
 		ID:           track.ID,
+		Slug:         track.Slug,
 		Title:        track.Title,
 		Status:       string(track.Status),
 		CurrentPhase: progress.CurrentPhase,
 		TotalPhases:  progress.TotalPhases,
 	}
+}
+
+// promptTrackAlias returns the human-readable display alias (slug) for
+// the prompt track, falling back to the durable typeid when the slug is
+// unset. Mirrors formatTrackAlias for *core.Track.
+func promptTrackAlias(t *promptTrack) string {
+	if t == nil {
+		return ""
+	}
+	if t.Slug != "" {
+		return t.Slug
+	}
+	return t.ID
 }
 
 // renderPromptMarkdown writes the enriched context in a markdown format
@@ -183,7 +198,7 @@ func renderPromptMarkdown(w io.Writer, pc promptContext) {
 	t := pc.Task
 
 	// Header line.
-	_, _ = fmt.Fprintf(w, "# %s: %s\n", t.ID, t.Title)
+	_, _ = fmt.Fprintf(w, "# %s: %s\n", formatTaskAlias(t), t.Title)
 
 	// Status line.
 	parts := []string{fmt.Sprintf("Status: %s", t.Status)}
@@ -203,7 +218,7 @@ func renderPromptMarkdown(w io.Writer, pc promptContext) {
 	// Track.
 	if pc.Track != nil {
 		_, _ = fmt.Fprintf(w, "Track: %s (%s, phase %d/%d)\n",
-			pc.Track.ID, pc.Track.Status,
+			promptTrackAlias(pc.Track), pc.Track.Status,
 			pc.Track.CurrentPhase, pc.Track.TotalPhases)
 	}
 

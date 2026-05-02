@@ -54,17 +54,19 @@ func runTrackAbandon(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	displayID := trackDisplayID(ctx, svc, id)
+
 	if len(affected) > 0 && !trackAbandonNoPrompt {
 		_, _ = fmt.Fprintf(w,
 			"Abandoning track %s will skip %d task(s):\n",
-			id, len(affected))
+			displayID, len(affected))
 		for _, t := range affected {
 			_, _ = fmt.Fprintf(w, "  %s  %s  [%s]\n",
-				t.ID, t.Title, t.Status)
+				formatTaskAlias(t), t.Title, t.Status)
 		}
 		_, _ = fmt.Fprint(w, "Continue? [y/N] ")
 		if !readConfirm(cmd.InOrStdin()) {
-			return fmt.Errorf("aborted; track %s not abandoned", id)
+			return fmt.Errorf("aborted; track %s not abandoned", displayID)
 		}
 	}
 
@@ -76,8 +78,22 @@ func runTrackAbandon(cmd *cobra.Command, args []string) error {
 	if len(skipped) > 0 {
 		_, _ = fmt.Fprintf(w, "Skipped %d task(s)\n", len(skipped))
 	}
-	_, _ = fmt.Fprintf(w, "Abandoned track %s\n", id)
+	_, _ = fmt.Fprintf(w, "Abandoned track %s\n", displayID)
 	return nil
+}
+
+// trackDisplayID returns the human-readable display alias (slug) for a
+// track when available, falling back to the durable typeid. Errors during
+// lookup degrade to the typeid.
+func trackDisplayID(ctx context.Context, svc *core.TrackService, id string) string {
+	if svc == nil || id == "" {
+		return id
+	}
+	track, err := svc.GetTrack(ctx, id)
+	if err != nil || track == nil {
+		return id
+	}
+	return formatTrackAlias(track)
 }
 
 var trackDeleteCmd = trackLifecycleCmd(
@@ -114,12 +130,15 @@ func trackLifecycleCmd(
 			}
 
 			svc := core.NewTrackService(s, s)
+			// Resolve display alias before the action runs since some
+			// destructive verbs (e.g. delete) remove the row first.
+			displayID := trackDisplayID(ctx, svc, id)
 			if err := action(ctx, svc, id); err != nil {
 				return err
 			}
 
 			w := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(w, "%sd track %s\n", past, id)
+			_, _ = fmt.Fprintf(w, "%sd track %s\n", past, displayID)
 			return nil
 		},
 	}

@@ -93,7 +93,8 @@ var trackUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		_, _ = fmt.Fprintf(w, "Updated track %s\n", id)
+		displayID := trackDisplayID(ctx, svc, id)
+		_, _ = fmt.Fprintf(w, "Updated track %s\n", displayID)
 
 		// Resolve task specs: frontmatter first, then extractor fallback.
 		var taskSpecs []core.PlanTaskSpec
@@ -141,7 +142,7 @@ var trackUpdateCmd = &cobra.Command{
 						recErr,
 					)
 				}
-				_, _ = fmt.Fprintf(w, "Reconciled plan for track %s:\n", id)
+				_, _ = fmt.Fprintf(w, "Reconciled plan for track %s:\n", displayID)
 				_, _ = fmt.Fprintf(w, "  Created: %d tasks\n", len(rec.Created))
 				_, _ = fmt.Fprintf(w, "  Updated: %d tasks\n", len(rec.Updated))
 				_, _ = fmt.Fprintf(w, "  Unchanged: %d tasks\n", len(rec.Unchanged))
