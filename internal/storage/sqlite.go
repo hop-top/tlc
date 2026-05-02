@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,13 @@ func (s *SQLiteStorage) SetProjector(p Projector) {
 }
 
 func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
+	// One-time bootstrap: relocate any pre-existing db.*.bak files dropped
+	// beside the live DB by older tlc versions into <dbDir>/.dbs/. Cheap
+	// no-op when there are none.
+	if path != "" {
+		migrateOldBackups(filepath.Dir(path))
+	}
+
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)

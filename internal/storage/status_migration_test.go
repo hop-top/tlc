@@ -62,16 +62,19 @@ func fileSHA256(t *testing.T, path string) string {
 	return string(h.Sum(nil))
 }
 
-// listBackupFiles returns all *.bak files in the directory of dbPath that
-// match the status-migration backup naming convention.
+// listBackupFiles returns all *.bak files in the .dbs/ subdir beside dbPath
+// that match the status-migration backup naming convention.
 func listBackupFiles(t *testing.T, dbPath string) []string {
 	t.Helper()
-	dir := filepath.Dir(dbPath)
+	dir := filepath.Join(filepath.Dir(dbPath), backupSubdir)
 	base := filepath.Base(dbPath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	prefix := name + ".pre-status-migration."
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		t.Fatalf("readdir %s: %v", dir, err)
 	}
 	var out []string

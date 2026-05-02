@@ -202,7 +202,12 @@ func backupForStatusMigration(dbPath string) (string, error) {
 	stem := strings.TrimSuffix(base, ext)
 
 	backupName := fmt.Sprintf("%s.pre-status-migration.%s.bak", stem, ts)
-	backupPath := filepath.Join(filepath.Dir(dbPath), backupName)
+	dbDir := filepath.Dir(dbPath)
+	backupDir := filepath.Join(dbDir, backupSubdir)
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		return "", fmt.Errorf("mkdir backup dir %s: %w", backupDir, err)
+	}
+	backupPath := filepath.Join(backupDir, backupName)
 
 	if err := copyFileWithSync(dbPath, backupPath); err != nil {
 		// Cleanup partial file so we never leave a truncated .bak behind.

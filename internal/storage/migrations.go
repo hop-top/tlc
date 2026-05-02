@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"hop.top/kit/go/storage/sqlstore"
 )
@@ -476,13 +477,25 @@ func (s *SQLiteStorage) migrate() error {
 		}
 	}
 
-	// Backup before applying any pending migrations.
+	// Backup before applying any pending migrations. The kit primitive
+	// drops the .bak beside the live DB; relocate it into <dbDir>/.dbs/
+	// so the parent stays scannable.
+	//
+	// TODO(kit): file an upstream issue to add `sqlstore.WithBackupDir`
+	// (or similar) so the kit primitive can write directly to the chosen
+	// dir and skip this rename.
 	if hasPending && s.dbPath != "" {
 		nextVersion := currentVersion + 1
-		if bp, err := sqlstore.BackupBeforeMigrate(s.dbPath, nextVersion); err != nil {
+		bp, err := sqlstore.BackupBeforeMigrate(s.dbPath, nextVersion)
+		if err != nil {
 			return fmt.Errorf("pre-migration backup failed: %w", err)
-		} else if bp != "" {
-			log.Printf("backed up database before migration: %s", bp)
+		}
+		final, err := stashBackup(filepath.Dir(s.dbPath), bp)
+		if err != nil {
+			return fmt.Errorf("pre-migration backup stash failed: %w", err)
+		}
+		if final != "" {
+			log.Printf("backed up database before migration: %s", final)
 		}
 	}
 
