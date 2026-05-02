@@ -31,7 +31,6 @@ Examples:
   tlc track exec my-feature --agent claude --dry-run`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		trackID := args[0]
 		if trackExecAgent == "" {
 			return fmt.Errorf(
 				"--agent is required; specify which agent to dispatch tasks to",
@@ -69,6 +68,13 @@ Examples:
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, trackExecTimeout)
 			defer cancel()
+		}
+
+		// Resolve TypeID/slug input to the canonical track TypeID
+		// before downstream services (ContextBuilder, DepGraph) consume it.
+		trackID, err := resolveTrackID(ctx, s, args[0])
+		if err != nil {
+			return err
 		}
 
 		// Resolve linked TODO tasks in dependency order.

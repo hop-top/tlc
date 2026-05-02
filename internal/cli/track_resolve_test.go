@@ -11,8 +11,10 @@ import (
 func createTrack(t *testing.T, ctx context.Context, s interface{ CreateTrack(context.Context, *core.Track) error }, id, title, typ string, status core.TrackStatus) {
 	t.Helper()
 	now := time.Now().UTC()
+	// Use the supplied id as Slug too so the (project_id, slug) UNIQUE
+	// constraint is satisfied across multiple inserts in the same test.
 	if err := s.CreateTrack(ctx, &core.Track{
-		ID: id, Title: title, Type: typ, Status: status,
+		ID: id, Slug: id, Title: title, Type: typ, Status: status,
 		CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("create track %s: %v", id, err)
