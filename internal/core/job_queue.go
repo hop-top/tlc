@@ -22,9 +22,9 @@ const (
 type JobType string
 
 const (
-	JobTypeAgentTask  JobType = "agent.task"
-	JobTypeAgentFlow  JobType = "agent.flow"
-	JobTypeAgentTrack JobType = "agent.track"
+	JobTypeAgentTask  JobType = "tlc.agent.task"
+	JobTypeAgentFlow  JobType = "tlc.agent.flow"
+	JobTypeAgentTrack JobType = "tlc.agent.track"
 )
 
 // Job is an async agent execution job.

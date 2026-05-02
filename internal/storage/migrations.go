@@ -445,10 +445,20 @@ var migrations = []migration{
 		PRAGMA foreign_keys = ON;
 		`,
 	},
+	{
+		// Re-prefix JobType values with "tlc." so the persisted job.type
+		// column matches the bus topic prefix landed in 576a671. The
+		// LIKE 'agent.%' filter keeps the migration idempotent — once
+		// rewritten, rows already start with "tlc." and won't match.
+		version: 16,
+		query: `
+		UPDATE jobs SET type = 'tlc.' || type WHERE type LIKE 'agent.%';
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 15
+const LatestMigrationVersion = 16
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
