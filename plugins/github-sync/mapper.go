@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v69/github"
+	"hop.top/tlc/internal/core"
 )
 
 const (
@@ -67,6 +68,10 @@ var effortToLabel = map[string]string{
 // dueBodyRe matches the due date footer convention in issue bodies.
 var dueBodyRe = regexp.MustCompile(`<!-- tlc:due (\d{4}-\d{2}-\d{2}) -->`)
 
+// tlcUIDRe matches the tlc TypeID footer embedded in remote issue bodies.
+// Format: <!-- tlc-uid: task_<26 char crockford base32> -->
+var tlcUIDRe = regexp.MustCompile(`<!-- tlc-uid: (task_[0-9a-z]{26}) -->`)
+
 // blockedByRe matches "blocked by #N" or "depends on #N" patterns.
 var blockedByRe = regexp.MustCompile(`(?i)(?:blocked by|depends on)\s+#(\d+)`)
 
@@ -82,7 +87,7 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 	body := issue.GetBody()
 
 	task := &Task{
-		ID:          fmt.Sprintf("GH-%d", number),
+		ID:          recoverOrMintTaskID(body),
 		Title:       title,
 		Description: body,
 		CreatedAt:   issue.GetCreatedAt().Time,
@@ -228,6 +233,17 @@ func parseBlockedBy(body string, task *Task) {
 	task.Meta["blocked_by"] = refs
 }
 
+// recoverOrMintTaskID returns the tlc TypeID embedded in body's tlc-uid
+// footer, or mints a fresh one when no footer is present (or invalid).
+// This is what enables sync.pull to update the existing tlc row instead of
+// creating a duplicate on every cycle.
+func recoverOrMintTaskID(body string) string {
+	if m := tlcUIDRe.FindStringSubmatch(body); m != nil && core.IsTaskID(m[1]) {
+		return m[1]
+	}
+	return core.NewTaskID()
+}
+
 // parseDueFromBody extracts a due date from the <!-- tlc:due YYYY-MM-DD --> footer.
 func parseDueFromBody(body string) *time.Time {
 	m := dueBodyRe.FindStringSubmatch(body)
@@ -316,8 +332,8 @@ func buildPushLabels(task *Task) []string {
 }
 
 // buildPushBody prepends blocked-by references to the task description and
-// appends a due-date footer. Existing blocked-by header lines and due-date
-// footers are stripped first to prevent duplication across sync cycles.
+// appends footers (due date + tlc-uid). Existing blocked-by header lines and
+// existing footers are stripped first to prevent duplication across cycles.
 func buildPushBody(task *Task) string {
 	// Unescape backticks that were shell-escaped during task creation.
 	body := strings.ReplaceAll(task.Description, "\\`", "`")
@@ -325,8 +341,9 @@ func buildPushBody(task *Task) string {
 	// Strip existing blocked-by/depends-on header lines to avoid duplication.
 	body = blockedByLineRe.ReplaceAllString(body, "")
 
-	// Strip existing due-date footer to avoid duplication.
+	// Strip existing due-date and tlc-uid footers to avoid duplication.
 	body = dueBodyRe.ReplaceAllString(body, "")
+	body = tlcUIDRe.ReplaceAllString(body, "")
 
 	body = strings.TrimLeft(body, "\n")
 	body = strings.TrimRight(body, "\n ")
@@ -345,6 +362,12 @@ func buildPushBody(task *Task) string {
 	// Append due-date footer
 	if task.DueAt != nil {
 		body += "\n\n<!-- tlc:due " + task.DueAt.Format("2006-01-02") + " -->"
+	}
+
+	// Append tlc-uid footer so a later sync.pull can recover this task's
+	// tlc identity. Only emit when the task already carries a typeid.
+	if core.IsTaskID(task.ID) {
+		body += "\n\n<!-- tlc-uid: " + task.ID + " -->"
 	}
 
 	return body

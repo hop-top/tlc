@@ -1,6 +1,16 @@
 package main
 
-import "time"
+import (
+	"regexp"
+	"strings"
+	"time"
+
+	"hop.top/tlc/internal/core"
+)
+
+// tlcUIDRe matches the tlc TypeID footer embedded in remote issue bodies.
+// Format: <!-- tlc-uid: task_<26 char crockford base32> -->
+var tlcUIDRe = regexp.MustCompile(`<!-- tlc-uid: (task_[0-9a-z]{26}) -->`)
 
 // Task represents the TLC task structure as used by plugins.
 type Task struct {
@@ -41,7 +51,7 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 	}
 
 	task := &Task{
-		ID:          identifier,
+		ID:          recoverOrMintTaskID(description),
 		Title:       title,
 		Description: description,
 		Status:      status,
@@ -78,4 +88,30 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 	}
 
 	return task
+}
+
+// MapTaskToLinearDescription returns the Linear issue description body for a
+// TLC task, embedding the tlc-uid footer when the task carries a typeid so
+// a later sync.pull can recover the original tlc identity.
+func MapTaskToLinearDescription(task *Task) string {
+	body := task.Description
+	body = tlcUIDRe.ReplaceAllString(body, "")
+	body = strings.TrimRight(body, "\n ")
+
+	if core.IsTaskID(task.ID) {
+		if body != "" {
+			body += "\n\n"
+		}
+		body += "<!-- tlc-uid: " + task.ID + " -->"
+	}
+	return body
+}
+
+// recoverOrMintTaskID returns the tlc TypeID embedded in body's tlc-uid
+// footer, or mints a fresh one when no footer is present (or invalid).
+func recoverOrMintTaskID(body string) string {
+	if m := tlcUIDRe.FindStringSubmatch(body); m != nil && core.IsTaskID(m[1]) {
+		return m[1]
+	}
+	return core.NewTaskID()
 }

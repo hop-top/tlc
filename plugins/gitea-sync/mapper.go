@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.jetify.com/typeid"
 )
 
 // Task represents the TLC task structure as used by plugins.
@@ -61,6 +63,42 @@ type GiteaDependency struct {
 
 var blockedByRe = regexp.MustCompile(`(?i)(?:blocked by|depends on)\s+#(\d+)`)
 
+// tlcUIDRe matches the tlc TypeID footer embedded in remote issue bodies.
+// Mirrors hop.top/tlc/internal/core (kept inline because plugin sub-modules
+// cannot import internal/core).
+var tlcUIDRe = regexp.MustCompile(`<!-- tlc-uid: (task_[0-9a-z]{26}) -->`)
+
+var taskTypeIDPattern = regexp.MustCompile(`^task_[0-9a-z]{26}$`)
+
+func isTaskID(s string) bool { return taskTypeIDPattern.MatchString(s) }
+
+func newTaskID() string {
+	id, err := typeid.WithPrefix("task")
+	if err != nil {
+		panic("typeid: newTaskID: " + err.Error())
+	}
+	return id.String()
+}
+
+func recoverOrMintTaskID(body string) string {
+	if m := tlcUIDRe.FindStringSubmatch(body); m != nil && isTaskID(m[1]) {
+		return m[1]
+	}
+	return newTaskID()
+}
+
+func embedTLCUIDFooter(body, taskID string) string {
+	body = tlcUIDRe.ReplaceAllString(body, "")
+	body = strings.TrimRight(body, "\n ")
+	if isTaskID(taskID) {
+		if body != "" {
+			body += "\n\n"
+		}
+		body += "<!-- tlc-uid: " + taskID + " -->"
+	}
+	return body
+}
+
 // priorityLabelMap maps priority label names to TLC priority values.
 var priorityLabelMap = map[string]string{
 	"priority:critical": "P0",
@@ -89,7 +127,7 @@ var effortToLabel = map[string]string{
 // MapGiteaIssueToTask maps a Gitea issue (with optional dependencies) to a TLC task.
 func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
 	task := &Task{
-		ID:        fmt.Sprintf("GT-%d", issue.Index),
+		ID:        recoverOrMintTaskID(issue.Body),
 		Title:     issue.Title,
 		Description: issue.Body,
 		CreatedAt: issue.CreatedAt,
@@ -266,6 +304,9 @@ func MapTaskToGiteaIssue(task *Task) map[string]interface{} {
 			}
 		}
 	}
+
+	// Embed tlc-uid footer so a later sync.pull can recover identity.
+	body = embedTLCUIDFooter(body, task.ID)
 
 	result := map[string]interface{}{
 		"title":  task.Title,

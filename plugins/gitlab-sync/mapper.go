@@ -7,6 +7,7 @@ import (
 	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
+	"go.jetify.com/typeid"
 )
 
 // Task represents the TLC task structure as used by plugins.
@@ -26,6 +27,42 @@ type Task struct {
 }
 
 var blockedByRe = regexp.MustCompile(`(?i)blocked\s+by\s+#(\d+)`)
+
+// tlcUIDRe matches the tlc TypeID footer embedded in remote issue bodies.
+// Mirrors hop.top/tlc/internal/core (kept inline because plugin sub-modules
+// cannot import internal/core).
+var tlcUIDRe = regexp.MustCompile(`<!-- tlc-uid: (task_[0-9a-z]{26}) -->`)
+
+var taskTypeIDPattern = regexp.MustCompile(`^task_[0-9a-z]{26}$`)
+
+func isTaskID(s string) bool { return taskTypeIDPattern.MatchString(s) }
+
+func newTaskID() string {
+	id, err := typeid.WithPrefix("task")
+	if err != nil {
+		panic("typeid: newTaskID: " + err.Error())
+	}
+	return id.String()
+}
+
+func recoverOrMintTaskID(body string) string {
+	if m := tlcUIDRe.FindStringSubmatch(body); m != nil && isTaskID(m[1]) {
+		return m[1]
+	}
+	return newTaskID()
+}
+
+func embedTLCUIDFooter(body, taskID string) string {
+	body = tlcUIDRe.ReplaceAllString(body, "")
+	body = strings.TrimRight(body, "\n ")
+	if isTaskID(taskID) {
+		if body != "" {
+			body += "\n\n"
+		}
+		body += "<!-- tlc-uid: " + taskID + " -->"
+	}
+	return body
+}
 
 // priorityLabelMap maps GitLab priority labels to TLC priorities.
 var priorityLabelMap = map[string]string{
@@ -72,7 +109,7 @@ func MapGitLabIssueToTask(issue *gitlab.Issue) *Task {
 	blockedReason := deriveBlockedReason(state, issue.Labels)
 
 	task := &Task{
-		ID:            fmt.Sprintf("GL-%d", iid),
+		ID:            recoverOrMintTaskID(body),
 		Title:         title,
 		Description:   body,
 		Status:        status,
@@ -215,6 +252,9 @@ func MapTaskToGitLabIssueData(task *Task) *GitLabIssueData {
 			description += suffix
 		}
 	}
+
+	// Embed tlc-uid footer so a later sync.pull can recover identity.
+	description = embedTLCUIDFooter(description, task.ID)
 
 	return &GitLabIssueData{
 		Title:       task.Title,

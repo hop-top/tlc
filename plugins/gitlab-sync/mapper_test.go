@@ -297,6 +297,85 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 	}
 }
 
+// --- TypeID round-trip (T-0823) ---
+
+func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
+	const taskID = "task_01h455vb4pex5vsknk084sn02q"
+
+	original := &Task{
+		ID:          taskID,
+		Title:       "round-trip",
+		Status:      "TODO",
+		Description: "body text",
+	}
+
+	data := MapTaskToGitLabIssueData(original)
+	if !containsSub(data.Description, "<!-- tlc-uid: "+taskID+" -->") {
+		t.Fatalf("Description missing tlc-uid footer: %q", data.Description)
+	}
+
+	now := time.Now()
+	issue := &gitlab.Issue{
+		IID:         42,
+		Title:       "round-trip",
+		Description: data.Description,
+		State:       "opened",
+		CreatedAt:   &now,
+		UpdatedAt:   &now,
+	}
+	got := MapGitLabIssueToTask(issue)
+
+	if got.ID != taskID {
+		t.Errorf("round-trip ID = %q, want %q", got.ID, taskID)
+	}
+}
+
+func TestTypeIDRoundTrip_GeneratesWhenAbsent(t *testing.T) {
+	now := time.Now()
+	issue := &gitlab.Issue{
+		IID:         43,
+		Title:       "no footer",
+		Description: "plain description",
+		State:       "opened",
+		CreatedAt:   &now,
+		UpdatedAt:   &now,
+	}
+	got := MapGitLabIssueToTask(issue)
+
+	if !isTaskTypeID(got.ID) {
+		t.Errorf("ID = %q, want fresh task_<26char> typeid", got.ID)
+	}
+}
+
+// isTaskTypeID is a local shape check — see internal/core/typeid.go.
+func isTaskTypeID(s string) bool {
+	if len(s) != len("task_")+26 {
+		return false
+	}
+	if s[:5] != "task_" {
+		return false
+	}
+	for _, r := range s[5:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'z')) {
+			return false
+		}
+	}
+	return true
+}
+
+// containsSub reports whether sub appears anywhere in s.
+func containsSub(s, sub string) bool {
+	if len(sub) == 0 {
+		return true
+	}
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParseLabelDimensions(t *testing.T) {
 	tests := []struct {
 		name         string

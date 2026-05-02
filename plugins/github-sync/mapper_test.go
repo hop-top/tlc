@@ -388,6 +388,62 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 	}
 }
 
+// --- TypeID round-trip (T-0823) ---
+
+func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
+	const taskID = "task_01h455vb4pex5vsknk084sn02q"
+
+	original := &Task{
+		ID:          taskID,
+		Title:       "round-trip",
+		Status:      "TODO",
+		Description: "body text",
+	}
+
+	req := MapTaskToGitHubIssueRequest(original)
+
+	// Footer must be present on push body.
+	body := req.GetBody()
+	if !strings.Contains(body, "<!-- tlc-uid: "+taskID+" -->") {
+		t.Fatalf("push body missing tlc-uid footer: %q", body)
+	}
+
+	// Pull back as if the issue body was the body we pushed.
+	issue := makeIssue(withBody(body))
+	got := MapGitHubIssueToTask(issue)
+
+	if got.ID != taskID {
+		t.Errorf("round-trip ID = %q, want %q", got.ID, taskID)
+	}
+}
+
+func TestTypeIDRoundTrip_GeneratesWhenAbsent(t *testing.T) {
+	// Issue body has no tlc-uid footer → mapper generates a fresh typeid.
+	issue := makeIssue(withBody("plain description, no footer"))
+	got := MapGitHubIssueToTask(issue)
+
+	if !isTaskTypeID(got.ID) {
+		t.Errorf("ID = %q, want fresh task_<26char> typeid", got.ID)
+	}
+}
+
+// isTaskTypeID is a local helper to avoid pulling internal/core into tests
+// when the test only needs to assert shape, not generation.
+func isTaskTypeID(s string) bool {
+	if len(s) != len("task_")+26 {
+		return false
+	}
+	if s[:5] != "task_" {
+		return false
+	}
+	for _, r := range s[5:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'z')) {
+			return false
+		}
+	}
+	return true
+}
+
 // --- buildPushBody ---
 
 func TestBuildPushBody(t *testing.T) {

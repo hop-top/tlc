@@ -266,6 +266,73 @@ func TestMapTaskToBitbucketIssue(t *testing.T) {
 	}
 }
 
+// --- TypeID round-trip (T-0823) ---
+
+func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
+	const taskID = "task_01h455vb4pex5vsknk084sn02q"
+
+	original := &Task{
+		ID:          taskID,
+		Title:       "round-trip",
+		Status:      "TODO",
+		Description: "body text",
+	}
+
+	req := MapTaskToBitbucketIssue(original)
+	if req.Content == nil || !strings.Contains(req.Content.Raw, "<!-- tlc-uid: "+taskID+" -->") {
+		raw := ""
+		if req.Content != nil {
+			raw = req.Content.Raw
+		}
+		t.Fatalf("push body missing tlc-uid footer: %q", raw)
+	}
+
+	// Pull back: build a BB issue with that body.
+	issue := &BitbucketIssue{
+		ID:    77,
+		Title: "round-trip",
+		State: "new",
+		Content: &BitbucketContent{
+			Raw: req.Content.Raw,
+		},
+	}
+	got := MapBitbucketIssueToTask(issue, nil)
+
+	if got.ID != taskID {
+		t.Errorf("round-trip ID = %q, want %q", got.ID, taskID)
+	}
+}
+
+func TestTypeIDRoundTrip_GeneratesWhenAbsent(t *testing.T) {
+	issue := &BitbucketIssue{
+		ID:      78,
+		Title:   "no footer",
+		State:   "new",
+		Content: &BitbucketContent{Raw: "plain description"},
+	}
+	got := MapBitbucketIssueToTask(issue, nil)
+
+	if !isTaskTypeID(got.ID) {
+		t.Errorf("ID = %q, want fresh task_<26char> typeid", got.ID)
+	}
+}
+
+// isTaskTypeID is a local shape check — see internal/core/typeid.go.
+func isTaskTypeID(s string) bool {
+	if len(s) != len("task_")+26 {
+		return false
+	}
+	if s[:5] != "task_" {
+		return false
+	}
+	for _, r := range s[5:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'z')) {
+			return false
+		}
+	}
+	return true
+}
+
 func TestMapTLCPriorityToBitbucket(t *testing.T) {
 	tests := []struct {
 		input string
