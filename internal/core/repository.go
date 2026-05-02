@@ -14,6 +14,10 @@ type Repository interface {
 	CreateTask(ctx context.Context, task *Task) error
 	// GetTask retrieves a task by its ID. Returns nil, nil if not found.
 	GetTask(ctx context.Context, id string) (*Task, error)
+	// GetTaskBySeq retrieves a task by its (project_id, seq) display alias.
+	// projectID may be empty for the global bucket. Returns nil, nil if
+	// not found.
+	GetTaskBySeq(ctx context.Context, projectID string, seq int64) (*Task, error)
 	// UpdateTask updates an existing task.
 	UpdateTask(ctx context.Context, task *Task) error
 	// UpdateTaskWithLog updates a task and adds a log entry atomically.
@@ -76,6 +80,9 @@ type TrackRepository interface {
 	CreateTrack(ctx context.Context, track *Track) error
 	// GetTrack retrieves a track by its ID. Returns nil, nil if not found.
 	GetTrack(ctx context.Context, id string) (*Track, error)
+	// GetTrackBySlug retrieves a track by its (project_id, slug) display
+	// alias. projectID may be empty. Returns nil, nil if not found.
+	GetTrackBySlug(ctx context.Context, projectID, slug string) (*Track, error)
 	// UpdateTrack updates an existing track.
 	UpdateTrack(ctx context.Context, track *Track) error
 	// DeleteTrack removes a track by its ID. Fails if tasks reference this track.

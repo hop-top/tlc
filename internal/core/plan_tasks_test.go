@@ -76,14 +76,15 @@ func TestCreateTasksFromPlan_Basic(t *testing.T) {
 	if len(ids) != 3 {
 		t.Fatalf("ids len = %d, want 3", len(ids))
 	}
-	if ids[0] != "T-0100" {
-		t.Errorf("ids[0] = %q, want T-0100", ids[0])
+	// IDs are TypeIDs after the typeid-ids refactor; assert shape and
+	// distinctness rather than legacy T-NNNN literals.
+	for i, id := range ids {
+		if !IsTaskID(id) {
+			t.Errorf("ids[%d] = %q; not a TypeID", i, id)
+		}
 	}
-	if ids[1] != "T-0101" {
-		t.Errorf("ids[1] = %q, want T-0101", ids[1])
-	}
-	if ids[2] != "T-0102" {
-		t.Errorf("ids[2] = %q, want T-0102", ids[2])
+	if ids[0] == ids[1] || ids[1] == ids[2] || ids[0] == ids[2] {
+		t.Errorf("ids contain duplicates: %v", ids)
 	}
 
 	// Verify tasks created in taskRepo.

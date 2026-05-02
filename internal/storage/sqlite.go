@@ -369,6 +369,30 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 	return &task, nil
 }
 
+// GetTaskBySeq retrieves a task by its (project_id, seq) display alias.
+// Uses the same code path as GetTask once the typeid is resolved so
+// query semantics, column scanning, and project scoping stay consistent.
+//
+// projectID is matched against tasks.project_id literally — empty string
+// hits the global bucket; non-empty matches that exact project. Note that
+// task_sequences uses "default" as the storage key for the empty-project
+// bucket but tasks.project_id stores empty string, so seq lookup queries
+// the latter directly.
+func (s *SQLiteStorage) GetTaskBySeq(ctx context.Context, projectID string, seq int64) (*core.Task, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM tasks WHERE project_id = ? AND seq = ?`,
+		projectID, seq,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lookup task by seq: %w", err)
+	}
+	return s.GetTask(ctx, id)
+}
+
 func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		metaJSON, _ := json.Marshal(task.Meta)

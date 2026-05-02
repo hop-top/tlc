@@ -57,6 +57,22 @@ func (m *MockRepository) GetTask(ctx context.Context, id string) (*Task, error) 
 	return task, nil
 }
 
+// GetTaskBySeq looks up a task by (project_id, seq) display alias.
+func (m *MockRepository) GetTaskBySeq(ctx context.Context, projectID string, seq int64) (*Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, task := range m.Tasks {
+		var pid string
+		if task.ProjectID != nil {
+			pid = *task.ProjectID
+		}
+		if pid == projectID && task.Seq == seq {
+			return task, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *MockRepository) UpdateTask(ctx context.Context, task *Task) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
