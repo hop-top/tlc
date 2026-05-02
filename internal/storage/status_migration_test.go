@@ -20,14 +20,16 @@ func seedOldStatusRows(t *testing.T, s *SQLiteStorage, rows map[string]string) {
 	t.Helper()
 	ctx := context.Background()
 	now := "2026-04-27T00:00:00Z"
+	seq := int64(1)
 	for id, status := range rows {
 		_, err := s.db.ExecContext(ctx, `
-			INSERT INTO tasks (project_id, id, title, status, reference, created_at, updated_at)
-			VALUES ('', ?, ?, ?, ?, ?, ?)
-		`, id, "title-"+id, status, "ref:"+id, now, now)
+			INSERT INTO tasks (project_id, id, seq, title, status, reference, created_at, updated_at)
+			VALUES ('', ?, ?, ?, ?, ?, ?, ?)
+		`, id, seq, "title-"+id, status, "ref:"+id, now, now)
 		if err != nil {
 			t.Fatalf("seed row %s/%s: %v", id, status, err)
 		}
+		seq++
 	}
 }
 

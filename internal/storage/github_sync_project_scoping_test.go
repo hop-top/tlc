@@ -281,8 +281,11 @@ storage:
 		defer os.Chdir(oldCwd)
 		os.Chdir(proj1Dir)
 
+		// Each project's row gets its own TypeID; the foreign GitHub
+		// issue number lives in Meta["origin_id"]. Two projects can
+		// share an origin_id without colliding on the primary key.
 		task1 := &core.Task{
-			ID:        "GH-50",
+			ID:        core.NewTaskID(),
 			Title:     "Fix login bug in project1",
 			Status:    core.StatusTodo,
 			Reference: "https://github.com/org1/project1/issues/50",
@@ -302,7 +305,7 @@ storage:
 		os.Chdir(proj2Dir)
 
 		task2 := &core.Task{
-			ID:        "GH-50", // Same ID!
+			ID:        core.NewTaskID(),
 			Title:     "Fix login bug in project2",
 			Status:    core.StatusTodo,
 			Reference: "https://github.com/org2/project2/issues/50",

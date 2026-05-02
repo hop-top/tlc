@@ -36,6 +36,7 @@ func TestSQLiteStorage_TrackCRUD(t *testing.T) {
 
 	track := &core.Track{
 		ID:        "feat-login",
+		Slug:      "feat-login",
 		Title:     "Login Feature",
 		Type:      core.TrackTypeFeature,
 		Status:    core.TrackStatusPending,
@@ -113,6 +114,7 @@ func TestSQLiteStorage_TrackUpdateNotFound(t *testing.T) {
 
 	track := &core.Track{
 		ID:        "ghost",
+		Slug:      "ghost",
 		Title:     "Ghost",
 		Type:      "feature",
 		Status:    core.TrackStatusPending,
@@ -140,11 +142,11 @@ func TestSQLiteStorage_TrackListFilters(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	tracks := []*core.Track{
-		{ID: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
+		{ID: "t1", Slug: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
 			CreatedAt: now, UpdatedAt: now},
-		{ID: "t2", Title: "T2", Type: "bug", Status: core.TrackStatusActive,
+		{ID: "t2", Slug: "t2", Title: "T2", Type: "bug", Status: core.TrackStatusActive,
 			CreatedAt: now, UpdatedAt: now},
-		{ID: "t3", Title: "T3", Type: "feature", Status: core.TrackStatusCompleted,
+		{ID: "t3", Slug: "t3", Title: "T3", Type: "feature", Status: core.TrackStatusCompleted,
 			CreatedAt: now, UpdatedAt: now},
 	}
 	for _, tr := range tracks {
@@ -201,9 +203,9 @@ func TestSQLiteStorage_TrackListByProjectID(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	pid := "proj-a"
 	tracks := []*core.Track{
-		{ID: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
+		{ID: "t1", Slug: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
 			CreatedAt: now, UpdatedAt: now, ProjectID: &pid},
-		{ID: "t2", Title: "T2", Type: "feature", Status: core.TrackStatusPending,
+		{ID: "t2", Slug: "t2", Title: "T2", Type: "feature", Status: core.TrackStatusPending,
 			CreatedAt: now, UpdatedAt: now},
 	}
 	for _, tr := range tracks {
@@ -227,7 +229,7 @@ func TestSQLiteStorage_TrackDeleteWithLinkedTasks(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	track := &core.Track{
-		ID: "feat-x", Title: "X", Type: "feature",
+		ID: "feat-x", Slug: "feat-x", Title: "X", Type: "feature",
 		Status: core.TrackStatusPending, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.CreateTrack(ctx, track); err != nil {
@@ -277,7 +279,7 @@ func TestSQLiteStorage_TrackAssignedTo(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	assignee := "agent-1"
 	track := &core.Track{
-		ID: "t-assigned", Title: "Assigned Track", Type: "feature",
+		ID: "t-assigned", Slug: "t-assigned", Title: "Assigned Track", Type: "feature",
 		Status: core.TrackStatusPending, CreatedAt: now, UpdatedAt: now,
 		AssignedTo: &assignee,
 	}
@@ -297,7 +299,7 @@ func TestSQLiteStorage_TrackNilMeta(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	track := &core.Track{
-		ID: "no-meta", Title: "No Meta", Type: "bug",
+		ID: "no-meta", Slug: "no-meta", Title: "No Meta", Type: "bug",
 		Status: core.TrackStatusPending, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.CreateTrack(ctx, track); err != nil {
