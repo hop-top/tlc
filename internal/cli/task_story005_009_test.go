@@ -40,7 +40,7 @@ func TestTaskUpdateTitle(t *testing.T) {
 		t.Fatalf("task update --title failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}
@@ -74,7 +74,7 @@ func TestTaskUpdateDescription(t *testing.T) {
 		t.Fatalf("task update --description failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}
@@ -103,7 +103,7 @@ func TestTaskUpdateForceStatus(t *testing.T) {
 		t.Fatalf("task update --force failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after force update")
 	}
@@ -135,7 +135,7 @@ func TestTaskDeleteWithYesFlag(t *testing.T) {
 		t.Fatalf("task delete --yes failed: %v", err)
 	}
 
-	task, _ := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task != nil {
 		t.Error("expected task to be deleted, but it still exists")
 	}
@@ -162,7 +162,7 @@ func TestTaskDeleteYesShortFlag(t *testing.T) {
 		t.Fatalf("task delete -y failed: %v", err)
 	}
 
-	task, _ := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task != nil {
 		t.Error("expected task to be deleted with -y short flag")
 	}

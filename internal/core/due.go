@@ -46,19 +46,34 @@ func (t *Task) NextReminder() *time.Time {
 	}
 
 	if t.RRule != "" {
-		// Walk forward from now (or CreatedAt, whichever is later)
-		// to find the next occurrence. Using `now` here matches the
-		// previous semantics of "next reminder strictly in the
-		// future" while letting the RRULE walker consult UNTIL/COUNT
-		// constraints encoded in the rule.
-		next, ok, _ := NextFireFromRRule(t.RRule, now)
-		if ok {
-			candidate := next
-			if t.DueAt == nil || candidate.Before(*t.DueAt) {
-				if earliest == nil || candidate.Before(*earliest) {
-					earliest = &candidate
-				}
+		// Walk from the task's anchor (CreatedAt) so the cadence is
+		// preserved across reminder ticks — a task created at xx:17
+		// with FREQ=HOURLY fires at xx:17 every hour, not at "1h
+		// from whenever NextReminder happens to be called".
+		//
+		// We step the rule forward until we land strictly after
+		// `now`. UNTIL/COUNT constraints inside the rule still apply.
+		anchor := t.CreatedAt
+		if anchor.IsZero() {
+			anchor = now
+		}
+		cursor := anchor
+		const maxSteps = 10000
+		for i := 0; i < maxSteps; i++ {
+			next, ok, _ := NextFireFromRRule(t.RRule, cursor)
+			if !ok {
+				break
 			}
+			if next.After(now) {
+				candidate := next
+				if t.DueAt == nil || candidate.Before(*t.DueAt) {
+					if earliest == nil || candidate.Before(*earliest) {
+						earliest = &candidate
+					}
+				}
+				break
+			}
+			cursor = next
 		}
 	}
 

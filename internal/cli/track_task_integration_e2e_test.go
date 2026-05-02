@@ -106,7 +106,7 @@ func TestTaskTrackIntegration_E2E_UpdateTrackLink(t *testing.T) {
 			t.Fatalf("task update --track: %v", err)
 		}
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task.TrackID == nil ||
 			*task.TrackID != trackTypeID {
 			t.Errorf(
@@ -154,7 +154,7 @@ func TestTaskTrackIntegration_E2E_UnlinkTrack(t *testing.T) {
 			t.Fatalf("task update --track -: %v", err)
 		}
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task.TrackID != nil {
 			t.Errorf(
 				"expected TrackID=nil after unlink, got %v",

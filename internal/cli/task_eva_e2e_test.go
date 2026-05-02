@@ -88,7 +88,7 @@ func TestTaskUpdateAddAndRemoveEva(t *testing.T) {
 			t.Fatalf("task update eva failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask == nil {
 			t.Fatal("task not found after update")
 		}
@@ -134,7 +134,7 @@ func TestTaskUpdateClearEva(t *testing.T) {
 			t.Fatalf("task update --clear-eva failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask == nil {
 			t.Fatal("task not found after update")
 		}

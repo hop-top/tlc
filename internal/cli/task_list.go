@@ -216,8 +216,7 @@ var TaskListCmd = &cobra.Command{
 		if taskListCounters {
 			format = formatCounters
 		}
-		formatTasks(cmd, tasks, format)
-		return nil
+		return formatTasks(cmd, tasks, format)
 	},
 }
 
@@ -300,8 +299,7 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	if taskListCounters {
 		format = formatCounters
 	}
-	formatWorkspaceTasks(cmd, tasks, format)
-	return nil
+	return formatWorkspaceTasks(cmd, tasks, format)
 }
 
 // projectLabel returns a short label from a project ID.
@@ -311,13 +309,11 @@ func projectLabel(projectID string) string {
 }
 
 // formatWorkspaceTasks renders tasks with project context.
-func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
+func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string) error {
 	out := cmd.OutOrStdout()
 	switch format {
-	case formatJSON:
-		formatTasks(cmd, tasks, format)
-	case formatYAML:
-		formatTasks(cmd, tasks, format)
+	case formatJSON, formatYAML:
+		return formatTasks(cmd, tasks, format)
 	case "tls":
 		for _, t := range tasks {
 			label := ""
@@ -335,10 +331,11 @@ func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string)
 	case formatCounters:
 		renderCounters(out, tasks)
 	case formatVtodo:
-		writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
+		return writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default:
 		renderWorkspaceTable(out, tasks)
 	}
+	return nil
 }
 
 func init() {

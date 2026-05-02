@@ -83,7 +83,7 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 		out := buildTrackShowOutput(track, flags, progress, strategy)
 		return output.Render(cmd.OutOrStdout(), format, out)
 	case formatVtodo:
-		writeVtodo(cmd, tasks, []*core.Track{track}, trackShowOutputPath, trackShowIncludeLogs)
+		return writeVtodo(cmd, tasks, []*core.Track{track}, trackShowOutputPath, trackShowIncludeLogs)
 	default:
 		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks, strategy)
 	}

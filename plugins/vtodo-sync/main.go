@@ -38,11 +38,33 @@ type Error struct {
 }
 
 // Method-specific param shapes.
+//
+// The tlc sync client sends the configured endpoint under "repo" to
+// match the existing github/jira/linear plugin contract. We accept it
+// there and keep "source" as an alias for direct callers (manifest +
+// docs use "source" historically). UnmarshalJSON copies "repo" into
+// Source when "source" is absent.
 
 type SyncPullParams struct {
 	Source      string `json:"source"`
 	IncludeLogs bool   `json:"include_logs,omitempty"`
 	LastSyncAt  string `json:"last_sync_at,omitempty"`
+}
+
+func (p *SyncPullParams) UnmarshalJSON(b []byte) error {
+	type raw SyncPullParams
+	var aux struct {
+		raw
+		Repo string `json:"repo,omitempty"`
+	}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	*p = SyncPullParams(aux.raw)
+	if p.Source == "" {
+		p.Source = aux.Repo
+	}
+	return nil
 }
 
 type SyncPushParams struct {
@@ -51,9 +73,41 @@ type SyncPushParams struct {
 	Tasks       []Task `json:"tasks"`
 }
 
+func (p *SyncPushParams) UnmarshalJSON(b []byte) error {
+	type raw SyncPushParams
+	var aux struct {
+		raw
+		Repo string `json:"repo,omitempty"`
+	}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	*p = SyncPushParams(aux.raw)
+	if p.Source == "" {
+		p.Source = aux.Repo
+	}
+	return nil
+}
+
 type SyncDeleteParams struct {
 	Source string `json:"source"`
 	Tasks  []Task `json:"tasks"`
+}
+
+func (p *SyncDeleteParams) UnmarshalJSON(b []byte) error {
+	type raw SyncDeleteParams
+	var aux struct {
+		raw
+		Repo string `json:"repo,omitempty"`
+	}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	*p = SyncDeleteParams(aux.raw)
+	if p.Source == "" {
+		p.Source = aux.Repo
+	}
+	return nil
 }
 
 func main() {
@@ -192,7 +246,10 @@ func handleDelete(req Request) Response {
 		kept = append(kept, t)
 	}
 
-	if writeErr := writeTasksToFile(path, kept); writeErr != nil {
+	// Use replaceTasksFile (snapshot) — we already computed the kept set
+	// from the existing file, and we want the deletion to actually drop
+	// the listed IDs. writeTasksToFile would merge them back in.
+	if writeErr := replaceTasksFile(path, kept); writeErr != nil {
 		// Whole-file write failed — flip every "deleted" to failed.
 		for _, id := range deleted {
 			failed[id] = writeErr.Error()
@@ -279,7 +336,24 @@ func readTasksFromFile(path string) ([]Task, error) {
 
 // writeTasksToFile serialises tasks into a fresh VCALENDAR and atomically
 // replaces the target path.
+// writeTasksToFile merges the incoming tasks into the existing
+// calendar (if any) keyed by ID. Tasks not mentioned in the incoming
+// batch are preserved verbatim — tlc's sync layer sends incremental
+// batches, so a snapshot replace would silently delete unchanged work.
+// Used by sync.push.
 func writeTasksToFile(path string, tasks []Task) error {
+	existing, err := readTasksFromFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	merged := mergeTasksByID(existing, tasks)
+	return replaceTasksFile(path, merged)
+}
+
+// replaceTasksFile unconditionally replaces the calendar file's
+// VTODO list with the supplied tasks. Used by sync.delete after the
+// caller has already filtered the to-keep set.
+func replaceTasksFile(path string, tasks []Task) error {
 	coreTasks := make([]*core.Task, 0, len(tasks))
 	for i := range tasks {
 		coreTasks = append(coreTasks, taskToCore(&tasks[i]))
@@ -297,6 +371,37 @@ func writeTasksToFile(path string, tasks []Task) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// mergeTasksByID returns existing entries with any matching incoming
+// entry replacing it; new IDs are appended at the end. Iteration order
+// of `existing` is preserved so the .ics file's component order stays
+// stable across incremental pushes.
+func mergeTasksByID(existing, incoming []Task) []Task {
+	if len(incoming) == 0 {
+		return existing
+	}
+	idx := make(map[string]int, len(incoming))
+	for i, t := range incoming {
+		idx[t.ID] = i
+	}
+
+	out := make([]Task, 0, len(existing)+len(incoming))
+	used := make(map[string]bool, len(incoming))
+	for _, e := range existing {
+		if i, ok := idx[e.ID]; ok {
+			out = append(out, incoming[i])
+			used[e.ID] = true
+		} else {
+			out = append(out, e)
+		}
+	}
+	for _, t := range incoming {
+		if !used[t.ID] {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func sendResponse(resp Response) {

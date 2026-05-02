@@ -56,7 +56,7 @@ func TestTaskUpdateCommands(t *testing.T) {
 			t.Fatalf("task update assignee failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask.AssignedTo == nil {
 			t.Error("assignee field is nil after update")
 		} else if *updatedTask.AssignedTo != testEngineer2 {
@@ -90,7 +90,7 @@ func TestTaskUpdateCommands(t *testing.T) {
 			t.Fatalf("task update to clear assignee failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask.AssignedTo != nil {
 			t.Errorf("assignee field is %s, expected nil (cleared)", *updatedTask.AssignedTo)
 		}
@@ -122,7 +122,7 @@ func TestTaskUpdateCommands(t *testing.T) {
 			t.Fatalf("task update to clear assignee with dash failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask.AssignedTo != nil {
 			t.Errorf("assignee field is %s, expected nil (cleared)", *updatedTask.AssignedTo)
 		}
@@ -153,7 +153,7 @@ func TestTaskUpdateCommands(t *testing.T) {
 			t.Fatalf("task update to add tag failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if len(updatedTask.Tags) != 2 {
 			t.Errorf("expected 2 tags, got %d", len(updatedTask.Tags))
 		}
@@ -201,7 +201,7 @@ func TestTaskUpdateCommands(t *testing.T) {
 			t.Fatalf("task update to remove tag failed: %v", err)
 		}
 
-		updatedTask, _ := s.GetTask(ctx, "T-0001")
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if len(updatedTask.Tags) != 1 {
 			t.Errorf("expected 1 tag after removal, got %d", len(updatedTask.Tags))
 		}
@@ -241,7 +241,7 @@ func TestTaskUpdateAssignee(t *testing.T) {
 		t.Fatalf("task update assignee failed: %v", err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask := getTaskByAlias(t, ctx, "T-0001")
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
@@ -318,7 +318,7 @@ func TestTaskUpdateBlockedBy(t *testing.T) {
 		t.Fatalf("task update blockers failed: %v", err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask := getTaskByAlias(t, ctx, "T-0001")
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
@@ -360,7 +360,7 @@ func TestTaskUpdateClearBlockedBy(t *testing.T) {
 		t.Fatalf("task update --clear-blocked-by failed: %v", err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask := getTaskByAlias(t, ctx, "T-0001")
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
@@ -426,7 +426,7 @@ func TestTaskUpdate(t *testing.T) {
 		t.Fatalf("task update to add tag failed: %v", err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask := getTaskByAlias(t, ctx, "T-0001")
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
@@ -483,7 +483,7 @@ func TestTaskRemoveTag(t *testing.T) {
 		t.Fatalf("task update to remove tag failed: %v", err)
 	}
 
-	updatedTask, _ := s.GetTask(ctx, "T-0001")
+	updatedTask := getTaskByAlias(t, ctx, "T-0001")
 	if updatedTask == nil {
 		t.Fatal("task not found after update")
 	}
@@ -516,7 +516,7 @@ func TestTaskUpdateEffort(t *testing.T) {
 		t.Fatalf("task update --effort failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}
@@ -566,7 +566,7 @@ func TestTaskUpdatePriority(t *testing.T) {
 		t.Fatalf("task update --priority failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}
@@ -644,7 +644,7 @@ func TestTaskUpdate_BlockedReason(t *testing.T) {
 		t.Fatalf("task update --blocked failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}
@@ -682,7 +682,7 @@ func TestTaskUpdate_Unblock(t *testing.T) {
 		t.Fatalf("task update --unblock failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}
@@ -711,7 +711,7 @@ func TestTaskUpdate_Timeout(t *testing.T) {
 		t.Fatalf("task update --timeout failed: %v", err)
 	}
 
-	updated, _ := s.GetTask(ctx, "T-0001")
+	updated := getTaskByAlias(t, ctx, "T-0001")
 	if updated == nil {
 		t.Fatal("task not found after update")
 	}

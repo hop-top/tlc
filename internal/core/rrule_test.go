@@ -72,21 +72,44 @@ func TestNextFireFromRRule_HourlyInterval(t *testing.T) {
 }
 
 func TestNextFireFromRRule_WeeklyByDay(t *testing.T) {
-	// Friday 2026-05-01 12:00 UTC → next MO/WE/FR after.
-	// Friday +1d=Sat (skip), +2d=Sun (skip), +3d=Mon (match).
+	// Friday 2026-05-01 12:00 UTC → next BYDAY=MO,WE,FR after.
+	// Walk forward day-by-day, filtering by weekday: Sat (skip),
+	// Sun (skip), Mon (match) → 2026-05-04 12:00 UTC.
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC) // Friday
 	next, ok, err := core.NextFireFromRRule(
 		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now)
 	assert.NoError(t, err)
 	assert.True(t, ok)
-	// Walk: candidate = now + 7d = Friday again. Hmm —
-	// but BYDAY=MO,WE,FR with WEEKLY adds 7d each step in our
-	// simple walker, so it cycles back to Friday and matches.
-	// The simple v1 helper treats BYDAY as a filter applied
-	// after stepping; for WEEKLY the candidate weekday equals
-	// the start weekday, so we'll only fire on the same
-	// weekday. This is acceptable v1 behavior.
-	assert.Equal(t, now.AddDate(0, 0, 7), next)
+	assert.Equal(t, time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC), next)
+}
+
+// TestNextFireFromRRule_WeeklyByDayCoversAllListedDays asserts that
+// successive calls walk the full BYDAY set, not just the start weekday.
+// Reproduces the bug where WEEKLY+BYDAY only ever fired on the start day.
+func TestNextFireFromRRule_WeeklyByDayCoversAllListedDays(t *testing.T) {
+	// Start on Sunday so the first three matches are Mon/Wed/Fri.
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC) // Sunday
+
+	// 1st call: Mon 2026-05-04
+	t1, ok1, err1 := core.NextFireFromRRule(
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now)
+	assert.NoError(t, err1)
+	assert.True(t, ok1)
+	assert.Equal(t, time.Monday, t1.Weekday())
+
+	// 2nd call: from Monday, next is Wednesday.
+	t2, ok2, err2 := core.NextFireFromRRule(
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", t1)
+	assert.NoError(t, err2)
+	assert.True(t, ok2)
+	assert.Equal(t, time.Wednesday, t2.Weekday())
+
+	// 3rd call: from Wednesday, next is Friday.
+	t3, ok3, err3 := core.NextFireFromRRule(
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", t2)
+	assert.NoError(t, err3)
+	assert.True(t, ok3)
+	assert.Equal(t, time.Friday, t3.Weekday())
 }
 
 func TestNextFireFromRRule_DailyByDay(t *testing.T) {
@@ -99,6 +122,31 @@ func TestNextFireFromRRule_DailyByDay(t *testing.T) {
 	assert.True(t, ok)
 	expected := now.AddDate(0, 0, 3) // Monday
 	assert.Equal(t, expected, next)
+}
+
+// TestNextFireFromRRule_MonthlyByMonthDay asserts BYMONTHDAY actually
+// constrains when the rule fires. Bug: the helper accepted MONTHLY+
+// BYMONTHDAY=1 as valid but ignored the filter, so it fired on
+// whatever day-of-month the reference time had.
+func TestNextFireFromRRule_MonthlyByMonthDay(t *testing.T) {
+	// Reference 2026-05-15 → next FREQ=MONTHLY;BYMONTHDAY=1 is 2026-06-01.
+	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	next, ok, err := core.NextFireFromRRule(
+		"FREQ=MONTHLY;BYMONTHDAY=1", now)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC), next)
+}
+
+// TestNextFireFromRRule_MonthlyByMonthDayLastDay covers the negative
+// offset shape: BYMONTHDAY=-1 means "last day of month".
+func TestNextFireFromRRule_MonthlyByMonthDayLastDay(t *testing.T) {
+	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	next, ok, err := core.NextFireFromRRule(
+		"FREQ=MONTHLY;BYMONTHDAY=-1", now)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC), next)
 }
 
 func TestNextFireFromRRule_UntilTermination(t *testing.T) {

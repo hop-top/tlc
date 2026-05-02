@@ -90,7 +90,7 @@ func isVerboseOutput() bool {
 	return viper.GetBool("output.verbose")
 }
 
-func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
+func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) error {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
@@ -104,23 +104,26 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) {
 	case formatCounters:
 		renderCounters(out, tasks)
 	case formatVtodo:
-		writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
+		return writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default: // table
 		renderTable(out, tasks)
 	}
+	return nil
 }
 
 // writeVtodo serialises the supplied tasks/tracks (and optionally logs)
 // into a VCALENDAR and writes the .ics output. When outputPath is empty
 // the calendar is written to cmd.OutOrStdout(); otherwise it is written
-// to that file path. includeLogs gates VJOURNAL emission.
+// to that file path. Returns non-nil on encode/write failure so callers
+// (and downstream scripts) can distinguish a real export from a silent
+// no-op.
 func writeVtodo(
 	cmd *cobra.Command,
 	tasks []*core.Task,
 	tracks []*core.Track,
 	outputPath string,
 	includeLogs bool,
-) {
+) error {
 	var logs []*core.LogEntry
 	if includeLogs {
 		logs = collectVtodoLogs(tasks)
@@ -131,17 +134,17 @@ func writeVtodo(
 	}
 	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
 	if err != nil {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "vtodo encode failed: %v\n", err)
-		return
+		return fmt.Errorf("vtodo encode failed: %w", err)
 	}
 	body := cal.Serialize()
 	if outputPath == "" {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), body)
-		return
+		return nil
 	}
 	if err := os.WriteFile(outputPath, []byte(body), 0o600); err != nil {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "failed to write %s: %v\n", outputPath, err)
+		return fmt.Errorf("write %s: %w", outputPath, err)
 	}
+	return nil
 }
 
 // collectVtodoLogs fetches log entries for each task that has an

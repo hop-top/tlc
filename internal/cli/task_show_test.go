@@ -542,7 +542,7 @@ func TestTaskDelete(t *testing.T) {
 			t.Fatalf("task delete failed: %v", err)
 		}
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task != nil {
 			t.Error("task was not deleted")
 		}

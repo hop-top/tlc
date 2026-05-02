@@ -117,6 +117,53 @@ func TestTaskListVtodoOutputFlag(t *testing.T) {
 	})
 }
 
+// TestTaskListVtodo_OutputWriteFailureSurfacesError verifies that a
+// failed file write surfaces a non-nil error to the caller. Without
+// this, scripts that pipe `tlc task list --format vtodo --output ...`
+// can silently believe the export succeeded when nothing was written.
+func TestTaskListVtodo_OutputWriteFailureSurfacesError(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		now := time.Now().UTC()
+		if err := s.CreateTask(ctx, &core.Task{
+			ID: "T-0001", Title: "Audit me",
+			Status: core.StatusTodo, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("CreateTask: %v", err)
+		}
+
+		// Point --output at an unwritable path: a non-existent dir.
+		// os.WriteFile will return ENOENT.
+		tmp := t.TempDir()
+		bogus := filepath.Join(tmp, "does-not-exist", "tasks.ics")
+
+		viper.Set("output.format", formatVtodo)
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "list", "--output", bogus})
+
+		execErr := cmd.Execute()
+		if execErr == nil {
+			t.Fatalf("Execute returned nil; want error from failed --output write")
+		}
+		if !strings.Contains(execErr.Error(), "tasks.ics") &&
+			!strings.Contains(execErr.Error(), "no such file") {
+			t.Errorf("error %q did not mention the failed write", execErr.Error())
+		}
+	})
+}
+
 // TestTaskShowVtodoFormat verifies `task show <id> --format vtodo` emits
 // a single-VTODO VCALENDAR.
 func TestTaskShowVtodoFormat(t *testing.T) {

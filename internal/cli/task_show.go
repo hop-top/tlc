@@ -76,7 +76,9 @@ var TaskShowCmd = &cobra.Command{
 				continue
 			}
 			if format == formatVtodo {
-				writeVtodo(cmd, []*core.Task{task}, nil, taskShowOutput, taskShowIncludeLogs)
+				if err := writeVtodo(cmd, []*core.Task{task}, nil, taskShowOutput, taskShowIncludeLogs); err != nil {
+					return err
+				}
 				continue
 			}
 

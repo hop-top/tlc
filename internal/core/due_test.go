@@ -91,16 +91,18 @@ func TestNextReminder(t *testing.T) {
 		// so remind_at (farFuture) should win
 		assert.Equal(t, farFuture.Unix(), r.Unix())
 	})
-	t.Run("rrule recurrence", func(t *testing.T) {
-		// Hourly RRULE → next fire is +1h from now.
+	t.Run("rrule recurrence preserves anchor cadence", func(t *testing.T) {
+		// Anchor (CreatedAt) = now - 2h30m. FREQ=HOURLY fires at
+		// anchor+1h, anchor+2h, anchor+3h ... so the cadence is
+		// at minute-30 within each hour. Next strictly-future
+		// fire after `now` is now + 30m, NOT now + 1h.
 		task := &core.Task{
 			CreatedAt: now.Add(-150 * time.Minute),
 			RRule:     "FREQ=HOURLY",
 		}
 		r := task.NextReminder()
 		assert.NotNil(t, r)
-		// next-from-now is now + 1h (within ~1s tolerance).
-		assert.InDelta(t, now.Add(time.Hour).Unix(), r.Unix(), 2)
+		assert.InDelta(t, now.Add(30*time.Minute).Unix(), r.Unix(), 2)
 	})
 	t.Run("rrule stops at due", func(t *testing.T) {
 		// Next fire = now + 2h, but due is now + 10min, so
