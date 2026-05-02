@@ -1,0 +1,255 @@
+package vtodo_test
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/vtodo"
+)
+
+// fixedTime is a deterministic timestamp used across encode tests.
+var fixedTime = time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
+
+func ptr[T any](v T) *T { return &v }
+
+func sampleTask() *core.Task {
+	due := fixedTime.Add(24 * time.Hour)
+	remind := fixedTime.Add(12 * time.Hour)
+	assignee := "alice"
+	return &core.Task{
+		ID:          "task_01h455vb4pex5vsknk084sn02q",
+		Seq:         42,
+		Title:       "Replace JWT signer",
+		Description: "Rotate to ES256 across services",
+		Status:      core.StatusInProgress,
+		AssignedTo:  &assignee,
+		Tags:        []string{"security", "auth"},
+		Reference:   "tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn02q",
+		Effort:      core.EffortM,
+		Priority:    core.PriorityP1,
+		CreatedAt:   fixedTime,
+		UpdatedAt:   fixedTime.Add(time.Hour),
+		DueAt:       &due,
+		RemindAt:    &remind,
+		RRule:       "FREQ=DAILY;INTERVAL=2",
+	}
+}
+
+func TestBuildVCalendar_Envelope(t *testing.T) {
+	cal, err := vtodo.BuildVCalendar(nil, nil, nil)
+	require.NoError(t, err)
+	out := cal.Serialize()
+	require.Contains(t, out, "BEGIN:VCALENDAR")
+	require.Contains(t, out, "END:VCALENDAR")
+	require.Contains(t, out, "VERSION:2.0")
+	require.Contains(t, out, "PRODID:-//tlc//vtodo//EN")
+	require.Contains(t, out, "CALSCALE:GREGORIAN")
+	require.Contains(t, out, "METHOD:PUBLISH")
+}
+
+func TestBuildVCalendar_TaskFields(t *testing.T) {
+	task := sampleTask()
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	out := cal.Serialize()
+
+	require.Contains(t, out, "BEGIN:VTODO")
+	require.Contains(t, out, "UID:task_01h455vb4pex5vsknk084sn02q@tlc.local")
+	require.Contains(t, out, "SUMMARY:Replace JWT signer")
+	require.Contains(t, out, "DESCRIPTION:Rotate to ES256 across services")
+	require.Contains(t, out, "STATUS:IN-PROCESS")
+	require.Contains(t, out, "PRIORITY:3")
+	require.Contains(t, out, "URL:tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn02q")
+	require.Contains(t, out, "X-TLC-EFFORT:M")
+	require.Contains(t, out, "DUE:20260503T143000Z")
+	require.Contains(t, out, "RRULE:FREQ=DAILY;INTERVAL=2")
+	// CATEGORIES emitted as separate properties in this lib version; both
+	// orderings count.
+	require.True(t,
+		strings.Contains(out, "CATEGORIES:security") &&
+			strings.Contains(out, "CATEGORIES:auth"),
+		"missing CATEGORIES entries in:\n%s", out,
+	)
+	// Assignee without an email goes into X-TLC-ASSIGNEE.
+	require.Contains(t, out, "X-TLC-ASSIGNEE:alice")
+	// Email-shaped assignee → ATTENDEE.
+	require.NotContains(t, out, "ATTENDEE:")
+	// VALARM block carries the absolute reminder.
+	require.Contains(t, out, "BEGIN:VALARM")
+	require.Contains(t, out, "ACTION:DISPLAY")
+	require.Contains(t, out, "TRIGGER;VALUE=DATE-TIME:20260503T023000Z")
+	require.Contains(t, out, "END:VALARM")
+}
+
+func TestBuildVCalendar_AssigneeEmailGoesToAttendee(t *testing.T) {
+	task := sampleTask()
+	task.AssignedTo = ptr("alice@example.com")
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	out := cal.Serialize()
+	require.Contains(t, out, "ATTENDEE:mailto:alice@example.com")
+	require.NotContains(t, out, "X-TLC-ASSIGNEE:alice@example.com")
+}
+
+func TestBuildVCalendar_StatusMapping(t *testing.T) {
+	cases := []struct {
+		status core.TaskStatus
+		want   string
+	}{
+		{core.StatusTodo, "STATUS:NEEDS-ACTION"},
+		{core.StatusInProgress, "STATUS:IN-PROCESS"},
+		{core.StatusDone, "STATUS:COMPLETED"},
+		{core.StatusSkipped, "STATUS:CANCELLED"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.status), func(t *testing.T) {
+			task := &core.Task{
+				ID:        "task_01h455vb4pex5vsknk084sn02q",
+				Title:     "x",
+				Status:    tc.status,
+				CreatedAt: fixedTime,
+			}
+			cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+			require.NoError(t, err)
+			require.Contains(t, cal.Serialize(), tc.want)
+		})
+	}
+}
+
+func TestBuildVCalendar_PriorityMapping(t *testing.T) {
+	cases := []struct {
+		priority core.Priority
+		want     string
+		absent   bool
+	}{
+		{core.PriorityP0, "PRIORITY:1", false},
+		{core.PriorityP1, "PRIORITY:3", false},
+		{core.PriorityP2, "PRIORITY:5", false},
+		{core.PriorityP3, "PRIORITY:7", false},
+		{"", "PRIORITY:", true},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.priority), func(t *testing.T) {
+			task := &core.Task{
+				ID:        "task_01h455vb4pex5vsknk084sn02q",
+				Title:     "x",
+				Status:    core.StatusTodo,
+				Priority:  tc.priority,
+				CreatedAt: fixedTime,
+			}
+			cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+			require.NoError(t, err)
+			out := cal.Serialize()
+			if tc.absent {
+				require.NotContains(t, out, "PRIORITY:")
+			} else {
+				require.Contains(t, out, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildVCalendar_EmptyRRuleNoLine(t *testing.T) {
+	task := sampleTask()
+	task.RRule = ""
+	task.DueAt = nil
+	task.RemindAt = nil
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	require.NotContains(t, cal.Serialize(), "RRULE:")
+}
+
+func TestBuildVCalendar_TrackChildLinks(t *testing.T) {
+	track := &core.Track{
+		ID:        "track_01h455vbqkfsn02nk084ksn02q",
+		Slug:      "auth-rewrite",
+		Title:     "Auth rewrite",
+		Type:      core.TrackTypeFeature,
+		Status:    core.TrackStatusActive,
+		CreatedAt: fixedTime,
+		UpdatedAt: fixedTime,
+	}
+	t1 := sampleTask()
+	t1.TrackID = ptr(track.ID)
+
+	t2 := *sampleTask()
+	t2.ID = "task_01h455vb4pex5vsknk084sn0az"
+	t2.TrackID = ptr(track.ID)
+
+	cal, err := vtodo.BuildVCalendar([]*core.Task{t1, &t2}, []*core.Track{track}, nil)
+	require.NoError(t, err)
+	out := cal.Serialize()
+	// Track CHILD links to both tasks.
+	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn02q@tlc.local")
+	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn0az@tlc.local")
+	// Each task PARENT link back.
+	require.Contains(t, out, "RELATED-TO;RELTYPE=PARENT:track_01h455vbqkfsn02nk084ksn02q@tlc.local")
+	// Track marker for decode classification.
+	require.Contains(t, out, "X-TLC-IS-TRACK:TRUE")
+	require.Contains(t, out, "X-TLC-TRACK-SLUG:auth-rewrite")
+	require.Contains(t, out, "X-TLC-TRACK-TYPE:feature")
+}
+
+func TestBuildVCalendar_DependsOn(t *testing.T) {
+	blocker := "task_01h455vb4pex5vsknk084sn0az"
+	task := sampleTask()
+	task.Meta = map[string]interface{}{
+		"blocked_by": []string{blocker},
+	}
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	require.Contains(t, cal.Serialize(),
+		"RELATED-TO;RELTYPE=DEPENDS-ON:task_01h455vb4pex5vsknk084sn0az@tlc.local",
+	)
+}
+
+func TestBuildVCalendar_LogsGated(t *testing.T) {
+	task := sampleTask()
+	logs := []*core.LogEntry{{
+		TaskID:    task.ID,
+		Timestamp: fixedTime,
+		By:        "alice",
+		Action:    "CLAIMED",
+		Note:      "starting work",
+	}}
+
+	t.Run("default skips VJOURNAL", func(t *testing.T) {
+		cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, logs)
+		require.NoError(t, err)
+		require.NotContains(t, cal.Serialize(), "BEGIN:VJOURNAL")
+	})
+
+	t.Run("WithIncludeLogs emits VJOURNAL", func(t *testing.T) {
+		cal, err := vtodo.BuildVCalendar(
+			[]*core.Task{task}, nil, logs,
+			vtodo.WithIncludeLogs(true),
+		)
+		require.NoError(t, err)
+		out := cal.Serialize()
+		require.Contains(t, out, "BEGIN:VJOURNAL")
+		require.Contains(t, out, "X-TLC-LOG-ACTION:CLAIMED")
+		require.Contains(t, out, "X-TLC-LOG-BY:alice")
+		require.Contains(t, out,
+			"RELATED-TO;RELTYPE=PARENT:task_01h455vb4pex5vsknk084sn02q@tlc.local",
+		)
+	})
+}
+
+func TestBuildVCalendar_CustomDomainAndProductID(t *testing.T) {
+	task := sampleTask()
+	cal, err := vtodo.BuildVCalendar(
+		[]*core.Task{task}, nil, nil,
+		vtodo.WithUIDDomain("calendar.example.com"),
+		vtodo.WithProductID("-//example//cal//EN"),
+	)
+	require.NoError(t, err)
+	out := cal.Serialize()
+	require.Contains(t, out, "PRODID:-//example//cal//EN")
+	require.Contains(t, out,
+		"UID:task_01h455vb4pex5vsknk084sn02q@calendar.example.com",
+	)
+}
