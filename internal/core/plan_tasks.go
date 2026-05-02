@@ -138,19 +138,21 @@ func (s *TrackService) CreateTasksFromPlan(
 		}
 	}
 
-	// --- Pre-allocate IDs --------------------------------------------
+	// --- Pre-allocate IDs and sequences -------------------------------
 	// Generate all IDs upfront so forward blocked-by refs (index > i)
 	// can be resolved during task creation without an extra pass.
 	createdIDs := make([]string, len(specs))
+	createdSeqs := make([]int64, len(specs))
 	for i := range specs {
 		seq, err := idGen.GetNextSequenceID(ctx, projectID)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"plan task %d (%q): failed to generate ID; %w",
+				"plan task %d (%q): failed to allocate sequence; %w",
 				i, specs[i].Title, err,
 			)
 		}
-		createdIDs[i] = fmt.Sprintf("T-%04d", seq)
+		createdIDs[i] = NewTaskID()
+		createdSeqs[i] = int64(seq)
 	}
 
 	// --- Create tasks + resolve refs ---------------------------------
@@ -229,6 +231,7 @@ func (s *TrackService) CreateTasksFromPlan(
 
 		task := &Task{
 			ID:          taskID,
+			Seq:         createdSeqs[i],
 			Title:       spec.Title,
 			Description: strings.TrimSpace(spec.Description),
 			Status:      StatusTodo,

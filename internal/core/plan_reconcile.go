@@ -158,13 +158,14 @@ func (rc *reconcileCtx) createNew(idx int, spec PlanTaskSpec) error {
 	seq, err := rc.idGen.GetNextSequenceID(rc.ctx, rc.projectID)
 	if err != nil {
 		return fmt.Errorf(
-			"reconcile: task %d (%q): ID generation: %w",
+			"reconcile: task %d (%q): seq allocation: %w",
 			idx, spec.Title, err,
 		)
 	}
-	taskID := fmt.Sprintf("T-%04d", seq)
+	taskID := NewTaskID()
 
 	task := taskFromSpec(spec, taskID, rc.trackID, rc.projectID, rc.now)
+	task.Seq = int64(seq)
 	if err := rc.svc.taskRepo.CreateTask(rc.ctx, task); err != nil {
 		return fmt.Errorf(
 			"reconcile: task %d (%q): create: %w",

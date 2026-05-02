@@ -835,11 +835,11 @@ func (e *FlowExecutor) ExecuteForTest(
 	return err
 }
 
-// generateTaskID creates a unique task ID (e.g., T-0042).
+// generateTaskID returns a fresh TypeID-shaped task identifier
+// (e.g. "task_01h455vb4pex5vsknk084sn02q"). Sequence allocation for the
+// human-facing T-NNNN+ alias happens in the repository's INSERT path.
 func generateTaskID() string {
-	// Simple UUID-based ID for now
-	// In production, this should use a counter from the database
-	return fmt.Sprintf("T-%s", uuid.New().String()[:8])
+	return NewTaskID()
 }
 
 // aggregateJoinOutput builds the join step's structured output from its
