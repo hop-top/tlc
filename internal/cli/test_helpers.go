@@ -456,6 +456,7 @@ func resetTaskFlags() {
 	resetFlowFlags()
 
 	tasksSyncDryRun = false
+	taskSyncProjectionDryRun = false
 
 	// Reset prompt flags.
 	promptJSON = false
@@ -476,7 +477,7 @@ func resetTaskFlags() {
 		aliasAddCmd, aliasRemoveCmd,
 		trackCreateCmd, trackUpdateCmd, trackArchiveCmd, trackAbandonCmd, trackDeleteCmd,
 		trackListCmd, trackShowCmd, trackSummaryCmd, trackGraphCmd,
-		TasksSyncCmd,
+		TasksSyncCmd, TaskSyncProjectionCmd,
 		PromptTaskCmd,
 	} {
 		if cmd != nil {

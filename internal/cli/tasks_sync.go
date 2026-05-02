@@ -15,17 +15,37 @@ import (
 var tasksSyncDryRun bool
 
 // TasksCmd is the parent command for filesystem projection operations.
+//
+// Deprecated: the plural "tasks" parent violates kit CLI conventions
+// (§3.2: one noun, multiple verbs; never asymmetric singular/plural pairs).
+// Use `tlc task sync-projection` instead. Hidden + deprecation warning kept
+// for one release.
 var TasksCmd = &cobra.Command{
-	Use:   "tasks",
-	Short: "Filesystem projection operations",
+	Use:        "tasks",
+	Short:      "Filesystem projection operations (deprecated)",
+	Hidden:     true,
+	Deprecated: "use 'tlc task sync-projection' instead",
 }
 
-// TasksSyncCmd rebuilds the .tlc/tasks/ filesystem projection from SQLite.
+// TasksSyncCmd is the deprecated alias for `tlc task sync-projection`.
+//
+// Deprecated: use `tlc task sync-projection`. Hidden + deprecation warning
+// kept for one release; forwards to the new handler.
 var TasksSyncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "Rebuild filesystem projection from database",
-	Long:  "Wipes .tlc/tasks/ and rebuilds all canonical files and symlinks from SQLite.",
-	RunE:  runTasksSync,
+	Use:        "sync",
+	Short:      "Rebuild filesystem projection from database (deprecated)",
+	Hidden:     true,
+	Deprecated: "use 'tlc task sync-projection' instead",
+	Long: `Wipes .tlc/tasks/ and rebuilds all canonical files and symlinks from SQLite.
+
+DEPRECATED: use 'tlc task sync-projection'. This alias will be removed in a
+future release.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
+			"warning: 'tlc tasks sync' is deprecated; "+
+				"use 'tlc task sync-projection' instead")
+		return runTasksSyncProjection(cmd, args)
+	},
 }
 
 func init() {
@@ -36,7 +56,10 @@ func init() {
 	RootCmd.AddCommand(TasksCmd)
 }
 
-func runTasksSync(cmd *cobra.Command, _ []string) error {
+// runTasksSyncProjection rebuilds the .tlc/tasks/ filesystem projection from
+// SQLite. Shared by `tlc task sync-projection` and the deprecated
+// `tlc tasks sync` alias.
+func runTasksSyncProjection(cmd *cobra.Command, _ []string) error {
 	cfg := filesystemConfigFromViper()
 	if !cfg.Enabled {
 		fmt.Fprintln(cmd.OutOrStdout(),
