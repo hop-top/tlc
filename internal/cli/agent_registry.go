@@ -102,47 +102,63 @@ in the agents.yaml config file.`,
 }
 
 // AgentRegisteredCmd lists agent names registered in agents.yaml.
-// Distinct from `tlc agent list`, which lists agent run records.
+//
+// Deprecated: this verb/adjective sibling pair (register / registered)
+// violates the kit CLI conventions (§3.2). Use `tlc agent list --source
+// config` instead. Hidden + deprecation warning kept for one release.
 var AgentRegisteredCmd = &cobra.Command{
-	Use:   "registered",
-	Short: "List agents registered in agents.yaml",
+	Use:        "registered",
+	Short:      "List agents registered in agents.yaml (deprecated)",
+	Hidden:     true,
+	Deprecated: "use 'tlc agent list --source config' instead",
 	Long: `List all agents registered in ~/.config/tlc/agents.yaml (global)
 and .tlc/agents.yaml (project-local). Shows merged view.
 
-Distinct from 'tlc agent list', which shows agent execution audit records.`,
+DEPRECATED: use 'tlc agent list --source config'. This alias will be
+removed in a future release.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		reg := core.NewAgentRegistry()
-		if err := reg.LoadDefaults(); err != nil {
-			return fmt.Errorf("load agents: %w", err)
-		}
-		reg.TrustProject(reg.ProjectConfigPath())
-
-		names := reg.List()
-		out := cmd.OutOrStdout()
-		if len(names) == 0 {
-			_, _ = fmt.Fprintln(out, "No agents registered.")
-			_, _ = fmt.Fprintf(out,
-				"Add one with: tlc agent register <name> --binary <path>\n")
-			_, _ = fmt.Fprintf(out,
-				"Or edit %s directly.\n", agentsGlobalDefaultPath())
-			return nil
-		}
-
-		_, _ = fmt.Fprintf(out, "Registered agents:\n")
-		for _, n := range names {
-			cfg, err := reg.Get(n)
-			if err != nil {
-				_, _ = fmt.Fprintf(out, "  %s  (error: %v)\n", n, err)
-				continue
-			}
-			descriptor := cfg.Binary
-			if descriptor == "" {
-				descriptor = cfg.Image
-			}
-			_, _ = fmt.Fprintf(out, "  %s  %s\n", n, descriptor)
-		}
-		return nil
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
+			"warning: 'tlc agent registered' is deprecated; "+
+				"use 'tlc agent list --source config' instead")
+		return runAgentListConfig(cmd)
 	},
+}
+
+// runAgentListConfig prints agents declared in agents.yaml (global +
+// project-local merged). Shared by `agent list --source config` and the
+// deprecated `agent registered` alias.
+func runAgentListConfig(cmd *cobra.Command) error {
+	reg := core.NewAgentRegistry()
+	if err := reg.LoadDefaults(); err != nil {
+		return fmt.Errorf("load agents: %w", err)
+	}
+	reg.TrustProject(reg.ProjectConfigPath())
+
+	names := reg.List()
+	out := cmd.OutOrStdout()
+	if len(names) == 0 {
+		_, _ = fmt.Fprintln(out, "No agents registered.")
+		_, _ = fmt.Fprintf(out,
+			"Add one with: tlc agent register <name> --binary <path>\n")
+		_, _ = fmt.Fprintf(out,
+			"Or edit %s directly.\n", agentsGlobalDefaultPath())
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(out, "Registered agents:\n")
+	for _, n := range names {
+		cfg, err := reg.Get(n)
+		if err != nil {
+			_, _ = fmt.Fprintf(out, "  %s  (error: %v)\n", n, err)
+			continue
+		}
+		descriptor := cfg.Binary
+		if descriptor == "" {
+			descriptor = cfg.Image
+		}
+		_, _ = fmt.Fprintf(out, "  %s  %s\n", n, descriptor)
+	}
+	return nil
 }
 
 func init() {

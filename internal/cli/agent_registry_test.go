@@ -200,6 +200,109 @@ func TestAgentRegistered_NoConfigEmpty(t *testing.T) {
 	}
 }
 
+// TestAgentRegistered_EmitsDeprecationWarning verifies that the hidden
+// `agent registered` alias prints a deprecation warning to stderr while
+// still rendering the registered list to stdout. T-1105.
+func TestAgentRegistered_EmitsDeprecationWarning(t *testing.T) {
+	cfgPath := withHome(t)
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `agents:
+  claude:
+    binary: /a/b/claude
+`
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	AgentRegisteredCmd.SetOut(&stdout)
+	AgentRegisteredCmd.SetErr(&stderr)
+	if err := AgentRegisteredCmd.RunE(AgentRegisteredCmd, nil); err != nil {
+		t.Fatalf("registered failed: %v", err)
+	}
+
+	if !strings.Contains(stderr.String(), "deprecated") {
+		t.Errorf("expected deprecation warning on stderr, got:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "agent list --source config") {
+		t.Errorf("warning should point at replacement command, got:\n%s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "claude") {
+		t.Errorf("expected stdout to list 'claude', got:\n%s", stdout.String())
+	}
+}
+
+// TestAgentRegisteredCmd_Hidden verifies that the cobra command stays
+// hidden so it doesn't surface in `tlc agent --help`.
+func TestAgentRegisteredCmd_Hidden(t *testing.T) {
+	if !AgentRegisteredCmd.Hidden {
+		t.Error("AgentRegisteredCmd should be Hidden=true (deprecation alias)")
+	}
+	if AgentRegisteredCmd.Deprecated == "" {
+		t.Error("AgentRegisteredCmd should set Deprecated message")
+	}
+}
+
+// TestAgentList_SourceConfig verifies that `agent list --source config`
+// prints the merged registry contents (same surface as the deprecated
+// alias). T-1105.
+func TestAgentList_SourceConfig(t *testing.T) {
+	cfgPath := withHome(t)
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `agents:
+  claude:
+    binary: /a/b/claude
+  codex:
+    binary: /a/b/codex
+`
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prev := agentListSource
+	agentListSource = "config"
+	t.Cleanup(func() { agentListSource = prev })
+
+	var out bytes.Buffer
+	AgentListCmd.SetOut(&out)
+	AgentListCmd.SetErr(&out)
+	if err := AgentListCmd.RunE(AgentListCmd, nil); err != nil {
+		t.Fatalf("agent list --source config failed: %v", err)
+	}
+
+	output := out.String()
+	for _, want := range []string{"claude", "codex"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected list to mention %q, got:\n%s", want, output)
+		}
+	}
+}
+
+// TestAgentList_SourceInvalid verifies that an unknown --source value is
+// rejected with an actionable error.
+func TestAgentList_SourceInvalid(t *testing.T) {
+	withHome(t)
+
+	prev := agentListSource
+	agentListSource = "bogus"
+	t.Cleanup(func() { agentListSource = prev })
+
+	var out bytes.Buffer
+	AgentListCmd.SetOut(&out)
+	AgentListCmd.SetErr(&out)
+	err := AgentListCmd.RunE(AgentListCmd, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid --source")
+	}
+	if !strings.Contains(err.Error(), "invalid --source") {
+		t.Errorf("error should describe invalid --source, got: %v", err)
+	}
+}
+
 func TestParseEnvFlags(t *testing.T) {
 	cases := []struct {
 		name    string

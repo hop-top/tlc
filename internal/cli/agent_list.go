@@ -16,45 +16,36 @@ var (
 	agentListStatus string
 	agentListLimit  int
 	agentListJSON   bool
+	agentListSource string
 )
 
 // AgentListCmd implements `tlc agent list`.
 var AgentListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List agent execution runs",
-	Long: `List agent run audit records with optional filters.
+	Short: "List agent execution runs or configured agents",
+	Long: `List agent run audit records (default) or registered agents.
+
+Use --source to switch between:
+  runs    Audit records of agent executions (default)
+  config  Agents declared in agents.yaml (global + project-local)
 
 Examples:
   tlc agent list
   tlc agent list --status succeeded
-  tlc agent list --limit 20 --json`,
+  tlc agent list --limit 20 --json
+  tlc agent list --source config`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		s, err := getStorage()
-		if err != nil {
-			return err
+		switch agentListSource {
+		case "", "runs":
+			return runAgentListRuns(cmd)
+		case "config":
+			return runAgentListConfig(cmd)
+		default:
+			return fmt.Errorf(
+				"agent list: invalid --source %q; valid: runs, config",
+				agentListSource,
+			)
 		}
-		defer func() { _ = s.Close() }()
-
-		runs, err := s.ListAgentRuns(
-			context.Background(), agentListStatus, agentListLimit,
-		)
-		if err != nil {
-			return fmt.Errorf("list agent runs: %w", err)
-		}
-
-		format := viper.GetString("output.format")
-		if agentListJSON || format == formatJSON {
-			return output.Render(cmd.OutOrStdout(), formatJSON, runs)
-		}
-
-		out := cmd.OutOrStdout()
-		if len(runs) == 0 {
-			_, _ = fmt.Fprintln(out, "No agent runs found")
-			return nil
-		}
-
-		renderAgentRunsTable(out, runs)
-		return nil
 	},
 }
 
@@ -67,6 +58,35 @@ type agentRunRow struct {
 	Exit     string `table:"Exit"`
 	Started  string `table:"Started"`
 	Duration string `table:"Duration"`
+}
+
+func runAgentListRuns(cmd *cobra.Command) error {
+	s, err := getStorage()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = s.Close() }()
+
+	runs, err := s.ListAgentRuns(
+		context.Background(), agentListStatus, agentListLimit,
+	)
+	if err != nil {
+		return fmt.Errorf("list agent runs: %w", err)
+	}
+
+	format := viper.GetString("output.format")
+	if agentListJSON || format == formatJSON {
+		return output.Render(cmd.OutOrStdout(), formatJSON, runs)
+	}
+
+	out := cmd.OutOrStdout()
+	if len(runs) == 0 {
+		_, _ = fmt.Fprintln(out, "No agent runs found")
+		return nil
+	}
+
+	renderAgentRunsTable(out, runs)
+	return nil
 }
 
 func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord) {
@@ -97,9 +117,11 @@ func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord) {
 
 func init() {
 	f := AgentListCmd.Flags()
-	f.StringVar(&agentListStatus, "status", "", "Filter by status")
-	f.IntVar(&agentListLimit, "limit", 50, "Max results")
-	f.BoolVar(&agentListJSON, "json", false, "Output as JSON")
+	f.StringVar(&agentListStatus, "status", "", "Filter by status (source=runs)")
+	f.IntVar(&agentListLimit, "limit", 50, "Max results (source=runs)")
+	f.BoolVar(&agentListJSON, "json", false, "Output as JSON (source=runs)")
+	f.StringVar(&agentListSource, "source", "runs",
+		"Listing source: 'runs' (audit records) or 'config' (agents.yaml)")
 
 	AgentCmd.AddCommand(AgentListCmd)
 }

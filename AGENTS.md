@@ -129,8 +129,9 @@ tlc agent watch [--queue agent] [--interval 5s]
 tlc agent status <job-id>
 tlc agent cancel <job-id>
 
-# list jobs (filterable)
+# list agent runs (audit records, default) or registered agents
 tlc agent list [--status <s>] [--limit N] [--json]
+tlc agent list --source config   # agents declared in agents.yaml
 ```
 
 Shorthand exec (delegates to `agent run` internally):
