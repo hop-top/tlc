@@ -31,7 +31,7 @@ func ScanTrack(row *sql.Row) (core.Track, error) {
 	var assignedTo, projectID, metaStr sql.NullString
 
 	err := row.Scan(
-		&t.ID, &t.Title, &t.Type, &t.Status,
+		&t.ID, &t.Slug, &t.Title, &t.Type, &t.Status,
 		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr,
 	)
 	if err != nil {
@@ -50,7 +50,7 @@ func ScanTrackRows(rows *sql.Rows) (core.Track, error) {
 	var assignedTo, projectID, metaStr sql.NullString
 
 	err := rows.Scan(
-		&t.ID, &t.Title, &t.Type, &t.Status,
+		&t.ID, &t.Slug, &t.Title, &t.Type, &t.Status,
 		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr,
 	)
 	if err != nil {
@@ -71,11 +71,11 @@ func BindTrack(t core.Track) (cols []string, vals []any) {
 	}
 
 	cols = []string{
-		"id", "title", "type", "status", "assigned_to",
+		"id", "slug", "title", "type", "status", "assigned_to",
 		"created_at", "updated_at", "project_id", "meta",
 	}
 	vals = []any{
-		t.ID, t.Title, t.Type, string(t.Status), t.AssignedTo,
+		t.ID, t.Slug, t.Title, t.Type, string(t.Status), t.AssignedTo,
 		t.CreatedAt.Format(time.RFC3339),
 		t.UpdatedAt.Format(time.RFC3339),
 		pid, string(metaJSON),
