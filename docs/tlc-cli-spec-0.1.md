@@ -21,7 +21,7 @@ Available on all commands:
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
 | `--config` | `-c` | path | Config file path (default: auto-detect) |
-| `--format` | `-f` | enum | Output format: `table`, `json`, `yaml`, `tls`, `summary` |
+| `--format` | `-f` | enum | Output format: `table`, `json`, `yaml`, `tls`, `summary`, `vtodo` |
 | `--no-color` | | bool | Disable colored output |
 | `--verbose` | `-v` | bool | Verbose logging |
 | `--quiet` | `-q` | bool | Suppress non-essential output |
@@ -32,6 +32,7 @@ Available on all commands:
 - `json`: JSON output (default for non-TTY)
 - `yaml`: YAML output
 - `tls`: Task Line Syntax (see task-line-spec-0.1.md)
+- `vtodo`: RFC 5545 iCalendar (see vtodo-sync-spec-0.1.md)
 
 ---
 
