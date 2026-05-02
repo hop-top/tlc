@@ -60,7 +60,7 @@ func autoCreateTrack(
 	ctx context.Context, w io.Writer,
 	s *storage.SQLiteStorage, input string,
 ) (string, error) {
-	if err := core.ValidateTrackID(input); err != nil {
+	if err := core.ValidateTrackSlug(input); err != nil {
 		return "", fmt.Errorf(
 			"cannot auto-create track: %w; "+
 				"run 'tlc track create' manually",

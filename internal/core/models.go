@@ -54,6 +54,7 @@ func ValidPriority(p Priority) bool {
 
 type Task struct {
 	ID            string                 `json:"id" yaml:"id" table:"ID"`
+	Seq           int64                  `json:"seq" yaml:"seq"`
 	Title         string                 `json:"title" yaml:"title" table:"Title"`
 	Description   string                 `json:"description,omitempty" yaml:"description,omitempty"`
 	Status        TaskStatus             `json:"status" yaml:"status" table:"Status"`
