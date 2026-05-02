@@ -25,29 +25,34 @@ func goldenModel(t *testing.T) Model {
 	svc := core.NewTaskService(repo, logRepo)
 
 	assignee := "alice"
+	// Use stable typeids so URIs (and detail-view "ID:" lines) are
+	// reproducible across runs; Seq drives the T-NNNN display alias.
 	tasks := []*core.Task{
 		{
-			ID:         "T-0001",
+			ID:         "task_01h455vb4pex5vsknk084sn001",
+			Seq:        1,
 			Title:      "Implement auth middleware",
 			Status:     core.StatusTodo,
 			AssignedTo: &assignee,
 			Tags:       []string{"auth", "backend"},
-			Reference:  "tlc://hop-top/tlc/T-0001",
+			Reference:  "tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn001",
 		},
 		{
-			ID:        "T-0002",
+			ID:        "task_01h455vb4pex5vsknk084sn002",
+			Seq:       2,
 			Title:     "Refactor task list",
 			Status:    core.StatusInProgress,
 			Tags:      []string{"refactor"},
-			Reference: "tlc://hop-top/tlc/T-0002",
+			Reference: "tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn002",
 		},
 		{
-			ID:          "T-0003",
+			ID:          "task_01h455vb4pex5vsknk084sn003",
+			Seq:         3,
 			Title:       "Add golden snapshot tests",
 			Description: "Capture View() output for parity check.",
 			Status:      core.StatusDone,
 			Tags:        []string{"test"},
-			Reference:   "tlc://hop-top/tlc/T-0003",
+			Reference:   "tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn003",
 		},
 	}
 

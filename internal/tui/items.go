@@ -57,7 +57,7 @@ func (ti *taskItem) Render(width int) string {
 	}
 
 	return fmt.Sprintf("%s %s %s %s%s%s%s",
-		cursor, ti.task.ID, status, title,
+		cursor, displayAlias(ti.task), status, title,
 		syncIcon, ti.styles.Muted.Render(assignee), tags,
 	)
 }
@@ -151,9 +151,9 @@ func (ki *kanbanCardItem) Render(_ int) string {
 			Bold(true)
 	}
 
-	// Build card content: ID + title + tags.
+	// Build card content: alias + title + tags.
 	var b strings.Builder
-	b.WriteString(ki.task.ID)
+	b.WriteString(displayAlias(ki.task))
 	b.WriteByte('\n')
 	b.WriteString(ki.task.Title)
 
@@ -187,6 +187,19 @@ func formatStatusWithStyles(status core.TaskStatus, s *styles.Styles) string {
 	default:
 		return string(status)
 	}
+}
+
+// displayAlias renders a task's human-side reference. Prefers the
+// FormatTaskAlias (T-NNNN, derived from Seq) and falls back to the
+// durable id when Seq is unset (e.g. legacy or unseeded test data).
+func displayAlias(t *core.Task) string {
+	if t == nil {
+		return ""
+	}
+	if alias := core.FormatTaskAlias(t); alias != "" {
+		return alias
+	}
+	return t.ID
 }
 
 // getTagStyleFrom returns the lipgloss style for a tag from the tagColors map.
