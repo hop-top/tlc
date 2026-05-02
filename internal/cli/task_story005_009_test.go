@@ -228,10 +228,7 @@ func TestTaskReopen(t *testing.T) {
 		t.Fatalf("task reopen failed: %v", err)
 	}
 
-	s, _ := getStorageRaw()
-	defer s.Close()
-
-	task, _ := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task not found after reopen")
 	}
@@ -278,10 +275,7 @@ func TestTaskReopenAuditContinuity(t *testing.T) {
 		t.Fatalf("task reopen failed: %v", err)
 	}
 
-	s, _ := getStorageRaw()
-	defer s.Close()
-
-	task, _ := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task not found after reopen")
 	}

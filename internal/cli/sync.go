@@ -273,14 +273,11 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 		}
 
 		if existing == nil {
-			// Create new task
-			// Assign a new ID if not present
+			// Mint a durable TypeID for tasks pulled from remotes that
+			// don't carry their own ID. Storage allocates the per-project
+			// seq alias on insert.
 			if remoteTask.ID == "" {
-				allTasks, listErr := s.ListTasks(ctx, core.Query{})
-				if listErr != nil {
-					return fmt.Errorf("failed to list tasks for ID generation: %w", listErr)
-				}
-				remoteTask.ID = core.FormatTaskSeq(int64(len(allTasks) + 1))
+				remoteTask.ID = core.NewTaskID()
 			}
 			remoteTask.LastSyncAt = &now
 			if err := s.CreateTask(ctx, &remoteTask); err != nil {

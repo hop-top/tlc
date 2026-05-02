@@ -58,7 +58,7 @@ func TestTaskCreate(t *testing.T) {
 
 		s, _ := getStorageRaw()
 		defer s.Close()
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task was not created")
 		}
@@ -84,7 +84,7 @@ func TestTaskCreate(t *testing.T) {
 
 		s, _ := getStorageRaw()
 		defer s.Close()
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task was not created")
 		}
@@ -125,6 +125,8 @@ func TestTaskCreate(t *testing.T) {
 			t.Fatalf("task create with --id failed: %v", err)
 		}
 
+		// --id explicitly sets task.ID — look up by that literal,
+		// not via the seq-based alias helper.
 		task, _ := s.GetTask(ctx, "T-9999")
 		if task == nil {
 			t.Fatal("task not found after creation")
@@ -151,7 +153,7 @@ func TestTaskCreate(t *testing.T) {
 			t.Fatalf("task create with --reference failed: %v", err)
 		}
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task not found after creation")
 		}
@@ -224,7 +226,7 @@ func TestTaskCreateWithAssignee(t *testing.T) {
 		t.Fatalf("getStorageRaw: %v", err)
 	}
 	defer s.Close()
-	task, _ := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task was not created")
 	}
@@ -251,12 +253,7 @@ func TestTaskCreateWithTags(t *testing.T) {
 		t.Fatalf("task create with tags failed: %v", err)
 	}
 
-	s2, err := getStorageRaw()
-	if err != nil {
-		t.Fatalf("getStorageRaw: %v", err)
-	}
-	defer s2.Close()
-	task, _ := s2.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task was not created")
 	}
@@ -440,7 +437,7 @@ func TestTaskCreateWithCrossProjectBlockedBy(t *testing.T) {
 		t.Fatalf("task create with cross-project blocker failed: %v", err)
 	}
 
-	task, _ := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if task == nil {
 		t.Fatal("task not found after creation")
 	}

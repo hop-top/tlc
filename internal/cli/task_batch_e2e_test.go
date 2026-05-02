@@ -67,7 +67,12 @@ func TestBatchE2E_AssignRegexNoPrompt(t *testing.T) {
 			t.Errorf("expected %s → carol", id)
 		}
 	}
+	// T-0020 was seeded directly via storage with that literal as
+	// task.ID, so look it up by the same string (not via seq alias).
 	task, _ := s.GetTask(ctx, "T-0020")
+	if task == nil {
+		t.Fatal("T-0020 not found")
+	}
 	if task.AssignedTo != nil {
 		t.Errorf("expected T-0020 unassigned")
 	}

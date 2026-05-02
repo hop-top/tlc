@@ -10,6 +10,16 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
+// taskDisplayID renders the alias (T-NNNN) when seq is populated,
+// falling back to task.ID. Centralizes the lifecycle command output
+// so users see the human-friendly form, not the typeid PK.
+func taskDisplayID(t *core.Task) string {
+	if alias := core.FormatTaskAlias(t); alias != "" {
+		return alias
+	}
+	return t.ID
+}
+
 var TaskClaimCmd = &cobra.Command{
 	Use:   "claim <task-id|pattern>...",
 	Short: "Claim a task for work",
@@ -74,7 +84,7 @@ var TaskClaimCmd = &cobra.Command{
 				}
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", task.ID)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -137,7 +147,7 @@ var TaskUnclaimCmd = &cobra.Command{
 				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
 				continue
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", task.ID)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -205,7 +215,7 @@ var TaskAssignCmd = &cobra.Command{
 				continue
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", task.ID, assignee)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", taskDisplayID(task), assignee)
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -274,7 +284,7 @@ var TaskUnassignCmd = &cobra.Command{
 				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
 				continue
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", task.ID)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -339,7 +349,11 @@ var TaskCompleteCmd = &cobra.Command{
 				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
 				continue
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", task.ID)
+			alias := core.FormatTaskAlias(task)
+			if alias == "" {
+				alias = task.ID
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", alias)
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -412,7 +426,7 @@ var TaskReopenCmd = &cobra.Command{
 				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
 				continue
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", task.ID)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))

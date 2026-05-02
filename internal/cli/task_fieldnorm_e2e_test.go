@@ -183,7 +183,7 @@ func TestFieldNorm_E2E_UpdateStatusAlias(t *testing.T) {
 	} {
 		t.Run(tc.alias, func(t *testing.T) {
 			// Reset to TODO first
-			task, _ := s.GetTask(ctx, "T-0030")
+			task := mustGetTask(t, ctx, s, "T-0030")
 			task.Status = core.StatusTodo
 			_ = s.UpdateTask(ctx, task)
 
@@ -197,7 +197,7 @@ func TestFieldNorm_E2E_UpdateStatusAlias(t *testing.T) {
 				t.Fatalf("task update --status %s: %v", tc.alias, err)
 			}
 
-			updated, _ := s.GetTask(ctx, "T-0030")
+			updated := mustGetTask(t, ctx, s, "T-0030")
 			if updated.Status != tc.expect {
 				t.Errorf("alias %q: got status %s, want %s", tc.alias, updated.Status, tc.expect)
 			}

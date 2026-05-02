@@ -115,9 +115,9 @@ func TestTagAdd(t *testing.T) {
 			t.Fatalf("tag add failed: %v", err)
 		}
 
-		task, err := s.GetTask(ctx, "T-0001")
-		if err != nil || task == nil {
-			t.Fatalf("failed to get task: %v", err)
+		task := getTaskByAlias(t, ctx, "T-0001")
+		if task == nil {
+			t.Fatal("task not found")
 		}
 
 		tagSet := make(map[string]bool)
@@ -153,7 +153,7 @@ func TestTagAdd(t *testing.T) {
 			t.Fatalf("tag add (dedup) failed: %v", err)
 		}
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if len(task.Tags) != 1 {
 			t.Errorf("expected 1 tag after dedup; got %d: %v", len(task.Tags), task.Tags)
 		}

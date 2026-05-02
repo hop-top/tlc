@@ -5,6 +5,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 
@@ -160,6 +163,49 @@ func testClearAssignee(t *testing.T, clearValue string) {
 	if updatedTask.AssignedTo != nil {
 		t.Errorf("assignee field is %s, expected nil (cleared)", *updatedTask.AssignedTo)
 	}
+}
+
+// mustGetTask looks up a task by its literal task.ID (typeid OR
+// hand-seeded string) and fails the test if it doesn't exist. Used
+// by tests that seed rows directly via storage with a chosen string
+// as the primary key.
+func mustGetTask(t *testing.T, ctx context.Context, s *storage.SQLiteStorage, id string) *core.Task {
+	t.Helper()
+	task, err := s.GetTask(ctx, id)
+	if err != nil {
+		t.Fatalf("GetTask(%q): %v", id, err)
+	}
+	if task == nil {
+		t.Fatalf("task %q not found", id)
+	}
+	return task
+}
+
+// getTaskByAlias resolves a "T-NNNN" display alias to the row's
+// durable TypeID and returns the *core.Task. CLI-created tasks now
+// have TypeIDs as their primary key, so direct GetTask("T-0001")
+// returns nil; tests assert via the per-project seq alias instead.
+//
+// Returns nil when the alias doesn't resolve.
+func getTaskByAlias(t *testing.T, ctx context.Context, alias string) *core.Task {
+	t.Helper()
+	if !strings.HasPrefix(alias, "T-") {
+		t.Fatalf("getTaskByAlias: expected T-NNNN, got %q", alias)
+	}
+	n, err := strconv.ParseInt(alias[2:], 10, 64)
+	if err != nil {
+		t.Fatalf("getTaskByAlias: bad alias %q: %v", alias, err)
+	}
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+	task, err := s.GetTaskBySeq(ctx, "", n)
+	if err != nil {
+		t.Fatalf("GetTaskBySeq: %v", err)
+	}
+	return task
 }
 
 func createAndCompleteTask(t *testing.T, title, description string) {

@@ -36,7 +36,7 @@ func TestTaskLifecycle(t *testing.T) {
 			t.Fatalf("task claim with --note failed: %v", err)
 		}
 
-		task, _ = s.GetTask(ctx, "T-0001")
+		task = getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task not found after claim")
 		}
@@ -71,7 +71,7 @@ func TestTaskLifecycle(t *testing.T) {
 			t.Fatalf("task unclaim with --note failed: %v", err)
 		}
 
-		task, _ = s.GetTask(ctx, "T-0001")
+		task = getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task not found after unclaim")
 		}
@@ -125,10 +125,7 @@ func TestTaskAssign(t *testing.T) {
 		}
 		defer s.Close()
 
-		updatedTask, err := s.GetTask(ctx, "T-0001")
-		if err != nil {
-			t.Fatalf("failed to get task: %v", err)
-		}
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask == nil {
 			t.Fatal("task not found after assign")
 		}
@@ -178,10 +175,7 @@ func TestTaskAssign(t *testing.T) {
 		}
 		defer s.Close()
 
-		updatedTask, err := s.GetTask(ctx, "T-0001")
-		if err != nil {
-			t.Fatalf("failed to get task: %v", err)
-		}
+		updatedTask := getTaskByAlias(t, ctx, "T-0001")
 		if updatedTask == nil {
 			t.Fatal("task not found after assign")
 		}
@@ -194,7 +188,7 @@ func TestTaskAssign(t *testing.T) {
 		}
 
 		// Verify REASSIGNED log entry exists
-		logs, _ := s.GetLogs(ctx, "T-0001", "desc")
+		logs, _ := s.GetLogs(ctx, updatedTask.ID, "desc")
 		if len(logs) == 0 {
 			t.Fatal("expected at least one log entry")
 		}
@@ -294,7 +288,7 @@ func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
 	}
 	defer s.Close()
 
-	task, err := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if err != nil {
 		t.Fatalf("failed to get task: %v", err)
 	}
@@ -349,11 +343,7 @@ func TestTaskUnassign(t *testing.T) {
 	}
 	defer s.Close()
 
-	updatedTask, err := s.GetTask(ctx, "T-0001")
-	if err != nil {
-		t.Fatalf("failed to get task: %v", err)
-	}
-
+	updatedTask := getTaskByAlias(t, ctx, "T-0001")
 	if updatedTask == nil {
 		t.Fatal("task not found after unassign")
 	}
@@ -367,7 +357,7 @@ func TestTaskUnassign(t *testing.T) {
 	}
 
 	// Verify log entry
-	logs, _ := s.GetLogs(ctx, "T-0001", "desc")
+	logs, _ := s.GetLogs(ctx, updatedTask.ID, "desc")
 	if len(logs) == 0 {
 		t.Fatal("expected at least one log entry")
 	}
@@ -446,7 +436,7 @@ func TestTaskReopenAppendsNoteToDescription(t *testing.T) {
 	}
 	defer s.Close()
 
-	task, err := s.GetTask(ctx, "T-0001")
+	task := getTaskByAlias(t, ctx, "T-0001")
 	if err != nil {
 		t.Fatalf("failed to get task: %v", err)
 	}
@@ -511,7 +501,7 @@ func TestTaskComplete_RegexPattern(t *testing.T) {
 		}
 	}
 	// T-0010 should be untouched
-	task, _ := s.GetTask(ctx, "T-0010")
+	task := mustGetTask(t, ctx, s, "T-0010")
 	if task.Status != core.StatusInProgress {
 		t.Errorf("expected T-0010 still IN_PROGRESS, got %s", task.Status)
 	}
@@ -584,7 +574,7 @@ func TestTaskAssign_RegexPattern(t *testing.T) {
 			t.Errorf("expected %s assigned to bob", id)
 		}
 	}
-	task, _ := s.GetTask(ctx, "T-0010")
+	task := mustGetTask(t, ctx, s, "T-0010")
 	if task.AssignedTo != nil {
 		t.Errorf("expected T-0010 unassigned")
 	}

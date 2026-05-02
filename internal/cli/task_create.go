@@ -198,17 +198,12 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		meta["blocked_by"] = validated
 	}
 
+	// Mint a durable TypeID when the user didn't pass --id. Seq is allocated
+	// atomically by storage on insert (per-project monotonic counter) so we
+	// don't pre-allocate here.
 	finalID := id
 	if finalID == "" {
-		var projectID string
-		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
-			projectID = proj.ProjectID
-		}
-		seq, err := s.GetNextSequenceID(ctx, projectID)
-		if err != nil {
-			return fmt.Errorf("failed to get next sequence ID: %w", err)
-		}
-		finalID = core.FormatTaskSeq(int64(seq))
+		finalID = core.NewTaskID()
 	}
 
 	now := time.Now().UTC()
@@ -269,8 +264,10 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
 
-	// Retry with a fresh sequence ID if the generated ID collides with an existing task
-	// (sequence can lag behind tasks created via import or explicit --id).
+	// Retry with a fresh TypeID if the generated ID collides. TypeIDs are
+	// uuidv7-backed so collisions are vanishingly rare, but the retry is
+	// cheap and keeps create-task robust under any concurrent insert that
+	// happened to mint the same suffix.
 	for {
 		err := s.CreateTask(ctx, task)
 		if err == nil {
@@ -279,15 +276,8 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		if id != "" || !strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return fmt.Errorf("failed to create task: %w", err)
 		}
-		var projectID string
-		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
-			projectID = proj.ProjectID
-		}
-		seq, seqErr := s.GetNextSequenceID(ctx, projectID)
-		if seqErr != nil {
-			return fmt.Errorf("failed to create task: %w", err)
-		}
-		task.ID = core.FormatTaskSeq(int64(seq))
+		task.ID = core.NewTaskID()
+		task.Seq = 0 // re-allocate seq for the new id
 		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
 
@@ -302,7 +292,15 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		_, _ = fmt.Fprintf(w, "Warning: failed to write log: %v\n", err)
 	}
 
-	_, _ = fmt.Fprintf(w, "Created task %s: %s\n", task.ID, task.Title)
+	// Display alias by default; verbose output adds the durable TypeID.
+	alias := core.FormatTaskAlias(task)
+	if alias == "" {
+		alias = task.ID
+	}
+	_, _ = fmt.Fprintf(w, "Created task %s: %s\n", alias, task.Title)
+	if isVerboseOutput() && alias != task.ID {
+		_, _ = fmt.Fprintf(w, "  ID: %s\n", task.ID)
+	}
 	return nil
 }
 

@@ -55,9 +55,9 @@ func TestTaskTrackIntegration_E2E_CreateWithTrack(t *testing.T) {
 			t.Errorf("expected 'Created task' in output; got:\n%s", out)
 		}
 
-		task, err := s.GetTask(ctx, "T-0001")
-		if err != nil {
-			t.Fatalf("GetTask: %v", err)
+		task := getTaskByAlias(t, ctx, "T-0001")
+		if task == nil {
+			t.Fatal("task not found after create")
 		}
 		if task.TrackID == nil || *task.TrackID != trackTypeID {
 			t.Errorf(

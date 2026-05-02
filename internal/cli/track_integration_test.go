@@ -47,13 +47,18 @@ func TestTaskCreateWithTrack(t *testing.T) {
 			t.Errorf("expected 'Created task' in output, got: %s", output)
 		}
 
-		// Verify task has track_id set to the track's TypeID.
-		task, err := s.GetTask(ctx, "T-0001")
+		// Verify the newly-created task is linked to the track. Look it up
+		// via its seq alias (T-0001) since CLI now mints a TypeID for
+		// task.ID rather than persisting the alias.
+		task, err := s.GetTaskBySeq(ctx, "", 1)
 		if err != nil {
-			t.Fatalf("GetTask: %v", err)
+			t.Fatalf("GetTaskBySeq: %v", err)
 		}
 		if task == nil {
 			t.Fatal("task not found after create")
+		}
+		if !core.IsTaskID(task.ID) {
+			t.Errorf("task.ID = %q; want a TypeID", task.ID)
 		}
 		if task.TrackID == nil || *task.TrackID != trackTypeID {
 			t.Errorf("expected track_id=%s, got %v", trackTypeID, task.TrackID)
@@ -174,7 +179,7 @@ func TestTaskUpdateTrack(t *testing.T) {
 			t.Fatalf("task update --track track-a failed: %v", err)
 		}
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task.TrackID == nil || *task.TrackID != trackATypeID {
 			t.Errorf("expected track_id=%s, got %v", trackATypeID, task.TrackID)
 		}
@@ -192,7 +197,7 @@ func TestTaskUpdateTrack(t *testing.T) {
 			t.Fatalf("task update --track - failed: %v", err)
 		}
 
-		task, _ = s.GetTask(ctx, "T-0001")
+		task = getTaskByAlias(t, ctx, "T-0001")
 		if task.TrackID != nil {
 			t.Errorf("expected track_id=nil after unlink, got %v", *task.TrackID)
 		}

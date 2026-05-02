@@ -41,7 +41,11 @@ func runTaskPrompt(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	res, err := uri.NewResolver(s).ResolveTask(ctx, args[0])
+	canonical, err := parseTaskRefForCLI(ctx, s, args[0])
+	if err != nil {
+		return err
+	}
+	res, err := uri.NewResolver(s).ResolveTask(ctx, canonical)
 	if err != nil {
 		return fmt.Errorf("task %s not found; run 'tlc task list' to see available tasks", args[0])
 	}
@@ -255,6 +259,7 @@ func renderPromptMarkdown(w io.Writer, pc promptContext) {
 func renderPromptJSON(w io.Writer, pc promptContext) error {
 	out := promptJSONOutput{
 		ID:          pc.Task.ID,
+		Alias:       core.FormatTaskAlias(pc.Task),
 		Title:       pc.Task.Title,
 		Status:      string(pc.Task.Status),
 		Description: pc.Description,
@@ -281,6 +286,7 @@ func renderPromptJSON(w io.Writer, pc promptContext) error {
 // promptJSONOutput is the typed JSON output for --json mode.
 type promptJSONOutput struct {
 	ID          string           `json:"id"`
+	Alias       string           `json:"alias,omitempty"`
 	Title       string           `json:"title"`
 	Status      string           `json:"status"`
 	Description string           `json:"description,omitempty"`

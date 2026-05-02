@@ -84,10 +84,7 @@ func TestTaskPromptE2E_ClassifyAndComplete(t *testing.T) {
 		}
 		defer s.Close()
 
-		task, err := s.GetTask(ctx, "T-0001")
-		if err != nil {
-			t.Fatalf("GetTask: %v", err)
-		}
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task not found after complete")
 		}
@@ -220,8 +217,13 @@ func TestTaskPromptE2E_ContextDumpJSON(t *testing.T) {
 			t.Fatalf("invalid JSON output: %v\nraw: %s", err, buf2.String())
 		}
 
-		if parsed.ID != "T-0001" {
-			t.Errorf("expected id T-0001, got %q", parsed.ID)
+		// JSON `id` is the durable TypeID; user-facing alias lives in
+		// the `alias` field so scripts can pick whichever they need.
+		if !core.IsTaskID(parsed.ID) {
+			t.Errorf("expected TypeID-shaped id, got %q", parsed.ID)
+		}
+		if parsed.Alias != "T-0001" {
+			t.Errorf("expected alias T-0001, got %q", parsed.Alias)
 		}
 		if parsed.Title != "Build API gateway" {
 			t.Errorf("expected title 'Build API gateway', got %q", parsed.Title)
@@ -318,7 +320,7 @@ func TestTaskPromptE2E_DryRun(t *testing.T) {
 		}
 		defer s.Close()
 
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Fatal("task not found")
 		}
@@ -375,7 +377,7 @@ func TestTaskPromptE2E_DestructiveGuardReject(t *testing.T) {
 		}
 
 		// Verify the task still exists.
-		task, _ := s.GetTask(ctx, "T-0001")
+		task := getTaskByAlias(t, ctx, "T-0001")
 		if task == nil {
 			t.Error("task should still exist after rejected delete")
 		}
