@@ -213,6 +213,23 @@ func Execute() {
 	if ok {
 		os.Args = expanded
 	}
+	// Pre-parse -C/--chdir before cobra so that cobra.OnInitialize
+	// (which runs initConfig and walks os.Getwd() to detect the
+	// project) sees the post-chdir cwd. Kit's own -C handler runs in
+	// PersistentPreRunE — too late for project detection. We strip
+	// the flag from os.Args so kit doesn't double-chdir.
+	if newArgs, target, ok := preParseChdir(os.Args); ok {
+		dir, err := resolvePreChdirTarget(target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if err := os.Chdir(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: cannot chdir to %q: %s\n", dir, err)
+			os.Exit(1)
+		}
+		os.Args = newArgs
+	}
 	defer func() {
 		closePolicy()
 		if auditSub != nil {
@@ -616,4 +633,103 @@ func getStorage() (*storage.SQLiteStorage, error) {
 	touchProjectIfNeeded(s)
 	SetupProjector(s)
 	return s, nil
+}
+
+// preParseChdir scans args for the first occurrence of -C/--chdir and
+// returns (newArgs, target, true) with the flag stripped if found.
+// Recognised forms: `-C <path>`, `--chdir <path>`, `-C=<path>`,
+// `--chdir=<path>`. The flag is only recognised in the position before
+// `--`. When `--` is reached the scan stops (everything after is
+// treated as positional args).
+//
+// Returns (args, "", false) when no chdir flag is present so callers
+// can no-op cleanly.
+func preParseChdir(args []string) ([]string, string, bool) {
+	if len(args) <= 1 {
+		return args, "", false
+	}
+	out := make([]string, 0, len(args))
+	out = append(out, args[0])
+	target := ""
+	found := false
+	i := 1
+	for i < len(args) {
+		a := args[i]
+		// Stop scanning at "--": everything after is positional.
+		if a == "--" {
+			out = append(out, args[i:]...)
+			break
+		}
+		if !found {
+			if a == "-C" || a == "--chdir" {
+				if i+1 >= len(args) {
+					// No value follows; let cobra produce its
+					// own error by leaving the flag in place.
+					out = append(out, a)
+					i++
+					continue
+				}
+				target = args[i+1]
+				found = true
+				i += 2
+				continue
+			}
+			if strings.HasPrefix(a, "-C=") {
+				target = strings.TrimPrefix(a, "-C=")
+				found = true
+				i++
+				continue
+			}
+			if strings.HasPrefix(a, "--chdir=") {
+				target = strings.TrimPrefix(a, "--chdir=")
+				found = true
+				i++
+				continue
+			}
+		}
+		out = append(out, a)
+		i++
+	}
+	if !found {
+		return args, "", false
+	}
+	return out, target, true
+}
+
+// resolvePreChdirTarget expands ~ and converts the target to an
+// absolute path. The target must be an existing directory. Kit's
+// ChdirResolver (which can map non-dir targets to tool-specific
+// directories) is intentionally not consulted here — the pre-parse
+// only handles the common path case. Targets that are not directories
+// fall through with an error so the user gets a clear message before
+// kit gets a chance to run.
+func resolvePreChdirTarget(target string) (string, error) {
+	if target == "" {
+		return "", fmt.Errorf("-C/--chdir requires a non-empty path")
+	}
+	// Expand leading ~ to the user's home directory.
+	if strings.HasPrefix(target, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve ~ in %q: %w", target, err)
+		}
+		switch {
+		case target == "~":
+			target = home
+		case strings.HasPrefix(target, "~/"):
+			target = filepath.Join(home, target[2:])
+		}
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve %q: %w", target, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("cannot chdir to %q: %w", target, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("cannot chdir to %q: not a directory", target)
+	}
+	return abs, nil
 }

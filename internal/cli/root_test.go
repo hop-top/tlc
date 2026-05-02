@@ -438,6 +438,211 @@ func TestInitConfig_ExplicitConfigOverridesMergesWithCascade(t *testing.T) {
 	}
 }
 
+// TestPreParseChdir_NoFlagIsNoOp verifies the pre-parse helper returns
+// (args, "", false) when no -C/--chdir flag is present, leaving args
+// untouched. This is the critical no-op invariant for unrelated CLI
+// invocations.
+func TestPreParseChdir_NoFlagIsNoOp(t *testing.T) {
+	cases := [][]string{
+		{"tlc"},
+		{"tlc", "task", "list"},
+		{"tlc", "task", "create", "x", "--reference", "tlc://repo/T-1"},
+	}
+	for _, args := range cases {
+		newArgs, target, ok := preParseChdir(args)
+		if ok {
+			t.Errorf("preParseChdir(%v) ok=true, want false", args)
+		}
+		if target != "" {
+			t.Errorf("preParseChdir(%v) target=%q, want \"\"", args, target)
+		}
+		if len(newArgs) != len(args) {
+			t.Errorf("preParseChdir(%v) modified args: got %v", args, newArgs)
+		}
+	}
+}
+
+// TestPreParseChdir_StripsAllFlagForms verifies all four supported
+// forms of the chdir flag are recognised and stripped.
+func TestPreParseChdir_StripsAllFlagForms(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "short space-separated",
+			args: []string{"tlc", "-C", "/some/dir", "task", "list"},
+			want: []string{"tlc", "task", "list"},
+		},
+		{
+			name: "long space-separated",
+			args: []string{"tlc", "--chdir", "/some/dir", "task", "list"},
+			want: []string{"tlc", "task", "list"},
+		},
+		{
+			name: "short equals",
+			args: []string{"tlc", "-C=/some/dir", "task", "list"},
+			want: []string{"tlc", "task", "list"},
+		},
+		{
+			name: "long equals",
+			args: []string{"tlc", "--chdir=/some/dir", "task", "list"},
+			want: []string{"tlc", "task", "list"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			newArgs, target, ok := preParseChdir(tc.args)
+			if !ok {
+				t.Fatalf("preParseChdir() ok=false, want true")
+			}
+			if target != "/some/dir" {
+				t.Errorf("target = %q, want %q", target, "/some/dir")
+			}
+			if len(newArgs) != len(tc.want) {
+				t.Fatalf("newArgs = %v, want %v", newArgs, tc.want)
+			}
+			for i := range newArgs {
+				if newArgs[i] != tc.want[i] {
+					t.Errorf("newArgs[%d] = %q, want %q", i, newArgs[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestPreParseChdir_StopsAtDoubleDash verifies that flags after `--`
+// are treated as positional and not consumed by the chdir pre-parse.
+func TestPreParseChdir_StopsAtDoubleDash(t *testing.T) {
+	args := []string{"tlc", "exec", "--", "-C", "/should/not/strip"}
+	newArgs, _, ok := preParseChdir(args)
+	if ok {
+		t.Fatalf("preParseChdir() ok=true, want false (flag is positional)")
+	}
+	if len(newArgs) != len(args) {
+		t.Fatalf("newArgs = %v, want unchanged %v", newArgs, args)
+	}
+}
+
+// TestChdirSwitchesProjectContext verifies that pre-parsing -C
+// chdirs before project detection runs, so the resulting project ID
+// reflects the new directory rather than the original cwd. This is
+// the regression test for T-1121.
+func TestChdirSwitchesProjectContext(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	projA := filepath.Join(tmpDir, "projA")
+	projB := filepath.Join(tmpDir, "projB")
+	for _, p := range []string{projA, projB} {
+		tlcDir := filepath.Join(p, ".tlc")
+		if err := os.MkdirAll(tlcDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Write a minimal project config with a stable project id
+		// so DetectProject can return a deterministic value.
+		body := "project:\n  id: " + filepath.Base(p) + "\nstorage:\n  db_path: " + filepath.Join(tlcDir, "db.sqlite") + "\n"
+		if err := os.WriteFile(filepath.Join(tlcDir, "config.yaml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	oldWd, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldWd) }()
+	if err := os.Chdir(projA); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity check: with no flag, scanning preParseChdir leaves args
+	// alone and the original cwd is preserved.
+	if _, _, ok := preParseChdir([]string{"tlc", "task", "list"}); ok {
+		t.Fatalf("no-flag pre-parse should return ok=false")
+	}
+
+	// Now simulate `tlc -C <projB> task list`. After the pre-parse
+	// chdir step, os.Getwd() must report projB.
+	args := []string{"tlc", "-C", projB, "task", "list"}
+	newArgs, target, ok := preParseChdir(args)
+	if !ok {
+		t.Fatalf("preParseChdir ok=false, want true")
+	}
+	if target != projB {
+		t.Fatalf("target = %q, want %q", target, projB)
+	}
+	dir, err := resolvePreChdirTarget(target)
+	if err != nil {
+		t.Fatalf("resolvePreChdirTarget: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("os.Chdir(%s): %v", dir, err)
+	}
+	gotWd, _ := os.Getwd()
+	wantWd, _ := filepath.EvalSymlinks(projB)
+	gotWdResolved, _ := filepath.EvalSymlinks(gotWd)
+	if gotWdResolved != wantWd {
+		t.Fatalf("post-chdir cwd = %q, want %q", gotWdResolved, wantWd)
+	}
+
+	// Args must no longer carry -C / target — kit must not see it.
+	for _, a := range newArgs {
+		if a == "-C" || a == "--chdir" || a == projB {
+			t.Fatalf("newArgs still contains chdir flag/target: %v", newArgs)
+		}
+	}
+
+	// Project detection now resolves to projB. We exercise
+	// initConfig + viper directly because DetectProject caches its
+	// result process-wide.
+	cfgFile = ""
+	viper.Reset()
+	initConfig()
+	if got := viper.GetString("project.id"); got != "projB" {
+		t.Fatalf("project.id = %q, want %q (project context did not switch)", got, "projB")
+	}
+}
+
+// TestResolvePreChdirTarget_TildeAndRelative verifies ~ expansion and
+// relative path resolution against the current working directory.
+func TestResolvePreChdirTarget_TildeAndRelative(t *testing.T) {
+	tmpDir := t.TempDir()
+	sub := filepath.Join(tmpDir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldWd, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldWd) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Relative path
+	got, err := resolvePreChdirTarget("sub")
+	if err != nil {
+		t.Fatalf("resolvePreChdirTarget(sub): %v", err)
+	}
+	wantSub, _ := filepath.EvalSymlinks(sub)
+	gotResolved, _ := filepath.EvalSymlinks(got)
+	if gotResolved != wantSub {
+		t.Errorf("relative resolved to %q, want %q", gotResolved, wantSub)
+	}
+
+	// ~ expansion (resolves to home dir; we just need it to not error
+	// and to produce an absolute path).
+	got, err = resolvePreChdirTarget("~")
+	if err != nil {
+		t.Fatalf("resolvePreChdirTarget(~): %v", err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("~ did not resolve to absolute path: %q", got)
+	}
+
+	// Non-existent path returns an error.
+	if _, err := resolvePreChdirTarget(filepath.Join(tmpDir, "does-not-exist")); err == nil {
+		t.Errorf("expected error for non-existent path")
+	}
+}
+
 // TestFindAllConfigsForMode_HopIgnoresStandalone verifies hop mode
 // does not pick up standalone config paths.
 func TestFindAllConfigsForMode_HopIgnoresStandalone(t *testing.T) {
