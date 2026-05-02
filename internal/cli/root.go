@@ -75,6 +75,63 @@ func GetBusPublisher() domain.EventPublisher {
 // GetEventBus returns the process-wide bus.Bus, or nil if not initialised.
 func GetEventBus() bus.Bus { return eventBus }
 
+// commandGroups maps each top-level command name to the cobra GroupID it
+// belongs to. Mirrors the §4.1 taxonomy from
+// ~/.ops/docs/cli-conventions-with-kit.md. Every visible top-level command
+// must have an entry — applyCommandGroups() asserts on missing entries via
+// the regression test.
+var commandGroups = map[string]string{
+	// KNOWLEDGE — task and track-shaped data, audit, and prompts.
+	"task":    "knowledge",
+	"tasks":   "knowledge",
+	"track":   "knowledge",
+	"flow":    "knowledge",
+	"log":     "knowledge",
+	"project": "knowledge",
+	"prompt":  "knowledge",
+
+	// CURATE — metadata, intake, sync.
+	"tag":      "curate",
+	"label":    "curate",
+	"assignee": "curate",
+	"inbox":    "curate",
+	"sync":     "curate",
+
+	// ORGANIZE — workspace, environment, scaffolding.
+	"workspace": "organize",
+	"doctor":    "organize",
+	"init":      "organize",
+	"schema":    "organize",
+	"workflow":  "organize",
+
+	// INTERACT — interactive surfaces.
+	"tui":   "interact",
+	"agent": "interact",
+
+	// INSTANCE — node-bound concerns (auth, URI handlers).
+	"auth": "instance",
+	"uri":  "instance",
+
+	// MANAGEMENT — meta/tooling, hidden by default.
+	"config":     "management",
+	"alias":      "management",
+	"version":    "management",
+	"upgrade":    "management",
+	"completion": "management",
+}
+
+// applyCommandGroups walks RootCmd.Commands() and sets each child's GroupID
+// from commandGroups. Must be invoked after all subcommand init() functions
+// have registered their commands (i.e. before kit's Execute) so every
+// child sees its assignment.
+func applyCommandGroups() {
+	for _, c := range RootCmd.Commands() {
+		if id, ok := commandGroups[c.Name()]; ok {
+			c.GroupID = id
+		}
+	}
+}
+
 // kitRoot constructs the root command using kit/cli.New() and wires up
 // TLC-specific flags, viper bindings, and lifecycle hooks.
 func kitRoot() *kitcli.Root {
@@ -82,6 +139,18 @@ func kitRoot() *kitcli.Root {
 		Name:    "tlc",
 		Version: tlcVersion,
 		Short:   "Task Line CLI - Multi-agent task orchestration",
+		// Help.Groups registers custom groups in display order. Kit adds
+		// the built-in "management" group (Hidden) automatically — do not
+		// re-list it here or AddGroup would duplicate it.
+		Help: kitcli.HelpConfig{
+			Groups: []kitcli.GroupConfig{
+				{ID: "knowledge", Title: "KNOWLEDGE"},
+				{ID: "curate", Title: "CURATE"},
+				{ID: "organize", Title: "ORGANIZE"},
+				{ID: "interact", Title: "INTERACT"},
+				{ID: "instance", Title: "INSTANCE"},
+			},
+		},
 	})
 
 	cmd := root.Cmd
@@ -230,6 +299,13 @@ func Execute() {
 		}
 		os.Args = newArgs
 	}
+	// Subcommands register on RootCmd via their own init() funcs, which
+	// run before main() — by the time Execute() is called they are all
+	// attached. Set GroupID now so kit's help renderer groups them
+	// correctly. Must run after preParseChdir (so we don't change cwd
+	// inside this function before stripping the flag) and before kit's
+	// Execute (which dispatches to fang for help rendering).
+	applyCommandGroups()
 	defer func() {
 		closePolicy()
 		if auditSub != nil {

@@ -577,6 +577,22 @@ func newTestCmd() *cobra.Command {
 		Short: "Task Line CLI - Multi-agent task orchestration",
 	}
 
+	// Register the same command groups the production root uses.
+	// applyCommandGroups() (called from Execute and from regression
+	// tests) sets GroupID on the global subcommand vars (TaskCmd, etc.).
+	// When a test attaches one of those globals to a fresh root via
+	// cmd.AddCommand(TaskCmd), cobra's checkCommandGroups panics unless
+	// the parent has the group defined — mirror the production groups
+	// so any test cmd accepts the grouped subcommands.
+	cmd.AddGroup(
+		&cobra.Group{ID: "knowledge", Title: "KNOWLEDGE"},
+		&cobra.Group{ID: "curate", Title: "CURATE"},
+		&cobra.Group{ID: "organize", Title: "ORGANIZE"},
+		&cobra.Group{ID: "interact", Title: "INTERACT"},
+		&cobra.Group{ID: "instance", Title: "INSTANCE"},
+		&cobra.Group{ID: "management", Title: "MANAGEMENT"},
+	)
+
 	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file")
 	cmd.PersistentFlags().StringP("format", "f", "", "output format (table, json, yaml, tls, summary)")
 	cmd.PersistentFlags().Bool("no-color", false, "disable colored output")

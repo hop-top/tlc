@@ -666,3 +666,74 @@ func TestFindAllConfigsForMode_HopIgnoresStandalone(t *testing.T) {
 			len(configs), configs)
 	}
 }
+
+// TestApplyCommandGroups verifies the §4.1 taxonomy mapping is enforced on
+// every visible top-level command. Two failure modes:
+//  1. A command in the map has the wrong GroupID after applyCommandGroups()
+//     runs (regression in commandGroups assignments).
+//  2. A new top-level command was registered without a commandGroups entry,
+//     leaving its GroupID empty — every new command must opt into a group
+//     so help output stays grouped.
+//
+// Hidden commands (e.g. the deprecated `tasks` parent) are exempt: kit's
+// help renderer already filters them, and assigning them a group would
+// drag them back into the visible help output.
+func TestApplyCommandGroups(t *testing.T) {
+	applyCommandGroups()
+
+	// Spot-check a representative entry from each group to catch silent
+	// regressions where commandGroups is rewritten but applyCommandGroups
+	// stops walking RootCmd.Commands().
+	want := map[string]string{
+		"task":      "knowledge",
+		"track":     "knowledge",
+		"flow":      "knowledge",
+		"log":       "knowledge",
+		"project":   "knowledge",
+		"prompt":    "knowledge",
+		"tag":       "curate",
+		"label":     "curate",
+		"assignee":  "curate",
+		"inbox":     "curate",
+		"sync":      "curate",
+		"workspace": "organize",
+		"doctor":    "organize",
+		"init":      "organize",
+		"schema":    "organize",
+		"workflow":  "organize",
+		"tui":       "interact",
+		"agent":     "interact",
+		"auth":      "instance",
+		"uri":       "instance",
+		"config":    "management",
+		"alias":     "management",
+		"version":   "management",
+		"upgrade":   "management",
+	}
+
+	got := make(map[string]string, len(RootCmd.Commands()))
+	for _, c := range RootCmd.Commands() {
+		got[c.Name()] = c.GroupID
+	}
+
+	for name, group := range want {
+		if got[name] != group {
+			t.Errorf("command %q: GroupID = %q, want %q",
+				name, got[name], group)
+		}
+	}
+
+	// Every visible top-level command must have a GroupID. Hidden
+	// commands (kit's auto-injected `help`, the deprecated `tasks`
+	// parent) are skipped — they never appear in --help output.
+	for _, c := range RootCmd.Commands() {
+		if c.Hidden {
+			continue
+		}
+		if c.GroupID == "" {
+			t.Errorf("top-level command %q has no GroupID; "+
+				"add an entry to commandGroups in root.go",
+				c.Name())
+		}
+	}
+}
