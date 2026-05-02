@@ -90,15 +90,16 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 
 // trackShowOutput is the structured output for JSON/YAML rendering.
 type trackShowOutput struct {
-	ID                string                 `json:"id" yaml:"id"`
-	Title             string                 `json:"title" yaml:"title"`
-	Type              string                 `json:"type" yaml:"type"`
-	Status            string                 `json:"status" yaml:"status"`
-	State             []string               `json:"state" yaml:"state"`
-	Assignee          string                 `json:"assignee" yaml:"assignee"`
-	CreatedAt         string                 `json:"created_at" yaml:"created_at"`
-	UpdatedAt         string                 `json:"updated_at" yaml:"updated_at"`
-	Progress          *core.TrackProgress    `json:"progress" yaml:"progress"`
+	ID                string                  `json:"id" yaml:"id"`
+	Slug              string                  `json:"slug,omitempty" yaml:"slug,omitempty"`
+	Title             string                  `json:"title" yaml:"title"`
+	Type              string                  `json:"type" yaml:"type"`
+	Status            string                  `json:"status" yaml:"status"`
+	State             []string                `json:"state" yaml:"state"`
+	Assignee          string                  `json:"assignee" yaml:"assignee"`
+	CreatedAt         string                  `json:"created_at" yaml:"created_at"`
+	UpdatedAt         string                  `json:"updated_at" yaml:"updated_at"`
+	Progress          *core.TrackProgress     `json:"progress" yaml:"progress"`
 	ExecutionStrategy *core.ExecutionStrategy `json:"execution_strategy,omitempty" yaml:"execution_strategy,omitempty"`
 }
 
@@ -118,6 +119,7 @@ func buildTrackShowOutput(
 	}
 	return trackShowOutput{
 		ID:                t.ID,
+		Slug:              t.Slug,
 		Title:             t.Title,
 		Type:              t.Type,
 		Status:            string(t.Status),
@@ -139,7 +141,10 @@ func renderTrackShowDetail(
 	strategy *core.ExecutionStrategy,
 ) {
 	// Header
-	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", t.ID)))
+	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", formatTrackAlias(t))))
+	if isVerboseOutput() && t.ID != "" && t.ID != formatTrackAlias(t) {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("ID:"), t.ID)
+	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)
 
 	stateStrs := make([]string, len(flags))
@@ -244,7 +249,7 @@ func renderPhaseTask(w io.Writer, task *core.Task) {
 	default:
 		styled = fmt.Sprintf("[%s]", statusStr)
 	}
-	_, _ = fmt.Fprintf(w, "  %-10s %-15s %s\n", task.ID, styled, task.Title)
+	_, _ = fmt.Fprintf(w, "  %-10s %-15s %s\n", formatTaskAlias(task), styled, task.Title)
 }
 
 // buildPhaseTasks groups tasks by their phase tag number.
