@@ -48,7 +48,7 @@ var TaskCreateCmd = &cobra.Command{
 		}
 
 		var sched taskScheduling
-		if err := sched.parse(taskDue, taskRemindAt, taskRemindEvery, taskNoAutoRemind); err != nil {
+		if err := sched.parse(taskDue, taskRemindAt, taskRRule, taskNoAutoRemind); err != nil {
 			return err
 		}
 
@@ -236,7 +236,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	if sched != nil {
 		task.DueAt = sched.dueAt
 		task.RemindAt = sched.remindAt
-		task.RemindEvery = sched.remindEvery
+		task.RRule = sched.rrule
 		task.NoAutoRemind = sched.noAutoRemind
 	}
 
@@ -341,7 +341,7 @@ func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&taskTrack, "track", "", "Link task to a track ID")
 	cmd.Flags().StringVar(&taskDue, "due", "", "Due date (tomorrow, in 3d, 2025-05-01)")
 	cmd.Flags().StringVar(&taskRemindAt, "remind-at", "", "One-shot reminder time")
-	cmd.Flags().StringVar(&taskRemindEvery, "remind-every", "", "Recurring reminder interval (1h, 30m)")
+	cmd.Flags().StringVar(&taskRRule, "rrule", "", "Recurring reminder RRULE (e.g. FREQ=DAILY, FREQ=WEEKLY;BYDAY=MO,WE,FR)")
 	cmd.Flags().BoolVar(&taskNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
 	cmd.Flags().StringSliceVar(&taskEva, "eva", []string{}, "Eva annotations (repeatable)")
 }

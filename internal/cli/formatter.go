@@ -459,8 +459,8 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	if t.RemindAt != nil {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Remind At:"), t.RemindAt.Format(time.RFC3339))
 	}
-	if t.RemindEvery != nil {
-		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Remind Every:"), t.RemindEvery.String())
+	if t.RRule != "" {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("RRule:"), t.RRule)
 	}
 	if t.NoAutoRemind {
 		_, _ = fmt.Fprintf(w, "%s yes\n", labelStyle.Render("No Auto-Remind:"))

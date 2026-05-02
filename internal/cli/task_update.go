@@ -230,20 +230,15 @@ var TaskUpdateCmd = &cobra.Command{
 				}
 				changed = true
 			}
-			if cmd.Flags().Changed("remind-every") {
-				if taskUpdateRemindEvery == "-" || taskUpdateRemindEvery == "" {
-					task.RemindEvery = nil
+			if cmd.Flags().Changed("rrule") {
+				if taskUpdateRRule == "-" || taskUpdateRRule == "" {
+					task.RRule = ""
 				} else {
-					d, err := time.ParseDuration(taskUpdateRemindEvery)
-					if err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --remind-every: %v", task.ID, err))
+					if err := core.ValidateRRule(taskUpdateRRule); err != nil {
+						errs = append(errs, fmt.Sprintf("%s: invalid --rrule: %v", task.ID, err))
 						continue
 					}
-					if d <= 0 {
-						errs = append(errs, fmt.Sprintf("%s: --remind-every must be positive", task.ID))
-						continue
-					}
-					task.RemindEvery = &d
+					task.RRule = taskUpdateRRule
 				}
 				changed = true
 			}
@@ -418,7 +413,7 @@ func init() {
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateTrack, "track", "", "Link to track ID (use '-' to unlink)")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateDue, "due", "", "Due date (tomorrow, in 3d, 2025-05-01)")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindAt, "remind-at", "", "One-shot reminder time")
-	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindEvery, "remind-every", "", "Recurring reminder interval (1h, 30m)")
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateRRule, "rrule", "", "Recurring reminder RRULE (use '-' to clear)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")

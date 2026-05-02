@@ -89,12 +89,12 @@ var (
 
 	taskDue          string
 	taskRemindAt     string
-	taskRemindEvery  string
+	taskRRule        string
 	taskNoAutoRemind bool
 
 	taskUpdateDue          string
 	taskUpdateRemindAt     string
-	taskUpdateRemindEvery  string
+	taskUpdateRRule        string
 	taskUpdateNoAutoRemind bool
 
 	taskEva              []string
