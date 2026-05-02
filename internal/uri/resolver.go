@@ -16,11 +16,26 @@ import (
 type Resolver struct {
 	storage  *storage.SQLiteStorage
 	FlowsDir string // overrides default flows directory; empty = "examples/flows"
+
+	// DBCache caches cross-project DB handles. When nil, ResolveTask
+	// opens a fresh handle on every cross-DB lookup and the caller (or
+	// a deferred close in ResolvedTask) must close it. When non-nil,
+	// handles are owned by the cache; callers MUST invoke
+	// ProjectDBCache.Close before the command exits.
+	DBCache *ProjectDBCache
 }
 
 // NewResolver creates a new URI resolver.
 func NewResolver(s *storage.SQLiteStorage) *Resolver {
 	return &Resolver{storage: s}
+}
+
+// WithDBCache returns a copy of the resolver bound to cache so cross-DB
+// handles are reused for the lifetime of the cache.
+func (r *Resolver) WithDBCache(cache *ProjectDBCache) *Resolver {
+	cp := *r
+	cp.DBCache = cache
+	return &cp
 }
 
 // defaultFlowsDir returns the configured or default flows directory.
@@ -84,29 +99,53 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 		return &ResolvedTask{Task: task, Storage: r.storage}, nil
 	}
 
-	// Look up project in global registry
-	regProj, err := r.storage.LookupProject(ctx, projectID)
+	// Look up project in registry with fuzzy fallbacks (label, prefix).
+	regProj, err := ResolveProjectRef(ctx, r.storage, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup project %q: %w", projectID, err)
-	}
-	if regProj == nil {
-		return nil, &ErrProjectNotFound{ProjectID: projectID}
+		return nil, err
 	}
 
-	// Open project database
-	projStorage, err := storage.NewSQLiteStorage(regProj.DBPath)
+	// Open project database via cache when present so multiple lookups
+	// in the same command share a single handle.
+	var projStorage *storage.SQLiteStorage
+	cached := r.DBCache != nil
+	if cached {
+		projStorage, err = r.DBCache.Open(regProj.DBPath)
+	} else {
+		projStorage, err = storage.NewSQLiteStorage(regProj.DBPath)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to open project database %q: %w", regProj.DBPath, err)
 	}
 
-	task, err := projStorage.GetTask(ctx, taskID)
+	// Look up the task in the resolved project's DB scoped to the
+	// canonical project_id (so a label/prefix-matched project still
+	// hits the right rows).
+	task, err := projStorage.GetTaskInProject(ctx, taskID, regProj.ProjectID)
 	if err != nil {
-		_ = projStorage.Close()
+		if !cached {
+			_ = projStorage.Close()
+		}
 		return nil, err
 	}
 	if task == nil {
-		_ = projStorage.Close()
-		return nil, &ErrTaskNotFound{ID: taskID, ProjectID: projectID}
+		// Fall back to an unscoped lookup so DBs that pre-date
+		// project_id stamping (project_id='' in old rows) still
+		// resolve. GetTask without a current-project context returns
+		// the global bucket entry first.
+		task, err = projStorage.GetTaskInProject(ctx, taskID, "")
+		if err != nil {
+			if !cached {
+				_ = projStorage.Close()
+			}
+			return nil, err
+		}
+	}
+	if task == nil {
+		if !cached {
+			_ = projStorage.Close()
+		}
+		return nil, &ErrTaskNotFound{ID: taskID, ProjectID: regProj.ProjectID}
 	}
 
 	return &ResolvedTask{Task: task, Storage: projStorage}, nil

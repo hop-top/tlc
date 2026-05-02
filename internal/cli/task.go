@@ -285,11 +285,24 @@ func pushSyncedTask(ctx context.Context, task *core.Task, s core.Repository) err
 	return nil
 }
 
+// validateBlockedByRefs resolves each blocked_by reference against the
+// project registry. Cross-project refs (containing "/" or "://") are
+// resolved through registryStorage with fuzzy project matching (label,
+// id-prefix, label-prefix) and a shared DB handle cache, so a single
+// command invocation reuses one cross-project SQLite handle per db_path.
+//
+// The cache is opened and closed inside this function: handles never
+// outlive the call. registryStorage and localStorage may be the same
+// *SQLiteStorage (the common case where the local DB also serves as the
+// project registry).
 func validateBlockedByRefs(ctx context.Context, registryStorage, localStorage *storage.SQLiteStorage, refs []string) ([]string, error) {
 	normalized := core.NormalizeBlockedBy(refs)
 	if len(normalized) == 0 {
 		return nil, nil
 	}
+
+	cache := uri.NewProjectDBCache()
+	defer cache.Close()
 
 	validated := make([]string, 0, len(normalized))
 	for _, ref := range normalized {
@@ -299,7 +312,8 @@ func validateBlockedByRefs(ctx context.Context, registryStorage, localStorage *s
 			resolverStorage = registryStorage
 		}
 
-		resolved, err := uri.NewResolver(resolverStorage).ResolveTask(ctx, normalizedRef)
+		resolver := uri.NewResolver(resolverStorage).WithDBCache(cache)
+		resolved, err := resolver.ResolveTask(ctx, normalizedRef)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"invalid blocked_by reference %q: %w; run 'tlc task list' to see available task IDs",
@@ -308,9 +322,6 @@ func validateBlockedByRefs(ctx context.Context, registryStorage, localStorage *s
 		}
 
 		validated = append(validated, canonicalBlockedByRef(localStorage, normalizedRef, resolved))
-		if resolved.Storage != resolverStorage {
-			_ = resolved.Storage.Close()
-		}
 	}
 
 	return core.NormalizeBlockedBy(validated), nil
