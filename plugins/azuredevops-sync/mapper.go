@@ -2,9 +2,63 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
+
+	"go.jetify.com/typeid"
 )
+
+// tlcUIDRe matches the tlc TypeID footer embedded in remote issue bodies.
+// Format: <!-- tlc-uid: task_<26 char crockford base32> -->
+//
+// The footer carries the tlc task TypeID across a sync round-trip so that a
+// later sync.pull recognizes the issue as an existing tlc row instead of
+// creating a duplicate. Mirrors hop.top/tlc/internal/core.IsTaskID /
+// NewTaskID — kept inline because plugin sub-modules cannot import the tlc
+// internal package.
+var tlcUIDRe = regexp.MustCompile(`<!-- tlc-uid: (task_[0-9a-z]{26}) -->`)
+
+var taskTypeIDPattern = regexp.MustCompile(`^task_[0-9a-z]{26}$`)
+
+// isTaskID reports whether s is a syntactically valid task TypeID.
+func isTaskID(s string) bool { return taskTypeIDPattern.MatchString(s) }
+
+// newTaskID returns a fresh TypeID-shaped task identifier
+// (e.g. "task_01h455vb4pex5vsknk084sn02q").
+func newTaskID() string {
+	id, err := typeid.WithPrefix("task")
+	if err != nil {
+		// jetify's WithPrefix only errors on invalid prefixes; ours is constant
+		// and known-valid.
+		panic("typeid: newTaskID: " + err.Error())
+	}
+	return id.String()
+}
+
+// recoverOrMintTaskID returns the tlc TypeID embedded in body's tlc-uid
+// footer, or mints a fresh one when no footer is present.
+func recoverOrMintTaskID(body string) string {
+	if m := tlcUIDRe.FindStringSubmatch(body); m != nil && isTaskID(m[1]) {
+		return m[1]
+	}
+	return newTaskID()
+}
+
+// embedTLCUIDFooter appends the tlc-uid footer to body when taskID is a
+// valid TypeID, stripping any pre-existing footer to avoid duplication.
+func embedTLCUIDFooter(body, taskID string) string {
+	body = tlcUIDRe.ReplaceAllString(body, "")
+	body = strings.TrimRight(body, "\n ")
+
+	if isTaskID(taskID) {
+		if body != "" {
+			body += "\n\n"
+		}
+		body += "<!-- tlc-uid: " + taskID + " -->"
+	}
+	return body
+}
 
 // Task represents the TLC task structure as used by sync plugins.
 type Task struct {
@@ -137,7 +191,7 @@ func MapWorkItemToTask(wi *WorkItem, org, project string) *Task {
 	}
 
 	return &Task{
-		ID:            fmt.Sprintf("AZ-%d", wi.ID),
+		ID:            recoverOrMintTaskID(description),
 		Title:         title,
 		Description:   description,
 		Status:        status,
@@ -205,9 +259,11 @@ func mapADOPriority(fields WorkItemFields) string {
 
 // MapTaskToWorkItem builds JSON Patch operations for creating/updating an ADO work item.
 func MapTaskToWorkItem(task *Task) []PatchOperation {
+	desc := embedTLCUIDFooter(task.Description, task.ID)
+
 	ops := []PatchOperation{
 		{Op: "add", Path: "/fields/System.Title", Value: task.Title},
-		{Op: "add", Path: "/fields/System.Description", Value: task.Description},
+		{Op: "add", Path: "/fields/System.Description", Value: desc},
 		{Op: "add", Path: "/fields/System.State", Value: mapStatusToState(task.Status, task.BlockedReason)},
 	}
 

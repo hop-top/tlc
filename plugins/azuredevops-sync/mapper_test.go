@@ -343,6 +343,80 @@ func TestMapTaskToWorkItem(t *testing.T) {
 	}
 }
 
+// --- TypeID round-trip (T-0823) ---
+
+func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
+	const taskID = "task_01h455vb4pex5vsknk084sn02q"
+
+	original := &Task{
+		ID:          taskID,
+		Title:       "round-trip",
+		Status:      "TODO",
+		Description: "body text",
+	}
+
+	ops := MapTaskToWorkItem(original)
+	opMap := patchMap(ops)
+
+	desc, _ := opMap["/fields/System.Description"].(string)
+	if !contains(desc, "<!-- tlc-uid: "+taskID+" -->") {
+		t.Fatalf("System.Description missing tlc-uid footer: %q", desc)
+	}
+
+	// Pull back: reconstruct a WorkItem with the patched description.
+	wi := &WorkItem{
+		ID: 99,
+		Fields: WorkItemFields{
+			"System.Title":       "round-trip",
+			"System.Description": desc,
+			"System.State":       "New",
+			"System.CreatedDate": "2026-01-01T00:00:00Z",
+			"System.ChangedDate": "2026-01-02T00:00:00Z",
+		},
+	}
+	got := MapWorkItemToTask(wi, "org", "proj")
+
+	if got.ID != taskID {
+		t.Errorf("round-trip ID = %q, want %q", got.ID, taskID)
+	}
+}
+
+func TestTypeIDRoundTrip_GeneratesWhenAbsent(t *testing.T) {
+	wi := &WorkItem{
+		ID: 100,
+		Fields: WorkItemFields{
+			"System.Title":       "no footer",
+			"System.Description": "plain description",
+			"System.State":       "New",
+			"System.CreatedDate": "2026-01-01T00:00:00Z",
+			"System.ChangedDate": "2026-01-02T00:00:00Z",
+		},
+	}
+	got := MapWorkItemToTask(wi, "org", "proj")
+
+	if !isTaskTypeID(got.ID) {
+		t.Errorf("ID = %q, want fresh task_<26char> typeid", got.ID)
+	}
+}
+
+// isTaskTypeID is a local shape check — see internal/core/typeid.go.
+func isTaskTypeID(s string) bool {
+	if len(s) != len("task_")+26 {
+		return false
+	}
+	if s[:5] != "task_" {
+		return false
+	}
+	for _, r := range s[5:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'z')) {
+			return false
+		}
+	}
+	return true
+}
+
+func contains(s, sub string) bool { return findSubstr(s, sub) }
+
 func TestMapBlockedByToLinkPatches(t *testing.T) {
 	ops := MapBlockedByToLinkPatches(
 		[]string{"AZ-10", "AZ-20"}, "org1", "proj1",
