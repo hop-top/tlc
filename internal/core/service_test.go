@@ -26,6 +26,19 @@ func (m *mockRepo) GetTask(_ context.Context, id string) (*Task, error) {
 	return m.tasks[id], nil
 }
 
+func (m *mockRepo) GetTaskBySeq(_ context.Context, projectID string, seq int64) (*Task, error) {
+	for _, t := range m.tasks {
+		var pid string
+		if t.ProjectID != nil {
+			pid = *t.ProjectID
+		}
+		if pid == projectID && t.Seq == seq {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *mockRepo) UpdateTask(_ context.Context, t *Task) error {
 	m.tasks[t.ID] = t
 	return nil

@@ -40,6 +40,20 @@ func (r *reconcileTaskRepo) GetTask(_ context.Context, id string) (*Task, error)
 	return &cp, nil
 }
 
+func (r *reconcileTaskRepo) GetTaskBySeq(_ context.Context, projectID string, seq int64) (*Task, error) {
+	for _, t := range r.tasks {
+		var pid string
+		if t.ProjectID != nil {
+			pid = *t.ProjectID
+		}
+		if pid == projectID && t.Seq == seq {
+			cp := *t
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *reconcileTaskRepo) UpdateTask(_ context.Context, task *Task) error {
 	cp := *task
 	if task.Meta != nil {

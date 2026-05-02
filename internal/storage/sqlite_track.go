@@ -48,18 +48,39 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 	})
 }
 
+// GetTrack retrieves a track by either its TypeID primary key or its
+// (project_id, slug) display alias. Slug fallback keeps callers that
+// pass user-typed values working without an explicit ParseTrackRef hop.
 func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, error) {
 	var row *sql.Row
-	if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
-		row = s.db.QueryRowContext(ctx, `
-			SELECT id, slug, title, type, status, assigned_to,
-				created_at, updated_at, project_id, meta, plan_mapping
-			FROM tracks WHERE id = ? AND project_id = ?`, id, proj.ProjectID)
+	proj := core.DetectProject()
+	scoped := proj != nil && proj.InProject && proj.ProjectID != ""
+
+	if core.IsTrackID(id) {
+		if scoped {
+			row = s.db.QueryRowContext(ctx, `
+				SELECT id, slug, title, type, status, assigned_to,
+					created_at, updated_at, project_id, meta, plan_mapping
+				FROM tracks WHERE id = ? AND project_id = ?`, id, proj.ProjectID)
+		} else {
+			row = s.db.QueryRowContext(ctx, `
+				SELECT id, slug, title, type, status, assigned_to,
+					created_at, updated_at, project_id, meta, plan_mapping
+				FROM tracks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
+		}
 	} else {
-		row = s.db.QueryRowContext(ctx, `
-			SELECT id, slug, title, type, status, assigned_to,
-				created_at, updated_at, project_id, meta, plan_mapping
-			FROM tracks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
+		// Slug fallback. Match the same project-scoping rules.
+		if scoped {
+			row = s.db.QueryRowContext(ctx, `
+				SELECT id, slug, title, type, status, assigned_to,
+					created_at, updated_at, project_id, meta, plan_mapping
+				FROM tracks WHERE slug = ? AND project_id = ?`, id, proj.ProjectID)
+		} else {
+			row = s.db.QueryRowContext(ctx, `
+				SELECT id, slug, title, type, status, assigned_to,
+					created_at, updated_at, project_id, meta, plan_mapping
+				FROM tracks WHERE slug = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
+		}
 	}
 
 	return scanTrackFromRow(row)
@@ -68,9 +89,19 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 // getTrackInProject retrieves a track scoped to a specific project.
 func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID string) (*core.Track, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, title, type, status, assigned_to,
+		SELECT id, slug, title, type, status, assigned_to,
 			created_at, updated_at, project_id, meta, plan_mapping
 		FROM tracks WHERE id = ? AND project_id = ?`, id, projectID)
+	return scanTrackFromRow(row)
+}
+
+// GetTrackBySlug retrieves a track by its (project_id, slug) display alias.
+// Empty projectID matches the global bucket. Returns nil, nil if not found.
+func (s *SQLiteStorage) GetTrackBySlug(ctx context.Context, projectID, slug string) (*core.Track, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, slug, title, type, status, assigned_to,
+			created_at, updated_at, project_id, meta, plan_mapping
+		FROM tracks WHERE project_id = ? AND slug = ?`, projectID, slug)
 	return scanTrackFromRow(row)
 }
 

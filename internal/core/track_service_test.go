@@ -26,12 +26,33 @@ func (r *stubTrackRepo) CreateTrack(_ context.Context, track *Track) error {
 }
 
 func (r *stubTrackRepo) GetTrack(_ context.Context, id string) (*Track, error) {
-	t, ok := r.tracks[id]
-	if !ok {
-		return nil, nil
+	if t, ok := r.tracks[id]; ok {
+		cp := *t
+		return &cp, nil
 	}
-	cp := *t
-	return &cp, nil
+	// Slug fallback so callers using user-facing strings work without
+	// going through ParseTrackRef in tests.
+	for _, t := range r.tracks {
+		if t.Slug == id {
+			cp := *t
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *stubTrackRepo) GetTrackBySlug(_ context.Context, projectID, slug string) (*Track, error) {
+	for _, t := range r.tracks {
+		var pid string
+		if t.ProjectID != nil {
+			pid = *t.ProjectID
+		}
+		if pid == projectID && t.Slug == slug {
+			cp := *t
+			return &cp, nil
+		}
+	}
+	return nil, nil
 }
 
 func (r *stubTrackRepo) UpdateTrack(_ context.Context, track *Track) error {
@@ -84,6 +105,10 @@ type stubTaskRepo struct {
 }
 
 func (r *stubTaskRepo) CreateTask(_ context.Context, _ *Task) error { return nil }
+func (r *stubTaskRepo) GetTaskBySeq(_ context.Context, _ string, _ int64) (*Task, error) {
+	return nil, nil
+}
+
 func (r *stubTaskRepo) GetTask(_ context.Context, _ string) (*Task, error) {
 	return nil, nil
 }
