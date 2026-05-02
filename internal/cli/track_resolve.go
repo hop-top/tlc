@@ -15,9 +15,27 @@ import (
 // candidates exist — the caller may offer to auto-create.
 var ErrTrackNotFound = errors.New("track not found")
 
-// resolveTrackID resolves a possibly-partial track ID to an exact
-// match. Resolution order: exact → prefix → fuzzy.
-// Returns an actionable error on no match or ambiguous match.
+// currentProjectID returns the active project ID for the current cwd,
+// or "" if no project context is detected.
+func currentProjectID() string {
+	if proj := core.DetectProject(); proj != nil && proj.InProject {
+		return proj.ProjectID
+	}
+	return ""
+}
+
+// resolveTrackID resolves a track reference to its canonical TypeID.
+//
+// Accepted user-facing forms:
+//   - "track_<26char>"   TypeID — strict resolution, no fuzzy fallback
+//   - "<slug>"           exact slug under the active project
+//   - partial / prefix / fuzzy — fallback for slug-shaped input
+//
+// TypeID inputs are routed through core.ParseTrackRef so callers
+// downstream always see the canonical TypeID. A typeid that doesn't
+// resolve fails fast (no fuzzy fallback). Slug inputs first try the
+// strict (project_id, slug) lookup; if that misses, the resolver falls
+// through to prefix and then fuzzy matching for legacy convenience.
 func resolveTrackID(
 	ctx context.Context, s *storage.SQLiteStorage, input string,
 ) (string, error) {
@@ -28,7 +46,28 @@ func resolveTrackID(
 		)
 	}
 
-	// 1. Exact match.
+	projectID := currentProjectID()
+
+	// 1a. Strict TypeID path — never fall through to fuzzy.
+	if core.IsTrackID(input) {
+		id, err := core.ParseTrackRef(ctx, s, projectID, input)
+		if err != nil {
+			return "", fmt.Errorf(
+				"track %q: %w; run 'tlc track list' to see available tracks",
+				input, ErrTrackNotFound,
+			)
+		}
+		return id, nil
+	}
+
+	// 1b. Strict slug path — exact (project_id, slug) match.
+	if id, err := core.ParseTrackRef(ctx, s, projectID, input); err == nil {
+		return id, nil
+	}
+
+	// Fallback: slug fallback inside SQLiteStorage.GetTrack also covers
+	// pre-typeid rows where Track.ID holds the slug (used by some legacy
+	// tests and unmigrated data).
 	track, err := s.GetTrack(ctx, input)
 	if err != nil {
 		return "", fmt.Errorf(

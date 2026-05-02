@@ -33,9 +33,12 @@ var trackCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		title := trimMatchingQuotes(args[0])
 
-		trackID := trackCreateID
-		if trackID == "" {
-			trackID = core.SlugFromTitle(title)
+		// User-supplied --id (or auto-derived from title) becomes the
+		// human-facing Slug. Track.ID itself is the durable TypeID,
+		// minted by TrackService.CreateTrack via core.NewTrackID().
+		slug := trackCreateID
+		if slug == "" {
+			slug = core.SlugFromTitle(title)
 		}
 
 		if trackCreateType == "" {
@@ -65,7 +68,7 @@ var trackCreateCmd = &cobra.Command{
 		}
 
 		track := &core.Track{
-			ID:         trackID,
+			Slug:       slug,
 			Title:      title,
 			Type:       trackCreateType,
 			AssignedTo: assignee,
