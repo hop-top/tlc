@@ -2,7 +2,7 @@
 
 ## Overview
 
-TLC (Task Line CLI) supports integration with external task management systems (GitHub Issues, Jira, Linear, etc.) while maintaining a clear distinction between internal and external tasks.
+TLC (Task Line CLI) supports integration with external task management systems (GitHub Issues, Jira, Linear, etc.) while maintaining a clear distinction between internal and external tasks. Task identity is managed via TypeID (see [identifiers-spec-0.1.md](identifiers-spec-0.1.md)).
 
 ## Core Principles
 

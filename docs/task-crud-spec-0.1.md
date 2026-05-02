@@ -19,6 +19,7 @@ This spec DOES NOT own:
 - flow orchestration semantics (see task-flow-spec-0.1.md)
 
 This spec references:
+- identifiers-spec-0.1.md for TypeID format and T-NNNN alias rules
 - task-line-spec-0.1.md for line format
 - task-log-spec-0.1.md for log schema
 
@@ -70,7 +71,7 @@ No daemon required.
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `{{.ID}}` | string | Task ID (e.g. `T-0042`) |
+| `{{.ID}}` | string | Task display alias (e.g. `T-0042`; see identifiers-spec-0.1.md) |
 | `{{.Title}}` | string | Task title |
 | `{{.AssignedTo}}` | string | Assignee identifier; empty if unassigned |
 | `{{.UpdatedAt}}` | time.Time | Last mutation timestamp (UTC) |
@@ -362,7 +363,8 @@ TLC implementations MAY support auto-archiving:
 
 ```json
 {
-  "id": "T-0002",
+  "id": "task_01h455vb4pex5vsknk084sn02q",
+  "seq": 2,
   "title": "Fix token refresh race",
   "description": "Observed intermittent auth failures when refresh occurs concurrently.",
   "status": "IN_PROGRESS",
@@ -373,7 +375,7 @@ TLC implementations MAY support auto-archiving:
     {
       "timestamp": "2025-01-01T00:00:00Z",
       "entity_type": "task",
-      "entity_id": "T-0002",
+      "entity_id": "task_01h455vb4pex5vsknk084sn02q",
       "by": "codex",
       "action": "CLAIMED",
       "note": "Taking ownership"
@@ -387,6 +389,7 @@ TLC implementations MAY support auto-archiving:
 ## Example TODO Line
 
 - [~] T-0002 Fix token refresh race @codex #auth #bug ref:docs/rfc/012.md
+  (Alias T-0002 resolves to task_01h455vb4pex5vsknk084sn02q; see identifiers-spec-0.1.md)
 
 ---
 
@@ -601,11 +604,12 @@ If ANY step fails, entire transaction MUST be rolled back.
 
 ### id
 
-- Format: `[A-Z]-[0-9]{4,}` (recommended)
-- Examples: `T-0001`, `TASK-0042`, `BUG-1234`
+- Format: TypeID `<prefix>_<26-char-base32-uuidv7>` (see identifiers-spec-0.1.md)
+- Examples: `task_01h455vb4pex5vsknk084sn02q`, `track_01h455vbqkfsn02nk084ksn02q`
+- Display alias (CLI only): `T-NNNN+` for tasks, slug for tracks (see identifiers-spec-0.1.md)
 - MUST be stable once created
 - MUST be unique across all tasks
-- Length: 1-50 characters
+- Length: ~38 characters (typical TypeID format)
 
 ### title
 
@@ -985,7 +989,7 @@ all hooks run regardless of individual failures.
 
 | Variable | Type | Description |
 |---|---|---|
-| `{{.ID}}` | string | Task ID (e.g. `T-0094`) |
+| `{{.ID}}` | string | Task display alias (e.g. `T-0094`; see identifiers-spec-0.1.md) |
 | `{{.Title}}` | string | Task title |
 | `{{.AssignedTo}}` | string | Assignee handle (empty string if unassigned) |
 | `{{.UpdatedAt}}` | time.Time | Last update timestamp (UTC) |
