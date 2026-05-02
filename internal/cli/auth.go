@@ -19,6 +19,18 @@ var (
 	oauthFlow bool
 )
 
+// authStore resolves the credential store backend from viper. The
+// `auth.backend` config key selects the kit storage/secret backend; the empty
+// default routes to KeychainStore so existing users see no behaviour change.
+func authStore() auth.Store {
+	backend := viper.GetString("auth.backend")
+	store, err := auth.NewStore("tlc", backend)
+	if err != nil {
+		log.Fatal("Failed to open credential store", "backend", backend, "error", err)
+	}
+	return store
+}
+
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage authentication for external systems",
@@ -30,7 +42,7 @@ var loginCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		system := args[0]
-		store := auth.NewKeychainStore("tlc")
+		store := authStore()
 
 		ctx := context.Background()
 
@@ -90,7 +102,7 @@ var logoutCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		system := args[0]
-		store := auth.NewKeychainStore("tlc")
+		store := authStore()
 		if err := store.Delete(system, account); err != nil {
 			log.Fatal("Failed to logout", "system", system, "error", err)
 		}
@@ -102,7 +114,7 @@ var authStatusCmd = &cobra.Command{
 	Use:   "status [system]",
 	Short: "Show authentication status",
 	Run: func(_ *cobra.Command, args []string) {
-		store := auth.NewKeychainStore("tlc")
+		store := authStore()
 		systems := []string{"github", "jira", "linear"}
 		if len(args) > 0 {
 			systems = []string{args[0]}
