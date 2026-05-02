@@ -20,6 +20,52 @@ func isPattern(s string) bool {
 	return strings.ContainsAny(s, patternChars)
 }
 
+// taskRefAliasRe and taskRefDigitsRe gate which inputs we route through
+// core.ParseTaskRef. Anything else (cross-project URIs, scheme-prefixed
+// refs, etc.) keeps falling through to uri.NewResolver below.
+var (
+	taskRefAliasRe  = regexp.MustCompile(`^@?T-\d+$`)
+	taskRefDigitsRe = regexp.MustCompile(`^\d+$`)
+)
+
+// parseTaskRefForCLI maps a user-facing task reference to its durable
+// typeid using core.ParseTaskRef. Inputs that aren't one of the
+// supported short forms (task_<typeid>, T-NNNN, bare digits) are
+// returned unchanged so legacy URI/cross-project refs fall through to
+// the existing uri.Resolver path. When core.ParseTaskRef cannot resolve
+// a short-form ref, the original input is returned so the legacy
+// resolver gets a chance to find tasks whose IDs literally match the
+// alias (e.g. tasks fixtures inserted as `T-0046` without a matching
+// seq column).
+func parseTaskRefForCLI(ctx context.Context, s *storage.SQLiteStorage, input string) (string, error) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return input, nil
+	}
+	// Strip a single leading "@" so "@T-0001" resolves like "T-0001".
+	candidate := strings.TrimPrefix(trimmed, "@")
+
+	switch {
+	case core.IsTaskID(candidate),
+		taskRefAliasRe.MatchString(candidate),
+		taskRefDigitsRe.MatchString(candidate):
+		projectID := ""
+		if proj := core.DetectProject(); proj != nil && proj.InProject {
+			projectID = proj.ProjectID
+		}
+		resolved, err := core.ParseTaskRef(ctx, s, projectID, candidate)
+		if err != nil {
+			// Fall through to legacy resolver — it normalises bare
+			// digits and zero-padded refs into T-NNNN and looks up
+			// the task by its literal stored ID. This keeps fixtures
+			// without an allocated seq (tests, legacy data) working.
+			return input, nil
+		}
+		return resolved, nil
+	}
+	return input, nil
+}
+
 // resolveTaskIDs resolves a slice of args (exact IDs or a single regex/glob pattern)
 // into a ResolvedTask slice. Returns requiresConfirmation=true when a pattern
 // matched more than one task.
@@ -49,7 +95,11 @@ func resolveTaskIDs(ctx context.Context, args []string, s *storage.SQLiteStorage
 	resolver := uri.NewResolver(s)
 	resolved := make([]*uri.ResolvedTask, 0, len(args))
 	for _, id := range args {
-		res, err := resolver.ResolveTask(ctx, id)
+		canonical, err := parseTaskRefForCLI(ctx, s, id)
+		if err != nil {
+			return nil, false, err
+		}
+		res, err := resolver.ResolveTask(ctx, canonical)
 		if err != nil {
 			return nil, false, err
 		}

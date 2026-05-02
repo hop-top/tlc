@@ -35,7 +35,12 @@ var TaskShowCmd = &cobra.Command{
 
 		var errs []string
 		for i, id := range args {
-			res, resolveErr := uri.NewResolver(s).ResolveTask(ctx, id)
+			canonical, parseErr := parseTaskRefForCLI(ctx, s, id)
+			if parseErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", id, parseErr))
+				continue
+			}
+			res, resolveErr := uri.NewResolver(s).ResolveTask(ctx, canonical)
 			if resolveErr != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", id, resolveErr))
 				continue

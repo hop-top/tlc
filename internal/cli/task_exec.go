@@ -42,11 +42,21 @@ Examples:
   tlc task exec T-0042 --agent claude --dry-run`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		taskID := args[0]
 		if taskExecAgent == "" {
 			return fmt.Errorf(
 				"--agent is required; run 'tlc agent run --help' to see available options",
 			)
+		}
+
+		s, err := getStorage()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = s.Close() }()
+
+		taskID, err := parseTaskRefForCLI(cmd.Context(), s, args[0])
+		if err != nil {
+			return err
 		}
 
 		// Wire up the agent run flags.
