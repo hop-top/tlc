@@ -18,7 +18,9 @@ import (
 )
 
 // seedTrackScenario creates 6 tracks + linked tasks to produce all
-// four colors:
+// four colors. Tracks go through TrackService which auto-mints TypeIDs;
+// the supplied "ID" string ends up as Track.Slug. Tasks reference the
+// track by its TypeID (the foreign key column).
 //
 //	auth      — active + healthy (recent task, no blockers) → green
 //	payments  — active + healthy → green
@@ -32,36 +34,31 @@ func seedTrackScenario(
 	ctx context.Context,
 ) {
 	t.Helper()
-	svc := core.NewTrackService(s, s)
 	now := time.Now().UTC()
 
-	tracks := []*core.Track{
-		{ID: "auth", Title: "Auth system", Type: "feature",
-			Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now},
-		{ID: "payments", Title: "Payment processing", Type: "feature",
-			Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now},
-		{ID: "cdn", Title: "CDN migration", Type: "refactor",
-			Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now},
-		{ID: "search", Title: "Search rewrite", Type: "feature",
-			Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now},
-		{ID: "onboard", Title: "Onboarding flow", Type: "feature",
-			Status: core.TrackStatusPending, CreatedAt: now, UpdatedAt: now},
-		{ID: "legacy", Title: "Legacy cleanup", Type: "refactor",
-			Status: core.TrackStatusAbandoned, CreatedAt: now, UpdatedAt: now},
+	authTrack := &core.Track{ID: "auth", Title: "Auth system", Type: "feature",
+		Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now}
+	paymentsTrack := &core.Track{ID: "payments", Title: "Payment processing", Type: "feature",
+		Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now}
+	cdnTrack := &core.Track{ID: "cdn", Title: "CDN migration", Type: "refactor",
+		Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now}
+	searchTrack := &core.Track{ID: "search", Title: "Search rewrite", Type: "feature",
+		Status: core.TrackStatusActive, CreatedAt: now, UpdatedAt: now}
+	onboardTrack := &core.Track{ID: "onboard", Title: "Onboarding flow", Type: "feature",
+		Status: core.TrackStatusPending, CreatedAt: now, UpdatedAt: now}
+	legacyTrack := &core.Track{ID: "legacy", Title: "Legacy cleanup", Type: "refactor",
+		Status: core.TrackStatusAbandoned, CreatedAt: now, UpdatedAt: now}
+	for _, tr := range []*core.Track{
+		authTrack, paymentsTrack, cdnTrack, searchTrack,
+		onboardTrack, legacyTrack,
+	} {
+		seedTrack(t, ctx, s, s, tr)
 	}
-
-	for _, tr := range tracks {
-		if err := svc.CreateTrack(ctx, tr); err != nil {
-			t.Fatalf("seed track %s: %v", tr.ID, err)
-		}
-	}
-
-	trackID := func(id string) *string { return &id }
 
 	// auth: recent task → healthy
 	if err := s.CreateTask(ctx, &core.Task{
 		ID: "T-0001", Title: "Auth task", Status: core.StatusInProgress,
-		TrackID: trackID("auth"), CreatedAt: now, UpdatedAt: now,
+		TrackID: &authTrack.ID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
@@ -69,7 +66,7 @@ func seedTrackScenario(
 	// payments: recent task → healthy
 	if err := s.CreateTask(ctx, &core.Task{
 		ID: "T-0002", Title: "Payments task", Status: core.StatusInProgress,
-		TrackID: trackID("payments"), CreatedAt: now, UpdatedAt: now,
+		TrackID: &paymentsTrack.ID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
@@ -78,7 +75,7 @@ func seedTrackScenario(
 	staleTime := now.Add(-7 * 24 * time.Hour)
 	if err := s.CreateTask(ctx, &core.Task{
 		ID: "T-0003", Title: "CDN task", Status: core.StatusInProgress,
-		TrackID: trackID("cdn"), CreatedAt: staleTime, UpdatedAt: staleTime,
+		TrackID: &cdnTrack.ID, CreatedAt: staleTime, UpdatedAt: staleTime,
 	}); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
@@ -86,7 +83,7 @@ func seedTrackScenario(
 	// search: task blocked by external ID → blocked
 	if err := s.CreateTask(ctx, &core.Task{
 		ID: "T-0004", Title: "Search task", Status: core.StatusTodo,
-		TrackID: trackID("search"), CreatedAt: now, UpdatedAt: now,
+		TrackID: &searchTrack.ID, CreatedAt: now, UpdatedAt: now,
 		Meta: map[string]interface{}{"blocked_by": "EXTERNAL-999"},
 	}); err != nil {
 		t.Fatalf("seed task: %v", err)

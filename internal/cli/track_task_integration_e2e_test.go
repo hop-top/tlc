@@ -3,6 +3,11 @@ package cli
 // End-to-end tests for task-track integration (story 072).
 // Exercises: task create/update/list --track, auto-transition on claim,
 // task show Track field.
+//
+// Note: Tasks now store the track's TypeID in TrackID (not the slug).
+// Tests seed tracks via TrackService (which auto-mints a TypeID and
+// promotes the slug into Track.Slug) and use the resulting Track.ID for
+// downstream linkage and assertions.
 
 import (
 	"bytes"
@@ -24,14 +29,12 @@ func TestTaskTrackIntegration_E2E_CreateWithTrack(t *testing.T) {
 		}
 		defer s.Close()
 
-		// Seed track.
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
+		// Seed track (mutates ID to TypeID, sets Slug="browser-rendering").
+		track := &core.Track{
 			ID: "browser-rendering", Title: "Browser Rendering",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
-			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		cmd := newTestCmd()
 		cmd.AddCommand(TaskCmd)
@@ -56,10 +59,10 @@ func TestTaskTrackIntegration_E2E_CreateWithTrack(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTask: %v", err)
 		}
-		if task.TrackID == nil || *task.TrackID != "browser-rendering" {
+		if task.TrackID == nil || *task.TrackID != trackTypeID {
 			t.Errorf(
-				"expected TrackID=browser-rendering, got %v",
-				task.TrackID,
+				"expected TrackID=%s, got %v",
+				trackTypeID, task.TrackID,
 			)
 		}
 	})
@@ -78,13 +81,11 @@ func TestTaskTrackIntegration_E2E_UpdateTrackLink(t *testing.T) {
 		}
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
+		track := &core.Track{
 			ID: "browser-rendering", Title: "Browser Rendering",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
-			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Existing task",
@@ -107,10 +108,10 @@ func TestTaskTrackIntegration_E2E_UpdateTrackLink(t *testing.T) {
 
 		task, _ := s.GetTask(ctx, "T-0001")
 		if task.TrackID == nil ||
-			*task.TrackID != "browser-rendering" {
+			*task.TrackID != trackTypeID {
 			t.Errorf(
-				"expected TrackID=browser-rendering, got %v",
-				task.TrackID,
+				"expected TrackID=%s, got %v",
+				trackTypeID, task.TrackID,
 			)
 		}
 	})
@@ -129,18 +130,15 @@ func TestTaskTrackIntegration_E2E_UnlinkTrack(t *testing.T) {
 		}
 		defer s.Close()
 
-		trackID := "browser-rendering"
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
-			ID: trackID, Title: "Browser Rendering",
+		track := &core.Track{
+			ID: "browser-rendering", Title: "Browser Rendering",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
-			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Linked task",
-			Status: core.StatusTodo, TrackID: &trackID,
+			Status: core.StatusTodo, TrackID: &trackTypeID,
 		})
 
 		cmd := newTestCmd()
@@ -179,18 +177,15 @@ func TestTaskTrackIntegration_E2E_ListByTrack(t *testing.T) {
 		}
 		defer s.Close()
 
-		trackID := "browser-rendering"
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
-			ID: trackID, Title: "Browser Rendering",
+		track := &core.Track{
+			ID: "browser-rendering", Title: "Browser Rendering",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
-			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "With track",
-			Status: core.StatusTodo, TrackID: &trackID,
+			Status: core.StatusTodo, TrackID: &trackTypeID,
 		})
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0002", Title: "No track",
@@ -268,24 +263,21 @@ func TestTaskTrackIntegration_E2E_AutoTransition(t *testing.T) {
 		}
 		defer s.Close()
 
-		trackID := "pending-track"
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
-			ID: trackID, Title: "Pending Track",
+		track := &core.Track{
+			ID: "pending-track", Title: "Pending Track",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
-			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		// Verify track is pending.
-		tr, _ := s.GetTrack(ctx, trackID)
+		tr, _ := s.GetTrack(ctx, trackTypeID)
 		if tr.Status != core.TrackStatusPending {
 			t.Fatalf("expected pending, got %s", tr.Status)
 		}
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Linked task",
-			Status: core.StatusTodo, TrackID: &trackID,
+			Status: core.StatusTodo, TrackID: &trackTypeID,
 		})
 
 		cmd := newTestCmd()
@@ -300,7 +292,7 @@ func TestTaskTrackIntegration_E2E_AutoTransition(t *testing.T) {
 		}
 
 		// Track should now be active.
-		tr, _ = s.GetTrack(ctx, trackID)
+		tr, _ = s.GetTrack(ctx, trackTypeID)
 		if tr.Status != core.TrackStatusActive {
 			t.Errorf(
 				"expected track active after claim, got %s",
@@ -324,21 +316,22 @@ func TestTaskTrackIntegration_E2E_AlreadyActive(t *testing.T) {
 		}
 		defer s.Close()
 
-		trackID := "active-track"
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
-			ID: trackID, Title: "Active Track",
+		track := &core.Track{
+			ID: "active-track", Title: "Active Track",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
+		}
+		svc := core.NewTrackService(s, s)
+		if err := svc.CreateTrack(ctx, track); err != nil {
 			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := track.ID
 
 		// Seed a task and activate the track.
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "First task",
-			Status: core.StatusTodo, TrackID: &trackID,
+			Status: core.StatusTodo, TrackID: &trackTypeID,
 		})
-		if err := svc.UpdateTrack(ctx, trackID, func(tr *core.Track) error {
+		if err := svc.UpdateTrack(ctx, trackTypeID, func(tr *core.Track) error {
 			tr.Status = core.TrackStatusActive
 			return nil
 		}); err != nil {
@@ -348,7 +341,7 @@ func TestTaskTrackIntegration_E2E_AlreadyActive(t *testing.T) {
 		// Create a second task and claim it.
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0002", Title: "Second task",
-			Status: core.StatusTodo, TrackID: &trackID,
+			Status: core.StatusTodo, TrackID: &trackTypeID,
 		})
 
 		cmd := newTestCmd()
@@ -363,7 +356,7 @@ func TestTaskTrackIntegration_E2E_AlreadyActive(t *testing.T) {
 		}
 
 		// Track should still be active.
-		tr, _ := s.GetTrack(ctx, trackID)
+		tr, _ := s.GetTrack(ctx, trackTypeID)
 		if tr.Status != core.TrackStatusActive {
 			t.Errorf("expected active, got %s", tr.Status)
 		}
@@ -383,18 +376,15 @@ func TestTaskTrackIntegration_E2E_ShowTrack(t *testing.T) {
 		}
 		defer s.Close()
 
-		trackID := "browser-rendering"
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, &core.Track{
-			ID: trackID, Title: "Browser Rendering",
+		track := &core.Track{
+			ID: "browser-rendering", Title: "Browser Rendering",
 			Type: core.TrackTypeFeature,
-		}); err != nil {
-			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Parse HTML",
-			Status: core.StatusTodo, TrackID: &trackID,
+			Status: core.StatusTodo, TrackID: &trackTypeID,
 		})
 
 		cmd := newTestCmd()

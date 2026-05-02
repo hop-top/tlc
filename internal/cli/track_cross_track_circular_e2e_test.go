@@ -30,7 +30,9 @@ func writePlan(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-// seedEmptyTrack creates an empty track with the given id.
+// seedEmptyTrack creates an empty track with the given id (becomes
+// the slug). Routes through TrackService so a TypeID is auto-minted
+// and the (project_id, slug) UNIQUE constraint stays satisfied.
 func seedEmptyTrack(t *testing.T, id string) {
 	t.Helper()
 	s, err := getStorageRaw()
@@ -39,13 +41,11 @@ func seedEmptyTrack(t *testing.T, id string) {
 	}
 	defer s.Close()
 	now := time.Now().UTC()
-	if err := s.CreateTrack(ctxBG(), &core.Track{
+	seedTrack(t, ctxBG(), s, s, &core.Track{
 		ID: id, Title: id, Type: "feature",
 		Status:    core.TrackStatusActive,
 		CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("CreateTrack %s: %v", id, err)
-	}
+	})
 }
 
 // ingestPlan runs `track update <id> --add-plan <path>` and
@@ -105,10 +105,22 @@ func assertFullyResolved(t *testing.T, pathA, pathB string) {
 	}
 	defer s.Close()
 
+	// Resolve slugs → TypeIDs since task.track_id now stores the typeid.
+	alphaT, _ := s.GetTrackBySlug(ctx, "", "alpha")
+	if alphaT == nil {
+		t.Fatalf("alpha track not found by slug")
+	}
+	betaT, _ := s.GetTrackBySlug(ctx, "", "beta")
+	if betaT == nil {
+		t.Fatalf("beta track not found by slug")
+	}
+	alphaID := alphaT.ID
+	betaID := betaT.ID
+
 	// A-three and B-three by lookup via track+title.
 	aTasks, _ := s.ListTasks(ctx, core.Query{
 		Filters: []core.FieldFilter{
-			{Field: "track_id", Operator: core.OpEq, Value: "alpha"},
+			{Field: "track_id", Operator: core.OpEq, Value: alphaID},
 			{Field: "title", Operator: core.OpEq, Value: "A-three"},
 		},
 		AllProjects: true,
@@ -118,7 +130,7 @@ func assertFullyResolved(t *testing.T, pathA, pathB string) {
 	}
 	bTasks, _ := s.ListTasks(ctx, core.Query{
 		Filters: []core.FieldFilter{
-			{Field: "track_id", Operator: core.OpEq, Value: "beta"},
+			{Field: "track_id", Operator: core.OpEq, Value: betaID},
 			{Field: "title", Operator: core.OpEq, Value: "B-three"},
 		},
 		AllProjects: true,
@@ -129,7 +141,7 @@ func assertFullyResolved(t *testing.T, pathA, pathB string) {
 	// B-two is the target of A-three's cross-track ref.
 	bTwo, _ := s.ListTasks(ctx, core.Query{
 		Filters: []core.FieldFilter{
-			{Field: "track_id", Operator: core.OpEq, Value: "beta"},
+			{Field: "track_id", Operator: core.OpEq, Value: betaID},
 			{Field: "title", Operator: core.OpEq, Value: "B-two"},
 		},
 		AllProjects: true,
@@ -139,7 +151,7 @@ func assertFullyResolved(t *testing.T, pathA, pathB string) {
 	}
 	aTwo, _ := s.ListTasks(ctx, core.Query{
 		Filters: []core.FieldFilter{
-			{Field: "track_id", Operator: core.OpEq, Value: "alpha"},
+			{Field: "track_id", Operator: core.OpEq, Value: alphaID},
 			{Field: "title", Operator: core.OpEq, Value: "A-two"},
 		},
 		AllProjects: true,
@@ -281,12 +293,16 @@ tasks:
 			)
 		}
 
-		// Task exists with unresolved ref.
+		// Task exists with unresolved ref. Resolve slug → TypeID first.
 		s, _ := getStorageRaw()
 		defer s.Close()
+		lonelyT, _ := s.GetTrackBySlug(ctxBG(), "", "lonely")
+		if lonelyT == nil {
+			t.Fatalf("lonely track not found by slug")
+		}
 		tasks, _ := s.ListTasks(ctxBG(), core.Query{
 			Filters: []core.FieldFilter{
-				{Field: "track_id", Operator: core.OpEq, Value: "lonely"},
+				{Field: "track_id", Operator: core.OpEq, Value: lonelyT.ID},
 			},
 			AllProjects: true,
 		})

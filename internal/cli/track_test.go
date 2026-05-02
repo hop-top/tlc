@@ -417,12 +417,8 @@ func TestTrackDelete_WithLinkedTasks(t *testing.T) {
 		track := &core.Track{
 			ID: "linked-track", Title: "Linked", Type: "feature",
 		}
-		svc := core.NewTrackService(s, s)
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("CreateTrack: %v", err)
-		}
-		// Link a task.
-		tid := "linked-track"
+		tid := seedTrack(t, ctx, s, s, track)
+		// Link a task by track TypeID.
 		task := &core.Task{
 			ID: "T-0001", Title: "Linked task", Status: core.StatusTodo,
 			TrackID: &tid,

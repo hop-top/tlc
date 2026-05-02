@@ -407,9 +407,13 @@ func (s *TrackService) resolveCrossTrackRef(
 	if target.ProjectID != nil {
 		targetProjectID = *target.ProjectID
 	}
+	// Tasks reference the track by its durable TypeID (target.ID), not
+	// by the user-typed slug (ref.TrackID). Use target.ID to match the
+	// foreign key column and let the user supply slug or typeid in
+	// plan refs interchangeably.
 	tasks, err := s.taskRepo.ListTasks(ctx, Query{
 		Filters: []FieldFilter{
-			{Field: "track_id", Operator: OpEq, Value: ref.TrackID},
+			{Field: "track_id", Operator: OpEq, Value: target.ID},
 			{Field: "title", Operator: OpEq, Value: title},
 			{Field: "project_id", Operator: OpEq, Value: targetProjectID},
 		},

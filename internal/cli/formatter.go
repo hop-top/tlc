@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -60,6 +61,25 @@ func formatTrackAlias(t *core.Track) string {
 		return t.Slug
 	}
 	return t.ID
+}
+
+// formatTaskTrackDisplay resolves a Task.TrackID value into its human-
+// readable display form (the track's slug). On any lookup error the raw
+// value is returned so the caller still sees something useful.
+func formatTaskTrackDisplay(trackID string) string {
+	if trackID == "" {
+		return ""
+	}
+	s, err := getStorageRaw()
+	if err != nil {
+		return trackID
+	}
+	defer func() { _ = s.Close() }()
+	track, err := s.GetTrack(context.Background(), trackID)
+	if err != nil || track == nil {
+		return trackID
+	}
+	return formatTrackAlias(track)
 }
 
 // isVerboseOutput reports whether the user requested verbose output via
@@ -427,7 +447,7 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Fired At:"), t.StaleFiredAt.Format(time.RFC3339))
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
-		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Track:"), *t.TrackID)
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Track:"), formatTaskTrackDisplay(*t.TrackID))
 	}
 	if t.DueAt != nil {
 		dueLabel := "Due:"

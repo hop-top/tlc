@@ -242,15 +242,11 @@ func TestTrackLifecycle_E2E_CompleteOpenTasks(t *testing.T) {
 		s, _ := getStorageRaw()
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
-		trackID := "open-track"
 		track := &core.Track{
-			ID: trackID, Title: "Has open tasks",
+			ID: "open-track", Title: "Has open tasks",
 			Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("seed track: %v", err)
-		}
+		trackID := seedTrack(t, ctx, s, s, track)
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Open task", Status: core.StatusTodo,
@@ -263,7 +259,7 @@ func TestTrackLifecycle_E2E_CompleteOpenTasks(t *testing.T) {
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
 		cmd.SetArgs([]string{
-			"track", "update", trackID, "--status", "completed",
+			"track", "update", "open-track", "--status", "completed",
 		})
 
 		err := cmd.Execute()
@@ -358,15 +354,11 @@ func TestTrackLifecycle_E2E_DeleteLinked(t *testing.T) {
 		s, _ := getStorageRaw()
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
-		trackID := "linked-track"
 		track := &core.Track{
-			ID: trackID, Title: "Has tasks",
+			ID: "linked-track", Title: "Has tasks",
 			Type: core.TrackTypeFeature, Status: core.TrackStatusPending,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("seed track: %v", err)
-		}
+		trackID := seedTrack(t, ctx, s, s, track)
 
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Linked task", Status: core.StatusTodo,
@@ -378,7 +370,7 @@ func TestTrackLifecycle_E2E_DeleteLinked(t *testing.T) {
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
-		cmd.SetArgs([]string{"track", "delete", trackID})
+		cmd.SetArgs([]string{"track", "delete", "linked-track"})
 
 		err := cmd.Execute()
 		if err == nil {

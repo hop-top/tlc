@@ -208,7 +208,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		if err != nil {
 			return fmt.Errorf("failed to get next sequence ID: %w", err)
 		}
-		finalID = fmt.Sprintf("T-%04d", seq)
+		finalID = core.FormatTaskSeq(int64(seq))
 	}
 
 	now := time.Now().UTC()
@@ -287,7 +287,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		if seqErr != nil {
 			return fmt.Errorf("failed to create task: %w", err)
 		}
-		task.ID = fmt.Sprintf("T-%04d", seq)
+		task.ID = core.FormatTaskSeq(int64(seq))
 		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
 

@@ -115,13 +115,23 @@ func ParseTrackRef(ctx context.Context, repo TrackRepository, projectID, input s
 	return track.ID, nil
 }
 
-// FormatTaskAlias renders a Task as its display alias (e.g. "T-0042" or
-// "T-1234567"). The minimum width of 4 digits preserves the legacy
-// "T-NNNN" zero-padding for sub-9999 sequences while letting larger
-// values grow naturally.
-func FormatTaskAlias(t *Task) string {
-	if t == nil || t.Seq == 0 {
+// FormatTaskSeq renders a sequence number as the "T-NNNN" display alias.
+// The minimum width of 4 digits preserves the legacy zero-padding for
+// sub-9999 sequences while letting larger values grow naturally
+// (e.g. seq 12345 → "T-12345"). Returns "" for non-positive seq.
+func FormatTaskSeq(seq int64) string {
+	if seq <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("T-%04d", t.Seq)
+	return fmt.Sprintf("T-%04d", seq)
+}
+
+// FormatTaskAlias renders a Task as its display alias (e.g. "T-0042" or
+// "T-1234567"). Delegates to FormatTaskSeq so width policy lives in one
+// place.
+func FormatTaskAlias(t *Task) string {
+	if t == nil {
+		return ""
+	}
+	return FormatTaskSeq(t.Seq)
 }

@@ -1,10 +1,11 @@
 package uri
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"hop.top/tlc/internal/core"
 )
 
 // reNumeric matches a bare numeric string (e.g. "46", "0046").
@@ -29,7 +30,7 @@ func NormalizeTaskID(s string) string {
 	if strings.HasPrefix(raw, "T-") {
 		suffix := strings.TrimPrefix(raw, "T-")
 		if n, err := strconv.Atoi(suffix); err == nil {
-			return fmt.Sprintf("T-%04d", n)
+			return core.FormatTaskSeq(int64(n))
 		}
 		// Non-numeric suffix – return as-is (don't mangle unknown formats).
 		return raw
@@ -38,7 +39,7 @@ func NormalizeTaskID(s string) string {
 	// Bare numeric: "46" or "0046".
 	if reNumeric.MatchString(raw) {
 		n, _ := strconv.Atoi(raw) //nolint:errcheck // guarded by reNumeric.MatchString
-		return fmt.Sprintf("T-%04d", n)
+		return core.FormatTaskSeq(int64(n))
 	}
 
 	// Anything else (e.g. "project/task", "tlc://…") – pass through unchanged.

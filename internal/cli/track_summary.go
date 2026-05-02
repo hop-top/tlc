@@ -113,7 +113,7 @@ func runTrackSummary(cmd *cobra.Command, _ []string) error {
 			continue
 		}
 		rows = append(rows, summaryRow{
-			ID:        d.track.ID,
+			ID:        formatTrackAlias(d.track),
 			Progress:  d.progress,
 			State:     d.state,
 			UpdatedAt: d.track.UpdatedAt,
