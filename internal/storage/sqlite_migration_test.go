@@ -24,8 +24,10 @@ func TestSQLiteStorage_MigrationV2(t *testing.T) {
 	}
 }
 
-// TestSQLiteStorage_MigrationV6_TracksTable verifies migration v6 creates the
-// tracks table, adds track_id to tasks, and creates the expected indexes.
+// TestSQLiteStorage_TracksTable verifies the tracks table created by
+// migration v13 accepts inserts and exposes the expected columns and
+// indexes. (Originally written for v6; v13 supersedes that schema with
+// the typeid PK and the slug NOT NULL alias column.)
 func TestSQLiteStorage_MigrationV6_TracksTable(t *testing.T) {
 	s, err := NewSQLiteStorage(":memory:")
 	if err != nil {
@@ -37,8 +39,9 @@ func TestSQLiteStorage_MigrationV6_TracksTable(t *testing.T) {
 
 	// Verify tracks table exists by inserting a row.
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO tracks (id, title, type, status, created_at, updated_at)
-		VALUES ('test-track', 'Test Track', 'feature', 'pending', '2026-01-01', '2026-01-01')
+		INSERT INTO tracks (id, slug, title, type, status, created_at, updated_at)
+		VALUES ('track_01h455vbqkfsn02nk084ksn02q', 'test-track',
+		        'Test Track', 'feature', 'pending', '2026-01-01', '2026-01-01')
 	`)
 	if err != nil {
 		t.Fatalf("tracks table insert failed: %v", err)

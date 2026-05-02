@@ -306,19 +306,22 @@ func TestUpdateTask_GlobalTask(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Simulate: task created globally (project_id='') then also exists in a project
+	// Simulate: task exists in a project. Each row has its own TypeID
+	// (typeid-ids design — global/project rows are distinct identities).
 	projectID := "hop-top/aps"
-	s.CreateTask(ctx, &core.Task{
-		ID: "T-0001", Title: "Task", Status: core.StatusTodo,
+	globalTaskID := core.NewTaskID()
+	projTaskID := core.NewTaskID()
+	_ = s.CreateTask(ctx, &core.Task{
+		ID: globalTaskID, Title: "Task", Status: core.StatusTodo,
 		Reference: "ref", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	})
-	s.CreateTask(ctx, &core.Task{
-		ID: "T-0001", Title: "Task", Status: core.StatusTodo, ProjectID: &projectID,
+	_ = s.CreateTask(ctx, &core.Task{
+		ID: projTaskID, Title: "Task", Status: core.StatusTodo, ProjectID: &projectID,
 		Reference: "ref", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	})
 
 	// Read the project-scoped row (simulates GetTask in project context)
-	projTask, err := s.GetTaskInProject(ctx, "T-0001", projectID)
+	projTask, err := s.GetTaskInProject(ctx, projTaskID, projectID)
 	if err != nil || projTask == nil {
 		t.Fatalf("GetTaskInProject failed: %v", err)
 	}
@@ -331,7 +334,7 @@ func TestUpdateTask_GlobalTask(t *testing.T) {
 	}
 
 	// Project row should be IN_PROGRESS
-	after, err := s.GetTaskInProject(ctx, "T-0001", projectID)
+	after, err := s.GetTaskInProject(ctx, projTaskID, projectID)
 	if err != nil || after == nil {
 		t.Fatalf("GetTaskInProject after update failed: %v", err)
 	}
@@ -340,7 +343,7 @@ func TestUpdateTask_GlobalTask(t *testing.T) {
 	}
 
 	// Global '' row should be unaffected
-	global, err := s.GetTaskInProject(ctx, "T-0001", "")
+	global, err := s.GetTaskInProject(ctx, globalTaskID, "")
 	if err != nil || global == nil {
 		t.Fatalf("GetTaskInProject(global) failed: %v", err)
 	}

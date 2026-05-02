@@ -163,11 +163,11 @@ func TestBindTaskColumnCount(t *testing.T) {
 	}
 
 	cols, vals := BindTask(task)
-	if len(cols) != 20 {
-		t.Errorf("BindTask returned %d columns, want 20", len(cols))
+	if len(cols) != 21 {
+		t.Errorf("BindTask returned %d columns, want 21", len(cols))
 	}
-	if len(vals) != 20 {
-		t.Errorf("BindTask returned %d values, want 20", len(vals))
+	if len(vals) != 21 {
+		t.Errorf("BindTask returned %d values, want 21", len(vals))
 	}
 	if cols[0] != "id" {
 		t.Errorf("first column = %q, want %q", cols[0], "id")

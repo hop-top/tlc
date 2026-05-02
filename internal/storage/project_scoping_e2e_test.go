@@ -37,11 +37,11 @@ func TestProjectScoping_E2E(t *testing.T) {
 	proj1ID := "org/project1"
 	proj2ID := "org/project2"
 
-	t.Run("Tasks with same ID can exist in different projects", func(t *testing.T) {
-		t.Logf("Creates tasks with identical IDs (T-0001) in different projects")
-		t.Logf("Verifies both can coexist in the database")
+	t.Run("Tasks with same seq alias can exist in different projects", func(t *testing.T) {
+		t.Logf("Creates tasks in two projects; both get seq=1 (T-0001 alias).")
+		t.Logf("Their durable TypeIDs differ so they coexist in the database.")
 		task1 := &core.Task{
-			ID:        "T-0001",
+			ID:        core.NewTaskID(),
 			ProjectID: &proj1ID,
 			Title:     "Task in project 1",
 			Status:    core.StatusTodo,
@@ -51,7 +51,7 @@ func TestProjectScoping_E2E(t *testing.T) {
 		}
 
 		task2 := &core.Task{
-			ID:        "T-0001",
+			ID:        core.NewTaskID(),
 			ProjectID: &proj2ID,
 			Title:     "Task in project 2",
 			Status:    core.StatusTodo,
@@ -66,10 +66,21 @@ func TestProjectScoping_E2E(t *testing.T) {
 		err = s.CreateTask(ctx, task2)
 		require.NoError(t, err)
 
-		retrieved1, err := s.GetTask(ctx, "T-0001")
+		// Both projects' first task should be assigned seq=1.
+		assert.Equal(t, int64(1), task1.Seq)
+		assert.Equal(t, int64(1), task2.Seq)
+
+		// Each typeid resolves to its own row.
+		retrieved1, err := s.GetTask(ctx, task1.ID)
 		require.NoError(t, err)
+		require.NotNil(t, retrieved1)
 		assert.Equal(t, proj1ID, *retrieved1.ProjectID)
 		assert.Equal(t, "Task in project 1", retrieved1.Title)
+
+		retrieved2, err := s.GetTask(ctx, task2.ID)
+		require.NoError(t, err)
+		require.NotNil(t, retrieved2)
+		assert.Equal(t, proj2ID, *retrieved2.ProjectID)
 	})
 
 	t.Run("ListTasks filters by project_id", func(t *testing.T) {
@@ -84,25 +95,22 @@ func TestProjectScoping_E2E(t *testing.T) {
 	})
 
 	t.Run("GetNextSequenceID increments per project", func(t *testing.T) {
-		t.Logf("Tests that task ID sequences are independent per project")
-		t.Logf("Project A gets T-0001, T-0002; Project B gets T-0001, T-0002")
-		// Simulate being in project1
-		id1, err := s.GetNextSequenceID(ctx, proj1ID)
-		require.NoError(t, err)
-		assert.Equal(t, 1, id1)
+		t.Logf("Tests that task ID sequences are independent per project.")
+		t.Logf("Sequences may have advanced from prior subtests; assert deltas.")
 
-		id2, err := s.GetNextSequenceID(ctx, proj1ID)
+		base1, err := s.GetNextSequenceID(ctx, proj1ID)
 		require.NoError(t, err)
-		assert.Equal(t, 2, id2)
 
-		// Project2 starts from 1
-		id3, err := s.GetNextSequenceID(ctx, proj2ID)
+		next1, err := s.GetNextSequenceID(ctx, proj1ID)
 		require.NoError(t, err)
-		assert.Equal(t, 1, id3)
+		assert.Equal(t, base1+1, next1, "proj1 sequence must increment by 1")
 
-		id4, err := s.GetNextSequenceID(ctx, proj2ID)
+		base2, err := s.GetNextSequenceID(ctx, proj2ID)
 		require.NoError(t, err)
-		assert.Equal(t, 2, id4)
+
+		next2, err := s.GetNextSequenceID(ctx, proj2ID)
+		require.NoError(t, err)
+		assert.Equal(t, base2+1, next2, "proj2 sequence must increment by 1")
 	})
 
 	t.Run("Default project gets separate sequence", func(t *testing.T) {
@@ -277,58 +285,13 @@ func TestProjectScoping_TODOFileSync(t *testing.T) {
 	})
 }
 
-func TestProjectScoping_Migration(t *testing.T) {
-	resetProjectDetection()
-	t.Logf("Verifies that migration 7 successfully:")
-	t.Logf("1. Creates tasks_new table with composite primary key (project_id, id)")
-	t.Logf("2. Migrates existing data with COALESCE(project_id, 'default')")
-	t.Logf("3. Drops old table and renames new table")
-	t.Logf("4. Rebuilds indexes")
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "test_migrate.db")
-
-	t.Run("Migration 7 adds composite primary key", func(t *testing.T) {
-		s, err := NewSQLiteStorage(dbPath)
-		require.NoError(t, err)
-		defer s.Close()
-
-		ctx := context.Background()
-
-		proj1ID := "org/project1"
-		proj2ID := "org/project2"
-
-		task1 := &core.Task{
-			ID:        "T-0001",
-			ProjectID: &proj1ID,
-			Title:     "Task in project 1",
-			Status:    core.StatusTodo,
-			Reference: "ref1",
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-
-		task2 := &core.Task{
-			ID:        "T-0001",
-			ProjectID: &proj2ID,
-			Title:     "Task in project 2",
-			Status:    core.StatusTodo,
-			Reference: "ref2",
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-
-		err = s.CreateTask(ctx, task1)
-		require.NoError(t, err)
-
-		err = s.CreateTask(ctx, task2)
-		require.NoError(t, err)
-
-		// Verify both exist
-		tasks, err := s.ListTasks(ctx, core.Query{AllProjects: true})
-		require.NoError(t, err)
-		assert.Len(t, tasks, 2)
-	})
-}
+// TestProjectScoping_Migration was specific to migration v7's composite
+// (project_id, id) PK. Migration v13 (typeid-ids) replaces that with a
+// single TEXT PRIMARY KEY on the durable TypeID and a separate
+// (project_id, seq) UNIQUE constraint for the display alias. The
+// "two projects, same id" semantics now live in
+// TestProjectScoping_E2E/Tasks_with_same_seq_alias_can_exist_in_different_projects
+// — keeping a v7-named test would just rot. Removed by T-0818 sweep.
 
 func formatTLS(t *core.Task) string {
 	status := "[ ]"
