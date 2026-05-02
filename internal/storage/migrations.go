@@ -301,10 +301,99 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_tasks_due_at ON tasks(due_at);
 		`,
 	},
+	{
+		// Migrate task and track IDs to TypeID format (task_<26char>,
+		// track_<26char>) and add per-project sequence/slug aliases for
+		// human-facing display. Existing rows are dropped — typeid-ids
+		// design explicitly disposes of pre-migration data (T-0812, T-0813).
+		version: 13,
+		query: `
+		PRAGMA foreign_keys = OFF;
+
+		DROP TABLE IF EXISTS task_logs;
+		DROP TABLE IF EXISTS tasks;
+		DROP TABLE IF EXISTS tracks;
+
+		CREATE TABLE tasks (
+			id              TEXT PRIMARY KEY,
+			seq             INTEGER NOT NULL,
+			project_id      TEXT NOT NULL DEFAULT '',
+			title           TEXT NOT NULL,
+			description     TEXT,
+			status          TEXT NOT NULL,
+			assigned_to     TEXT,
+			reference       TEXT NOT NULL DEFAULT '',
+			created_at      TEXT NOT NULL,
+			updated_at      TEXT NOT NULL,
+			meta            TEXT,
+			tags            TEXT,
+			origin_system   TEXT,
+			last_sync_at    TEXT,
+			archived        INTEGER DEFAULT 0,
+			effort          TEXT NOT NULL DEFAULT '',
+			priority        TEXT NOT NULL DEFAULT '',
+			stale_timeout   INTEGER,
+			blocked_reason  TEXT,
+			stale_fired_at  TEXT,
+			track_id        TEXT,
+			due_at          TEXT,
+			remind_at       TEXT,
+			remind_every    INTEGER,
+			no_auto_remind  INTEGER DEFAULT 0,
+			UNIQUE (project_id, seq)
+		);
+
+		CREATE TABLE tracks (
+			id          TEXT PRIMARY KEY,
+			slug        TEXT NOT NULL,
+			project_id  TEXT NOT NULL DEFAULT '',
+			title       TEXT NOT NULL,
+			type        TEXT NOT NULL,
+			status      TEXT NOT NULL DEFAULT 'pending',
+			assigned_to TEXT,
+			created_at  TEXT NOT NULL,
+			updated_at  TEXT NOT NULL,
+			meta        TEXT,
+			plan_mapping TEXT,
+			UNIQUE (project_id, slug)
+		);
+
+		CREATE TABLE task_logs (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			task_id    TEXT NOT NULL,
+			project_id TEXT,
+			timestamp  TEXT NOT NULL,
+			by         TEXT NOT NULL,
+			action     TEXT NOT NULL,
+			note       TEXT NOT NULL,
+			meta       TEXT,
+			FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX idx_tasks_status        ON tasks(status);
+		CREATE INDEX idx_tasks_assigned_to   ON tasks(assigned_to);
+		CREATE INDEX idx_tasks_created_at    ON tasks(created_at);
+		CREATE INDEX idx_tasks_origin_system ON tasks(origin_system);
+		CREATE INDEX idx_tasks_archived      ON tasks(archived);
+		CREATE INDEX idx_tasks_project_id    ON tasks(project_id);
+		CREATE INDEX idx_tasks_track_id      ON tasks(track_id);
+		CREATE INDEX idx_tasks_due_at        ON tasks(due_at);
+		CREATE INDEX idx_tasks_seq           ON tasks(project_id, seq);
+
+		CREATE INDEX idx_tracks_status     ON tracks(status);
+		CREATE INDEX idx_tracks_project_id ON tracks(project_id);
+		CREATE INDEX idx_tracks_slug       ON tracks(project_id, slug);
+
+		CREATE INDEX idx_task_logs_task_id    ON task_logs(task_id);
+		CREATE INDEX idx_task_logs_project_id ON task_logs(project_id);
+
+		PRAGMA foreign_keys = ON;
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 12
+const LatestMigrationVersion = 13
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
