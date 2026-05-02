@@ -47,33 +47,28 @@ func TestTrackSummary_WithActiveTracks(t *testing.T) {
 		defer s.Close()
 
 		now := time.Now().UTC()
-		tracks := []*core.Track{
-			{
-				ID: "track-one", Title: "Track One",
-				Type: "feature", Status: core.TrackStatusActive,
-				CreatedAt: now, UpdatedAt: now,
-			},
-			{
-				ID: "track-two", Title: "Track Two",
-				Type: "bug", Status: core.TrackStatusActive,
-				CreatedAt: now, UpdatedAt: now,
-			},
-			{
-				ID: "track-three", Title: "Track Three",
-				Type: "feature", Status: core.TrackStatusCompleted,
-				CreatedAt: now, UpdatedAt: now,
-			},
+		trackOne := &core.Track{
+			ID: "track-one", Title: "Track One",
+			Type: "feature", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
 		}
-		for _, tr := range tracks {
-			if err := s.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("CreateTrack %s: %v", tr.ID, err)
-			}
-		}
+		seedTrack(t, ctx, s, s, trackOne)
+		seedTrack(t, ctx, s, s, &core.Track{
+			ID: "track-two", Title: "Track Two",
+			Type: "bug", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
+		})
+		seedTrack(t, ctx, s, s, &core.Track{
+			ID: "track-three", Title: "Track Three",
+			Type: "feature", Status: core.TrackStatusCompleted,
+			CreatedAt: now, UpdatedAt: now,
+		})
 
-		// Create tasks for track-one (1/2 done = 50%).
+		// Create tasks for track-one (1/2 done = 50%); link via the
+		// track's TypeID since that is what tasks now store.
 		for _, task := range []*core.Task{
-			{ID: "T-0001", Title: "A", Status: "DONE", TrackID: strPtr("track-one")},
-			{ID: "T-0002", Title: "B", Status: "TODO", TrackID: strPtr("track-one")},
+			{ID: "T-0001", Title: "A", Status: core.StatusDone, TrackID: &trackOne.ID},
+			{ID: "T-0002", Title: "B", Status: core.StatusTodo, TrackID: &trackOne.ID},
 		} {
 			if err := s.CreateTask(ctx, task); err != nil {
 				t.Fatalf("CreateTask: %v", err)
@@ -121,21 +116,20 @@ func TestTrackSummary_Overcommitted(t *testing.T) {
 		viper.Set("tracks.health.max_active", 2)
 
 		now := time.Now().UTC()
+		// Slugs must be 3+ chars (ValidateTrackSlug).
 		for _, tr := range []*core.Track{
 			{
-				ID: "t1", Title: "T1", Type: "feature",
+				ID: "trk-1", Title: "T1", Type: "feature",
 				Status: core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			},
 			{
-				ID: "t2", Title: "T2", Type: "feature",
+				ID: "trk-2", Title: "T2", Type: "feature",
 				Status: core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			},
 		} {
-			if err := s.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("CreateTrack: %v", err)
-			}
+			seedTrack(t, ctx, s, s, tr)
 		}
 
 		cmd := newTestCmd()

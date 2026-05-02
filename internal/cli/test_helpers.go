@@ -283,6 +283,23 @@ func resetTestEnvWithScheduling(t *testing.T, extraYAML string) (string, string)
 	return tmpDir, dbPath
 }
 
+// seedTrack creates a track via TrackService.CreateTrack which auto-mints
+// a TypeID and promotes the supplied slug. The mutated track is persisted
+// (track.ID == typeid, track.Slug == slug). Returns the typeid for callers
+// that need the durable identifier (e.g. for Task.TrackID linkage).
+//
+// Use this in tests instead of calling Storage.CreateTrack directly with
+// a slug-shaped ID, which would persist track.Slug="" and trip the
+// (project_id, slug) UNIQUE constraint on the second insert.
+func seedTrack(t *testing.T, ctx context.Context, repo core.TrackRepository, taskRepo core.Repository, track *core.Track) string {
+	t.Helper()
+	svc := core.NewTrackService(repo, taskRepo)
+	if err := svc.CreateTrack(ctx, track); err != nil {
+		t.Fatalf("seedTrack %q: %v", track.Slug, err)
+	}
+	return track.ID
+}
+
 var (
 	testMu sync.Mutex
 )

@@ -75,18 +75,14 @@ func TestTrackShow_PhaseBreakdown(t *testing.T) {
 		}
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
 		track := &core.Track{
 			ID:     "phased-track",
 			Title:  "Phased Track",
 			Type:   core.TrackTypeFeature,
 			Status: core.TrackStatusActive,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("create track: %v", err)
-		}
+		trackID := seedTrack(t, ctx, s, s, track)
 
-		trackID := "phased-track"
 		now := time.Now().UTC()
 		tasks := []*core.Task{
 			{
@@ -155,18 +151,14 @@ func TestTrackShow_UnphasedTasks(t *testing.T) {
 		}
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
 		track := &core.Track{
 			ID:     "unphased-track",
 			Title:  "Unphased Track",
 			Type:   core.TrackTypeBug,
 			Status: core.TrackStatusActive,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("create track: %v", err)
-		}
+		trackID := seedTrack(t, ctx, s, s, track)
 
-		trackID := "unphased-track"
 		now := time.Now().UTC()
 		task := &core.Task{
 			ID: "T-0010", Title: "Fix something", Status: core.StatusTodo,
@@ -298,7 +290,6 @@ func TestTrackShow_DoesNotLeakTasksFromOtherProjects(t *testing.T) {
 		projB := "proj-b"
 
 		// Track lives in proj-a.
-		svc := core.NewTrackService(s, s)
 		track := &core.Track{
 			ID:        "shared-id",
 			Title:     "Shared ID Track",
@@ -306,11 +297,8 @@ func TestTrackShow_DoesNotLeakTasksFromOtherProjects(t *testing.T) {
 			Status:    core.TrackStatusActive,
 			ProjectID: &projA,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("create track: %v", err)
-		}
+		trackID := seedTrack(t, ctx, s, s, track)
 
-		trackID := "shared-id"
 		now := time.Now().UTC()
 
 		// Legitimate task: same project as the track.

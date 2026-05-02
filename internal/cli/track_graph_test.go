@@ -22,44 +22,40 @@ func createTrackWithDepTasks(t *testing.T) {
 	}
 	defer s.Close()
 
-	svc := core.NewTrackService(s, s)
 	track := &core.Track{
 		ID:     "dep-track",
 		Title:  "Dependency Track",
 		Type:   core.TrackTypeFeature,
 		Status: core.TrackStatusActive,
 	}
-	if err := svc.CreateTrack(ctx, track); err != nil {
-		t.Fatalf("create track: %v", err)
-	}
+	trackTypeID := seedTrack(t, ctx, s, s, track)
 
-	trackID := "dep-track"
 	tasks := []*core.Task{
 		{
 			ID:      "T-0001",
 			Title:   "Root task",
 			Status:  core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 		},
 		{
 			ID:      "T-0002",
 			Title:   "Child A",
 			Status:  core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 			Meta:    map[string]interface{}{"blocked_by": []string{"T-0001"}},
 		},
 		{
 			ID:      "T-0003",
 			Title:   "Child B",
 			Status:  core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 			Meta:    map[string]interface{}{"blocked_by": []string{"T-0001"}},
 		},
 		{
 			ID:      "T-0004",
 			Title:   "Final",
 			Status:  core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 			Meta:    map[string]interface{}{"blocked_by": []string{"T-0002", "T-0003"}},
 		},
 	}

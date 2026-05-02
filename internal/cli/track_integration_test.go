@@ -19,16 +19,14 @@ func TestTaskCreateWithTrack(t *testing.T) {
 		}
 		defer s.Close()
 
-		// Create a track first.
-		svc := core.NewTrackService(s, s)
+		// Create a track first. Service mints a TypeID and promotes the
+		// supplied "ID" string into Track.Slug.
 		track := &core.Track{
 			ID:    "my-track",
 			Title: "My Track",
 			Type:  core.TrackTypeFeature,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("failed to create track: %v", err)
-		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		// Create a task linked to the track.
 		cmd := newTestCmd()
@@ -49,7 +47,7 @@ func TestTaskCreateWithTrack(t *testing.T) {
 			t.Errorf("expected 'Created task' in output, got: %s", output)
 		}
 
-		// Verify task has track_id set.
+		// Verify task has track_id set to the track's TypeID.
 		task, err := s.GetTask(ctx, "T-0001")
 		if err != nil {
 			t.Fatalf("GetTask: %v", err)
@@ -57,8 +55,8 @@ func TestTaskCreateWithTrack(t *testing.T) {
 		if task == nil {
 			t.Fatal("task not found after create")
 		}
-		if task.TrackID == nil || *task.TrackID != "my-track" {
-			t.Errorf("expected track_id=my-track, got %v", task.TrackID)
+		if task.TrackID == nil || *task.TrackID != trackTypeID {
+			t.Errorf("expected track_id=%s, got %v", trackTypeID, task.TrackID)
 		}
 	})
 }
@@ -99,27 +97,23 @@ func TestTaskListFilterByTrack(t *testing.T) {
 		defer s.Close()
 
 		// Create a track.
-		svc := core.NewTrackService(s, s)
 		track := &core.Track{
 			ID:    "filter-track",
 			Title: "Filter Track",
 			Type:  core.TrackTypeFeature,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("failed to create track: %v", err)
-		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
-		trackID := "filter-track"
-		// Create tasks: one with track, one without.
+		// Create tasks: one with track (linked by TypeID), one without.
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "With track", Status: core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 		})
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0002", Title: "No track", Status: core.StatusTodo,
 		})
 
-		// List with --track filter.
+		// List with --track filter (slug accepted; resolved to TypeID).
 		cmd := newTestCmd()
 		cmd.AddCommand(TaskCmd)
 		buf := new(bytes.Buffer)
@@ -155,15 +149,13 @@ func TestTaskUpdateTrack(t *testing.T) {
 		defer s.Close()
 
 		// Create tracks.
-		svc := core.NewTrackService(s, s)
-		for _, id := range []string{"track-a", "track-b"} {
-			tr := &core.Track{
-				ID: id, Title: id, Type: core.TrackTypeFeature,
-			}
-			if err := svc.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("failed to create track %s: %v", id, err)
-			}
+		trackA := &core.Track{
+			ID: "track-a", Title: "track-a", Type: core.TrackTypeFeature,
 		}
+		trackATypeID := seedTrack(t, ctx, s, s, trackA)
+		seedTrack(t, ctx, s, s, &core.Track{
+			ID: "track-b", Title: "track-b", Type: core.TrackTypeFeature,
+		})
 
 		// Create a task.
 		s.CreateTask(ctx, &core.Task{
@@ -183,8 +175,8 @@ func TestTaskUpdateTrack(t *testing.T) {
 		}
 
 		task, _ := s.GetTask(ctx, "T-0001")
-		if task.TrackID == nil || *task.TrackID != "track-a" {
-			t.Errorf("expected track_id=track-a, got %v", task.TrackID)
+		if task.TrackID == nil || *task.TrackID != trackATypeID {
+			t.Errorf("expected track_id=%s, got %v", trackATypeID, task.TrackID)
 		}
 
 		// Update: unlink with --track -.
@@ -219,27 +211,23 @@ func TestAutoTransitionPendingToActive(t *testing.T) {
 		defer s.Close()
 
 		// Create a pending track.
-		svc := core.NewTrackService(s, s)
 		track := &core.Track{
 			ID:    "auto-track",
 			Title: "Auto Track",
 			Type:  core.TrackTypeFeature,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("failed to create track: %v", err)
-		}
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		// Verify track is pending.
-		tr, _ := s.GetTrack(ctx, "auto-track")
+		tr, _ := s.GetTrack(ctx, trackTypeID)
 		if tr.Status != core.TrackStatusPending {
 			t.Fatalf("expected pending, got %s", tr.Status)
 		}
 
 		// Create a task linked to the track.
-		trackID := "auto-track"
 		s.CreateTask(ctx, &core.Task{
 			ID: "T-0001", Title: "Linked task", Status: core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 		})
 
 		// Claim the task — should auto-transition track to active.
@@ -260,7 +248,7 @@ func TestAutoTransitionPendingToActive(t *testing.T) {
 		}
 
 		// Verify track is now active.
-		tr, _ = s.GetTrack(ctx, "auto-track")
+		tr, _ = s.GetTrack(ctx, trackTypeID)
 		if tr.Status != core.TrackStatusActive {
 			t.Errorf(
 				"expected track status=active after claim, got %s",
@@ -284,21 +272,21 @@ func TestAutoTransitionNoOpWhenTrackAlreadyActive(t *testing.T) {
 		svc := core.NewTrackService(s, s)
 
 		// Create a track and manually set to active.
-		trackID := "active-track"
 		track := &core.Track{
-			ID: trackID, Title: "Active", Type: core.TrackTypeFeature,
+			ID: "active-track", Title: "Active", Type: core.TrackTypeFeature,
 		}
 		if err := svc.CreateTrack(ctx, track); err != nil {
 			t.Fatalf("create track: %v", err)
 		}
+		trackTypeID := track.ID
 
 		// Create a linked task, then activate the track.
 		s.CreateTask(context.Background(), &core.Task{
 			ID: "T-0001", Title: "t1", Status: core.StatusTodo,
-			TrackID: &trackID,
+			TrackID: &trackTypeID,
 		})
-		if err := svc.UpdateTrack(ctx, trackID, func(t *core.Track) error {
-			t.Status = core.TrackStatusActive
+		if err := svc.UpdateTrack(ctx, trackTypeID, func(tt *core.Track) error {
+			tt.Status = core.TrackStatusActive
 			return nil
 		}); err != nil {
 			t.Fatalf("activate track: %v", err)
@@ -317,7 +305,7 @@ func TestAutoTransitionNoOpWhenTrackAlreadyActive(t *testing.T) {
 		}
 
 		// Track should still be active (no error, no change).
-		tr, _ := s.GetTrack(ctx, trackID)
+		tr, _ := s.GetTrack(ctx, trackTypeID)
 		if tr.Status != core.TrackStatusActive {
 			t.Errorf("expected active, got %s", tr.Status)
 		}

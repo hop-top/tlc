@@ -65,7 +65,7 @@ func (s *TaskService) NextTaskID(ctx context.Context, projectID string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to get next sequence ID: %w", err)
 	}
-	return fmt.Sprintf("T-%04d", seq), nil
+	return FormatTaskSeq(int64(seq)), nil
 }
 
 func (s *TaskService) CreateTask(ctx context.Context, task *Task, by string, note string) error {

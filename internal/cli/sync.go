@@ -280,7 +280,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 				if listErr != nil {
 					return fmt.Errorf("failed to list tasks for ID generation: %w", listErr)
 				}
-				remoteTask.ID = fmt.Sprintf("T-%04d", len(allTasks)+1)
+				remoteTask.ID = core.FormatTaskSeq(int64(len(allTasks) + 1))
 			}
 			remoteTask.LastSyncAt = &now
 			if err := s.CreateTask(ctx, &remoteTask); err != nil {

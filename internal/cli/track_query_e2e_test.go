@@ -209,28 +209,24 @@ func TestTrackList_E2E_FilterByState(t *testing.T) {
 		defer s.Close()
 
 		now := time.Now().UTC()
-		svc := core.NewTrackService(s, s)
-		for _, tr := range []*core.Track{
-			{
-				ID: "stale-track", Title: "Stale Track",
-				Type: "feature", Status: core.TrackStatusActive,
-				CreatedAt: now, UpdatedAt: now,
-			},
-			{
-				ID: "healthy-track", Title: "Healthy Track",
-				Type: "feature", Status: core.TrackStatusActive,
-				CreatedAt: now, UpdatedAt: now,
-			},
-		} {
-			if err := svc.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("create track: %v", err)
-			}
+		staleTrack := &core.Track{
+			ID: "stale-track", Title: "Stale Track",
+			Type: "feature", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
 		}
+		healthyTrack := &core.Track{
+			ID: "healthy-track", Title: "Healthy Track",
+			Type: "feature", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		seedTrack(t, ctx, s, s, staleTrack)
+		seedTrack(t, ctx, s, s, healthyTrack)
 
 		// Link tasks: stale track gets a very old task (>7d default
-		// threshold), healthy gets a fresh task.
-		staleID := "stale-track"
-		healthyID := "healthy-track"
+		// threshold), healthy gets a fresh task. TrackID stores the
+		// track's TypeID.
+		staleID := staleTrack.ID
+		healthyID := healthyTrack.ID
 		for _, task := range []*core.Task{
 			{
 				ID: "T-0001", Title: "Old task",
@@ -292,16 +288,13 @@ func TestTrackList_E2E_JSONOutput(t *testing.T) {
 		defer s.Close()
 
 		now := time.Now().UTC()
-		svc := core.NewTrackService(s, s)
 		assignee := "dev-1"
 		track := &core.Track{
 			ID: "json-e2e-track", Title: "JSON E2E Track",
 			Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
 			AssignedTo: &assignee, CreatedAt: now, UpdatedAt: now,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("create track: %v", err)
-		}
+		seedTrack(t, ctx, s, s, track)
 
 		viper.Set("output.format", "json")
 		cmd := newTestCmd()
@@ -326,8 +319,12 @@ func TestTrackList_E2E_JSONOutput(t *testing.T) {
 			t.Fatalf("expected 1 track in JSON, got %d", len(items))
 		}
 		item := items[0]
-		if item.ID != "json-e2e-track" {
-			t.Errorf("expected id json-e2e-track, got %s", item.ID)
+		// id is now the durable TypeID; the user-typed slug appears in slug.
+		if !core.IsTrackID(item.ID) {
+			t.Errorf("expected TypeID-shaped id, got %s", item.ID)
+		}
+		if item.Slug != "json-e2e-track" {
+			t.Errorf("expected slug json-e2e-track, got %s", item.Slug)
 		}
 		if item.Type != "feature" {
 			t.Errorf("expected type feature, got %s", item.Type)
@@ -357,16 +354,12 @@ func TestTrackShow_E2E_PhaseBreakdown(t *testing.T) {
 		}
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
 		track := &core.Track{
 			ID: "phased-e2e", Title: "Phased E2E",
 			Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
 		}
-		if err := svc.CreateTrack(ctx, track); err != nil {
-			t.Fatalf("create track: %v", err)
-		}
+		trackID := seedTrack(t, ctx, s, s, track)
 
-		trackID := "phased-e2e"
 		now := time.Now().UTC()
 		tasks := []*core.Task{
 			{
@@ -554,26 +547,21 @@ func TestTrackList_E2E_BlockedWhenAnyTaskBlocked(t *testing.T) {
 		defer s.Close()
 
 		now := time.Now().UTC()
-		svc := core.NewTrackService(s, s)
-		for _, tr := range []*core.Track{
-			{
-				ID: "partial-blocked", Title: "Partially Blocked",
-				Type: "feature", Status: core.TrackStatusActive,
-				CreatedAt: now, UpdatedAt: now,
-			},
-			{
-				ID: "fully-clear", Title: "No Blockers",
-				Type: "feature", Status: core.TrackStatusActive,
-				CreatedAt: now, UpdatedAt: now,
-			},
-		} {
-			if err := svc.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("create track: %v", err)
-			}
+		partial := &core.Track{
+			ID: "partial-blocked", Title: "Partially Blocked",
+			Type: "feature", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
 		}
+		clear := &core.Track{
+			ID: "fully-clear", Title: "No Blockers",
+			Type: "feature", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		seedTrack(t, ctx, s, s, partial)
+		seedTrack(t, ctx, s, s, clear)
 
 		// partial-blocked: one blocked task, one unblocked task.
-		trID := "partial-blocked"
+		trID := partial.ID
 		blockedMeta := map[string]interface{}{"blocked_by": []string{"T-9999"}}
 		tasks := []*core.Task{
 			{
@@ -587,7 +575,7 @@ func TestTrackList_E2E_BlockedWhenAnyTaskBlocked(t *testing.T) {
 			},
 		}
 		// fully-clear: one unblocked task only.
-		clearID := "fully-clear"
+		clearID := clear.ID
 		tasks = append(tasks, &core.Task{
 			ID: "T-0012", Title: "Clear task", Status: core.StatusInProgress,
 			TrackID: &clearID, CreatedAt: now, UpdatedAt: now,
@@ -944,38 +932,38 @@ func TestTrackList_E2E_DefaultScopeOtherProjectTrackPersisted(t *testing.T) {
 		svc := core.NewTrackService(s, s)
 		inProj := "hop-top/tlc"
 		otherProj := "other-org/foo"
-		for _, tr := range []*core.Track{
-			{
-				ID: "in-proj-track", Title: "In Project",
-				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
-				ProjectID: &inProj, CreatedAt: now, UpdatedAt: now,
-			},
-			{
-				ID: "other-proj-track", Title: "Other Project",
-				Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
-				ProjectID: &otherProj, CreatedAt: now, UpdatedAt: now,
-			},
-		} {
+		inProjTrack := &core.Track{
+			ID: "in-proj-track", Title: "In Project",
+			Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+			ProjectID: &inProj, CreatedAt: now, UpdatedAt: now,
+		}
+		otherProjTrack := &core.Track{
+			ID: "other-proj-track", Title: "Other Project",
+			Type: core.TrackTypeFeature, Status: core.TrackStatusActive,
+			ProjectID: &otherProj, CreatedAt: now, UpdatedAt: now,
+		}
+		for _, tr := range []*core.Track{inProjTrack, otherProjTrack} {
 			if err := svc.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("create track %s: %v", tr.ID, err)
+				t.Fatalf("create track %s: %v", tr.Slug, err)
 			}
 		}
 
 		// AllProjects=true bypasses the auto project filter and returns
-		// every track regardless of owning project.
+		// every track regardless of owning project. Identify by Slug
+		// since Track.ID is now the auto-minted TypeID.
 		all, err := s.ListTracks(ctx, core.TrackQuery{AllProjects: true})
 		if err != nil {
 			t.Fatalf("ListTracks AllProjects=true: %v", err)
 		}
 		seen := map[string]bool{}
 		for _, tr := range all {
-			seen[tr.ID] = true
+			seen[tr.Slug] = true
 		}
 		if !seen["in-proj-track"] {
-			t.Errorf("expected in-proj-track persisted, got tracks: %v", seen)
+			t.Errorf("expected in-proj-track persisted, got slugs: %v", seen)
 		}
 		if !seen["other-proj-track"] {
-			t.Errorf("expected other-proj-track persisted, got tracks: %v", seen)
+			t.Errorf("expected other-proj-track persisted, got slugs: %v", seen)
 		}
 
 		// Default-scoped storage query (no AllProjects, no ProjectID
@@ -985,15 +973,15 @@ func TestTrackList_E2E_DefaultScopeOtherProjectTrackPersisted(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListTracks default scope: %v", err)
 		}
-		scopedIDs := map[string]bool{}
+		scopedSlugs := map[string]bool{}
 		for _, tr := range scoped {
-			scopedIDs[tr.ID] = true
+			scopedSlugs[tr.Slug] = true
 		}
-		if !scopedIDs["in-proj-track"] {
-			t.Errorf("expected in-proj-track in default-scope storage list, got: %v", scopedIDs)
+		if !scopedSlugs["in-proj-track"] {
+			t.Errorf("expected in-proj-track in default-scope storage list, got: %v", scopedSlugs)
 		}
-		if scopedIDs["other-proj-track"] {
-			t.Errorf("unexpected other-proj-track in default-scope storage list, got: %v", scopedIDs)
+		if scopedSlugs["other-proj-track"] {
+			t.Errorf("unexpected other-proj-track in default-scope storage list, got: %v", scopedSlugs)
 		}
 	})
 }

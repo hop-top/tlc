@@ -16,16 +16,16 @@ func TestTaskPrompt_MarkdownAllFields(t *testing.T) {
 	s, _ := getStorageRaw()
 	defer s.Close()
 
-	trackID := "auth-system"
 	now := time.Now().UTC()
-	s.CreateTrack(ctx, &core.Track{
-		ID:        trackID,
+	track := &core.Track{
+		ID:        "auth-system",
 		Title:     "Auth System",
 		Type:      "feature",
 		Status:    core.TrackStatusActive,
 		CreatedAt: now,
 		UpdatedAt: now,
-	})
+	}
+	trackID := seedTrack(t, ctx, s, s, track)
 
 	assignee := "jadb"
 	s.CreateTask(ctx, &core.Task{

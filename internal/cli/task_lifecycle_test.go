@@ -592,7 +592,7 @@ func TestTaskAssign_RegexPattern(t *testing.T) {
 
 // TestClaimComplete_TaskDuplicatedAcrossProjectBuckets is a regression test for
 // the bug where claim/complete silently updated the wrong row when the same task
-// ID existed in multiple project_id buckets ('' global + project-scoped sync rows).
+// existed in multiple project_id buckets ('' global + project-scoped sync rows).
 //
 // Repro sequence:
 //  1. Task created outside project context → project_id=''
@@ -603,6 +603,12 @@ func TestTaskAssign_RegexPattern(t *testing.T) {
 //
 // Fix: GetTask (no-project path) now orders by CASE WHEN project_id='' THEN 0 ELSE 1
 // so the global row is preferred, and UpdateTask uses WHERE project_id=? (not IS NULL).
+//
+// TypeID model adaptation: tasks.id is the durable PRIMARY KEY (a TypeID), so two
+// rows can no longer share id="T-0001". The duplicate-across-buckets condition is
+// now expressed as two rows with distinct TypeIDs but the same display alias seq=1
+// (UNIQUE on (project_id, seq) lets seq=1 exist once per project bucket).
+// CLI alias resolution looks up by seq within the active project context.
 func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
 	withTestLock(func() {
 		dbPath := resetTestDB(t)
@@ -615,11 +621,11 @@ func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
 		ctx := context.Background()
 
 		// Step 1: insert project-scoped duplicate FIRST so it gets a lower rowid.
-		// An unordered SELECT WHERE id=? would return this row first, proving the fix
-		// is needed to prefer the global (project_id='') row.
+		// Distinct TypeID; same display alias (seq=1) within proj-a's bucket.
 		projID := "proj-a"
+		scopedID := core.NewTaskID()
 		_ = s.CreateTask(ctx, &core.Task{
-			ID:        "T-0001",
+			ID:        scopedID,
 			Title:     "Global task",
 			ProjectID: &projID,
 			Status:    core.StatusTodo,
@@ -629,9 +635,10 @@ func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
 		})
 
 		// Step 2: create global task (project_id='') second — higher rowid.
-		// Without the fix an unordered SELECT would miss this row.
+		// Different TypeID; seq=1 in the global bucket.
+		globalID := core.NewTaskID()
 		_ = s.CreateTask(ctx, &core.Task{
-			ID:        "T-0001",
+			ID:        globalID,
 			Title:     "Global task",
 			Status:    core.StatusTodo,
 			Reference: "ref",
@@ -652,8 +659,8 @@ func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
 			t.Fatalf("claim failed: %v", err)
 		}
 
-		// '' row must be IN_PROGRESS
-		global, err := s.GetTaskInProject(ctx, "T-0001", "")
+		// '' row must be IN_PROGRESS — look up by its TypeID.
+		global, err := s.GetTaskInProject(ctx, globalID, "")
 		if err != nil || global == nil {
 			t.Fatalf("GetTaskInProject('') after claim: %v", err)
 		}
@@ -662,7 +669,7 @@ func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
 		}
 
 		// project-scoped row must be untouched
-		scoped, err := s.GetTaskInProject(ctx, "T-0001", projID)
+		scoped, err := s.GetTaskInProject(ctx, scopedID, projID)
 		if err != nil || scoped == nil {
 			t.Fatalf("GetTaskInProject(projID) after claim: %v", err)
 		}
@@ -682,7 +689,7 @@ func TestClaimComplete_TaskDuplicatedAcrossProjectBuckets(t *testing.T) {
 			t.Fatalf("complete failed (regression: reads stale '' row as TODO): %v", err)
 		}
 
-		global2, err := s.GetTaskInProject(ctx, "T-0001", "")
+		global2, err := s.GetTaskInProject(ctx, globalID, "")
 		if err != nil || global2 == nil {
 			t.Fatalf("GetTaskInProject('') after complete: %v", err)
 		}

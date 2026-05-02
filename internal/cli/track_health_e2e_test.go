@@ -52,9 +52,7 @@ func TestTrackHealth_E2E_SummaryStatusCounts(t *testing.T) {
 			},
 		}
 		for _, tr := range tracks {
-			if err := s.CreateTrack(ctx, tr); err != nil {
-				t.Fatalf("CreateTrack %s: %v", tr.ID, err)
-			}
+			seedTrack(t, ctx, s, s, tr)
 		}
 
 		cmd := newTestCmd()
@@ -100,13 +98,11 @@ func TestTrackHealth_E2E_OvercommitWarning(t *testing.T) {
 		for _, id := range []string{
 			"oc-1", "oc-2", "oc-3", "oc-4",
 		} {
-			if err := s.CreateTrack(ctx, &core.Track{
+			seedTrack(t, ctx, s, s, &core.Track{
 				ID: id, Title: id, Type: "feature",
 				Status: core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
-			}); err != nil {
-				t.Fatalf("CreateTrack %s: %v", id, err)
-			}
+			})
 		}
 
 		// Default max_active=3; 4 active tracks -> overcommit.
@@ -148,13 +144,11 @@ func TestTrackHealth_E2E_NoWarningUnderThreshold(t *testing.T) {
 
 		now := time.Now().UTC()
 		for _, id := range []string{"ok-1", "ok-2"} {
-			if err := s.CreateTrack(ctx, &core.Track{
+			seedTrack(t, ctx, s, s, &core.Track{
 				ID: id, Title: id, Type: "feature",
 				Status: core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
-			}); err != nil {
-				t.Fatalf("CreateTrack %s: %v", id, err)
-			}
+			})
 		}
 
 		cmd := newTestCmd()
@@ -194,16 +188,13 @@ func TestTrackPlan_E2E_AddPlanWithTasks(t *testing.T) {
 		}
 		defer s.Close()
 
-		svc := core.NewTrackService(s, s)
 		now := time.Now().UTC()
-		if err := s.CreateTrack(ctx, &core.Track{
+		track := &core.Track{
 			ID: "plan-track", Title: "Plan Track",
 			Type: "feature", Status: core.TrackStatusActive,
 			CreatedAt: now, UpdatedAt: now,
-		}); err != nil {
-			t.Fatalf("CreateTrack: %v", err)
 		}
-		_ = svc // keep ref for clarity
+		trackTypeID := seedTrack(t, ctx, s, s, track)
 
 		planContent := `---
 title: Test Plan
@@ -245,23 +236,27 @@ tasks:
 			)
 		}
 
-		// Verify tasks exist with correct TrackID.
-		for _, id := range []string{"T-0001", "T-0002"} {
-			task, err := s.GetTask(ctx, id)
+		// Verify tasks exist with correct TrackID (now the track's TypeID).
+		// Plan ingestion mints TypeID-shaped task IDs; look them up by seq.
+		for _, seq := range []int64{1, 2} {
+			task, err := s.GetTaskBySeq(ctx, "", seq)
 			if err != nil {
-				t.Fatalf("GetTask %s: %v", id, err)
+				t.Fatalf("GetTaskBySeq seq=%d: %v", seq, err)
+			}
+			if task == nil {
+				t.Fatalf("task seq=%d not found", seq)
 			}
 			if task.TrackID == nil ||
-				*task.TrackID != "plan-track" {
+				*task.TrackID != trackTypeID {
 				t.Errorf(
-					"task %s: expected TrackID=plan-track, got %v",
-					id, task.TrackID,
+					"task seq=%d: expected TrackID=%s, got %v",
+					seq, trackTypeID, task.TrackID,
 				)
 			}
 		}
 
 		// Verify plan is linked in track meta.
-		tr, _ := s.GetTrack(ctx, "plan-track")
+		tr, _ := s.GetTrack(ctx, trackTypeID)
 		if tr.Meta == nil {
 			t.Fatal("expected Meta with plans key")
 		}
@@ -294,13 +289,11 @@ func TestTrackPlan_E2E_AddPlanLinkOnly(t *testing.T) {
 		defer s.Close()
 
 		now := time.Now().UTC()
-		if err := s.CreateTrack(ctx, &core.Track{
+		trackTypeID := seedTrack(t, ctx, s, s, &core.Track{
 			ID: "link-only", Title: "Link Only",
 			Type: "feature", Status: core.TrackStatusActive,
 			CreatedAt: now, UpdatedAt: now,
-		}); err != nil {
-			t.Fatalf("CreateTrack: %v", err)
-		}
+		})
 
 		planContent := `---
 title: Design Notes
@@ -338,7 +331,7 @@ tracks: [link-only]
 		}
 
 		// Verify plan is linked but no tasks created.
-		tr, _ := s.GetTrack(ctx, "link-only")
+		tr, _ := s.GetTrack(ctx, trackTypeID)
 		if tr.Meta == nil || tr.Meta["plans"] == nil {
 			t.Error("expected plan linked in Meta")
 		}
@@ -364,13 +357,11 @@ func TestTrackPlan_E2E_BlockedByResolution(t *testing.T) {
 		defer s.Close()
 
 		now := time.Now().UTC()
-		if err := s.CreateTrack(ctx, &core.Track{
+		seedTrack(t, ctx, s, s, &core.Track{
 			ID: "dep-track", Title: "Dep Track",
 			Type: "feature", Status: core.TrackStatusActive,
 			CreatedAt: now, UpdatedAt: now,
-		}); err != nil {
-			t.Fatalf("CreateTrack: %v", err)
-		}
+		})
 
 		planContent := `---
 title: Dependency Plan
@@ -415,15 +406,19 @@ tasks:
 			)
 		}
 
-		// Verify blocked_by resolved to real IDs.
-		// Task B (T-0002) blocked by Task A (T-0001).
-		taskB, _ := s.GetTask(ctx, "T-0002")
-		if taskB == nil {
-			t.Fatal("T-0002 not found")
+		// Verify blocked_by resolved to real task IDs (now TypeIDs).
+		// Plan ingestion mints TypeIDs for created tasks; look up by seq.
+		taskA, err := s.GetTaskBySeq(ctx, "", 1)
+		if err != nil || taskA == nil {
+			t.Fatalf("GetTaskBySeq seq=1: %v", err)
+		}
+		taskB, err := s.GetTaskBySeq(ctx, "", 2)
+		if err != nil || taskB == nil {
+			t.Fatalf("GetTaskBySeq seq=2: %v", err)
 		}
 		blockedBy, ok := taskB.Meta["blocked_by"]
 		if !ok {
-			t.Fatal("T-0002 missing blocked_by in Meta")
+			t.Fatal("seq=2 missing blocked_by in Meta")
 		}
 		blockedSlice, ok := blockedBy.([]any)
 		if !ok {
@@ -434,26 +429,25 @@ tasks:
 		}
 		if len(blockedSlice) != 1 {
 			t.Fatalf(
-				"T-0002 expected 1 blocked_by, got %d",
+				"seq=2 expected 1 blocked_by, got %d",
 				len(blockedSlice),
 			)
 		}
-		if blockedSlice[0] != "T-0001" {
+		if blockedSlice[0] != taskA.ID {
 			t.Errorf(
-				"T-0002 blocked_by[0] = %v, want T-0001",
-				blockedSlice[0],
+				"seq=2 blocked_by[0] = %v, want %s",
+				blockedSlice[0], taskA.ID,
 			)
 		}
 
-		// Task C (T-0003) blocked by Task A (T-0001) and
-		// Task B (T-0002).
-		taskC, _ := s.GetTask(ctx, "T-0003")
-		if taskC == nil {
-			t.Fatal("T-0003 not found")
+		// Task C (seq=3) blocked by Task A (seq=1) and Task B (seq=2).
+		taskC, err := s.GetTaskBySeq(ctx, "", 3)
+		if err != nil || taskC == nil {
+			t.Fatalf("GetTaskBySeq seq=3: %v", err)
 		}
 		blockedBy, ok = taskC.Meta["blocked_by"]
 		if !ok {
-			t.Fatal("T-0003 missing blocked_by in Meta")
+			t.Fatal("seq=3 missing blocked_by in Meta")
 		}
 		blockedSlice, ok = blockedBy.([]any)
 		if !ok {
@@ -464,15 +458,15 @@ tasks:
 		}
 		if len(blockedSlice) != 2 {
 			t.Fatalf(
-				"T-0003 expected 2 blocked_by, got %d",
+				"seq=3 expected 2 blocked_by, got %d",
 				len(blockedSlice),
 			)
 		}
-		if blockedSlice[0] != "T-0001" ||
-			blockedSlice[1] != "T-0002" {
+		if blockedSlice[0] != taskA.ID ||
+			blockedSlice[1] != taskB.ID {
 			t.Errorf(
-				"T-0003 blocked_by = %v, want [T-0001 T-0002]",
-				blockedSlice,
+				"seq=3 blocked_by = %v, want [%s %s]",
+				blockedSlice, taskA.ID, taskB.ID,
 			)
 		}
 	})
