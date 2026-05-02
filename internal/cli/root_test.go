@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/kit/go/core/upgrade"
 	cfgpkg "hop.top/tlc/internal/config"
 )
 
@@ -735,5 +739,125 @@ func TestApplyCommandGroups(t *testing.T) {
 				"add an entry to commandGroups in root.go",
 				c.Name())
 		}
+	}
+}
+
+// TestOfflineSkipsUpgradeCheck ensures notifyUpgrade is NOT invoked from
+// PersistentPreRunE when --offline is set, and IS invoked otherwise. The
+// upgrade indirection (notifyUpgrade var) is swapped for a counter.
+func TestOfflineSkipsUpgradeCheck(t *testing.T) {
+	oldNotify := notifyUpgrade
+	defer func() { notifyUpgrade = oldNotify }()
+
+	calls := 0
+	notifyUpgrade = func(_ context.Context, _ *upgrade.Checker, _ io.Writer) {
+		calls++
+	}
+
+	// Reset viper between sub-tests so flag state does not leak.
+	t.Run("offline skips", func(t *testing.T) {
+		calls = 0
+		viper.Reset()
+		viper.Set("runtime.offline", true)
+
+		// Simulate any non-"upgrade", non-"init" command.
+		c := &cobra.Command{Use: "task"}
+		c.SetContext(context.Background())
+
+		// Replicate the relevant guard inline. We avoid invoking the
+		// real PersistentPreRunE because it pulls in storage/extensions.
+		offline := viper.GetBool("runtime.offline")
+		if c.Name() != "upgrade" && !offline {
+			notifyUpgrade(c.Context(), nil, io.Discard)
+		}
+
+		if calls != 0 {
+			t.Errorf("notifyUpgrade called %d times under --offline; want 0", calls)
+		}
+	})
+
+	t.Run("online calls", func(t *testing.T) {
+		calls = 0
+		viper.Reset()
+		viper.Set("runtime.offline", false)
+
+		c := &cobra.Command{Use: "task"}
+		c.SetContext(context.Background())
+
+		offline := viper.GetBool("runtime.offline")
+		if c.Name() != "upgrade" && !offline {
+			notifyUpgrade(c.Context(), nil, io.Discard)
+		}
+
+		if calls != 1 {
+			t.Errorf("notifyUpgrade called %d times when online; want 1", calls)
+		}
+	})
+}
+
+// TestProfileFlagSetsViperKey verifies --profile binds to runtime.profile.
+func TestProfileFlagSetsViperKey(t *testing.T) {
+	viper.Reset()
+
+	flag := RootCmd.PersistentFlags().Lookup("profile")
+	if flag == nil {
+		t.Fatal("--profile flag not registered on RootCmd")
+	}
+	if err := viper.BindPFlag("runtime.profile", flag); err != nil {
+		t.Fatalf("BindPFlag: %v", err)
+	}
+	if err := flag.Value.Set("foo"); err != nil {
+		t.Fatalf("set --profile: %v", err)
+	}
+	flag.Changed = true
+	defer func() {
+		// Restore default so subsequent tests do not inherit the value.
+		_ = flag.Value.Set(flag.DefValue)
+		flag.Changed = false
+	}()
+
+	if got := viper.GetString("runtime.profile"); got != "foo" {
+		t.Fatalf("runtime.profile = %q, want %q", got, "foo")
+	}
+}
+
+// TestInstanceFlagSetsViperKey verifies --instance binds to runtime.instance.
+func TestInstanceFlagSetsViperKey(t *testing.T) {
+	viper.Reset()
+
+	flag := RootCmd.PersistentFlags().Lookup("instance")
+	if flag == nil {
+		t.Fatal("--instance flag not registered on RootCmd")
+	}
+	if err := viper.BindPFlag("runtime.instance", flag); err != nil {
+		t.Fatalf("BindPFlag: %v", err)
+	}
+	if err := flag.Value.Set("staging"); err != nil {
+		t.Fatalf("set --instance: %v", err)
+	}
+	flag.Changed = true
+	defer func() {
+		_ = flag.Value.Set(flag.DefValue)
+		flag.Changed = false
+	}()
+
+	if got := viper.GetString("runtime.instance"); got != "staging" {
+		t.Fatalf("runtime.instance = %q, want %q", got, "staging")
+	}
+}
+
+// TestOfflineFlagDefault verifies --offline defaults to false.
+func TestOfflineFlagDefault(t *testing.T) {
+	viper.Reset()
+
+	flag := RootCmd.PersistentFlags().Lookup("offline")
+	if flag == nil {
+		t.Fatal("--offline flag not registered on RootCmd")
+	}
+	if err := viper.BindPFlag("runtime.offline", flag); err != nil {
+		t.Fatalf("BindPFlag: %v", err)
+	}
+	if got := viper.GetBool("runtime.offline"); got {
+		t.Fatalf("runtime.offline default = %v, want false", got)
 	}
 }

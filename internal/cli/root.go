@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,12 @@ var (
 	cfgFile    string
 	tlcVersion = "dev" // overridden at build time via -ldflags
 )
+
+// notifyUpgrade indirects upgrade.NotifyIfAvailable so tests can substitute
+// a counter and assert the call was skipped under --offline.
+var notifyUpgrade = func(ctx context.Context, c *upgrade.Checker, out io.Writer) {
+	upgrade.NotifyIfAvailable(ctx, c, out)
+}
 
 // SetVersion sets the version string injected at build time.
 func SetVersion(v string) { tlcVersion = v }
@@ -161,6 +168,21 @@ func kitRoot() *kitcli.Root {
 	// (count flag) — re-registered in kit's new go/console/cli layout.
 	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
 
+	// Persistent global flags from cli-conventions §5.
+	// See docs/global-flags.md for behaviour and viper bindings.
+	cmd.PersistentFlags().Bool("offline", false, "Disable all network (skip sync, upgrade check, plugin downloads)")
+	cmd.PersistentFlags().String("profile", os.Getenv("APS_PROFILE"), "aps profile name")
+	cmd.PersistentFlags().String("instance", "tlc", "Backend instance")
+	if err := viper.BindPFlag("runtime.offline", cmd.PersistentFlags().Lookup("offline")); err != nil {
+		log.Warn("Failed to bind offline flag", "error", err)
+	}
+	if err := viper.BindPFlag("runtime.profile", cmd.PersistentFlags().Lookup("profile")); err != nil {
+		log.Warn("Failed to bind profile flag", "error", err)
+	}
+	if err := viper.BindPFlag("runtime.instance", cmd.PersistentFlags().Lookup("instance")); err != nil {
+		log.Warn("Failed to bind instance flag", "error", err)
+	}
+
 	// Add -f shorthand to kit's --format flag.
 	if f := cmd.PersistentFlags().Lookup("format"); f != nil {
 		f.Shorthand = "f"
@@ -193,8 +215,9 @@ func kitRoot() *kitcli.Root {
 
 	// --- Lifecycle hooks ---
 	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
-		if c.Name() != "upgrade" {
-			upgrade.NotifyIfAvailable(c.Context(), newChecker(), os.Stderr)
+		offline := viper.GetBool("runtime.offline")
+		if c.Name() != "upgrade" && !offline {
+			notifyUpgrade(c.Context(), newChecker(), os.Stderr)
 		}
 
 		// Skip auto-detection and storage bootstrap for the init command.
@@ -218,11 +241,16 @@ func kitRoot() *kitcli.Root {
 			return err
 		}
 
-		// Bootstrap extensions once per process.
+		// Bootstrap extensions once per process. Skip InitAll entirely
+		// when --offline is set: some extensions reach out to the
+		// network during init, and we lack a per-extension offline
+		// signal today. Coarse-grained but safe.
 		if extMgr == nil {
 			extMgr = extensions.New(log.Default(), eventBus)
 			extensions.RegisterBuiltins(extMgr)
-			if err := extMgr.InitAll(c.Context()); err != nil {
+			if offline {
+				log.Info("offline: skipping extension init")
+			} else if err := extMgr.InitAll(c.Context()); err != nil {
 				log.Warn("Failed to initialise extensions", "error", err)
 			}
 		}

@@ -354,3 +354,4 @@ from the relevant config struct.
 - `CHANGELOG.md`
 - `docs/stories/README.md`
 - `docs/personas/*.md`
+- `docs/global-flags.md` — persistent global flags (`--offline`, `--profile`, `--instance`)

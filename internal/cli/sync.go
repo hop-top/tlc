@@ -12,6 +12,7 @@ import (
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/kit/go/console/output"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/rpc"
 	"hop.top/tlc/internal/sync"
@@ -179,6 +180,10 @@ func autoConfigureGitHub(directionHint string) error {
 }
 
 func runSyncPull(cmd *cobra.Command, system string) error {
+	if viper.GetBool("runtime.offline") {
+		return output.UsageError("sync requires network; --offline is set")
+	}
+
 	// Auto-configure GitHub if needed
 	if system == syncSystemGitHub {
 		if err := autoConfigureGitHub(syncDirectionPull); err != nil {
@@ -383,6 +388,9 @@ var SyncPushCmd = &cobra.Command{
 	Short: "Push local changes to an external system",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
+		if viper.GetBool("runtime.offline") {
+			return output.UsageError("sync requires network; --offline is set")
+		}
 		system := args[0]
 		ctx := context.Background()
 
