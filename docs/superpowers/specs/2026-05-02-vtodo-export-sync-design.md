@@ -80,7 +80,30 @@ END:VCALENDAR
 
 ### Dependencies
 
-If `Task.BlockedBy []string` exists (or future): emit `RELATED-TO;RELTYPE=DEPENDS-ON:<blocker-uid>@<domain>` on the blocked task. RFC 9253. Skipped if no blocked-by data is modeled.
+`RELTYPE=DEPENDS-ON` (RFC 9253) lives **on the blocked task**, pointing to the blocker UID. The inverse ("X blocks Y") is inferred at read time by scanning all components for `DEPENDS-ON:<X>`. Do not invent `RELTYPE=BLOCKS` or `BLOCKED-BY` — RFC 5545–era clients treat unknown RELTYPEs as PARENT, which would silently corrupt hierarchy in older readers.
+
+If `Task.BlockedBy []string` is modeled (current or future): emit one `RELATED-TO;RELTYPE=DEPENDS-ON:<blocker-uid>@<domain>` row per blocker on the blocked task. PARENT and DEPENDS-ON may both target the same UID — they encode independent facts (hierarchy vs. blocking).
+
+**Temporal RELTYPEs** (`FINISHTOSTART`, `FINISHTOFINISH`, `STARTTOSTART`, `STARTTOFINISH` from RFC 9253) are placed **on the predecessor** pointing to the successor — opposite direction from `DEPENDS-ON`. Out of scope for v1.
+
+### Log entries via VJOURNAL (optional, opt-in)
+
+tlc `LogEntry` rows (`task_logs` table) map naturally to VJOURNAL components — peers of VTODO, linked by `RELATED-TO`. VJOURNAL **cannot** nest inside VTODO; both sit at the VCALENDAR level.
+
+Mapping:
+
+| `LogEntry` field | VJOURNAL property |
+|---|---|
+| derived (`log_<typeid>`) | `UID` |
+| `Timestamp` | `DTSTAMP` |
+| `By` | `ORGANIZER:mailto:<addr>` (if profile resolves) |
+| `Action` + `Note` | `SUMMARY` (action), `DESCRIPTION` (note) |
+| `TaskID` | `RELATED-TO:<task-uid>@<domain>` |
+| `Meta` | `X-TLC-META:<json>` |
+
+CLI: `--include-logs` flag on the vtodo formatters (default off — log volume can dwarf task volume). Plugin: `vtodo-sync` accepts a `include_logs` config to toggle the same behavior on push/pull.
+
+Round-trip: log entries with non-tlc UIDs (foreign VJOURNAL imports) get a fresh tlc log row with the original UID stored in `LogEntry.Meta["external_uid"]`.
 
 ## Phase 2 — RRULE replaces `RemindEvery`
 
@@ -225,11 +248,13 @@ External UIDs (e.g. from Apple Reminders) that don't match tlc typeid pattern: s
 
 ## Out of scope (now)
 
-- VEVENT/VJOURNAL.
+- VEVENT.
 - Subtasks (`Task.ParentID`).
-- `RELTYPE=SIBLING` rows.
-- Temporal RFC 9253 RELTYPEs (`FINISHTOSTART`, etc.) — add if a real consumer needs scheduling semantics.
+- `RELTYPE=SIBLING` rows (siblings inferable from shared parent).
+- `RELTYPE=BLOCKS` / `BLOCKED-BY` (not standard; RFC 5545 readers degrade unknown RELTYPEs to PARENT).
+- Temporal RFC 9253 RELTYPEs (`FINISHTOSTART`, `FINISHTOFINISH`, `STARTTOSTART`, `STARTTOFINISH`) — add if a real consumer needs scheduling semantics.
 - CalDAV mode (Phase 3b).
+- VJOURNAL log export is in scope but defaults off; consumers that don't want log noise simply omit `--include-logs`.
 
 ## Open questions
 
