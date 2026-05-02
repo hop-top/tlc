@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"hop.top/kit/go/console/alias"
 )
 
 // ---------------------------------------------------------------------------
@@ -13,8 +15,9 @@ import (
 
 func TestExpandAliases_NoMatch(t *testing.T) {
 	dir := t.TempDir()
-	writeAliasConfig(t, dir, "tl", "task list")
 	chdir(t, dir)
+	setXDGConfig(t, t.TempDir())
+	writeLocalAlias(t, dir, "tl", "task list")
 
 	args := []string{"tlc", "task", "show", "T-0001"}
 	got, ok := ExpandAliases(args)
@@ -28,8 +31,9 @@ func TestExpandAliases_NoMatch(t *testing.T) {
 
 func TestExpandAliases_Match(t *testing.T) {
 	dir := t.TempDir()
-	writeAliasConfig(t, dir, "tl", "task list")
 	chdir(t, dir)
+	setXDGConfig(t, t.TempDir())
+	writeLocalAlias(t, dir, "tl", "task list")
 
 	args := []string{"tlc", "tl"}
 	got, ok := ExpandAliases(args)
@@ -44,8 +48,9 @@ func TestExpandAliases_Match(t *testing.T) {
 
 func TestExpandAliases_MatchWithExtraArgs(t *testing.T) {
 	dir := t.TempDir()
-	writeAliasConfig(t, dir, "tl", "task list")
 	chdir(t, dir)
+	setXDGConfig(t, t.TempDir())
+	writeLocalAlias(t, dir, "tl", "task list")
 
 	args := []string{"tlc", "tl", "--status", "TODO"}
 	got, ok := ExpandAliases(args)
@@ -60,8 +65,9 @@ func TestExpandAliases_MatchWithExtraArgs(t *testing.T) {
 
 func TestExpandAliases_FlagBeforeAlias(t *testing.T) {
 	dir := t.TempDir()
-	writeAliasConfig(t, dir, "tl", "task list")
 	chdir(t, dir)
+	setXDGConfig(t, t.TempDir())
+	writeLocalAlias(t, dir, "tl", "task list")
 
 	// -c flag before alias name should be preserved.
 	args := []string{"tlc", "-c", "/tmp/config.yaml", "tl"}
@@ -86,6 +92,27 @@ func TestExpandAliases_Empty(t *testing.T) {
 	}
 }
 
+func TestExpandAliases_LocalOverridesGlobal(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	xdgBase := t.TempDir()
+	setXDGConfig(t, xdgBase)
+
+	// Global says tl → flow list; local says tl → task list (project wins).
+	writeGlobalAlias(t, xdgBase, "tl", "flow list")
+	writeLocalAlias(t, dir, "tl", "task list")
+
+	args := []string{"tlc", "tl"}
+	got, ok := ExpandAliases(args)
+	if !ok {
+		t.Fatal("expected expansion")
+	}
+	want := []string{"tlc", "task", "list"}
+	if !equalSlices(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // alias add / list / remove command tests
 // ---------------------------------------------------------------------------
@@ -93,8 +120,9 @@ func TestExpandAliases_Empty(t *testing.T) {
 func TestAliasAdd_Local(t *testing.T) {
 	resetAliasFlags(t)
 	dir := t.TempDir()
+	mkLocalConfigDir(t, dir)
 	chdir(t, dir)
-	setXDGConfig(t, t.TempDir()) // isolate global config
+	setXDGConfig(t, t.TempDir())
 
 	cmd := newTestCmd()
 	cmd.AddCommand(AliasCmd)
@@ -110,12 +138,12 @@ func TestAliasAdd_Local(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	aliases, err := loadAliasesFrom(localAliasPath())
-	if err != nil {
+	store := alias.NewStore(localAliasPath())
+	if err := store.Load(); err != nil {
 		t.Fatalf("load aliases: %v", err)
 	}
-	if aliases["tl"] != "task list" {
-		t.Errorf("alias not saved: %v", aliases)
+	if v, ok := store.Get("tl"); !ok || v != "task list" {
+		t.Errorf("alias not saved: %v", store.All())
 	}
 }
 
@@ -139,31 +167,28 @@ func TestAliasAdd_Global(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	// globalAliasPath() = $XDG_CONFIG_HOME/tlc/config.yaml
-	globalPath := filepath.Join(globalBaseDir, "tlc", "config.yaml")
-	aliases, err := loadAliasesFrom(globalPath)
+	gp, err := globalAliasPath()
 	if err != nil {
+		t.Fatalf("global path: %v", err)
+	}
+	store := alias.NewStore(gp)
+	if err := store.Load(); err != nil {
 		t.Fatalf("load global aliases: %v", err)
 	}
-	if aliases["ts"] != "task show" {
-		t.Errorf("global alias not saved: %v", aliases)
+	if v, ok := store.Get("ts"); !ok || v != "task show" {
+		t.Errorf("global alias not saved: %v", store.All())
 	}
 }
 
 func TestAliasList(t *testing.T) {
 	resetAliasFlags(t)
-	// Set up local config dir.
 	localDir := t.TempDir()
-	writeAliasConfig(t, localDir, "tl", "task list")
 	chdir(t, localDir)
-
-	// Set up global config dir.
 	globalBaseDir := t.TempDir()
 	setXDGConfig(t, globalBaseDir)
-	globalPath := filepath.Join(globalBaseDir, "tlc", "config.yaml")
-	if err := saveAliasesTo(globalPath, aliasMap{"ts": "task show"}); err != nil {
-		t.Fatal(err)
-	}
+
+	writeLocalAlias(t, localDir, "tl", "task list")
+	writeGlobalAlias(t, globalBaseDir, "ts", "task show")
 
 	cmd := newTestCmd()
 	cmd.AddCommand(AliasCmd)
@@ -188,9 +213,10 @@ func TestAliasList(t *testing.T) {
 func TestAliasRemove(t *testing.T) {
 	resetAliasFlags(t)
 	dir := t.TempDir()
-	writeAliasConfig(t, dir, "tl", "task list")
+	mkLocalConfigDir(t, dir)
 	chdir(t, dir)
 	setXDGConfig(t, t.TempDir())
+	writeLocalAlias(t, dir, "tl", "task list")
 
 	cmd := newTestCmd()
 	cmd.AddCommand(AliasCmd)
@@ -206,8 +232,9 @@ func TestAliasRemove(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	aliases, _ := loadAliasesFrom(localAliasPath())
-	if _, ok := aliases["tl"]; ok {
+	store := alias.NewStore(localAliasPath())
+	_ = store.Load()
+	if _, ok := store.Get("tl"); ok {
 		t.Error("alias was not removed")
 	}
 }
@@ -275,16 +302,41 @@ func TestAliasList_Empty(t *testing.T) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// writeAliasConfig writes a minimal YAML config with one alias to
-// <dir>/.tlc/config.yaml.
-func writeAliasConfig(t *testing.T, dir, name, expansion string) {
+// mkLocalConfigDir creates <dir>/.tlc so localAliasPath() returns a
+// project-local store path. Mirrors what `tlc init` would have done.
+func mkLocalConfigDir(t *testing.T, dir string) {
 	t.Helper()
-	cfgDir := filepath.Join(dir, ".tlc")
-	if err := os.MkdirAll(cfgDir, 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".tlc"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	content := "aliases:\n  " + name + ": " + expansion + "\n"
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(content), 0o600); err != nil {
+}
+
+// writeLocalAlias persists name→expansion to <dir>/.tlc/aliases.yaml using
+// the kit alias.Store directly (mirrors the path resolved by
+// localAliasPath()).
+func writeLocalAlias(t *testing.T, dir, name, expansion string) {
+	t.Helper()
+	path := filepath.Join(dir, ".tlc", "aliases.yaml")
+	store := alias.NewStore(path)
+	_ = store.Load()
+	if err := store.Set(name, expansion); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeGlobalAlias persists name→expansion to <xdgBase>/tlc/aliases.yaml.
+func writeGlobalAlias(t *testing.T, xdgBase, name, expansion string) {
+	t.Helper()
+	path := filepath.Join(xdgBase, "tlc", "aliases.yaml")
+	store := alias.NewStore(path)
+	_ = store.Load()
+	if err := store.Set(name, expansion); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -303,12 +355,18 @@ func chdir(t *testing.T, dir string) {
 }
 
 // setXDGConfig overrides XDG_CONFIG_HOME so that globalAliasPath() returns
-// <base>/tlc/config.yaml. Restores original env after test.
+// <base>/tlc/aliases.yaml. Restores original env after test.
 func setXDGConfig(t *testing.T, base string) {
 	t.Helper()
-	prev := os.Getenv("XDG_CONFIG_HOME")
+	prev, had := os.LookupEnv("XDG_CONFIG_HOME")
 	os.Setenv("XDG_CONFIG_HOME", base)
-	t.Cleanup(func() { os.Setenv("XDG_CONFIG_HOME", prev) })
+	t.Cleanup(func() {
+		if had {
+			os.Setenv("XDG_CONFIG_HOME", prev)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+	})
 }
 
 // resetAliasFlags resets package-level alias flag state between tests.

@@ -1,13 +1,22 @@
+// Package cli — alias.go wires the kit primitive hop.top/kit/go/console/alias
+// (a YAML-backed Store) into TLC's cobra command tree, preserving the
+// --global flag semantics inherited from the legacy viper-backed aliases.
+//
+// Storage:
+//   - Global: $XDG_CONFIG_HOME/tlc/aliases.yaml (resolved via xdg.ConfigDir).
+//   - Project (when in a tlc project): <project-root>/.tlc/aliases.yaml.
+//
+// Precedence: project > global. ExpandAliases (alias_expand.go) merges both
+// stores at expansion time with project entries overriding global.
 package cli
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"hop.top/kit/go/console/alias"
 )
 
 // AliasCmd is the root alias command.
@@ -16,8 +25,11 @@ var AliasCmd = &cobra.Command{
 	Short: "Manage command aliases",
 	Long: `Define short aliases for longer tlc commands.
 
-Aliases are stored in the local project config (.tlc/config.yaml) or the
-global user config (~/.config/tlc/config.yaml) when --global is given.
+Aliases are stored in YAML files:
+  - global: $XDG_CONFIG_HOME/tlc/aliases.yaml
+  - local:  <project-root>/.tlc/aliases.yaml (when in a project)
+
+Project aliases override global aliases on collision.
 
 Examples:
   tlc alias add tl "task list"          # tlc tl → tlc task list
@@ -61,6 +73,35 @@ func init() {
 	RootCmd.AddCommand(AliasCmd)
 }
 
+// pickStore returns the project store when --global is unset and a project
+// store path is resolvable; otherwise the global store. Falls back to the
+// global store if no project root is detected.
+func pickStore() (*alias.Store, string, error) {
+	if !aliasGlobal {
+		path := localAliasPath()
+		if path != "" {
+			s, err := loadStore(path)
+			return s, "local", err
+		}
+	}
+	path, err := globalAliasPath()
+	if err != nil {
+		return nil, "", err
+	}
+	s, err := loadStore(path)
+	return s, "global", err
+}
+
+// loadStore returns an alias.Store with its YAML file loaded (missing file
+// is not an error — the store stays empty).
+func loadStore(path string) (*alias.Store, error) {
+	s := alias.NewStore(path)
+	if err := s.Load(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
 func runAliasAdd(cmd *cobra.Command, args []string) error {
 	name, expansion := args[0], args[1]
 
@@ -68,44 +109,38 @@ func runAliasAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	path := localAliasPath()
-	if aliasGlobal {
-		path = globalAliasPath()
+	store, scope, err := pickStore()
+	if err != nil {
+		return fmt.Errorf("resolve alias store: %w", err)
 	}
-
-	aliases, err := loadAliasesFrom(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("load aliases: %w", err)
+	if err := store.Set(name, expansion); err != nil {
+		return err
 	}
-	if aliases == nil {
-		aliases = aliasMap{}
-	}
-
-	aliases[name] = expansion
-	if err := saveAliasesTo(path, aliases); err != nil {
+	if err := store.Save(); err != nil {
 		return fmt.Errorf("save alias: %w", err)
-	}
-
-	scope := "local"
-	if aliasGlobal {
-		scope = "global"
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Added %s alias: %s = %q\n", scope, name, expansion)
 	return nil
 }
 
 func runAliasList(cmd *cobra.Command) error {
-	globalPath := globalAliasPath()
-	localPath := localAliasPath()
-
-	globalAliases, err := loadAliasesFrom(globalPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	globalPath, err := globalAliasPath()
+	if err != nil {
+		return fmt.Errorf("resolve global alias path: %w", err)
+	}
+	gs, err := loadStore(globalPath)
+	if err != nil {
 		return fmt.Errorf("load global aliases: %w", err)
 	}
+	globalAliases := gs.All()
 
-	localAliases, err := loadAliasesFrom(localPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("load local aliases: %w", err)
+	var localAliases map[string]string
+	if lp := localAliasPath(); lp != "" {
+		ls, err := loadStore(lp)
+		if err != nil {
+			return fmt.Errorf("load local aliases: %w", err)
+		}
+		localAliases = ls.All()
 	}
 
 	if len(globalAliases) == 0 && len(localAliases) == 0 {
@@ -114,8 +149,7 @@ func runAliasList(cmd *cobra.Command) error {
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-
-	printSection := func(label string, m aliasMap) {
+	printSection := func(label string, m map[string]string) {
 		if len(m) == 0 {
 			return
 		}
@@ -129,7 +163,6 @@ func runAliasList(cmd *cobra.Command) error {
 			fmt.Fprintf(w, "  %s\t= %s\n", k, m[k])
 		}
 	}
-
 	printSection("global", globalAliases)
 	printSection("local", localAliases)
 	return w.Flush()
@@ -138,31 +171,18 @@ func runAliasList(cmd *cobra.Command) error {
 func runAliasRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	path := localAliasPath()
-	if aliasGlobal {
-		path = globalAliasPath()
-	}
-
-	aliases, err := loadAliasesFrom(path)
-	if err != nil && errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("alias %q not found", name)
-	}
+	store, scope, err := pickStore()
 	if err != nil {
-		return fmt.Errorf("load aliases: %w", err)
+		return fmt.Errorf("resolve alias store: %w", err)
 	}
-
-	if _, ok := aliases[name]; !ok {
+	if _, ok := store.Get(name); !ok {
 		return fmt.Errorf("alias %q not found", name)
 	}
-
-	delete(aliases, name)
-	if err := saveAliasesTo(path, aliases); err != nil {
-		return fmt.Errorf("save aliases: %w", err)
+	if err := store.Remove(name); err != nil {
+		return err
 	}
-
-	scope := "local"
-	if aliasGlobal {
-		scope = "global"
+	if err := store.Save(); err != nil {
+		return fmt.Errorf("save aliases: %w", err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Removed %s alias: %s\n", scope, name)
 	return nil
@@ -192,3 +212,4 @@ func validateAliasName(name string) error {
 	}
 	return nil
 }
+

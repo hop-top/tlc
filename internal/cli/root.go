@@ -440,6 +440,11 @@ func initConfig() {
 		log.Debug("Using config file", "path", viper.ConfigFileUsed())
 	}
 
+	// One-shot migration of the deprecated `aliases:` map from viper into
+	// the new YAML-backed alias.Store(s). No-op when the legacy key is
+	// absent or the store already has entries.
+	migrateLegacyAliases()
+
 	// Validate merged configuration
 	var cfg config.Config
 	if err := viper.Unmarshal(&cfg); err != nil {
