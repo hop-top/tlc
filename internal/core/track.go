@@ -81,6 +81,7 @@ func TrackTypeList(configTypes ...[]string) string {
 // Track represents a grouping of related tasks toward a deliverable.
 type Track struct {
 	ID          string         `json:"id" yaml:"id" table:"ID"`
+	Slug        string         `json:"slug" yaml:"slug"`
 	Title       string         `json:"title" yaml:"title" table:"Title"`
 	Type        string         `json:"type" yaml:"type" table:"Type"`
 	Status      TrackStatus    `json:"status" yaml:"status" table:"Status"`
@@ -92,28 +93,30 @@ type Track struct {
 	PlanMapping map[int]string `json:"plan_mapping,omitempty" yaml:"plan_mapping,omitempty"`
 }
 
-// trackIDRe matches lowercase alphanumeric characters and hyphens, 3-64 chars.
-var trackIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$`)
+// trackSlugRe matches lowercase alphanumeric characters and hyphens, 3-64 chars.
+var trackSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$`)
 
-// ValidateTrackID checks that id is lowercase alphanumeric + hyphens, 3-64 chars.
-func ValidateTrackID(id string) error {
-	if len(id) < 3 {
+// ValidateTrackSlug checks that slug is lowercase alphanumeric + hyphens, 3-64 chars.
+// Slugs are the human-typeable display alias for tracks; the durable identity
+// is Track.ID (a TypeID like track_<26char>).
+func ValidateTrackSlug(slug string) error {
+	if len(slug) < 3 {
 		return fmt.Errorf(
-			"track ID %q too short (min 3 chars); use lowercase alphanum + hyphens",
-			id,
+			"track slug %q too short (min 3 chars); use lowercase alphanum + hyphens",
+			slug,
 		)
 	}
-	if len(id) > 64 {
+	if len(slug) > 64 {
 		return fmt.Errorf(
-			"track ID %q too long (max 64 chars); use lowercase alphanum + hyphens",
-			id,
+			"track slug %q too long (max 64 chars); use lowercase alphanum + hyphens",
+			slug,
 		)
 	}
-	if !trackIDRe.MatchString(id) {
+	if !trackSlugRe.MatchString(slug) {
 		return fmt.Errorf(
-			"track ID %q invalid; must be lowercase alphanum + hyphens, "+
+			"track slug %q invalid; must be lowercase alphanum + hyphens, "+
 				"start/end with alphanum",
-			id,
+			slug,
 		)
 	}
 	return nil

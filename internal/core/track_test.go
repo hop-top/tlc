@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-func TestValidateTrackID(t *testing.T) {
+func TestValidateTrackSlug(t *testing.T) {
 	tests := []struct {
-		id      string
+		slug    string
 		wantErr bool
 	}{
 		{"abc", false},
@@ -37,12 +37,12 @@ func TestValidateTrackID(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		err := ValidateTrackID(tc.id)
+		err := ValidateTrackSlug(tc.slug)
 		if tc.wantErr && err == nil {
-			t.Errorf("ValidateTrackID(%q) expected error, got nil", tc.id)
+			t.Errorf("ValidateTrackSlug(%q) expected error, got nil", tc.slug)
 		}
 		if !tc.wantErr && err != nil {
-			t.Errorf("ValidateTrackID(%q) unexpected error: %v", tc.id, err)
+			t.Errorf("ValidateTrackSlug(%q) unexpected error: %v", tc.slug, err)
 		}
 	}
 }

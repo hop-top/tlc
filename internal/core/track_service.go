@@ -46,9 +46,16 @@ func NewTrackService(repo TrackRepository, taskRepo Repository, opts ...TrackSer
 	return s
 }
 
-// CreateTrack validates and persists a new track.
+// CreateTrack validates and persists a new track. Track.ID is the durable
+// TypeID (auto-generated upstream); Track.Slug is the user-facing alias and
+// is what we validate.
 func (s *TrackService) CreateTrack(ctx context.Context, track *Track) error {
-	if err := ValidateTrackID(track.ID); err != nil {
+	if track.ID == "" {
+		track.ID = NewTrackID()
+	} else if !IsTrackID(track.ID) {
+		return fmt.Errorf("track ID %q invalid; must be track_<26char-typeid>", track.ID)
+	}
+	if err := ValidateTrackSlug(track.Slug); err != nil {
 		return err
 	}
 	if !ValidTrackType(track.Type) {
