@@ -390,10 +390,22 @@ var migrations = []migration{
 		PRAGMA foreign_keys = ON;
 		`,
 	},
+	{
+		// Replace remind_every (fixed Duration) with rrule (RFC 5545
+		// recurrence string) so reminders can express richer schedules
+		// like "every weekday until June" or "first Monday of month".
+		// Existing remind_every data is dropped per typeid-ids design's
+		// disposability rule.
+		version: 14,
+		query: `
+		ALTER TABLE tasks DROP COLUMN remind_every;
+		ALTER TABLE tasks ADD COLUMN rrule TEXT;
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 13
+const LatestMigrationVersion = 14
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

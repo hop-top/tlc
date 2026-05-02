@@ -360,8 +360,8 @@ type StaleConfig struct {
 
 // PriorityScheduleRule defines auto-due and auto-remind for a priority.
 type PriorityScheduleRule struct {
-	Due         time.Duration `yaml:"due"`
-	RemindEvery time.Duration `yaml:"remind_every"`
+	Due   time.Duration `yaml:"due"`
+	RRule string        `yaml:"rrule"`
 }
 
 // AgeNudgeRule defines age-based reminders for tasks without explicit due.
