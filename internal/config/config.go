@@ -319,7 +319,7 @@ type OutputConfig struct {
 // Validate validates the output configuration.
 func (o *OutputConfig) Validate() error {
 	switch o.Format {
-	case "table", "json", "yaml", "tls", "summary", "":
+	case "table", "json", "yaml", "tls", "summary", "counters", "vtodo", "":
 		return nil
 	default:
 		return fmt.Errorf("invalid output format: %s", o.Format)

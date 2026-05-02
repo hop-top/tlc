@@ -82,6 +82,8 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 	case formatJSON, formatYAML:
 		out := buildTrackShowOutput(track, flags, progress, strategy)
 		return output.Render(cmd.OutOrStdout(), format, out)
+	case formatVtodo:
+		writeVtodo(cmd, tasks, []*core.Track{track}, trackShowOutputPath, trackShowIncludeLogs)
 	default:
 		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks, strategy)
 	}
@@ -280,5 +282,7 @@ func extractPhaseNum(tags []string) (int, bool) {
 }
 
 func init() {
+	trackShowCmd.Flags().StringVar(&trackShowOutputPath, "output", "", "Write output to a file instead of stdout")
+	trackShowCmd.Flags().BoolVar(&trackShowIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
 	TrackCmd.AddCommand(trackShowCmd)
 }
