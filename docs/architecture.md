@@ -104,6 +104,7 @@ Pluggable sync providers via kit/ext.Manager:
 - GitHub (`github.go`) — Issue ↔ Task
 - Jira (`jira.go`) — Issue ↔ Task
 - Linear (`linear.go`) — Issue ↔ Task
+- VTODO / iCalendar (`vtodo-sync` plugin) — RFC 5545 VTODO ↔ Task (file mode v0.1; CalDAV deferred)
 
 Conflict resolution modes: remote-wins, local-wins,
 last-write-wins, manual.
@@ -334,6 +335,7 @@ Per-feature specs at `docs/`:
 - [tlc-config-spec-0.1](tlc-config-spec-0.1.md) — Configuration hierarchy
 - [tlc-uri-spec-0.1](tlc-uri-spec-0.1.md) — URI scheme and resolution
 - [task-exec-spec-0.1](task-exec-spec-0.1.md) — Deterministic execution (stdout/stderr capture, timeouts)
+- [vtodo-sync-spec-0.1](vtodo-sync-spec-0.1.md) — RFC 5545 iCalendar VTODO export, RRULE recurrence, sync plugin
 
 Plans: [track-registry-design](plans/2026-04-03-track-registry-design.md), [task-prompt-design](plans/2026-04-04-task-prompt-design.md), [flowtest-agent-dispatch](plans/2026-04-02-flowtest-agent-dispatch.md).
 

@@ -100,6 +100,19 @@ When a conflict is detected, TLC applies one of the following strategies (config
 4. **Push**: Local changes are pushed back to origin system based on `sync_direction`
 5. **Conflict Resolution**: Last-write-wins or manual resolution based on implementation
 
+## Sync Plugins
+
+TLC integrates external systems via pluggable sync providers:
+
+| Plugin | Scope | Status |
+|---|---|---|
+| github-sync | GitHub Issues ↔ Task | v1 shipped |
+| jira-sync | Jira Issues ↔ Task | v1 shipped |
+| linear-sync | Linear Issues ↔ Task | v1 shipped |
+| vtodo-sync | RFC 5545 VTODO ↔ Task (file mode) | v0.1 shipped; CalDAV deferred |
+
+Each plugin implements `sync.pull`, `sync.push`, and optionally `sync.delete` RPC methods. See [tlc-plugin-spec-0.1.md](tlc-plugin-spec-0.1.md) for interface details.
+
 ## Implementation Guidelines
 
 ### Must Requirements
