@@ -23,6 +23,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zalando/go-keyring v0.2.8
+	go.jetify.com/typeid v1.3.0
 	golang.org/x/crypto v0.50.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.42.0
@@ -64,6 +65,7 @@ require (
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/gofrs/uuid/v5 v5.2.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
