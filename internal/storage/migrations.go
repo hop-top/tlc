@@ -455,6 +455,33 @@ var migrations = []migration{
 		UPDATE jobs SET type = 'tlc.' || type WHERE type LIKE 'agent.%';
 		`,
 	},
+	{
+		// Drop phantom mirror rows minted by ingestTODOWith (T-1148).
+		// Every ingest of a serialized todo.txt line keyed each task by
+		// its T-NNNN display alias instead of resolving to the canonical
+		// typeid. The result: a parallel "T-NNNN" row with empty
+		// description / tags / metadata, sharing title and project_id
+		// with the populated typeid sibling.
+		//
+		// Idempotent: each subsequent run finds zero matching mirrors.
+		version: 16,
+		query: `
+		DELETE FROM tasks AS a
+		WHERE a.id LIKE 'T-%'
+		  AND COALESCE(length(a.description), 0) = 0
+		  AND EXISTS (
+			SELECT 1 FROM tasks b
+			WHERE b.id LIKE 'task\_%' ESCAPE '\'
+			  AND b.title = a.title
+			  AND b.project_id = a.project_id
+			  AND COALESCE(length(b.description), 0) > 0
+		  );
+
+		DELETE FROM task_logs
+		WHERE task_id LIKE 'T-%'
+		  AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = task_logs.task_id);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.

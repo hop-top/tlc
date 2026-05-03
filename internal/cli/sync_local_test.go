@@ -109,11 +109,14 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 	defer s.Close()
 
 	// Pre-populate DB with one task under project-a and one under project-b.
+	// Tasks are keyed by typeid post-T-0812; the T-NNNN form on TLS lines
+	// is a per-project seq alias resolved at ingest time.
 	ctx := context.Background()
 	projectA := "project-a"
 	projectB := "project-b"
+	existingTaskID := core.NewTaskID()
 	existingTask := &core.Task{
-		ID:        "T-0001",
+		ID:        existingTaskID,
 		Title:     "Existing task in project-a",
 		Status:    core.StatusTodo,
 		ProjectID: &projectA,
@@ -125,8 +128,9 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 		t.Fatalf("failed to seed task: %v", err)
 	}
 
+	projectTaskID := core.NewTaskID()
 	projectTask := &core.Task{
-		ID:        "T-0002",
+		ID:        projectTaskID,
 		Title:     "Existing task in project-b",
 		Status:    core.StatusTodo,
 		ProjectID: &projectB,
@@ -138,12 +142,20 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 		t.Fatalf("failed to seed project task: %v", err)
 	}
 
+	// Each project's seq counter starts at 1, so both seeded tasks have
+	// seq=1. Use that to compose the per-project alias on the TLS lines.
+	seededInA, _ := s.GetTaskInProject(ctx, existingTaskID, projectA)
+	seededInB, _ := s.GetTaskInProject(ctx, projectTaskID, projectB)
+	aliasA := core.FormatTaskAlias(seededInA)
+	aliasB := core.FormatTaskAlias(seededInB)
+
 	// Shared global TODO contains a task from another project and an update
-	// for the current project's existing task.
+	// for the current project's existing task. Both lines use the per-project
+	// seq alias as their leading id token (matches what formatTLS emits).
 	todoFile := filepath.Join(tmpDir, "global-todo.txt")
 	os.WriteFile(todoFile, []byte(
-		"[ ] T-0001 Same ID different project project_id=project-a created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n"+
-			"[~] T-0002 Updated task title project_id=project-b created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
+		"[ ] "+aliasA+" Same alias different project project_id=project-a created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n"+
+			"[~] "+aliasB+" Updated task title project_id=project-b created_at=2026-01-01T00:00:00Z updated_at=2026-01-01T00:00:00Z\n",
 	), 0o600)
 	viper.Set("task.todo_file", todoFile)
 
@@ -152,42 +164,33 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 		t.Fatalf("ingestTODOWith returned error: %v", err)
 	}
 
-	// Verify: T-0001 should still exist only under project-a and T-0002 should
-	// be updated in project-b.
-	allTasks, err := s.ListTasks(ctx, core.Query{AllProjects: true})
-	if err != nil {
-		t.Fatalf("ListTasks failed: %v", err)
+	// project-a's task must remain unchanged (foreign-project line skipped).
+	keptA, _ := s.GetTaskInProject(ctx, existingTaskID, projectA)
+	if keptA == nil {
+		t.Fatal("project-a task was unexpectedly removed")
+	}
+	if keptA.Title != "Existing task in project-a" {
+		t.Errorf("project-a task title mutated: %q", keptA.Title)
 	}
 
-	projectCounts := make(map[string]int)
-	var updatedTask *core.Task
-	for _, task := range allTasks {
-		if task.ID == "T-0001" {
-			pid := ""
-			if task.ProjectID != nil {
-				pid = *task.ProjectID
-			}
-			projectCounts[pid]++
-		}
-		if task.ID == "T-0002" && task.ProjectID != nil && *task.ProjectID == "project-b" {
-			updatedTask = task
-		}
-	}
-
-	if projectCounts["project-a"] != 1 {
-		t.Errorf("expected 1 T-0001 under project-a, got %d", projectCounts["project-a"])
-	}
-	if projectCounts["project-b"] != 0 {
-		t.Errorf("expected no T-0001 cloned into project-b, got %d", projectCounts["project-b"])
-	}
+	// project-b's task should have been updated by the matching line.
+	updatedTask, _ := s.GetTaskInProject(ctx, projectTaskID, projectB)
 	if updatedTask == nil {
-		t.Fatal("expected T-0002 to remain in project-b")
+		t.Fatal("expected project-b task to remain in DB")
 	}
 	if updatedTask.Title != "Updated task title" {
-		t.Errorf("expected T-0002 title to be updated, got %q", updatedTask.Title)
+		t.Errorf("expected project-b task title to be updated, got %q", updatedTask.Title)
 	}
 	if updatedTask.Status != core.StatusInProgress {
-		t.Errorf("expected T-0002 status to be updated, got %q", updatedTask.Status)
+		t.Errorf("expected project-b task status to be updated, got %q", updatedTask.Status)
+	}
+
+	// And no stray T-NNNN-keyed mirror was minted.
+	all, _ := s.ListTasks(ctx, core.Query{AllProjects: true})
+	for _, row := range all {
+		if strings.HasPrefix(row.ID, "T-") {
+			t.Errorf("found T-NNNN-keyed mirror after ingest: id=%s title=%q", row.ID, row.Title)
+		}
 	}
 }
 

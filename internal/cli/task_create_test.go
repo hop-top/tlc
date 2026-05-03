@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -488,4 +489,138 @@ func TestBuildTaskReference(t *testing.T) {
 			t.Errorf("reference %q must start with tlc:// scheme", got)
 		}
 	})
+}
+
+// TestTaskCreateCmd_NoDuplicateRow exercises the full create+sync path that
+// the CLI runs in production: create writes the task, syncTODOAll renders
+// todo.txt (with the T-NNNN alias as the leading id token), then a second
+// create triggers ingestTODOWith on that file. Before the fix, the second
+// create minted an empty mirror row keyed by T-NNNN.
+//
+// Refs: tlc/T-1148.
+func TestTaskCreateCmd_NoDuplicateRow(t *testing.T) {
+	dbPath := resetTestDB(t)
+	viper.Set("storage.db_path", dbPath)
+
+	// Point task.todo_file at a real, writable path so syncTODOAll
+	// flushes the alias-prefixed line. The next CreateTask invocation
+	// re-ingests that file and (pre-fix) creates the mirror row.
+	tmpDir := filepath.Dir(dbPath)
+	todoFile := filepath.Join(tmpDir, "todo.txt")
+	viper.Set("task.todo_file", todoFile)
+
+	ctx := context.Background()
+
+	// First create: writes the typeid row, then syncTODOAll flushes
+	// the alias-keyed line into todo.txt.
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(TaskCmd)
+	buf1 := new(bytes.Buffer)
+	cmd1.SetOut(buf1)
+	cmd1.SetErr(buf1)
+	cmd1.SetArgs([]string{"task", "create", "dup-repro-task", "--description", "non-empty"})
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("first create failed: %v", err)
+	}
+
+	// Force the next getStorage() to re-run ensureDBSynced (and thus
+	// ingestTODOWith) — production runs once per process; tests run
+	// many commands in one process.
+	dbSyncOnce = sync.Once{}
+
+	// Second create: triggers ingestTODOWith on the todo.txt that
+	// holds the first task's alias line.
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(TaskCmd)
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"task", "create", "dup-repro-task-2", "--description", "non-empty"})
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("second create failed: %v", err)
+	}
+
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	all, err := s.ListTasks(ctx, core.Query{AllProjects: true})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+
+	// Exactly two rows total — one per create. Anything more is a mirror.
+	if len(all) != 2 {
+		titles := make([]string, 0, len(all))
+		for _, row := range all {
+			titles = append(titles, fmt.Sprintf("%s/%s/desc=%d", row.ID, row.Title, len(row.Description)))
+		}
+		t.Fatalf("expected 2 task rows, got %d: %v", len(all), titles)
+	}
+
+	// And no row may be keyed by the T-NNNN alias.
+	for _, row := range all {
+		if strings.HasPrefix(row.ID, "T-") {
+			t.Fatalf("row mirrors T-NNNN alias: id=%s title=%q desc-len=%d",
+				row.ID, row.Title, len(row.Description))
+		}
+	}
+}
+
+// TestTaskCreateCmd_TaskListShowsOnceOnly verifies "task list" reports the
+// new task title exactly once after sequential creates that route through
+// the todo.txt sync.
+//
+// Refs: tlc/T-1148.
+func TestTaskCreateCmd_TaskListShowsOnceOnly(t *testing.T) {
+	dbPath := resetTestDB(t)
+	viper.Set("storage.db_path", dbPath)
+	tmpDir := filepath.Dir(dbPath)
+	todoFile := filepath.Join(tmpDir, "todo.txt")
+	viper.Set("task.todo_file", todoFile)
+
+	const target = "list-shows-once"
+
+	// Create the target.
+	cmd1 := newTestCmd()
+	cmd1.AddCommand(TaskCmd)
+	cmd1.SetOut(new(bytes.Buffer))
+	cmd1.SetErr(new(bytes.Buffer))
+	cmd1.SetArgs([]string{"task", "create", target, "--description", "non-empty"})
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("first create failed: %v", err)
+	}
+
+	// Reset the once-guard so subsequent commands re-run ingest.
+	dbSyncOnce = sync.Once{}
+
+	// Create a second task — its ingest pass triggers the dup mirror.
+	cmd2 := newTestCmd()
+	cmd2.AddCommand(TaskCmd)
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetErr(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"task", "create", "filler", "--description", "non-empty"})
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("second create failed: %v", err)
+	}
+
+	dbSyncOnce = sync.Once{}
+
+	listCmd := newTestCmd()
+	listCmd.AddCommand(TaskCmd)
+	listBuf := new(bytes.Buffer)
+	listCmd.SetOut(listBuf)
+	listCmd.SetErr(listBuf)
+	listCmd.SetArgs([]string{"task", "list", "--all-projects"})
+	if err := listCmd.Execute(); err != nil {
+		t.Fatalf("task list failed: %v", err)
+	}
+
+	out := listBuf.String()
+	if got := strings.Count(out, target); got != 1 {
+		t.Fatalf("task list shows %q %d times, want 1\n--- list output ---\n%s",
+			target, got, out)
+	}
 }

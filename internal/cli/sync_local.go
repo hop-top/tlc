@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +15,24 @@ import (
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
+
+// tlsAliasRe matches the leading T-NNNN+ display alias produced by formatTLS.
+var tlsAliasRe = regexp.MustCompile(`^T-(\d+)$`)
+
+// taskAliasSeq reports whether id is a T-NNNN display alias and, if so,
+// returns the embedded sequence number. Aliases are not durable identities;
+// they exist only as a per-project seq lookup key.
+func taskAliasSeq(id string) (int64, bool) {
+	m := tlsAliasRe.FindStringSubmatch(id)
+	if m == nil {
+		return 0, false
+	}
+	seq, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil || seq <= 0 {
+		return 0, false
+	}
+	return seq, true
+}
 
 // syncTODOAll syncs tasks to both global and project-specific todo.txt files.
 func syncTODOAll() error {
@@ -164,6 +184,23 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 		lookupProjectID := ""
 		if task.ProjectID != nil {
 			lookupProjectID = *task.ProjectID
+		}
+
+		// T-NNNN aliases are display-only, not durable identities. Resolve
+		// them to the canonical typeid via the seq counter so ingest finds
+		// the existing row (formatTLS emits the alias as the leading token,
+		// not the typeid). Without this, every re-ingest would mint a
+		// phantom mirror row keyed by the alias (T-1148).
+		if alias, ok := taskAliasSeq(task.ID); ok {
+			if resolved, err := s.GetTaskBySeq(ctx, lookupProjectID, alias); err == nil && resolved != nil {
+				task.ID = resolved.ID
+			} else {
+				// Alias does not resolve in this scope. The TLS line is
+				// either stale (task was deleted) or belongs to another
+				// project. Either way, we must not create a new row keyed
+				// by the alias — that would be the bug we are fixing.
+				continue
+			}
 		}
 
 		existing, _ := s.GetTaskInProject(ctx, task.ID, lookupProjectID) //nolint:errcheck // nil means create new
