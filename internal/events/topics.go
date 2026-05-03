@@ -40,6 +40,21 @@ const (
 	FlowFailed        = "tlc.flow.failed"
 )
 
+// State-machine transition topics, composed by domain.WithSMTopicPrefix
+// from the per-entity prefixes wired in internal/core/domain_statemachine.go.
+// Pre topics fire before the transition; subscriber error vetoes it.
+// Post topics fire fire-and-forget after the transition committed.
+const (
+	TaskStatusPreTransitioned  = "tlc.task.status.pre_transitioned"
+	TaskStatusPostTransitioned = "tlc.task.status.post_transitioned"
+
+	TrackStatusPreTransitioned  = "tlc.track.status.pre_transitioned"
+	TrackStatusPostTransitioned = "tlc.track.status.post_transitioned"
+
+	FlowStatusPreTransitioned  = "tlc.flow.status.pre_transitioned"
+	FlowStatusPostTransitioned = "tlc.flow.status.post_transitioned"
+)
+
 // --- Typed payloads per domain-events.md ---
 
 // TaskCreatedPayload is published after a task is created.

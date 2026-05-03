@@ -60,10 +60,16 @@ func (s *AuditSubscriber) handle(ctx context.Context, e bus.Event) error {
 	return s.logRepo.AddLog(ctx, entry)
 }
 
-// isTaskTopic returns true for task lifecycle topics.
+// isTaskTopic returns true for task lifecycle topics. Includes both
+// the legacy domain-event topics (tlc.task.created, .claimed, …) and
+// the state-machine post-transition topic
+// (tlc.task.status.post_transitioned). The pre-transition topic is
+// intentionally excluded — auditing should reflect what happened, not
+// what was attempted-but-vetoed.
 func isTaskTopic(topic string) bool {
 	switch topic {
 	case TaskCreated, TaskClaimed, TaskCompleted, TaskStatusChanged,
+		TaskStatusPostTransitioned,
 		string(TopicTaskReopened):
 		return true
 	}
@@ -87,7 +93,7 @@ func topicToAction(topic string) string {
 		return core.ActionClaimed
 	case TaskCompleted:
 		return core.ActionDone
-	case TaskStatusChanged:
+	case TaskStatusChanged, TaskStatusPostTransitioned:
 		return core.ActionUpdated
 	case string(TopicTaskReopened):
 		return "REOPENED"

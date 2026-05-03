@@ -5,12 +5,32 @@ import (
 	"hop.top/tlc/internal/config"
 )
 
+// Per-entity 3-segment prefixes for state-machine transition topics.
+// Composed by domain.WithSMTopicPrefix into:
+//
+//	<prefix>.pre_transitioned   — fires before the transition; subscriber
+//	                              error vetoes it ("pre-transition veto").
+//	<prefix>.post_transitioned  — fires fire-and-forget after the
+//	                              transition committed.
+//
+// Sibling tools subscribe to "tlc.task.status.*" / "tlc.track.status.*"
+// / "tlc.flow.status.*" to react to lifecycle changes without coupling
+// to tlc internals.
+const (
+	stateMachinePrefixTask  = "tlc.task.status"
+	stateMachinePrefixTrack = "tlc.track.status"
+	stateMachinePrefixFlow  = "tlc.flow.status"
+)
+
 // NewTaskStateMachine builds a domain.StateMachine from a TaskConfig.
 // Terminal statuses have no outgoing transitions and are excluded from
 // the rules map. The optional EventPublisher enables pre/post hooks.
+// Extra opts are appended after the tlc-default WithSMTopicPrefix so
+// callers can override topology (rare; mostly tests).
 func NewTaskStateMachine(
 	cfg *config.TaskConfig,
 	pub domain.EventPublisher,
+	opts ...domain.SMOption,
 ) *domain.StateMachine {
 	statuses := cfg.Statuses
 	if len(statuses) == 0 {
@@ -22,7 +42,10 @@ func NewTaskStateMachine(
 		sm = config.GetDefaultStateMachine()
 	}
 
-	return buildStateMachine(statuses, sm.Rules, pub)
+	return buildStateMachine(
+		statuses, sm.Rules, pub,
+		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixTask)}, opts...),
+	)
 }
 
 // NewTaskStateMachineFromWorkflow builds a domain.StateMachine from
@@ -31,6 +54,7 @@ func NewTaskStateMachine(
 func NewTaskStateMachineFromWorkflow(
 	wm *WorkflowManager,
 	pub domain.EventPublisher,
+	opts ...domain.SMOption,
 ) *domain.StateMachine {
 	rules := make(map[domain.State][]domain.State, len(wm.rules))
 	for from, tos := range wm.rules {
@@ -40,14 +64,16 @@ func NewTaskStateMachineFromWorkflow(
 		}
 		rules[domain.State(from)] = targets
 	}
-	return domain.NewStateMachine(rules, pub)
+	return domain.NewStateMachine(rules, pub,
+		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixTask)}, opts...)...,
+	)
 }
 
 // NewTrackStateMachine builds a domain.StateMachine for track lifecycle.
 // Rules: pending->active/abandoned, active->completed/abandoned,
 // completed->archived/abandoned, abandoned->archived.
 // Archived is terminal (no outgoing transitions).
-func NewTrackStateMachine(pub domain.EventPublisher) *domain.StateMachine {
+func NewTrackStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *domain.StateMachine {
 	rules := map[domain.State][]domain.State{
 		domain.State(TrackStatusPending):   {domain.State(TrackStatusActive), domain.State(TrackStatusAbandoned)},
 		domain.State(TrackStatusActive):    {domain.State(TrackStatusCompleted), domain.State(TrackStatusAbandoned)},
@@ -55,13 +81,15 @@ func NewTrackStateMachine(pub domain.EventPublisher) *domain.StateMachine {
 		domain.State(TrackStatusAbandoned): {domain.State(TrackStatusArchived)},
 		// archived: terminal — no outgoing transitions
 	}
-	return domain.NewStateMachine(rules, pub)
+	return domain.NewStateMachine(rules, pub,
+		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixTrack)}, opts...)...,
+	)
 }
 
 // NewFlowStateMachine builds a domain.StateMachine for flow run lifecycle.
 // Rules: queued->running, running->succeeded/failed/canceled/paused,
 // paused->running/canceled. Succeeded/failed/canceled are terminal.
-func NewFlowStateMachine(pub domain.EventPublisher) *domain.StateMachine {
+func NewFlowStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *domain.StateMachine {
 	rules := map[domain.State][]domain.State{
 		domain.State(FlowStatusQueued):  {domain.State(FlowStatusRunning)},
 		domain.State(FlowStatusRunning): {
@@ -76,7 +104,9 @@ func NewFlowStateMachine(pub domain.EventPublisher) *domain.StateMachine {
 		},
 		// succeeded, failed, canceled: terminal — no outgoing transitions
 	}
-	return domain.NewStateMachine(rules, pub)
+	return domain.NewStateMachine(rules, pub,
+		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixFlow)}, opts...)...,
+	)
 }
 
 // buildStateMachine converts config status definitions and rules
@@ -85,6 +115,7 @@ func buildStateMachine(
 	statuses []config.StatusDefinition,
 	configRules map[string][]string,
 	pub domain.EventPublisher,
+	opts []domain.SMOption,
 ) *domain.StateMachine {
 	if configRules == nil {
 		configRules = map[string][]string{
@@ -102,5 +133,5 @@ func buildStateMachine(
 		rules[domain.State(from)] = targets
 	}
 
-	return domain.NewStateMachine(rules, pub)
+	return domain.NewStateMachine(rules, pub, opts...)
 }
