@@ -214,13 +214,18 @@ func (m Model) detailView() string {
 	))
 	s.WriteString("\n\n")
 
-	fmt.Fprintf(&s, "ID:        %s\n", task.ID)
+	// The alias is already shown in the title above. Skip the durable typeid
+	// in default human output — only print ID when it's a non-typeid legacy
+	// or CLI-allocated value distinct from the alias (rare).
+	if task.ID != "" && task.ID != displayAlias(task) && !core.IsTaskID(task.ID) {
+		fmt.Fprintf(&s, "ID:        %s\n", task.ID)
+	}
 	fmt.Fprintf(&s, "Status:    %s\n", m.formatStatus(task.Status))
 	fmt.Fprintf(&s, "Assigned:  %s\n", formatAssignee(task.AssignedTo))
-	// Show Reference only when it carries information beyond the ID/alias
+	// Show Reference only when it carries information beyond the alias
 	// (i.e. external user-supplied refs like github:issues/42 or docs/foo.md).
-	// Auto-generated internal refs (tlc://<project>/<task.ID>) are noise here
-	// because the durable typeid is already shown on the ID: line above.
+	// Auto-generated internal refs (tlc://<project>/<task.ID>) are hidden
+	// because the alias is already shown in the title above.
 	if task.Reference != "" && !isInternalTaskRef(task.Reference, task) {
 		fmt.Fprintf(&s, "Reference: %s\n", task.Reference)
 	}

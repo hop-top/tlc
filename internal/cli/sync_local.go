@@ -247,7 +247,7 @@ func importFromProjection(s *storage.SQLiteStorage) error {
 				skippedExistingIDs++
 				continue
 			}
-			fmt.Printf("Warning: failed to create task %s: %v\n", task.ID, err)
+			fmt.Printf("Warning: failed to create task %s: %v\n", formatTaskAlias(task), err)
 		}
 	}
 

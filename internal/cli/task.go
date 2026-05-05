@@ -269,7 +269,7 @@ func pushSyncedTask(ctx context.Context, task *core.Task, s core.Repository) err
 	if system == syncSystemGitHub {
 		ensureGitHubToken()
 	}
-	fmt.Printf("Syncing task %s to %s...\n", task.ID, system)
+	fmt.Printf("Syncing task %s to %s...\n", formatTaskAlias(task), system)
 
 	if err := syncPushFn(ctx, system, task); err != nil {
 		return err
@@ -281,7 +281,7 @@ func pushSyncedTask(ctx context.Context, task *core.Task, s core.Repository) err
 		return fmt.Errorf("failed to update task after sync: %w", err)
 	}
 
-	fmt.Printf("✓ Task %s synced to %s\n", task.ID, system)
+	fmt.Printf("✓ Task %s synced to %s\n", formatTaskAlias(task), system)
 	return nil
 }
 

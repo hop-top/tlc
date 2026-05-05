@@ -381,7 +381,7 @@ Example:
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created task %s: %s (assigned to %s)\n",
-				task.ID, task.Title, assigneeName)
+				formatTaskAlias(task), task.Title, assigneeName)
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFlow %s invoked successfully. Created %d tasks.\n",

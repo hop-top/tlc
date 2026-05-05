@@ -85,11 +85,12 @@ func runAgentListRuns(cmd *cobra.Command) error {
 		return nil
 	}
 
-	renderAgentRunsTable(out, runs)
+	renderAgentRunsTable(out, runs, s)
 	return nil
 }
 
-func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord) {
+func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord, s aliasStorage) {
+	ctx := context.Background()
 	rows := make([]agentRunRow, len(runs))
 	for i, r := range runs {
 		duration := "-"
@@ -100,10 +101,18 @@ func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord) {
 		if len(id) > 8 {
 			id = id[:8]
 		}
+		target := r.TargetID
+		if r.TargetType == "task" && core.IsTaskID(r.TargetID) && s != nil {
+			if t, err := s.GetTask(ctx, r.TargetID); err == nil && t != nil {
+				if alias := core.FormatTaskAlias(t); alias != "" {
+					target = alias
+				}
+			}
+		}
 		rows[i] = agentRunRow{
 			ID:       id,
 			Agent:    r.Agent,
-			Target:   fmt.Sprintf("%s:%s", r.TargetType, r.TargetID),
+			Target:   fmt.Sprintf("%s:%s", r.TargetType, target),
 			Status:   r.Status,
 			Exit:     fmt.Sprintf("%d", r.ExitCode),
 			Started:  r.StartedAt.Format("2006-01-02 15:04"),

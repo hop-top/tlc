@@ -89,11 +89,11 @@ var TaskUpdateCmd = &cobra.Command{
 					nextStatus, core.GetCurrentUser(), transitionNote, wm, taskUpdateForce,
 				)
 				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: failed to transition: %v", task.ID, err))
+					errs = append(errs, fmt.Sprintf("%s: failed to transition: %v", formatTaskAlias(task), err))
 					continue
 				}
 				if err := res.Storage.AddLog(ctx, log); err != nil {
-					fmt.Printf("Warning: failed to write log for %s: %v\n", task.ID, err)
+					fmt.Printf("Warning: failed to write log for %s: %v\n", formatTaskAlias(task), err)
 				}
 				changed = true
 			}
@@ -295,7 +295,7 @@ var TaskUpdateCmd = &cobra.Command{
 					_, _ = fmt.Fprintf(cmd.OutOrStderr(), "Warning: %v (local state saved; sync needs retry)\n", err)
 				}
 			} else {
-				fmt.Printf("Updated task %s\n", task.ID)
+				fmt.Printf("Updated task %s\n", formatTaskAlias(task))
 			}
 		}
 
@@ -427,11 +427,12 @@ var TaskDeleteCmd = &cobra.Command{
 				}
 			}
 
+			alias := formatTaskAlias(task)
 			if err := res.Storage.DeleteTask(policyCtx, task.ID); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to delete: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: failed to delete: %v", alias, err))
 				continue
 			}
-			fmt.Printf("Deleted task %s\n", task.ID)
+			fmt.Printf("Deleted task %s\n", alias)
 		}
 
 		if len(errs) > 0 {
