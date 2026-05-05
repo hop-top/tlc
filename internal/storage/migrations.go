@@ -464,7 +464,7 @@ var migrations = []migration{
 		// with the populated typeid sibling.
 		//
 		// Idempotent: each subsequent run finds zero matching mirrors.
-		version: 16,
+		version: 17,
 		query: `
 		DELETE FROM tasks AS a
 		WHERE a.id LIKE 'T-%'
@@ -485,7 +485,7 @@ var migrations = []migration{
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 16
+const LatestMigrationVersion = 17
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

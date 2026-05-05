@@ -56,7 +56,7 @@ func TestMigrationV16_DropsTNNNNMirrorRows(t *testing.T) {
 	// already applied via NewSQLiteStorage; we re-run the v16 cleanup
 	// to assert idempotence and the delete predicate).
 	for _, m := range migrations {
-		if m.version == 16 {
+		if m.version == 17 {
 			if _, err := s.db.ExecContext(ctx, m.query); err != nil {
 				t.Fatalf("re-run v16 cleanup: %v", err)
 			}
@@ -94,7 +94,7 @@ func TestMigrationV16_DropsTNNNNMirrorRows(t *testing.T) {
 
 	// Idempotent: re-run is a no-op.
 	for _, m := range migrations {
-		if m.version == 16 {
+		if m.version == 17 {
 			if _, err := s.db.ExecContext(ctx, m.query); err != nil {
 				t.Fatalf("re-run v16 cleanup (2nd time): %v", err)
 			}
