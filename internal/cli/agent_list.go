@@ -58,36 +58,40 @@ Examples:
 	},
 }
 
-func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord) {
-	headers := []string{"ID", "Agent", "Target", "Status", "Exit", "Started", "Duration"}
+// agentRunRow is the row schema for `tlc agent list` table output.
+type agentRunRow struct {
+	ID       string `table:"ID"`
+	Agent    string `table:"Agent"`
+	Target   string `table:"Target"`
+	Status   string `table:"Status"`
+	Exit     string `table:"Exit"`
+	Started  string `table:"Started"`
+	Duration string `table:"Duration"`
+}
 
-	rows := make([][]string, 0, len(runs))
-	for _, r := range runs {
-		targetStr := fmt.Sprintf("%s:%s", r.TargetType, r.TargetID)
+func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord) {
+	rows := make([]agentRunRow, len(runs))
+	for i, r := range runs {
 		duration := "-"
 		if r.EndedAt != nil {
-			d := r.EndedAt.Sub(r.StartedAt)
-			duration = d.Truncate(time.Second).String()
+			duration = r.EndedAt.Sub(r.StartedAt).Truncate(time.Second).String()
 		}
-
-		// Truncate ID for display.
 		id := r.ID
 		if len(id) > 8 {
 			id = id[:8]
 		}
-
-		rows = append(rows, []string{
-			id,
-			r.Agent,
-			targetStr,
-			r.Status,
-			fmt.Sprintf("%d", r.ExitCode),
-			r.StartedAt.Format("2006-01-02 15:04"),
-			duration,
-		})
+		rows[i] = agentRunRow{
+			ID:       id,
+			Agent:    r.Agent,
+			Target:   fmt.Sprintf("%s:%s", r.TargetType, r.TargetID),
+			Status:   r.Status,
+			Exit:     fmt.Sprintf("%d", r.ExitCode),
+			Started:  r.StartedAt.Format("2006-01-02 15:04"),
+			Duration: duration,
+		}
 	}
 
-	renderTTYTable(out, headers, rows, termWidth())
+	_ = renderStyledList(out, formatTable, rows, nil) //nolint:errcheck // best-effort output
 	_, _ = fmt.Fprintf(out, "\nShowing %d agent runs\n", len(runs))
 }
 
