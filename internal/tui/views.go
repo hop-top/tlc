@@ -217,7 +217,13 @@ func (m Model) detailView() string {
 	fmt.Fprintf(&s, "ID:        %s\n", task.ID)
 	fmt.Fprintf(&s, "Status:    %s\n", m.formatStatus(task.Status))
 	fmt.Fprintf(&s, "Assigned:  %s\n", formatAssignee(task.AssignedTo))
-	fmt.Fprintf(&s, "Reference: %s\n", task.Reference)
+	// Show Reference only when it carries information beyond the ID/alias
+	// (i.e. external user-supplied refs like github:issues/42 or docs/foo.md).
+	// Auto-generated internal refs (tlc://<project>/<task.ID>) are noise here
+	// because the durable typeid is already shown on the ID: line above.
+	if task.Reference != "" && !isInternalTaskRef(task.Reference, task) {
+		fmt.Fprintf(&s, "Reference: %s\n", task.Reference)
+	}
 	if len(task.Tags) > 0 {
 		var tagPills []kittui.Pill
 		for _, tag := range task.Tags {
@@ -258,6 +264,38 @@ func (m Model) detailView() string {
 	}
 
 	return s.String()
+}
+
+// isInternalTaskRef reports whether ref is an auto-generated internal task
+// reference that adds no information beyond the alias / task ID.
+//
+// Returns true for the local default forms (tlc:///<id>, tlc://<id>,
+// task://<id>) and for the absolute project-scoped form
+// `tlc://<projectID>/<task.ID>` derived from the task's project_id (or the
+// currently detected project). External user-supplied refs (e.g.
+// github:issues/42, https://..., docs/foo.md) return false.
+func isInternalTaskRef(ref string, t *core.Task) bool {
+	if ref == "" {
+		return true
+	}
+	if t == nil || t.ID == "" {
+		return false
+	}
+	switch ref {
+	case "tlc:///" + t.ID, "tlc://" + t.ID, "task://" + t.ID:
+		return true
+	}
+	if t.ProjectID != nil && *t.ProjectID != "" {
+		if ref == fmt.Sprintf("tlc://%s/%s", *t.ProjectID, t.ID) {
+			return true
+		}
+	}
+	if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+		if ref == fmt.Sprintf("tlc://%s/%s", proj.ProjectID, t.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) kanbanView() string {

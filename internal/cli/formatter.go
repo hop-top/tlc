@@ -497,6 +497,38 @@ func isDefaultRef(ref, taskID string) bool {
 	}
 }
 
+// isInternalTaskRef reports whether ref is an auto-generated internal task
+// reference that adds no information beyond the alias / task ID. Returns
+// true for any of the local forms covered by isDefaultRef AND for the
+// absolute project-scoped form `tlc://<projectID>/<task.ID>` derived from
+// the task's project_id (or the currently detected project).
+//
+// Used by render-layer code to suppress noisy `Reference:` lines in default
+// (non-verbose) output. External user-supplied refs (e.g. github:issues/42,
+// https://..., docs/foo.md) return false and remain visible.
+func isInternalTaskRef(ref string, t *core.Task) bool {
+	if ref == "" {
+		return true
+	}
+	if t != nil && isDefaultRef(ref, t.ID) {
+		return true
+	}
+	// Absolute project-scoped form: tlc://<projectID>/<task.ID>
+	if t != nil && t.ID != "" {
+		if t.ProjectID != nil && *t.ProjectID != "" {
+			if ref == fmt.Sprintf("tlc://%s/%s", *t.ProjectID, t.ID) {
+				return true
+			}
+		}
+		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+			if ref == fmt.Sprintf("tlc://%s/%s", proj.ProjectID, t.ID) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Task: %s", formatTaskAlias(t))))
 	if isVerboseOutput() && t.ID != "" && t.ID != formatTaskAlias(t) {
@@ -555,7 +587,13 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		}
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
+	// Reference: hide auto-generated internal refs (tlc://<project>/<typeid>)
+	// from default human output — typeid only surfaces in verbose / machine
+	// modes per render policy. External refs (github:..., docs/..., https://...)
+	// remain visible because they carry information the alias does not.
+	if isVerboseOutput() || !isInternalTaskRef(t.Reference, t) {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
+	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), t.UpdatedAt.Format(time.RFC3339))
 
