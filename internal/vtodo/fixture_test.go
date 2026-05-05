@@ -128,7 +128,7 @@ func TestFixture_RoundTripStability(t *testing.T) {
 
 			cal, err := vtodo.BuildVCalendar(res.Tasks, res.Tracks, res.Logs)
 			require.NoError(t, err)
-			got := cal.Serialize()
+			got := mustSerialize(t, cal)
 			require.Equal(t, normaliseEOL(string(data)), normaliseEOL(got))
 		})
 	}

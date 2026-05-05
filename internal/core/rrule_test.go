@@ -170,10 +170,17 @@ func TestNextFireFromRRule_UntilWithinReach(t *testing.T) {
 }
 
 func TestNextFireFromRRule_CountTermination(t *testing.T) {
-	// COUNT=1 should yield exactly one occurrence on first call.
+	// Per RFC 5545 §3.3.10, COUNT includes DTSTART. tlc anchors
+	// DTSTART to `after`, so COUNT=1 ⇒ the single occurrence is
+	// DTSTART itself ⇒ no occurrence "strictly after" `after` ⇒
+	// ok=false. COUNT=2 ⇒ DTSTART + one fire ⇒ ok=true.
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	rule := "FREQ=DAILY;COUNT=1"
-	next, ok, err := core.NextFireFromRRule(rule, now)
+
+	_, ok, err := core.NextFireFromRRule("FREQ=DAILY;COUNT=1", now)
+	assert.NoError(t, err)
+	assert.False(t, ok)
+
+	next, ok, err := core.NextFireFromRRule("FREQ=DAILY;COUNT=2", now)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, now.AddDate(0, 0, 1), next)

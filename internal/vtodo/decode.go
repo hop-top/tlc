@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	ics "github.com/arran4/golang-ical"
+	vstar "github.com/hop-top/vstar/go"
+	"github.com/hop-top/vstar/go/codec/rfc5545"
 
 	"hop.top/tlc/internal/core"
 )
@@ -38,7 +39,7 @@ type ParseResult struct {
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	_ = resolve(opts) // currently no decode-time options consume from o
 
-	cal, err := ics.ParseCalendar(r)
+	cal, err := rfc5545.Parse(r)
 	if err != nil {
 		return nil, fmt.Errorf("parse calendar: %w", err)
 	}
@@ -46,35 +47,36 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	res := &ParseResult{}
 
 	// Build a map UID-body → entity ID for cross-component linkage and
-	// VJOURNAL TaskID resolution. We do this in two passes because
-	// VJOURNAL parsing needs the task index.
+	// VJOURNAL TaskID resolution. Two passes because VJOURNAL parsing
+	// needs the task index.
 	uidToTaskID := make(map[string]string)
 	uidToTrackID := make(map[string]string)
 
-	for _, todo := range cal.Todos() {
+	todos := cal.Filter(vstar.CompTodo)
+	for _, todo := range todos {
 		if isTrackComponent(todo) {
-			tr, uidBody, perr := decodeTrack(todo)
+			tr, uidBodyVal, perr := decodeTrack(todo)
 			if perr != nil {
 				return nil, perr
 			}
 			res.Tracks = append(res.Tracks, tr)
-			if uidBody != "" {
-				uidToTrackID[uidBody] = tr.ID
+			if uidBodyVal != "" {
+				uidToTrackID[uidBodyVal] = tr.ID
 			}
 		} else {
-			t, uidBody, perr := decodeTask(todo)
+			t, uidBodyVal, perr := decodeTask(todo)
 			if perr != nil {
 				return nil, perr
 			}
 			res.Tasks = append(res.Tasks, t)
-			if uidBody != "" {
-				uidToTaskID[uidBody] = t.ID
+			if uidBodyVal != "" {
+				uidToTaskID[uidBodyVal] = t.ID
 			}
 		}
 	}
 
 	// Resolve PARENT links to track IDs and DEPENDS-ON to task IDs.
-	for _, todo := range cal.Todos() {
+	for _, todo := range todos {
 		if isTrackComponent(todo) {
 			continue
 		}
@@ -93,8 +95,8 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		if task == nil {
 			continue
 		}
-		for _, rel := range todo.GetProperties(ics.ComponentPropertyRelatedTo) {
-			reltype := paramFirst(rel.ICalParameters, "RELTYPE")
+		for _, rel := range todo.GetAll("RELATED-TO") {
+			reltype := paramFirst(rel.Params, "RELTYPE")
 			body := uidBody(rel.Value)
 			switch reltype {
 			case RelTypeParent:
@@ -120,7 +122,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	}
 
 	// VJOURNAL → LogEntry.
-	for _, j := range cal.Journals() {
+	for _, j := range cal.Filter(vstar.CompJournal) {
 		le := decodeJournal(j, uidToTaskID)
 		res.Logs = append(res.Logs, le)
 	}
@@ -128,20 +130,18 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	return res, nil
 }
 
-func isTrackComponent(todo *ics.VTodo) bool {
-	p := todo.GetProperty(ics.ComponentProperty(XPropTrackKind))
-	if p != nil && strings.EqualFold(p.Value, "TRUE") {
+func isTrackComponent(todo vstar.Component) bool {
+	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, "TRUE") {
 		return true
 	}
 	// Fall-back: if UID body looks like a track typeid, treat as track.
-	uid := getUID(todo)
-	if core.IsTrackID(uidBody(uid)) {
+	if core.IsTrackID(uidBody(getUID(todo))) {
 		return true
 	}
 	return false
 }
 
-func decodeTask(todo *ics.VTodo) (*core.Task, string, error) {
+func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 	t := &core.Task{}
 
 	uid := getUID(todo)
@@ -158,21 +158,21 @@ func decodeTask(todo *ics.VTodo) (*core.Task, string, error) {
 		}
 	}
 
-	if p := todo.GetProperty(ics.ComponentPropertySummary); p != nil {
+	if p, ok := todo.Get("SUMMARY"); ok {
 		t.Title = unescapeText(p.Value)
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyDescription); p != nil {
+	if p, ok := todo.Get("DESCRIPTION"); ok {
 		t.Description = unescapeText(p.Value)
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyStatus); p != nil {
-		t.Status = icsToStatus(ics.ObjectStatus(p.Value))
+	if p, ok := todo.Get("STATUS"); ok {
+		t.Status = wireToStatus(p.Value)
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyPriority); p != nil {
+	if p, ok := todo.Get("PRIORITY"); ok {
 		if n, err := strconv.Atoi(strings.TrimSpace(p.Value)); err == nil {
 			t.Priority = icsToPriority(n)
 		}
 	}
-	for _, p := range todo.GetProperties(ics.ComponentPropertyCategories) {
+	for _, p := range todo.GetAll("CATEGORIES") {
 		for _, raw := range strings.Split(p.Value, ",") {
 			tag := strings.TrimSpace(unescapeText(raw))
 			if tag != "" {
@@ -180,66 +180,69 @@ func decodeTask(todo *ics.VTodo) (*core.Task, string, error) {
 			}
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyCreated); p != nil {
+	if p, ok := todo.Get("CREATED"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			t.CreatedAt = ts
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyLastModified); p != nil {
+	if p, ok := todo.Get("LAST-MODIFIED"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			t.UpdatedAt = ts
 		}
 	}
 	if t.UpdatedAt.IsZero() {
 		// Fallback to DTSTAMP when LAST-MODIFIED is absent.
-		if p := todo.GetProperty(ics.ComponentPropertyDtstamp); p != nil {
+		if p, ok := todo.Get("DTSTAMP"); ok {
 			if ts, err := parseICSTime(p.Value); err == nil {
 				t.UpdatedAt = ts
 			}
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyDue); p != nil {
+	if p, ok := todo.Get("DUE"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			due := ts
 			t.DueAt = &due
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyRrule); p != nil {
+	if p, ok := todo.Get("RRULE"); ok {
 		if err := core.ValidateRRule(p.Value); err == nil {
 			t.RRule = p.Value
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyUrl); p != nil {
+	if p, ok := todo.Get("URL"); ok {
 		t.Reference = p.Value
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropEffort)); p != nil {
+	if p, ok := todo.Get(XPropEffort); ok {
 		eff := core.Effort(strings.TrimSpace(p.Value))
 		if core.ValidEffort(eff) {
 			t.Effort = eff
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropAssignee)); p != nil {
+	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
 		t.AssignedTo = &val
-	} else if attendees := todo.Attendees(); len(attendees) > 0 {
-		// First attendee wins for v1.
-		email := attendees[0].Email()
+	} else if p, ok := todo.Get("ATTENDEE"); ok {
+		// First ATTENDEE wins for v1. Strip mailto: prefix when present.
+		email := strings.TrimPrefix(p.Value, "mailto:")
 		if email != "" {
 			t.AssignedTo = &email
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropProjectID)); p != nil {
+	if p, ok := todo.Get(XPropProjectID); ok {
 		val := p.Value
 		t.ProjectID = &val
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropTaskSeq)); p != nil {
+	if p, ok := todo.Get(XPropTaskSeq); ok {
 		if n, err := strconv.ParseInt(strings.TrimSpace(p.Value), 10, 64); err == nil {
 			t.Seq = n
 		}
 	}
-	for _, alarm := range todo.Alarms() {
-		trig := alarm.GetProperty(ics.ComponentPropertyTrigger)
-		if trig == nil {
+	for _, alarm := range todo.Sub {
+		if alarm.Type != vstar.CompAlarm {
+			continue
+		}
+		trig, ok := alarm.Get("TRIGGER")
+		if !ok {
 			continue
 		}
 		if ts, err := parseICSTime(trig.Value); err == nil {
@@ -252,7 +255,7 @@ func decodeTask(todo *ics.VTodo) (*core.Task, string, error) {
 	return t, body, nil
 }
 
-func decodeTrack(todo *ics.VTodo) (*core.Track, string, error) {
+func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 	tr := &core.Track{}
 
 	uid := getUID(todo)
@@ -269,40 +272,40 @@ func decodeTrack(todo *ics.VTodo) (*core.Track, string, error) {
 		}
 	}
 
-	if p := todo.GetProperty(ics.ComponentPropertySummary); p != nil {
+	if p, ok := todo.Get("SUMMARY"); ok {
 		tr.Title = unescapeText(p.Value)
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyStatus); p != nil {
-		tr.Status = icsStatusToTrack(ics.ObjectStatus(p.Value))
+	if p, ok := todo.Get("STATUS"); ok {
+		tr.Status = wireStatusToTrack(p.Value)
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyCreated); p != nil {
+	if p, ok := todo.Get("CREATED"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			tr.CreatedAt = ts
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentPropertyLastModified); p != nil {
+	if p, ok := todo.Get("LAST-MODIFIED"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			tr.UpdatedAt = ts
 		}
 	}
 	if tr.UpdatedAt.IsZero() {
-		if p := todo.GetProperty(ics.ComponentPropertyDtstamp); p != nil {
+		if p, ok := todo.Get("DTSTAMP"); ok {
 			if ts, err := parseICSTime(p.Value); err == nil {
 				tr.UpdatedAt = ts
 			}
 		}
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropTrackSlug)); p != nil {
+	if p, ok := todo.Get(XPropTrackSlug); ok {
 		tr.Slug = p.Value
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropTrackType)); p != nil {
+	if p, ok := todo.Get(XPropTrackType); ok {
 		tr.Type = p.Value
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropAssignee)); p != nil {
+	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
 		tr.AssignedTo = &val
 	}
-	if p := todo.GetProperty(ics.ComponentProperty(XPropProjectID)); p != nil {
+	if p, ok := todo.Get(XPropProjectID); ok {
 		val := p.Value
 		tr.ProjectID = &val
 	}
@@ -310,27 +313,27 @@ func decodeTrack(todo *ics.VTodo) (*core.Track, string, error) {
 	return tr, body, nil
 }
 
-func decodeJournal(j *ics.VJournal, uidToTaskID map[string]string) *core.LogEntry {
+func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEntry {
 	le := &core.LogEntry{}
 
-	if p := j.GetProperty(ics.ComponentProperty(XPropLogAction)); p != nil {
+	if p, ok := j.Get(XPropLogAction); ok {
 		le.Action = p.Value
 	}
-	if p := j.GetProperty(ics.ComponentProperty(XPropLogBy)); p != nil {
+	if p, ok := j.Get(XPropLogBy); ok {
 		le.By = p.Value
 	}
-	if p := j.GetProperty(ics.ComponentPropertyDescription); p != nil {
+	if p, ok := j.Get("DESCRIPTION"); ok {
 		le.Note = unescapeText(p.Value)
-	} else if p := j.GetProperty(ics.ComponentPropertySummary); p != nil {
+	} else if p, ok := j.Get("SUMMARY"); ok {
 		le.Note = unescapeText(p.Value)
 	}
-	if p := j.GetProperty(ics.ComponentPropertyDtstamp); p != nil {
+	if p, ok := j.Get("DTSTAMP"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			le.Timestamp = ts
 		}
 	}
 	if le.Timestamp.IsZero() {
-		if p := j.GetProperty(ics.ComponentPropertyCreated); p != nil {
+		if p, ok := j.Get("CREATED"); ok {
 			if ts, err := parseICSTime(p.Value); err == nil {
 				le.Timestamp = ts
 			}
@@ -339,11 +342,11 @@ func decodeJournal(j *ics.VJournal, uidToTaskID map[string]string) *core.LogEntr
 
 	// Prefer X-TLC-LOG-TASK if present (preserves the raw typeid even
 	// when the calendar didn't include a matching VTODO).
-	if p := j.GetProperty(ics.ComponentProperty(XPropLogTaskID)); p != nil {
+	if p, ok := j.Get(XPropLogTaskID); ok {
 		le.TaskID = p.Value
 	}
 	if le.TaskID == "" {
-		for _, rel := range j.GetProperties(ics.ComponentPropertyRelatedTo) {
+		for _, rel := range j.GetAll("RELATED-TO") {
 			body := uidBody(rel.Value)
 			if id, ok := uidToTaskID[body]; ok {
 				le.TaskID = id
@@ -359,29 +362,31 @@ func decodeJournal(j *ics.VJournal, uidToTaskID map[string]string) *core.LogEntr
 	return le
 }
 
-func icsToStatus(s ics.ObjectStatus) core.TaskStatus {
+// wireToStatus maps an RFC 5545 §3.8.1.11 STATUS wire string to a
+// tlc TaskStatus. Comparison is case-sensitive per the RFC.
+func wireToStatus(s string) core.TaskStatus {
 	switch s {
-	case ics.ObjectStatusInProcess:
+	case string(vstar.TodoInProcess):
 		return core.StatusInProgress
-	case ics.ObjectStatusCompleted:
+	case string(vstar.TodoCompleted):
 		return core.StatusDone
-	case ics.ObjectStatusCancelled:
+	case string(vstar.TodoCancelled):
 		return core.StatusSkipped
-	case ics.ObjectStatusNeedsAction:
+	case string(vstar.TodoNeedsAction):
 		return core.StatusTodo
 	}
 	return core.StatusTodo
 }
 
-func icsStatusToTrack(s ics.ObjectStatus) core.TrackStatus {
+func wireStatusToTrack(s string) core.TrackStatus {
 	switch s {
-	case ics.ObjectStatusInProcess:
+	case string(vstar.TodoInProcess):
 		return core.TrackStatusActive
-	case ics.ObjectStatusCompleted:
+	case string(vstar.TodoCompleted):
 		return core.TrackStatusCompleted
-	case ics.ObjectStatusCancelled:
+	case string(vstar.TodoCancelled):
 		return core.TrackStatusAbandoned
-	case ics.ObjectStatusNeedsAction:
+	case string(vstar.TodoNeedsAction):
 		return core.TrackStatusPending
 	}
 	return core.TrackStatusPending
@@ -402,12 +407,8 @@ func icsToPriority(n int) core.Priority {
 	}
 }
 
-func getUID(todo *ics.VTodo) string {
-	p := todo.GetProperty(ics.ComponentPropertyUniqueId)
-	if p == nil {
-		return ""
-	}
-	return p.Value
+func getUID(todo vstar.Component) string {
+	return todo.UID()
 }
 
 // uidBody strips the "@domain" suffix (if any) from a UID, leaving the
@@ -422,10 +423,10 @@ func uidBody(uid string) string {
 	return uid
 }
 
-func paramFirst(params map[string][]string, key string) string {
-	for k, v := range params {
-		if strings.EqualFold(k, key) && len(v) > 0 {
-			return v[0]
+func paramFirst(params []vstar.Param, key string) string {
+	for _, p := range params {
+		if strings.EqualFold(p.Name, key) {
+			return p.Value
 		}
 	}
 	return ""
@@ -455,7 +456,7 @@ func parseICSTime(s string) (time.Time, error) {
 }
 
 // unescapeText reverses the RFC 5545 §3.3.11 TEXT escapes that the
-// emitter applies (\\, \;, \,, \n, \N).
+// codec applies (\\, \;, \,, \n, \N).
 func unescapeText(s string) string {
 	if !strings.ContainsRune(s, '\\') {
 		return s

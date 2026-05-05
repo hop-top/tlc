@@ -1,18 +1,20 @@
 package vtodo
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
-	ics "github.com/arran4/golang-ical"
+	vstar "github.com/hop-top/vstar/go"
+	"github.com/hop-top/vstar/go/codec/rfc5545"
 
 	"hop.top/tlc/internal/core"
 )
 
 // RFC 5545 / RFC 9253 RELTYPE parameter values. RFC 9253 introduces
-// DEPENDS-ON; the lib treats RELTYPE values as opaque strings (see
-// docs/superpowers/specs/2026-05-02-golang-ical-decision.md), so we
+// DEPENDS-ON; vstar treats RELTYPE values as opaque strings, so we
 // hold our own constants.
 const (
 	RelTypeParent    = "PARENT"
@@ -35,18 +37,14 @@ const (
 	XPropLogTaskID = "X-TLC-LOG-TASK"
 )
 
-// reltypeParam is a tiny PropertyParameter that emits RELTYPE=<value>.
-// Equivalent to the lib's KeyValues helpers but specialised so we don't
-// have to repeat the boilerplate.
-type reltypeParam string
-
-func (r reltypeParam) KeyValue(_ ...interface{}) (string, []string) {
-	return "RELTYPE", []string{string(r)}
-}
+// utcStampLayout is the RFC 5545 §3.3.5 form #2 (UTC) DATE-TIME
+// representation used for absolute timestamps (CREATED, DTSTAMP,
+// LAST-MODIFIED, DUE, TRIGGER VALUE=DATE-TIME, …).
+const utcStampLayout = "20060102T150405Z"
 
 // BuildVCalendar serialises tasks, tracks and (optionally) log entries
-// into a VCALENDAR with VTODO and VJOURNAL components. The returned
-// *ics.Calendar is ready to be Serialize()d to an .ics string.
+// into a vstar.Calendar with VTODO and VJOURNAL components. Pair with
+// Serialize to produce an .ics string.
 //
 // Hierarchy: each Task with a non-nil TrackID emits a RELATED-TO
 // RELTYPE=PARENT pointing at the track's UID. Each Track emits a
@@ -63,25 +61,12 @@ func BuildVCalendar(
 	tracks []*core.Track,
 	logs []*core.LogEntry,
 	opts ...Option,
-) (*ics.Calendar, error) {
+) (vstar.Calendar, error) {
 	o := resolve(opts)
 
-	cal := ics.NewCalendar()
-	cal.SetVersion("2.0")
-	cal.SetProductId(o.productID)
-	cal.SetCalscale("GREGORIAN")
-	cal.SetMethod(ics.MethodPublish)
+	cal := vstar.Calendar{ProdID: o.productID}
 
-	// Index tracks by ID for child-task lookup and validate IDs.
-	trackByID := make(map[string]*core.Track, len(tracks))
-	for _, tr := range tracks {
-		if tr == nil {
-			continue
-		}
-		trackByID[tr.ID] = tr
-	}
-
-	// Index tasks per track (deterministic order — sort by ID).
+	// Index tasks per track for CHILD-link emission.
 	tasksByTrack := make(map[string][]*core.Task)
 	for _, t := range tasks {
 		if t == nil || t.TrackID == nil {
@@ -100,8 +85,7 @@ func BuildVCalendar(
 		if tr == nil {
 			continue
 		}
-		todo := cal.AddTodo(uidFor(tr.ID, o.uidDomain))
-		writeTrack(todo, tr, tasksByTrack[tr.ID], o.uidDomain)
+		cal.Append(buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain))
 	}
 
 	// Tasks → VTODO.
@@ -109,8 +93,7 @@ func BuildVCalendar(
 		if t == nil {
 			continue
 		}
-		todo := cal.AddTodo(uidFor(t.ID, o.uidDomain))
-		writeTask(todo, t, o.uidDomain)
+		cal.Append(buildTaskComponent(t, o.uidDomain))
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -119,12 +102,46 @@ func BuildVCalendar(
 			if le == nil {
 				continue
 			}
-			j := cal.AddJournal(logUID(le, o.uidDomain))
-			writeLogEntry(j, le, o.uidDomain)
+			cal.Append(buildLogComponent(le, o.uidDomain))
 		}
 	}
 
 	return cal, nil
+}
+
+// Serialize encodes cal as RFC 5545 wire format. Returns the UTF-8
+// string ready to write to a file or stream.
+//
+// Post-processes the codec output to inject CALSCALE:GREGORIAN +
+// METHOD:PUBLISH after PRODID. vstar.Calendar has no Props field for
+// arbitrary calendar-level properties (vstar T-0135); inject manually
+// until upstream lands. Both lines are RFC 5545 §3.6 standard
+// calendar-level properties; CALSCALE defaults to GREGORIAN, METHOD
+// defaults to PUBLISH for tlc's export use case.
+func Serialize(cal vstar.Calendar) (string, error) {
+	var buf bytes.Buffer
+	if err := rfc5545.Encode(&buf, cal); err != nil {
+		return "", fmt.Errorf("vtodo encode: %w", err)
+	}
+	return injectCalendarProps(buf.String()), nil
+}
+
+// injectCalendarProps inserts CALSCALE + METHOD after the PRODID line.
+// Workaround for vstar T-0135 — drop when vstar.Calendar gains Props.
+func injectCalendarProps(s string) string {
+	const prodIDPrefix = "PRODID:"
+	const inject = "CALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n"
+	idx := strings.Index(s, prodIDPrefix)
+	if idx < 0 {
+		return s
+	}
+	// Find end of the PRODID line (CRLF) so we insert AFTER it.
+	end := strings.Index(s[idx:], "\r\n")
+	if end < 0 {
+		return s
+	}
+	insertAt := idx + end + len("\r\n")
+	return s[:insertAt] + inject + s[insertAt:]
 }
 
 // uidFor renders a tlc TypeID as the iCalendar UID. Foreign IDs (already
@@ -142,19 +159,18 @@ func uidFor(typeID, domain string) string {
 	return typeID + "@" + domain
 }
 
-// statusToICS maps a tlc TaskStatus to an iCalendar ObjectStatus.
-// Per RFC 5545 §3.8.1.11 valid VTODO STATUS values are NEEDS-ACTION,
-// COMPLETED, IN-PROCESS, CANCELLED.
-func statusToICS(s core.TaskStatus) ics.ObjectStatus {
+// statusToWire maps a tlc TaskStatus to an RFC 5545 §3.8.1.11 STATUS
+// wire string. Defaults to NEEDS-ACTION for unknown / empty statuses.
+func statusToWire(s core.TaskStatus) string {
 	switch s {
 	case core.StatusInProgress:
-		return ics.ObjectStatusInProcess
+		return string(vstar.TodoInProcess)
 	case core.StatusDone:
-		return ics.ObjectStatusCompleted
+		return string(vstar.TodoCompleted)
 	case core.StatusSkipped:
-		return ics.ObjectStatusCancelled
-	default: // includes StatusTodo and empty
-		return ics.ObjectStatusNeedsAction
+		return string(vstar.TodoCancelled)
+	default:
+		return string(vstar.TodoNeedsAction)
 	}
 }
 
@@ -176,152 +192,182 @@ func priorityToICS(p core.Priority) int {
 	return 0
 }
 
-func writeTask(todo *ics.VTodo, t *core.Task, domain string) {
+func buildTaskComponent(t *core.Task, domain string) vstar.Component {
+	c := vstar.Component{Type: vstar.CompTodo}
+	c.Add(vstar.Property{Name: "UID", Value: uidFor(t.ID, domain)})
+
 	if t.Title != "" {
-		todo.SetSummary(t.Title)
+		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
 	}
 	if t.Description != "" {
-		todo.SetDescription(t.Description)
+		c.Add(vstar.Property{Name: "DESCRIPTION", Value: t.Description})
 	}
-	todo.SetStatus(statusToICS(t.Status))
+	c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status)})
 	if p := priorityToICS(t.Priority); p != 0 {
-		todo.SetPriority(p)
+		c.Add(vstar.Property{Name: "PRIORITY", Value: fmt.Sprintf("%d", p)})
 	}
 	for _, tag := range t.Tags {
 		if tag == "" {
 			continue
 		}
-		todo.AddCategory(tag)
+		c.Add(vstar.Property{Name: "CATEGORIES", Value: tag})
 	}
 	if !t.CreatedAt.IsZero() {
-		todo.SetCreatedTime(t.CreatedAt)
-		todo.SetDtStampTime(t.CreatedAt)
+		stamp := t.CreatedAt.UTC().Format(utcStampLayout)
+		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
+		c.Add(vstar.Property{Name: "DTSTAMP", Value: stamp})
 	}
 	if !t.UpdatedAt.IsZero() {
-		todo.SetModifiedAt(t.UpdatedAt)
+		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: t.UpdatedAt.UTC().Format(utcStampLayout)})
 	}
 	if t.DueAt != nil && !t.DueAt.IsZero() {
-		todo.SetDueAt(*t.DueAt)
+		c.Add(vstar.Property{Name: "DUE", Value: t.DueAt.UTC().Format(utcStampLayout)})
 	}
 	if t.RRule != "" {
-		todo.AddRrule(t.RRule)
+		c.Add(vstar.Property{Name: "RRULE", Value: t.RRule})
 	}
 	if t.Reference != "" {
-		todo.SetURL(t.Reference)
+		c.Add(vstar.Property{Name: "URL", Value: t.Reference})
 	}
 	if t.RemindAt != nil && !t.RemindAt.IsZero() {
-		alarm := todo.AddAlarm()
-		alarm.SetAction(ics.ActionDisplay)
-		alarm.SetTrigger(t.RemindAt.UTC().Format("20060102T150405Z"))
-		alarm.SetProperty(ics.ComponentPropertyDescription, t.Title)
-		// VALUE=DATE-TIME signals an absolute trigger (RFC 5545 §3.8.6.3).
-		alarm.GetProperty(ics.ComponentPropertyTrigger).ICalParameters["VALUE"] = []string{"DATE-TIME"}
+		c.Sub = append(c.Sub, buildAlarmComponent(*t.RemindAt, t.Title))
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
-		todo.AddProperty(
-			ics.ComponentPropertyRelatedTo,
-			uidFor(*t.TrackID, domain),
-			reltypeParam(RelTypeParent),
-		)
+		c.Add(vstar.Property{
+			Name:   "RELATED-TO",
+			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeParent}},
+			Value:  uidFor(*t.TrackID, domain),
+		})
 	}
 	for _, blocker := range blockedByList(t.Meta) {
-		todo.AddProperty(
-			ics.ComponentPropertyRelatedTo,
-			uidFor(blocker, domain),
-			reltypeParam(RelTypeDependsOn),
-		)
+		c.Add(vstar.Property{
+			Name:   "RELATED-TO",
+			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeDependsOn}},
+			Value:  uidFor(blocker, domain),
+		})
 	}
 	if t.Effort != "" {
-		todo.SetProperty(ics.ComponentProperty(XPropEffort), string(t.Effort))
+		c.Add(vstar.Property{Name: XPropEffort, Value: string(t.Effort)})
 	}
 	if t.AssignedTo != nil && *t.AssignedTo != "" {
 		assignee := *t.AssignedTo
 		if isEmail(assignee) {
-			todo.AddAttendee(assignee)
+			c.Add(vstar.Property{Name: "ATTENDEE", Value: "mailto:" + assignee})
 		} else {
-			todo.SetProperty(ics.ComponentProperty(XPropAssignee), assignee)
+			c.Add(vstar.Property{Name: XPropAssignee, Value: assignee})
 		}
 	}
 	if t.ProjectID != nil && *t.ProjectID != "" {
-		todo.SetProperty(ics.ComponentProperty(XPropProjectID), *t.ProjectID)
+		c.Add(vstar.Property{Name: XPropProjectID, Value: *t.ProjectID})
 	}
 	if t.Seq > 0 {
-		todo.SetProperty(ics.ComponentProperty(XPropTaskSeq), fmt.Sprintf("%d", t.Seq))
+		c.Add(vstar.Property{Name: XPropTaskSeq, Value: fmt.Sprintf("%d", t.Seq)})
 	}
+	return c
 }
 
-func writeTrack(todo *ics.VTodo, tr *core.Track, members []*core.Task, domain string) {
+func buildTrackComponent(tr *core.Track, members []*core.Task, domain string) vstar.Component {
+	c := vstar.Component{Type: vstar.CompTodo}
+	c.Add(vstar.Property{Name: "UID", Value: uidFor(tr.ID, domain)})
+
 	if tr.Title != "" {
-		todo.SetSummary(tr.Title)
+		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
 	}
 	// Tracks have no NEEDS-ACTION/etc states; STATUS COMPLETED for
 	// completed/archived, otherwise NEEDS-ACTION.
+	var status string
 	switch tr.Status {
 	case core.TrackStatusCompleted, core.TrackStatusArchived:
-		todo.SetStatus(ics.ObjectStatusCompleted)
+		status = string(vstar.TodoCompleted)
 	case core.TrackStatusAbandoned:
-		todo.SetStatus(ics.ObjectStatusCancelled)
+		status = string(vstar.TodoCancelled)
 	case core.TrackStatusActive:
-		todo.SetStatus(ics.ObjectStatusInProcess)
+		status = string(vstar.TodoInProcess)
 	default:
-		todo.SetStatus(ics.ObjectStatusNeedsAction)
+		status = string(vstar.TodoNeedsAction)
 	}
+	c.Add(vstar.Property{Name: "STATUS", Value: status})
+
 	if !tr.CreatedAt.IsZero() {
-		todo.SetCreatedTime(tr.CreatedAt)
-		todo.SetDtStampTime(tr.CreatedAt)
+		stamp := tr.CreatedAt.UTC().Format(utcStampLayout)
+		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
+		c.Add(vstar.Property{Name: "DTSTAMP", Value: stamp})
 	}
 	if !tr.UpdatedAt.IsZero() {
-		todo.SetModifiedAt(tr.UpdatedAt)
+		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: tr.UpdatedAt.UTC().Format(utcStampLayout)})
 	}
 	if tr.Slug != "" {
-		todo.SetProperty(ics.ComponentProperty(XPropTrackSlug), tr.Slug)
+		c.Add(vstar.Property{Name: XPropTrackSlug, Value: tr.Slug})
 	}
 	if tr.Type != "" {
-		todo.SetProperty(ics.ComponentProperty(XPropTrackType), tr.Type)
+		c.Add(vstar.Property{Name: XPropTrackType, Value: tr.Type})
 	}
 	// Marker so decode can distinguish a track-VTODO from a task-VTODO
 	// when the UID is foreign (rare but real for cross-system sync).
-	todo.SetProperty(ics.ComponentProperty(XPropTrackKind), "TRUE")
+	c.Add(vstar.Property{Name: XPropTrackKind, Value: "TRUE"})
 	if tr.AssignedTo != nil && *tr.AssignedTo != "" {
-		todo.SetProperty(ics.ComponentProperty(XPropAssignee), *tr.AssignedTo)
+		c.Add(vstar.Property{Name: XPropAssignee, Value: *tr.AssignedTo})
 	}
 	if tr.ProjectID != nil && *tr.ProjectID != "" {
-		todo.SetProperty(ics.ComponentProperty(XPropProjectID), *tr.ProjectID)
+		c.Add(vstar.Property{Name: XPropProjectID, Value: *tr.ProjectID})
 	}
 	for _, member := range members {
-		todo.AddProperty(
-			ics.ComponentPropertyRelatedTo,
-			uidFor(member.ID, domain),
-			reltypeParam(RelTypeChild),
-		)
+		c.Add(vstar.Property{
+			Name:   "RELATED-TO",
+			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeChild}},
+			Value:  uidFor(member.ID, domain),
+		})
 	}
+	return c
 }
 
-func writeLogEntry(j *ics.VJournal, le *core.LogEntry, domain string) {
+func buildLogComponent(le *core.LogEntry, domain string) vstar.Component {
+	c := vstar.Component{Type: vstar.CompJournal}
+	c.Add(vstar.Property{Name: "UID", Value: logUID(le, domain)})
+
 	if le.Note != "" {
-		j.SetSummary(firstLine(le.Note))
-		j.SetDescription(le.Note)
+		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})
+		c.Add(vstar.Property{Name: "DESCRIPTION", Value: le.Note})
 	} else if le.Action != "" {
-		j.SetSummary(le.Action)
+		c.Add(vstar.Property{Name: "SUMMARY", Value: le.Action})
 	}
 	if !le.Timestamp.IsZero() {
-		j.SetDtStampTime(le.Timestamp)
-		j.SetCreatedTime(le.Timestamp)
+		stamp := le.Timestamp.UTC().Format(utcStampLayout)
+		c.Add(vstar.Property{Name: "DTSTAMP", Value: stamp})
+		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
 	}
 	if le.TaskID != "" {
-		j.AddProperty(
-			ics.ComponentPropertyRelatedTo,
-			uidFor(le.TaskID, domain),
-			reltypeParam(RelTypeParent),
-		)
-		j.SetProperty(ics.ComponentProperty(XPropLogTaskID), le.TaskID)
+		c.Add(vstar.Property{
+			Name:   "RELATED-TO",
+			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeParent}},
+			Value:  uidFor(le.TaskID, domain),
+		})
+		c.Add(vstar.Property{Name: XPropLogTaskID, Value: le.TaskID})
 	}
 	if le.Action != "" {
-		j.SetProperty(ics.ComponentProperty(XPropLogAction), le.Action)
+		c.Add(vstar.Property{Name: XPropLogAction, Value: le.Action})
 	}
 	if le.By != "" {
-		j.SetProperty(ics.ComponentProperty(XPropLogBy), le.By)
+		c.Add(vstar.Property{Name: XPropLogBy, Value: le.By})
 	}
+	return c
+}
+
+// buildAlarmComponent emits a VALARM block carrying an absolute
+// DATE-TIME trigger. Used for tlc reminders that fire at a specific
+// instant rather than relative to DTSTART.
+func buildAlarmComponent(remindAt time.Time, summary string) vstar.Component {
+	c := vstar.Component{Type: vstar.CompAlarm}
+	c.Add(vstar.Property{Name: "ACTION", Value: "DISPLAY"})
+	c.Add(vstar.Property{
+		Name:   "TRIGGER",
+		Params: []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}},
+		Value:  remindAt.UTC().Format(utcStampLayout),
+	})
+	if summary != "" {
+		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
+	}
+	return c
 }
 
 // logUID derives a stable UID for a LogEntry. Combines task ID, action,
@@ -330,7 +376,7 @@ func writeLogEntry(j *ics.VJournal, le *core.LogEntry, domain string) {
 func logUID(le *core.LogEntry, domain string) string {
 	stamp := ""
 	if !le.Timestamp.IsZero() {
-		stamp = le.Timestamp.UTC().Format("20060102T150405Z")
+		stamp = le.Timestamp.UTC().Format(utcStampLayout)
 	}
 	base := fmt.Sprintf("log-%s-%s-%s", le.TaskID, le.Action, stamp)
 	return base + "@" + domain

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	vstar "github.com/hop-top/vstar/go"
 
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/vtodo"
@@ -15,6 +16,16 @@ import (
 var fixedTime = time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
 
 func ptr[T any](v T) *T { return &v }
+
+// mustSerialize encodes cal via vtodo.Serialize and fails the test on
+// error. Replaces *ics.Calendar.Serialize() from the pre-vstar codec
+// era (T-1230).
+func mustSerialize(t *testing.T, cal vstar.Calendar) string {
+	t.Helper()
+	s, err := vtodo.Serialize(cal)
+	require.NoError(t, err)
+	return s
+}
 
 func sampleTask() *core.Task {
 	due := fixedTime.Add(24 * time.Hour)
@@ -42,7 +53,7 @@ func sampleTask() *core.Task {
 func TestBuildVCalendar_Envelope(t *testing.T) {
 	cal, err := vtodo.BuildVCalendar(nil, nil, nil)
 	require.NoError(t, err)
-	out := cal.Serialize()
+	out := mustSerialize(t, cal)
 	require.Contains(t, out, "BEGIN:VCALENDAR")
 	require.Contains(t, out, "END:VCALENDAR")
 	require.Contains(t, out, "VERSION:2.0")
@@ -55,7 +66,7 @@ func TestBuildVCalendar_TaskFields(t *testing.T) {
 	task := sampleTask()
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
-	out := cal.Serialize()
+	out := mustSerialize(t, cal)
 
 	require.Contains(t, out, "BEGIN:VTODO")
 	require.Contains(t, out, "UID:task_01h455vb4pex5vsknk084sn02q@tlc.local")
@@ -90,7 +101,7 @@ func TestBuildVCalendar_AssigneeEmailGoesToAttendee(t *testing.T) {
 	task.AssignedTo = ptr("alice@example.com")
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
-	out := cal.Serialize()
+	out := mustSerialize(t, cal)
 	require.Contains(t, out, "ATTENDEE:mailto:alice@example.com")
 	require.NotContains(t, out, "X-TLC-ASSIGNEE:alice@example.com")
 }
@@ -115,7 +126,7 @@ func TestBuildVCalendar_StatusMapping(t *testing.T) {
 			}
 			cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 			require.NoError(t, err)
-			require.Contains(t, cal.Serialize(), tc.want)
+			require.Contains(t, mustSerialize(t, cal), tc.want)
 		})
 	}
 }
@@ -143,7 +154,7 @@ func TestBuildVCalendar_PriorityMapping(t *testing.T) {
 			}
 			cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 			require.NoError(t, err)
-			out := cal.Serialize()
+			out := mustSerialize(t, cal)
 			if tc.absent {
 				require.NotContains(t, out, "PRIORITY:")
 			} else {
@@ -160,7 +171,7 @@ func TestBuildVCalendar_EmptyRRuleNoLine(t *testing.T) {
 	task.RemindAt = nil
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
-	require.NotContains(t, cal.Serialize(), "RRULE:")
+	require.NotContains(t, mustSerialize(t, cal), "RRULE:")
 }
 
 func TestBuildVCalendar_TrackChildLinks(t *testing.T) {
@@ -182,7 +193,7 @@ func TestBuildVCalendar_TrackChildLinks(t *testing.T) {
 
 	cal, err := vtodo.BuildVCalendar([]*core.Task{t1, &t2}, []*core.Track{track}, nil)
 	require.NoError(t, err)
-	out := cal.Serialize()
+	out := mustSerialize(t, cal)
 	// Track CHILD links to both tasks.
 	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn02q@tlc.local")
 	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn0az@tlc.local")
@@ -202,7 +213,7 @@ func TestBuildVCalendar_DependsOn(t *testing.T) {
 	}
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
-	require.Contains(t, cal.Serialize(),
+	require.Contains(t, mustSerialize(t, cal),
 		"RELATED-TO;RELTYPE=DEPENDS-ON:task_01h455vb4pex5vsknk084sn0az@tlc.local",
 	)
 }
@@ -220,7 +231,7 @@ func TestBuildVCalendar_LogsGated(t *testing.T) {
 	t.Run("default skips VJOURNAL", func(t *testing.T) {
 		cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, logs)
 		require.NoError(t, err)
-		require.NotContains(t, cal.Serialize(), "BEGIN:VJOURNAL")
+		require.NotContains(t, mustSerialize(t, cal), "BEGIN:VJOURNAL")
 	})
 
 	t.Run("WithIncludeLogs emits VJOURNAL", func(t *testing.T) {
@@ -229,7 +240,7 @@ func TestBuildVCalendar_LogsGated(t *testing.T) {
 			vtodo.WithIncludeLogs(true),
 		)
 		require.NoError(t, err)
-		out := cal.Serialize()
+		out := mustSerialize(t, cal)
 		require.Contains(t, out, "BEGIN:VJOURNAL")
 		require.Contains(t, out, "X-TLC-LOG-ACTION:CLAIMED")
 		require.Contains(t, out, "X-TLC-LOG-BY:alice")
@@ -247,7 +258,7 @@ func TestBuildVCalendar_CustomDomainAndProductID(t *testing.T) {
 		vtodo.WithProductID("-//example//cal//EN"),
 	)
 	require.NoError(t, err)
-	out := cal.Serialize()
+	out := mustSerialize(t, cal)
 	require.Contains(t, out, "PRODID:-//example//cal//EN")
 	require.Contains(t, out,
 		"UID:task_01h455vb4pex5vsknk084sn02q@calendar.example.com",

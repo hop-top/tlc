@@ -10,11 +10,11 @@ require (
 	charm.land/lipgloss/v2 v2.0.3
 	charm.land/log/v2 v2.0.0
 	github.com/andygrunwald/go-jira v1.17.0
-	github.com/arran4/golang-ical v0.3.5
 	github.com/creack/pty v1.1.24
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/go-github/v69 v69.2.0
 	github.com/google/uuid v1.6.0
+	github.com/hop-top/vstar/go v0.0.0-00010101000000-000000000000
 	github.com/machinebox/graphql v0.2.2
 	github.com/mattn/go-isatty v0.0.21
 	github.com/robfig/cron/v3 v3.0.1
@@ -120,3 +120,7 @@ require (
 replace hop.top/kit => /Users/jadb/.w/ideacrafterslabs/kit/hops/main
 
 replace hop.top/hdl => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
+
+// Local replace until vstar publishes a tag fetchable by `go get`.
+// Pulled in to drop arran4/golang-ical (T-1230).
+replace github.com/hop-top/vstar/go => /Users/jadb/.w/ideacrafterslabs/vstar/hops/main/go
