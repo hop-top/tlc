@@ -89,9 +89,12 @@ func TestMigrationV13_TracksHaveSlugColumn(t *testing.T) {
 	}
 }
 
-// TestMigrationV13_TaskLogsForeignKey verifies task_logs FK now references
-// tasks(id) only (not the old composite key) and CASCADEs on task delete.
-func TestMigrationV13_TaskLogsForeignKey(t *testing.T) {
+// TestMigrationV15_TaskLogsNoCascade verifies migration v15 drops the
+// ON DELETE CASCADE that v13 placed on task_logs.task_id. Deleting a
+// task must leave its log entries intact so the --note recorded at
+// delete time (T-1178) survives for audit / policy enforcement
+// (T-1192).
+func TestMigrationV15_TaskLogsNoCascade(t *testing.T) {
 	s, err := NewSQLiteStorage(":memory:")
 	if err != nil {
 		t.Fatalf("NewSQLiteStorage: %v", err)
@@ -114,12 +117,12 @@ func TestMigrationV13_TaskLogsForeignKey(t *testing.T) {
 
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO task_logs (task_id, timestamp, by, action, note)
-		VALUES ('task_01h455vb4pex5vsknk084sn02q', '2026-01-01', 'noor', 'created', '')
+		VALUES ('task_01h455vb4pex5vsknk084sn02q', '2026-01-01', 'noor', 'deleted', 'why-i-deleted-it')
 	`); err != nil {
 		t.Fatalf("insert task_log: %v", err)
 	}
 
-	// Delete task → log row should cascade.
+	// Delete task — log row must survive (no cascade post-v15).
 	if _, err := s.db.ExecContext(ctx,
 		`DELETE FROM tasks WHERE id = 'task_01h455vb4pex5vsknk084sn02q'`,
 	); err != nil {
@@ -127,12 +130,22 @@ func TestMigrationV13_TaskLogsForeignKey(t *testing.T) {
 	}
 
 	var n int
+	var note string
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT count(*) FROM task_logs WHERE task_id = 'task_01h455vb4pex5vsknk084sn02q'`,
 	).Scan(&n); err != nil {
 		t.Fatalf("count logs: %v", err)
 	}
-	if n != 0 {
-		t.Errorf("after task delete, log rows remain: %d (want 0 via FK CASCADE)", n)
+	if n != 1 {
+		t.Fatalf("after task delete, log rows = %d; want 1 (cascade dropped)", n)
+	}
+
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT note FROM task_logs WHERE task_id = 'task_01h455vb4pex5vsknk084sn02q'`,
+	).Scan(&note); err != nil {
+		t.Fatalf("read note: %v", err)
+	}
+	if note != "why-i-deleted-it" {
+		t.Errorf("note = %q; want %q (note must survive task delete)", note, "why-i-deleted-it")
 	}
 }

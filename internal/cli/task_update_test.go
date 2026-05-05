@@ -1007,7 +1007,8 @@ func TestTaskUpdateStatusWithNote(t *testing.T) {
 }
 
 // TestTaskDeleteWithNote verifies --note|-n is plumbed to a DELETED
-// log entry written before the cascade-delete (T-1178).
+// log entry written before the row mutation. Post-T-1232 the cascade
+// is dropped, so the log entry must remain queryable after delete.
 func TestTaskDeleteWithNote(t *testing.T) {
 	t.Run("DeleteWithNoteRecordsLog", func(t *testing.T) {
 		ctx, cleanup := setupTestDir(t)
@@ -1036,15 +1037,30 @@ func TestTaskDeleteWithNote(t *testing.T) {
 			t.Fatalf("task delete --yes --note failed: %v", err)
 		}
 
-		// The cascading delete removes task_logs rows, but the log
-		// is written before delete via AddLog → ListLogs sees it
-		// only if queried before the row is gone. We verify the
-		// command ran cleanly and the task is gone.
-		s2, _ := getStorageRaw()
-		defer s2.Close()
+		// Task itself is gone…
 		gone := getTaskByAlias(t, ctx, "T-0001")
 		if gone != nil {
 			t.Errorf("expected task removed, found: %+v", gone)
+		}
+
+		// …but the DELETED log entry with the note survives
+		// (T-1232: cascade dropped from task_logs.task_id).
+		s2, _ := getStorageRaw()
+		defer s2.Close()
+		logs, err := s2.GetLogs(ctx, "T-0001", "asc")
+		if err != nil {
+			t.Fatalf("GetLogs after delete: %v", err)
+		}
+		var found bool
+		for _, le := range logs {
+			if le.Action == core.ActionDeleted && le.Note == "Out of scope" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected DELETED log with note %q to survive task delete; got %d entries: %+v",
+				"Out of scope", len(logs), logs)
 		}
 	})
 

@@ -402,10 +402,52 @@ var migrations = []migration{
 		ALTER TABLE tasks ADD COLUMN rrule TEXT;
 		`,
 	},
+	{
+		// Drop ON DELETE CASCADE on task_logs.task_id so log entries
+		// (including the --note recorded at delete time, T-1178) survive
+		// task deletion. Required for kit/runtime/policy adoption
+		// (T-1192, "delete-requires-note") to not be theater: capturing
+		// a delete reason has no audit value if the cascade wipes it.
+		//
+		// SQLite cannot ALTER a foreign key in place; rebuild the table
+		// without the cascade and copy rows over.  The FK is preserved
+		// as a referential hint but with no action on parent delete —
+		// task_id may legitimately reference a deleted task after this.
+		version: 15,
+		query: `
+		PRAGMA foreign_keys = OFF;
+
+		DROP TABLE IF EXISTS task_logs_new;
+
+		CREATE TABLE task_logs_new (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			task_id    TEXT NOT NULL,
+			project_id TEXT,
+			timestamp  TEXT NOT NULL,
+			by         TEXT NOT NULL,
+			action     TEXT NOT NULL,
+			note       TEXT NOT NULL,
+			meta       TEXT
+		);
+
+		INSERT INTO task_logs_new
+			(id, task_id, project_id, timestamp, by, action, note, meta)
+		SELECT id, task_id, project_id, timestamp, by, action, note, meta
+		FROM task_logs;
+
+		DROP TABLE task_logs;
+		ALTER TABLE task_logs_new RENAME TO task_logs;
+
+		CREATE INDEX IF NOT EXISTS idx_task_logs_task_id    ON task_logs(task_id);
+		CREATE INDEX IF NOT EXISTS idx_task_logs_project_id ON task_logs(project_id);
+
+		PRAGMA foreign_keys = ON;
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 14
+const LatestMigrationVersion = 15
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
