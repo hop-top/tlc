@@ -151,9 +151,13 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 		rows[i] = logTableRow{
 			Timestamp: l.Timestamp.Format("2006-01-02 15:04:05"),
 			TaskID:    taskCell,
-			Action:    formatLogAction(l.Action),
-			By:        l.By,
-			Note:      note,
+			// Plain action — kit/output's tabwriter (non-TTY) passes
+			// cell values through verbatim, so pre-styled lipgloss
+			// escapes from formatLogAction would leak into pipes
+			// (breaks `tlc log --all | grep CLAIMED`).
+			Action: l.Action,
+			By:     l.By,
+			Note:   note,
 		}
 	}
 

@@ -262,9 +262,12 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 			duration = r.EndedAt.Sub(r.StartedAt).String()
 		}
 		rows[i] = flowRunRow{
-			RunID:    r.ID,
-			FlowID:   r.FlowID,
-			Status:   formatFlowStatus(r.Status),
+			RunID:  r.ID,
+			FlowID: r.FlowID,
+			// Plain status — kit/output's tabwriter (non-TTY) passes
+			// cell values through verbatim, so pre-styled lipgloss
+			// escapes from formatFlowStatus would leak into pipes.
+			Status:   string(r.Status),
 			Started:  r.StartedAt.Format("2006-01-02 15:04:05"),
 			Duration: duration,
 		}
