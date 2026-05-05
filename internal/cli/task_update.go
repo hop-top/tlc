@@ -10,7 +10,11 @@ import (
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
+	"hop.top/kit/go/console/output"
 	"hop.top/kit/go/core/util"
+	"hop.top/kit/go/runtime/bus"
+	"hop.top/kit/go/runtime/domain"
+	"hop.top/kit/go/runtime/policy"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
@@ -348,6 +352,14 @@ var TaskDeleteCmd = &cobra.Command{
 			}
 		}
 
+		// Attach --note to ctx so policy.Engine sees it as
+		// `context.note` when evaluating the pre_persisted veto. Empty
+		// string is fine — the default delete-requires-note policy
+		// denies the empty case explicitly.
+		policyCtx := context.WithValue(ctx, policy.ContextAttrsKey, map[string]any{
+			"note": taskDeleteNote,
+		})
+
 		var errs []string
 		for _, res := range resolved {
 			task := res.Task
@@ -374,17 +386,33 @@ var TaskDeleteCmd = &cobra.Command{
 				continue
 			}
 
+			// Synchronous policy gate (T-1192). Publish the kit
+			// pre_persisted topic with Op=delete; any sync subscriber
+			// (the kit/runtime/policy engine wired in PersistentPreRunE)
+			// vetoes by returning an error. This mirrors what
+			// domain.Service[T].Delete would do internally — tlc's
+			// CLI delete bypasses domain.Service for now (T-1232 left
+			// the direct repo path intact), so the gate has to live
+			// here until the CLI is restructured.
+			if err := publishDeletePrePersisted(policyCtx, task.ID); err != nil {
+				if denied := policyAsCLIError(err); denied != nil {
+					return denied
+				}
+				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				continue
+			}
+
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
-				if err := deleteSyncedTask(ctx, task, res.Storage); err != nil {
+				if err := deleteSyncedTask(policyCtx, task, res.Storage); err != nil {
 					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
 					continue
 				}
 			}
 
 			// Record the deletion note against the transition log
-			// before the task row (and its cascading logs) is removed.
-			// Mirrors the complete --note plumbing: the note flows
-			// from CLI → audit log entry written via AddLog.
+			// before the task row is removed. T-1232 dropped the
+			// task_logs cascade, so the entry survives the delete
+			// for audit / policy review.
 			if taskDeleteNote != "" {
 				logEntry := &core.LogEntry{
 					TaskID:    task.ID,
@@ -393,13 +421,13 @@ var TaskDeleteCmd = &cobra.Command{
 					Action:    core.ActionDeleted,
 					Note:      taskDeleteNote,
 				}
-				if err := res.Storage.AddLog(ctx, logEntry); err != nil {
+				if err := res.Storage.AddLog(policyCtx, logEntry); err != nil {
 					_, _ = fmt.Fprintf(cmd.OutOrStderr(),
 						"Warning: failed to write delete log for %s: %v\n", task.ID, err)
 				}
 			}
 
-			if err := res.Storage.DeleteTask(ctx, task.ID); err != nil {
+			if err := res.Storage.DeleteTask(policyCtx, task.ID); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: failed to delete: %v", task.ID, err))
 				continue
 			}
@@ -411,6 +439,53 @@ var TaskDeleteCmd = &cobra.Command{
 		}
 		return syncTODOAll()
 	},
+}
+
+// publishDeletePrePersisted fires kit.runtime.entity.pre_persisted with
+// Op=delete on the process bus.  Any sync subscriber (the policy
+// engine) can veto by returning an error.  When the bus is not yet
+// initialised (e.g. unit tests that bypass PersistentPreRunE), the
+// publish is skipped and nil returned — adopters who want enforcement
+// in tests should construct a bus and wire policy themselves.
+func publishDeletePrePersisted(ctx context.Context, taskID string) error {
+	b := GetEventBus()
+	if b == nil {
+		return nil
+	}
+	payload := domain.PreEntityPayload{
+		Op:       domain.OpDelete,
+		Phase:    domain.PhasePrePersisted,
+		EntityID: taskID,
+	}
+	ev := bus.NewEvent("kit.runtime.entity.pre_persisted", "tlc.task.cli", payload)
+	return b.Publish(ctx, ev)
+}
+
+// policyAsCLIError returns a *output.Error envelope (CONFLICT, exit 4)
+// when err originates from a policy.Engine veto, else nil.  The kit
+// cli RunE wrapper round-trips *output.Error unchanged via the
+// asCLIError interface, so the resulting envelope reaches Execute()
+// with its ExitCode intact.  exitCodeFor in root.go reads that code.
+func policyAsCLIError(err error) *output.Error {
+	if err == nil {
+		return nil
+	}
+	var pde *policy.PolicyDeniedError
+	if errors.As(err, &pde) {
+		return &output.Error{
+			Code:     output.CodeConflict,
+			Message:  pde.Error(),
+			ExitCode: 4,
+		}
+	}
+	if errors.Is(err, domain.ErrConflict) {
+		return &output.Error{
+			Code:     output.CodeConflict,
+			Message:  err.Error(),
+			ExitCode: 4,
+		}
+	}
+	return nil
 }
 
 func init() {

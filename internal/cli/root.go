@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,9 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/kit/go/runtime/bus"
 	kitcli "hop.top/kit/go/console/cli"
+	"hop.top/kit/go/console/output"
 	"hop.top/kit/go/runtime/domain"
+	"hop.top/kit/go/runtime/policy"
 	"hop.top/kit/go/ai/ext/dispatch"
 	kitlog "hop.top/kit/go/console/log"
 	"hop.top/tlc/internal/config"
@@ -139,6 +142,13 @@ func kitRoot() *kitcli.Root {
 			busPublisher = events.NewBusPublisher(eventBus)
 		}
 
+		// Initialise the kit/runtime/policy engine on the bus. Misconfig
+		// (bad YAML, unknown topic, broken CEL) fails loud here so the
+		// user's command never runs against an unenforced ruleset.
+		if _, err := initPolicyEngine(eventBus); err != nil {
+			return err
+		}
+
 		// Bootstrap extensions once per process.
 		if extMgr == nil {
 			extMgr = extensions.New(log.Default(), eventBus)
@@ -204,6 +214,7 @@ func Execute() {
 		os.Args = expanded
 	}
 	defer func() {
+		closePolicy()
 		if auditSub != nil {
 			auditSub.Close()
 		}
@@ -219,8 +230,35 @@ func Execute() {
 		}
 	}()
 	if err := kitRootInstance.Execute(context.Background()); err != nil {
-		os.Exit(1)
+		os.Exit(exitCodeFor(err))
 	}
+}
+
+// exitCodeFor maps the error returned by kitRootInstance.Execute to a
+// classified process exit code.  Defaults to 1.  PolicyDeniedError
+// (and anything wrapping domain.ErrConflict) maps to 4 so policy
+// refusals are scriptable; ExitCodeError forwards its own code; an
+// *output.Error envelope already carries the desired ExitCode.
+func exitCodeFor(err error) int {
+	if err == nil {
+		return 0
+	}
+	var pde *policy.PolicyDeniedError
+	if errors.As(err, &pde) {
+		return 4
+	}
+	if errors.Is(err, domain.ErrConflict) {
+		return 4
+	}
+	var exErr *ExitCodeError
+	if errors.As(err, &exErr) {
+		return exErr.Code
+	}
+	var oe *output.Error
+	if errors.As(err, &oe) && oe.ExitCode != 0 {
+		return oe.ExitCode
+	}
+	return 1
 }
 
 func initConfig() {
