@@ -555,7 +555,13 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		}
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
+	// Reference: hide auto-generated internal refs (tlc://<project>/<typeid>)
+	// from default human output — typeid only surfaces in verbose / machine
+	// modes per render policy. External refs (github:..., docs/..., https://...)
+	// remain visible because they carry information the alias does not.
+	if isVerboseOutput() || !core.IsInternalTaskRef(t.Reference, t) {
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
+	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), t.UpdatedAt.Format(time.RFC3339))
 

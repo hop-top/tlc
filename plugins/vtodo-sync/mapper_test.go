@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -45,13 +44,13 @@ func TestTaskRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildVCalendar: %v", err)
 	}
-	var buf bytes.Buffer
-	if err := cal.SerializeTo(&buf); err != nil {
-		t.Fatalf("SerializeTo: %v", err)
+	serialized, err := vtodo.Serialize(cal)
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
 	}
 
 	// Decode: bytes → core.Task → plugin Task.
-	res, err := vtodo.ParseVCalendar(strings.NewReader(buf.String()))
+	res, err := vtodo.ParseVCalendar(strings.NewReader(serialized))
 	if err != nil {
 		t.Fatalf("ParseVCalendar: %v", err)
 	}

@@ -2,13 +2,13 @@
                                                                                             
 [1;38;5;39mTask T-0001: Implement auth middleware[m                                                      
                                                                                             
-ID:        task_01h455vb4pex5vsknk084sn001                                                  
 Status:    [ ]                                                                              
 Assigned:  @alice                                                                           
-Reference: tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn001                                
 Tags:       [38;5;241m╭────────╮[m                                                                      
  [38;5;241m│[m [1m#[m auth [38;5;241m│[m  [1m#[m backend                                                                      
  [38;5;241m╰────────╯[m              [38;5;241mctrl+t[m [2;38;5;241mopen[m                                                        
+                                                                                            
+                                                                                            
                                                                                             
                                                                                             
                                                                                             
