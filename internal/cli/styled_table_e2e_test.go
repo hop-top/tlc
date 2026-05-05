@@ -49,7 +49,7 @@ func buildTLCBinary(t *testing.T) string {
 	t.Helper()
 	binDir := t.TempDir()
 	binPath := filepath.Join(binDir, "tlc")
-	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", binPath, "./cmd/tlc")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binPath, "./cmd/tlc")
 	cmd.Dir = styledRepoRoot(t)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -109,7 +109,7 @@ func styledEnv(home, dbPath string) []string {
 // runTLCPlain runs tlc with stdout as a pipe (non-TTY).
 func runTLCPlain(t *testing.T, bin, cwd string, env []string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command(bin, args...)
+	cmd := exec.CommandContext(t.Context(), bin, args...)
 	cmd.Env = env
 	cmd.Dir = cwd
 	out, err := cmd.CombinedOutput()
@@ -123,7 +123,7 @@ func runTLCPlain(t *testing.T, bin, cwd string, env []string, args ...string) st
 // an *os.File terminal and activates the styled renderer.
 func runTLCPTY(t *testing.T, bin, cwd string, env []string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command(bin, args...)
+	cmd := exec.CommandContext(t.Context(), bin, args...)
 	cmd.Env = env
 	cmd.Dir = cwd
 
@@ -196,4 +196,3 @@ func TestStyledTable_TTYAndNonTTYContentIdentity(t *testing.T) {
 		}
 	}
 }
-

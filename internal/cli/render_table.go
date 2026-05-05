@@ -66,7 +66,7 @@ func renderStyledList[T any](w io.Writer, format string, rows []T, emphasis map[
 
 	style, hasStyle := activeTableStyle()
 	if !hasStyle && len(emphasis) == 0 {
-		return output.Render(w, format, rows)
+		return output.Render(w, format, rows) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 	}
 
 	opts := make([]output.RenderOption, 0, 1+len(emphasis))
@@ -76,5 +76,5 @@ func renderStyledList[T any](w io.Writer, format string, rows []T, emphasis map[
 	for idx, kind := range emphasis {
 		opts = append(opts, output.RowEmphasis(idx, kind))
 	}
-	return output.Render(w, format, rows, opts...)
+	return output.Render(w, format, rows, opts...) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 }

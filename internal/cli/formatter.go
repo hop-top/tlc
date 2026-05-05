@@ -375,9 +375,9 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 			proj = projectLabel(*t.ProjectID)
 		}
 		rows[i] = workspaceTaskRow{
-			Project:  proj,
-			ID:       formatTaskAlias(t),
-			Title:    t.Title,
+			Project: proj,
+			ID:      formatTaskAlias(t),
+			Title:   t.Title,
 			// Cell values must be plain — kit/output's tabwriter (non-TTY)
 			// passes them through verbatim, so any pre-styled lipgloss
 			// escapes would leak into piped output.
