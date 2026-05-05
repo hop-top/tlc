@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -362,12 +361,12 @@ func replaceTasksFile(path string, tasks []Task) error {
 	if err != nil {
 		return err
 	}
-	var buf bytes.Buffer
-	if err := cal.SerializeTo(&buf); err != nil {
+	body, err := vtodo.Serialize(cal)
+	if err != nil {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(body), 0o644); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

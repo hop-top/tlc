@@ -60,7 +60,7 @@ func (t *Task) NextReminder() *time.Time {
 		cursor := anchor
 		const maxSteps = 10000
 		for i := 0; i < maxSteps; i++ {
-			next, ok, _ := NextFireFromRRule(t.RRule, cursor)
+			next, ok, _ := NextFireFromRRule(t.RRule, anchor, cursor)
 			if !ok {
 				break
 			}

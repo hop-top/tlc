@@ -136,7 +136,10 @@ func writeVtodo(
 	if err != nil {
 		return fmt.Errorf("vtodo encode failed: %w", err)
 	}
-	body := cal.Serialize()
+	body, err := vtodo.Serialize(cal)
+	if err != nil {
+		return fmt.Errorf("vtodo encode failed: %w", err)
+	}
 	if outputPath == "" {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), body)
 		return nil

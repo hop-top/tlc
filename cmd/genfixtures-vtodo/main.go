@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	vstar "github.com/hop-top/vstar/go"
+
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/vtodo"
 )
@@ -24,6 +26,16 @@ func write(path, content string) {
 		panic(err)
 	}
 	fmt.Printf("wrote %s (%d bytes)\n", path, len(content))
+}
+
+// mustSerialize encodes cal via vtodo.Serialize and panics on error.
+// Replaces *ics.Calendar.Serialize() from the pre-vstar codec era.
+func mustSerialize(cal vstar.Calendar) string {
+	s, err := vtodo.Serialize(cal)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func main() {
@@ -53,7 +65,7 @@ func main() {
 
 	// 1. single-task.ics
 	cal, _ := vtodo.BuildVCalendar([]*core.Task{base}, nil, nil)
-	write(dir+"/single-task.ics", cal.Serialize())
+	write(dir+"/single-task.ics", mustSerialize(cal))
 
 	// 2. track-with-tasks.ics
 	track := &core.Track{
@@ -79,13 +91,13 @@ func main() {
 		[]*core.Task{&tt1, &tt2, &tt3},
 		[]*core.Track{track}, nil,
 	)
-	write(dir+"/track-with-tasks.ics", cal2.Serialize())
+	write(dir+"/track-with-tasks.ics", mustSerialize(cal2))
 
 	// 3. recurring-rrule.ics
 	rec := *base
 	rec.RRule = "FREQ=DAILY;INTERVAL=2"
 	cal3, _ := vtodo.BuildVCalendar([]*core.Task{&rec}, nil, nil)
-	write(dir+"/recurring-rrule.ics", cal3.Serialize())
+	write(dir+"/recurring-rrule.ics", mustSerialize(cal3))
 
 	// 4. with-dependencies.ics
 	blockerID := "task_01h455vb4pex5vsknk084sn0az"
@@ -100,7 +112,7 @@ func main() {
 		"blocked_by": []string{blockerID},
 	}
 	cal4, _ := vtodo.BuildVCalendar([]*core.Task{&blocker, &dep}, nil, nil)
-	write(dir+"/with-dependencies.ics", cal4.Serialize())
+	write(dir+"/with-dependencies.ics", mustSerialize(cal4))
 
 	// 5. with-logs.ics
 	log1 := &core.LogEntry{
@@ -121,5 +133,5 @@ func main() {
 		[]*core.Task{base}, nil, []*core.LogEntry{log1, log2},
 		vtodo.WithIncludeLogs(true),
 	)
-	write(dir+"/with-logs.ics", cal5.Serialize())
+	write(dir+"/with-logs.ics", mustSerialize(cal5))
 }
