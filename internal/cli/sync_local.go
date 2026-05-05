@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
@@ -149,6 +150,15 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 	ctx := context.Background()
 	scanner := bufio.NewScanner(f)
 
+	// skippedExistingIDs counts TLS lines whose ID already lives in the
+	// DB under a different project_id bucket. The pre-T-1234 code path
+	// attempted INSERT for these and surfaced one "Warning: failed to
+	// create task ...: UNIQUE constraint failed: tasks.id" per row on
+	// every read-side command (track list, task show, ...). They are
+	// noise on the happy path; we now skip them silently and emit at
+	// most one summary message at the end.
+	skippedExistingIDs := 0
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.TrimSpace(line) == "" {
@@ -205,6 +215,18 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 
 		existing, _ := s.GetTaskInProject(ctx, task.ID, lookupProjectID) //nolint:errcheck // nil means create new
 		if existing == nil {
+			// Before attempting INSERT, probe for an existing row with this
+			// ID under any project bucket. tasks.id is a global PRIMARY KEY
+			// (no compound PK on (project_id, id)), so an INSERT here would
+			// fail with "UNIQUE constraint failed: tasks.id". This is the
+			// T-1234 path: stale global todo.txt lines describe IDs that
+			// already exist in the DB under a different (or absent) project
+			// scope. Skip silently — never re-emit warnings on a happy-path
+			// read. A clean rebuild is available via 'tlc tasks sync'.
+			if anyExists, _ := s.TaskIDExists(ctx, task.ID); anyExists {
+				skippedExistingIDs++
+				continue
+			}
 			if task.CreatedAt.IsZero() {
 				task.CreatedAt = time.Now()
 			}
@@ -212,6 +234,13 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 				task.UpdatedAt = task.CreatedAt
 			}
 			if err := s.CreateTask(ctx, task); err != nil {
+				// Last-ditch race guard: another writer inserted the same
+				// ID between the probe and CreateTask. Treat as already-
+				// existing and stay quiet.
+				if isUniqueIDConflict(err) {
+					skippedExistingIDs++
+					continue
+				}
 				fmt.Printf("Warning: failed to create task %s: %v\n", task.ID, err)
 			}
 		} else {
@@ -238,7 +267,32 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("failed to scan TODO file: %w", err)
 	}
+
+	// One-shot summary, debug-level only — never on stdout. Per T-1234,
+	// happy-path read commands (track list, task show) must not surface
+	// per-row noise when todo.txt drifts from the DB. Operators can run
+	// 'tlc tasks sync' for a clean filesystem-projection rebuild.
+	if skippedExistingIDs > 0 {
+		log.Debug(
+			"ingestTODO: skipped TLS lines whose IDs already exist in DB; "+
+				"run 'tlc tasks sync' to rebuild the filesystem projection",
+			"count", skippedExistingIDs,
+		)
+	}
 	return nil
+}
+
+// isUniqueIDConflict reports whether err is a SQLite UNIQUE-constraint
+// failure on tasks.id. Used as a defensive race-guard in ingestTODOWith
+// so that a concurrent insert between the TaskIDExists probe and the
+// CreateTask call is treated as already-existing rather than as a
+// user-facing warning.
+func isUniqueIDConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed: tasks.id")
 }
 
 // parseTLS is a basic parser for Task Line Syntax.

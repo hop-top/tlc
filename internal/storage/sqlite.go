@@ -291,6 +291,24 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	return &task, nil
 }
 
+// TaskIDExists reports whether any row exists with the given task ID,
+// regardless of project_id. Useful for sync-projection paths that need
+// to detect "id already known" without caring about which project bucket
+// it lives in (the tasks.id column is a global PRIMARY KEY).
+func (s *SQLiteStorage) TaskIDExists(ctx context.Context, id string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(
+		ctx, "SELECT 1 FROM tasks WHERE id = ? LIMIT 1", id,
+	).Scan(&n)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to probe task id %q: %w", id, err)
+	}
+	return true, nil
+}
+
 func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID string) (*core.Task, error) {
 	row := s.db.QueryRowContext(
 		ctx,
