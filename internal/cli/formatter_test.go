@@ -140,9 +140,9 @@ func TestIsInternalTaskRef(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := isInternalTaskRef(tc.ref, tc.task)
+			got := core.IsInternalTaskRef(tc.ref, tc.task)
 			if got != tc.want {
-				t.Errorf("isInternalTaskRef(%q) = %v; want %v", tc.ref, got, tc.want)
+				t.Errorf("core.IsInternalTaskRef(%q) = %v; want %v", tc.ref, got, tc.want)
 			}
 		})
 	}
@@ -151,6 +151,9 @@ func TestIsInternalTaskRef(t *testing.T) {
 // TestRenderTaskDetail_ReferenceVisibility asserts the render-layer policy
 // for the "Reference:" line in default vs verbose human output (T-1313).
 func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
+	prevVerbose := viper.GetBool("output.verbose")
+	t.Cleanup(func() { viper.Set("output.verbose", prevVerbose) })
+
 	projectID := "hop-top/tlc"
 	typeid := "task_01kqwymh2qeh7a9nqrr5gv8ywt"
 
@@ -173,7 +176,6 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 
 	t.Run("DefaultHidesAutoTypeID", func(t *testing.T) {
 		viper.Set("output.verbose", false)
-		defer viper.Set("output.verbose", false)
 		var buf bytes.Buffer
 		renderTaskDetail(&buf, autoTask, nil)
 		out := buf.String()
@@ -187,7 +189,6 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 
 	t.Run("VerboseShowsFullURI", func(t *testing.T) {
 		viper.Set("output.verbose", true)
-		defer viper.Set("output.verbose", false)
 		var buf bytes.Buffer
 		renderTaskDetail(&buf, autoTask, nil)
 		out := buf.String()
@@ -201,7 +202,6 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 
 	t.Run("DefaultShowsExternalRef", func(t *testing.T) {
 		viper.Set("output.verbose", false)
-		defer viper.Set("output.verbose", false)
 		var buf bytes.Buffer
 		renderTaskDetail(&buf, externalTask, nil)
 		out := buf.String()

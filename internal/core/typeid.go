@@ -44,3 +44,40 @@ func IsTaskID(s string) bool { return taskTypeIDPattern.MatchString(s) }
 
 // IsTrackID reports whether s is a syntactically valid track TypeID.
 func IsTrackID(s string) bool { return trackTypeIDPattern.MatchString(s) }
+
+// IsInternalTaskRef reports whether ref is an auto-generated internal task
+// reference that adds no information beyond the task's display alias.
+//
+// Returns true for:
+//   - empty refs
+//   - the local default forms: tlc:///<id>, tlc://<id>, task://<id>
+//   - the absolute project-scoped form `tlc://<projectID>/<task.ID>`
+//     derived from the task's own ProjectID or the locally-detected project
+//
+// External user-supplied refs (e.g. github:issues/42, https://...,
+// docs/foo.md) return false. Used by render-layer code to suppress noisy
+// `Reference:` lines in default human output. Single source of truth —
+// shared by internal/cli and internal/tui.
+func IsInternalTaskRef(ref string, t *Task) bool {
+	if ref == "" {
+		return true
+	}
+	if t == nil || t.ID == "" {
+		return false
+	}
+	switch ref {
+	case "tlc:///" + t.ID, "tlc://" + t.ID, "task://" + t.ID:
+		return true
+	}
+	if t.ProjectID != nil && *t.ProjectID != "" {
+		if ref == "tlc://"+*t.ProjectID+"/"+t.ID {
+			return true
+		}
+	}
+	if proj := DetectProject(); proj != nil && proj.ProjectID != "" {
+		if ref == "tlc://"+proj.ProjectID+"/"+t.ID {
+			return true
+		}
+	}
+	return false
+}

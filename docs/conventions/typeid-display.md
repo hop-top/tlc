@@ -29,23 +29,17 @@ Typeids must **not** appear in:
 
 ## Helpers
 
-Two existing functions cover the common cases:
-
 - **`formatTaskAlias(t)`** in `internal/cli/formatter.go` — returns the
   task's display alias (`T-NNNN`), falling back to the typeid only when
   no alias can be derived. Use for any user-visible task identifier.
 - **`formatTrackAlias(t)`** in `internal/cli/formatter.go` — returns
   the track's slug, falling back to the typeid when slug is unset. Use
   for any user-visible track identifier.
-- **`isInternalTaskRef(ref, t)`** in `internal/cli/formatter.go` —
+- **`core.IsInternalTaskRef(ref, t)`** in `internal/core/typeid.go` —
   returns true for auto-generated `tlc://<project>/<typeid>` references
-  derivable from the task's alias. Use to gate `Reference:` lines that
-  add no information beyond what the alias already conveys.
-- **`aliasReference(ctx, store, ref, currentProject)`** in
-  `internal/cli/formatter_alias.go` — substitutes the typeid in a
-  `tlc://<project>/<typeid>` URI with its alias when the project
-  matches locally. Use when displaying a reference URI in default
-  output and the underlying typeid must not leak.
+  derivable from the task's alias. Single source of truth used by both
+  CLI formatter and TUI views. Use to gate `Reference:` lines that add
+  no information beyond what the alias already conveys.
 
 ## Anti-patterns
 
@@ -68,7 +62,7 @@ contains no `task_01` substring:
   hides auto-references; verbose shows them.
 - `TestRenderTable_NoTypeIDLeak` — `task list` default table never
   contains a typeid.
-- `TestAliasReference` — typeid → alias substitution behaviour matrix.
+- `TestIsInternalTaskRef` — predicate behaviour matrix.
 - TUI `detail.golden` snapshot — default detail view contains no
   typeid.
 

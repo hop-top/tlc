@@ -89,8 +89,19 @@ func runAgentListRuns(cmd *cobra.Command) error {
 	return nil
 }
 
-func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord, s aliasStorage) {
+// taskAliasLookup is the minimal storage surface renderAgentRunsTable
+// needs to resolve task typeids → display aliases. Lets tests fake it
+// without depending on the full *storage.SQLiteStorage surface.
+type taskAliasLookup interface {
+	GetTask(ctx context.Context, id string) (*core.Task, error)
+}
+
+func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord, s taskAliasLookup) {
 	ctx := context.Background()
+	// Cache typeid → alias lookups so a single renderAgentRunsTable call
+	// fetches each unique task at most once (avoids N+1 when --limit is
+	// high or several runs target the same task).
+	aliasCache := make(map[string]string)
 	rows := make([]agentRunRow, len(runs))
 	for i, r := range runs {
 		duration := "-"
@@ -103,9 +114,18 @@ func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord, s aliasSto
 		}
 		target := r.TargetID
 		if r.TargetType == "task" && core.IsTaskID(r.TargetID) && s != nil {
-			if t, err := s.GetTask(ctx, r.TargetID); err == nil && t != nil {
-				if alias := core.FormatTaskAlias(t); alias != "" {
-					target = alias
+			if cached, ok := aliasCache[r.TargetID]; ok {
+				if cached != "" {
+					target = cached
+				}
+			} else {
+				resolved := ""
+				if t, err := s.GetTask(ctx, r.TargetID); err == nil && t != nil {
+					resolved = core.FormatTaskAlias(t)
+				}
+				aliasCache[r.TargetID] = resolved // negative cache too
+				if resolved != "" {
+					target = resolved
 				}
 			}
 		}
