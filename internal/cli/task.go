@@ -63,7 +63,10 @@ var (
 
 	taskCreateTimeout string
 
-	taskDeleteYes bool
+	taskDeleteYes  bool
+	taskDeleteNote string
+
+	taskUpdateNote string
 
 	taskClaimNote        string
 	taskUnclaimNote      string

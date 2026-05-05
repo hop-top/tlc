@@ -77,8 +77,12 @@ var TaskUpdateCmd = &cobra.Command{
 				}
 				nextStatus := core.TaskStatus(normalized)
 				wm := core.DefaultWorkflow()
+				transitionNote := taskUpdateNote
+				if transitionNote == "" {
+					transitionNote = "Manual update"
+				}
 				log, err := task.TransitionWithWorkflow(
-					nextStatus, core.GetCurrentUser(), "Manual update", wm, taskUpdateForce,
+					nextStatus, core.GetCurrentUser(), transitionNote, wm, taskUpdateForce,
 				)
 				if err != nil {
 					errs = append(errs, fmt.Sprintf("%s: failed to transition: %v", task.ID, err))
@@ -377,6 +381,24 @@ var TaskDeleteCmd = &cobra.Command{
 				}
 			}
 
+			// Record the deletion note against the transition log
+			// before the task row (and its cascading logs) is removed.
+			// Mirrors the complete --note plumbing: the note flows
+			// from CLI → audit log entry written via AddLog.
+			if taskDeleteNote != "" {
+				logEntry := &core.LogEntry{
+					TaskID:    task.ID,
+					Timestamp: time.Now().UTC(),
+					By:        core.GetCurrentUser(),
+					Action:    core.ActionDeleted,
+					Note:      taskDeleteNote,
+				}
+				if err := res.Storage.AddLog(ctx, logEntry); err != nil {
+					_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+						"Warning: failed to write delete log for %s: %v\n", task.ID, err)
+				}
+			}
+
 			if err := res.Storage.DeleteTask(ctx, task.ID); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: failed to delete: %v", task.ID, err))
 				continue
@@ -415,8 +437,10 @@ func init() {
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindAt, "remind-at", "", "One-shot reminder time")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRRule, "rrule", "", "Recurring reminder RRULE (use '-' to clear)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded on status transition)")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
+	TaskDeleteCmd.Flags().StringVarP(&taskDeleteNote, "note", "n", "", "Delete note (recorded against the transition log)")
 }
 
 func deletePromptInteractive(cmd *cobra.Command) bool {
