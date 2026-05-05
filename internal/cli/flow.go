@@ -245,27 +245,32 @@ func formatFlowRuns(cmd *cobra.Command, runs []*core.FlowRun, format string) {
 	}
 }
 
-func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
-	headers := []string{"Run ID", "Flow ID", "Status", "Started", "Duration"}
+// flowRunRow is the row schema for `tlc flow runs` table output.
+type flowRunRow struct {
+	RunID    string `table:"Run ID"`
+	FlowID   string `table:"Flow ID"`
+	Status   string `table:"Status"`
+	Started  string `table:"Started"`
+	Duration string `table:"Duration"`
+}
 
-	rows := make([][]string, 0, len(runs))
-	for _, r := range runs {
+func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
+	rows := make([]flowRunRow, len(runs))
+	for i, r := range runs {
 		duration := "-"
 		if r.EndedAt != nil {
-			d := r.EndedAt.Sub(r.StartedAt)
-			duration = d.String()
+			duration = r.EndedAt.Sub(r.StartedAt).String()
 		}
-
-		rows = append(rows, []string{
-			r.ID,
-			r.FlowID,
-			formatFlowStatus(r.Status),
-			r.StartedAt.Format("2006-01-02 15:04:05"),
-			duration,
-		})
+		rows[i] = flowRunRow{
+			RunID:    r.ID,
+			FlowID:   r.FlowID,
+			Status:   formatFlowStatus(r.Status),
+			Started:  r.StartedAt.Format("2006-01-02 15:04:05"),
+			Duration: duration,
+		}
 	}
 
-	renderTTYTable(out, headers, rows, termWidth())
+	_ = renderStyledList(out, formatTable, rows, nil) //nolint:errcheck // best-effort output
 	_, _ = fmt.Fprintf(out, "\nShowing %d flow runs\n", len(runs))
 }
 
