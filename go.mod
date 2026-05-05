@@ -11,7 +11,7 @@ require (
 	charm.land/log/v2 v2.0.0
 	github.com/andygrunwald/go-jira v1.17.0
 	github.com/arran4/golang-ical v0.3.5
-	github.com/charmbracelet/x/term v0.2.2
+	github.com/creack/pty v1.1.24
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/go-github/v69 v69.2.0
 	github.com/google/uuid v1.6.0
@@ -52,6 +52,7 @@ require (
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20260413165052-6921c759c913 // indirect
 	github.com/charmbracelet/x/exp/strings v0.1.0 // indirect
+	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
