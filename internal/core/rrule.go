@@ -45,8 +45,9 @@ func ValidateRRule(rule string) error {
 	return nil
 }
 
-// NextFireFromRRule returns the next occurrence strictly after the
-// given reference time.
+// NextFireFromRRule returns the next occurrence strictly after `after`,
+// computed relative to `dtstart` (the rule's anchor — typically the
+// task's CreatedAt).
 //
 // Returns:
 //   - (zeroTime, false, nil) when the rule is empty (no recurrence).
@@ -54,10 +55,11 @@ func ValidateRRule(rule string) error {
 //   - (zeroTime, false, nil) when the rule has been exhausted (UNTIL/COUNT).
 //   - (zeroTime, false, err) on parse error or unsupported FREQ.
 //
-// Anchors DTSTART to the reference time so UNTIL/COUNT bounds are
-// computed relative to "now I set the reminder" — appropriate for
-// tlc's reminder use case where rules don't pre-exist a DTSTART.
-func NextFireFromRRule(rule string, after time.Time) (time.Time, bool, error) {
+// Callers stepping a recurrence forward (e.g. Task.NextReminder
+// advancing cursor → cursor → cursor) MUST pass a stable dtstart
+// across calls. Passing `after` as both args restarts COUNT/UNTIL
+// every invocation — bounded rules then never terminate.
+func NextFireFromRRule(rule string, dtstart, after time.Time) (time.Time, bool, error) {
 	if rule == "" {
 		return time.Time{}, false, nil
 	}
@@ -71,7 +73,7 @@ func NextFireFromRRule(rule string, after time.Time) (time.Time, bool, error) {
 			r.Freq, rule,
 		)
 	}
-	t, ok, err := rrule.NextOccurrence(r, after, after)
+	t, ok, err := rrule.NextOccurrence(r, dtstart, after)
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("rrule next: %w", err)
 	}

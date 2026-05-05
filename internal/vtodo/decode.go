@@ -222,8 +222,13 @@ func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 		val := p.Value
 		t.AssignedTo = &val
 	} else if p, ok := todo.Get("ATTENDEE"); ok {
-		// First ATTENDEE wins for v1. Strip mailto: prefix when present.
-		email := strings.TrimPrefix(p.Value, "mailto:")
+		// First ATTENDEE wins for v1. Strip mailto: prefix when present;
+		// URI scheme is case-insensitive (RFC 3986 §3.1) so MAILTO:,
+		// Mailto:, etc. all need to drop.
+		email := p.Value
+		if len(email) >= len("mailto:") && strings.EqualFold(email[:len("mailto:")], "mailto:") {
+			email = email[len("mailto:"):]
+		}
 		if email != "" {
 			t.AssignedTo = &email
 		}

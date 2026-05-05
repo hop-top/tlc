@@ -126,7 +126,12 @@ func Serialize(cal vstar.Calendar) (string, error) {
 	return injectCalendarProps(buf.String()), nil
 }
 
-// injectCalendarProps inserts CALSCALE + METHOD after the PRODID line.
+// injectCalendarProps inserts CALSCALE + METHOD after the PRODID
+// content line, skipping any RFC 5545 §3.1 fold continuation lines
+// (lines beginning with SPACE or HTAB). Long PRODIDs may fold across
+// multiple physical CRLF-terminated lines; CALSCALE/METHOD must land
+// AFTER the last continuation, never between them.
+//
 // Workaround for vstar T-0135 — drop when vstar.Calendar gains Props.
 func injectCalendarProps(s string) string {
 	const prodIDPrefix = "PRODID:"
@@ -135,13 +140,27 @@ func injectCalendarProps(s string) string {
 	if idx < 0 {
 		return s
 	}
-	// Find end of the PRODID line (CRLF) so we insert AFTER it.
-	end := strings.Index(s[idx:], "\r\n")
-	if end < 0 {
-		return s
+	// Walk physical lines (CRLF-terminated) starting at the PRODID
+	// line until we find one whose successor does NOT start with
+	// SPACE or HTAB — that's the end of the folded property.
+	cursor := idx
+	for {
+		end := strings.Index(s[cursor:], "\r\n")
+		if end < 0 {
+			return s // malformed; bail
+		}
+		afterCRLF := cursor + end + len("\r\n")
+		// If we're at end-of-string or the next byte is not a fold
+		// continuation, we've found the property boundary.
+		if afterCRLF >= len(s) {
+			return s[:afterCRLF] + inject
+		}
+		next := s[afterCRLF]
+		if next != ' ' && next != '\t' {
+			return s[:afterCRLF] + inject + s[afterCRLF:]
+		}
+		cursor = afterCRLF
 	}
-	insertAt := idx + end + len("\r\n")
-	return s[:insertAt] + inject + s[insertAt:]
 }
 
 // uidFor renders a tlc TypeID as the iCalendar UID. Foreign IDs (already

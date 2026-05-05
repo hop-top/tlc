@@ -10,9 +10,11 @@ at `github.com/hop-top/vstar/go`).
 
 ## Decision
 
-Use **`github.com/hop-top/vstar/go` v0.1.0** for VCALENDAR/VTODO/
+Use **`github.com/hop-top/vstar/go` v0.2+** for VCALENDAR/VTODO/
 VJOURNAL serialisation, and **`github.com/hop-top/vstar/go/rrule`**
-for RFC 5545 §3.3.10 RRULE parsing/validation/iteration.
+for RFC 5545 §3.3.10 RRULE parsing/validation/iteration. v0.1 shipped
+the codec; v0.2 added the RRULE package this migration also depends
+on (vstar T-0125, ADR-0009 + amendment), so the floor is v0.2.
 
 Drop `github.com/arran4/golang-ical` from `go.mod`.
 

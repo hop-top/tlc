@@ -264,3 +264,30 @@ func TestBuildVCalendar_CustomDomainAndProductID(t *testing.T) {
 		"UID:task_01h455vb4pex5vsknk084sn02q@calendar.example.com",
 	)
 }
+
+// TestBuildVCalendar_LongPRODIDFoldsCleanly proves CALSCALE/METHOD
+// inject lands AFTER the folded continuation lines of a long PRODID,
+// not between them. RFC 5545 §3.1 folds physical lines >75 octets at
+// CRLF + SPACE; a naive "first CRLF after PRODID:" inject corrupted
+// the header.
+func TestBuildVCalendar_LongPRODIDFoldsCleanly(t *testing.T) {
+	// Construct a PRODID well past 75 octets so the encoder folds it.
+	longPRODID := "-//example//" + strings.Repeat("VERY-LONG-PRODUCT-NAME-", 5) + "//EN"
+	require.Greater(t, len(longPRODID), 75, "PRODID must be long enough to fold")
+
+	cal, err := vtodo.BuildVCalendar(
+		nil, nil, nil,
+		vtodo.WithProductID(longPRODID),
+	)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	// PRODID must fold (CRLF then SPACE).
+	require.Contains(t, out, "PRODID:")
+	require.Contains(t, out, "\r\n ", "encoder must fold long PRODID")
+
+	// CALSCALE and METHOD must each be on their own physical lines —
+	// preceded by CRLF that is NOT followed by SPACE/TAB.
+	require.Contains(t, out, "\r\nCALSCALE:GREGORIAN\r\n")
+	require.Contains(t, out, "\r\nMETHOD:PUBLISH\r\n")
+}
