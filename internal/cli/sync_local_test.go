@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -541,4 +543,137 @@ func TestInitDoesNotTriggerGlobalIngestion(t *testing.T) {
 			t.Errorf("task %s has empty project_id — init should not create tasks with empty project_id", task.ID)
 		}
 	}
+}
+
+// captureIngestStdout redirects os.Stdout for the duration of fn and
+// returns whatever was written. Used to assert that ingestTODOWith
+// does not surface per-row UNIQUE-constraint warnings on a clean
+// re-ingest path.
+func captureIngestStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	done := make(chan struct{})
+	var buf bytes.Buffer
+	go func() {
+		_, _ = io.Copy(&buf, r)
+		close(done)
+	}()
+
+	fn()
+
+	_ = w.Close()
+	os.Stdout = old
+	<-done
+	return buf.String()
+}
+
+// TestIngestTODOWith_T1234_NoWarningsOnReIngest is a regression test
+// for T-1234: when ingestTODOWith encounters TLS lines whose IDs
+// already exist in the DB under a different project_id (typical for
+// the shared global todo.txt after track lifecycle transitions), it
+// must not attempt INSERT and emit "Warning: failed to create task
+// ...: UNIQUE constraint failed: tasks.id" once per row.
+//
+// Repro pattern from the bug report: project completes a track,
+// triggers track update / list cycle, todo.txt holds N task IDs
+// that already live in the DB under a project scope different from
+// the TLS lookup key. Pre-fix: N warnings to stdout. Post-fix: zero.
+func TestIngestTODOWith_T1234_NoWarningsOnReIngest(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tlc-ingest-t1234-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpDir, _ = filepath.EvalSymlinks(tmpDir)
+	origDir, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+
+	viper.Reset()
+	core.ResetDetectionCache()
+	dbSyncOnce = sync.Once{}
+
+	dbPath := filepath.Join(tmpDir, "test.sqlite")
+	viper.Set("storage.backend", "sqlite")
+	viper.Set("storage.db_path", dbPath)
+
+	// Seed DB with N tasks all scoped to project "foo".
+	s, err := storage.NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	const numTasks = 5
+	projectFoo := "foo"
+	for i := 1; i <= numTasks; i++ {
+		id := fixedTaskID(i)
+		seedErr := s.CreateTask(ctx, &core.Task{
+			ID:        id,
+			Title:     "Seeded task",
+			Status:    core.StatusDone,
+			ProjectID: &projectFoo,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			Meta:      map[string]interface{}{},
+		})
+		if seedErr != nil {
+			t.Fatalf("seed CreateTask %s: %v", id, seedErr)
+		}
+	}
+
+	// Build a global todo.txt that lists the same N tasks WITHOUT a
+	// project_id token. ingestTODOWith runs in no-project context,
+	// so lineProjectID == "" → falls through to the lookup-then-insert
+	// path with project_id="". The lookup misses (rows live under
+	// "foo"), and the pre-fix code attempts INSERT, which fails on
+	// the tasks.id UNIQUE constraint and prints one warning per row.
+	todoFile := filepath.Join(tmpDir, "global-todo.txt")
+	var todoLines []string
+	for i := 1; i <= numTasks; i++ {
+		todoLines = append(todoLines,
+			"[x] "+fixedTaskID(i)+" Seeded task")
+	}
+	if err := os.WriteFile(todoFile,
+		[]byte(strings.Join(todoLines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	viper.Set("task.todo_file", todoFile)
+
+	output := captureIngestStdout(t, func() {
+		if err := ingestTODOWith(s); err != nil {
+			t.Fatalf("ingestTODOWith returned error: %v", err)
+		}
+	})
+	_ = s.Close()
+
+	if strings.Contains(output, "Warning: failed to create task") {
+		t.Fatalf(
+			"ingestTODOWith printed UNIQUE-constraint warnings on "+
+				"re-ingest of already-existing task IDs (T-1234 "+
+				"regression). Output:\n%s", output)
+	}
+	if strings.Contains(output, "UNIQUE constraint failed") {
+		t.Fatalf(
+			"ingestTODOWith leaked a UNIQUE-constraint message on "+
+				"re-ingest. Output:\n%s", output)
+	}
+}
+
+// fixedTaskID returns the canonical "T-NNNN" form for small ints,
+// avoiding strconv to keep the test focused on the regression.
+func fixedTaskID(i int) string {
+	digits := []byte{
+		'0' + byte((i/1000)%10),
+		'0' + byte((i/100)%10),
+		'0' + byte((i/10)%10),
+		'0' + byte(i%10),
+	}
+	return "T-" + string(digits)
 }
