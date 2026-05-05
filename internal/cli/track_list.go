@@ -153,6 +153,30 @@ type trackListOutput struct {
 	Assignee string   `json:"assignee" yaml:"assignee"`
 }
 
+// trackTableRow is the table-only schema (no Project column).
+type trackTableRow struct {
+	ID       string `table:"ID"`
+	Title    string `table:"Title"`
+	Type     string `table:"Type"`
+	Status   string `table:"Status"`
+	State    string `table:"State"`
+	Progress string `table:"Progress"`
+	Assignee string `table:"Assignee"`
+}
+
+// trackTableRowWithProject mirrors trackTableRow with a Project column,
+// rendered when --all-projects is set.
+type trackTableRowWithProject struct {
+	ID       string `table:"ID"`
+	Project  string `table:"Project"`
+	Title    string `table:"Title"`
+	Type     string `table:"Type"`
+	Status   string `table:"Status"`
+	State    string `table:"State"`
+	Progress string `table:"Progress"`
+	Assignee string `table:"Assignee"`
+}
+
 func toTrackListOutput(t *core.Track, state []core.TrackStateFlag, p core.TrackProgress) trackListOutput {
 	flags := make([]string, len(state))
 	for i, f := range state {
@@ -191,49 +215,10 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 		return
 	}
 
-	headers := []string{"ID"}
-	if showProject {
-		headers = append(headers, "Project")
-	}
-	headers = append(headers, "Title", "Type", "Status", "State", "Progress", "Assignee")
-
-	tableRows := make([][]string, 0, len(rows))
-	for _, r := range rows {
-		assignee := "-"
-		if r.Track.AssignedTo != nil && *r.Track.AssignedTo != "" {
-			assignee = "@" + *r.Track.AssignedTo
-		}
-
-		stateStrs := make([]string, len(r.State))
-		for i, f := range r.State {
-			stateStrs[i] = string(f)
-		}
-
-		row := []string{formatTrackAlias(r.Track)}
-		if showProject {
-			proj := "-"
-			if r.Track.ProjectID != nil && *r.Track.ProjectID != "" {
-				proj = *r.Track.ProjectID
-			}
-			row = append(row, proj)
-		}
-		row = append(row,
-			r.Track.Title,
-			r.Track.Type,
-			string(r.Track.Status),
-			strings.Join(stateStrs, ","),
-			core.FormatProgress(r.Progress),
-			assignee,
-		)
-		tableRows = append(tableRows, row)
-	}
-
 	// Compute row emphasis from track status + state flags.
-	// Green: active + healthy. Pink: active + stale/blocked.
-	// Muted: abandoned. White: everything else.
-	primary := make(map[int]bool)
-	flagged := make(map[int]bool)
-	faded := make(map[int]bool)
+	// Primary: active + healthy. Secondary: active + stale/blocked.
+	// Muted: abandoned. None: everything else.
+	emphasis := make(map[int]output.EmphasisKind)
 	for i, r := range rows {
 		switch r.Track.Status {
 		case core.TrackStatusActive:
@@ -245,25 +230,68 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 				}
 			}
 			if hasFlag {
-				flagged[i] = true
+				emphasis[i] = output.EmphasisSecondary
 			} else {
-				primary[i] = true
+				emphasis[i] = output.EmphasisPrimary
 			}
 		case core.TrackStatusAbandoned:
-			faded[i] = true
+			emphasis[i] = output.EmphasisMuted
 		}
 	}
 
-	var opts []TableOption
-	if len(primary) > 0 || len(flagged) > 0 || len(faded) > 0 {
-		opts = append(opts,
-			WithPrimaryRows(primary),
-			WithSecondaryRows(flagged),
-			WithMutedRows(faded),
-		)
+	if showProject {
+		out := make([]trackTableRowWithProject, len(rows))
+		for i, r := range rows {
+			out[i] = trackTableRowWithProject{
+				ID:       formatTrackAlias(r.Track),
+				Project:  trackProject(r.Track),
+				Title:    r.Track.Title,
+				Type:     r.Track.Type,
+				Status:   string(r.Track.Status),
+				State:    joinTrackState(r.State),
+				Progress: core.FormatProgress(r.Progress),
+				Assignee: trackAssignee(r.Track),
+			}
+		}
+		_ = renderStyledList(w, formatTable, out, emphasis) //nolint:errcheck // best-effort output
+		return
 	}
 
-	renderTTYTable(w, headers, tableRows, termWidth(), opts...)
+	out := make([]trackTableRow, len(rows))
+	for i, r := range rows {
+		out[i] = trackTableRow{
+			ID:       formatTrackAlias(r.Track),
+			Title:    r.Track.Title,
+			Type:     r.Track.Type,
+			Status:   string(r.Track.Status),
+			State:    joinTrackState(r.State),
+			Progress: core.FormatProgress(r.Progress),
+			Assignee: trackAssignee(r.Track),
+		}
+	}
+	_ = renderStyledList(w, formatTable, out, emphasis) //nolint:errcheck // best-effort output
+}
+
+func trackProject(t *core.Track) string {
+	if t.ProjectID != nil && *t.ProjectID != "" {
+		return *t.ProjectID
+	}
+	return "-"
+}
+
+func trackAssignee(t *core.Track) string {
+	if t.AssignedTo != nil && *t.AssignedTo != "" {
+		return "@" + *t.AssignedTo
+	}
+	return "-"
+}
+
+func joinTrackState(state []core.TrackStateFlag) string {
+	parts := make([]string, len(state))
+	for i, f := range state {
+		parts[i] = string(f)
+	}
+	return strings.Join(parts, ",")
 }
 
 // resetTrackListFlags clears track list flag state between tests.

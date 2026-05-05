@@ -189,6 +189,11 @@ func init() {
 		}
 		return tuiCmd.RunE(c, args)
 	}
+
+	// Install kit-themed TableStyle so renderStyledList forwards it to
+	// output.WithTableStyle. The styled path activates only on TTY writers;
+	// non-TTY writers (pipes, tests) keep the plain tabwriter renderer.
+	setTableStyle(kitRootInstance.TableStyle())
 }
 
 // Execute runs the root command and handles any errors.

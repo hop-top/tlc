@@ -271,11 +271,20 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
-func renderTable(w io.Writer, tasks []*core.Task) {
-	headers := []string{"ID", "Title", "Status", "Assigned", "Due", "Stale", "Blocked"}
+// taskTableRow is the row schema for `tlc task list` table output.
+type taskTableRow struct {
+	ID       string `table:"ID"`
+	Title    string `table:"Title"`
+	Status   string `table:"Status"`
+	Assigned string `table:"Assigned"`
+	Due      string `table:"Due"`
+	Stale    string `table:"Stale"`
+	Blocked  string `table:"Blocked"`
+}
 
-	rows := make([][]string, 0, len(tasks))
-	for _, t := range tasks {
+func renderTable(w io.Writer, tasks []*core.Task) {
+	rows := make([]taskTableRow, len(tasks))
+	for i, t := range tasks {
 		assignee := "-"
 		if t.AssignedTo != nil {
 			assignee = *t.AssignedTo
@@ -302,23 +311,23 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			blockedCol = *t.BlockedReason
 		}
 
-		rows = append(rows, []string{
-			formatTaskAlias(t),
-			t.Title,
-			formatStatusPlain(t.Status),
-			assignee,
-			dueCol,
-			staleCol,
-			blockedCol,
-		})
+		rows[i] = taskTableRow{
+			ID:       formatTaskAlias(t),
+			Title:    t.Title,
+			Status:   formatStatusPlain(t.Status),
+			Assigned: assignee,
+			Due:      dueCol,
+			Stale:    staleCol,
+			Blocked:  blockedCol,
+		}
 	}
 
 	// Color is a pure function of status + state:
-	//   DONE / SKIPPED → white (terminal, always)
-	//   IN_PROGRESS → green
-	//   blocker (ID in another task's blocked-by) → pink
+	//   DONE / SKIPPED → none (terminal, always)
+	//   IN_PROGRESS    → primary (green)
+	//   blocker (ID in another task's blocked-by) → secondary (pink)
 	//   blocked (has BlockedReason) → muted
-	//   everything else → white
+	//   everything else → none
 	blockerIDs := make(map[string]bool)
 	for _, t := range tasks {
 		for _, dep := range t.BlockedBy() {
@@ -326,40 +335,37 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		}
 	}
 
-	primary := make(map[int]bool)
-	blockers := make(map[int]bool)
-	blocked := make(map[int]bool)
+	emphasis := make(map[int]output.EmphasisKind)
 	for i, t := range tasks {
 		switch {
-		case t.Status == core.StatusDone,
-			t.Status == core.StatusSkipped:
-			// White — terminal statuses stay neutral.
+		case t.Status == core.StatusDone, t.Status == core.StatusSkipped:
+			// none — terminal statuses stay neutral.
 		case t.Status == core.StatusInProgress:
-			primary[i] = true
+			emphasis[i] = output.EmphasisPrimary
 		case blockerIDs[t.ID]:
-			blockers[i] = true
+			emphasis[i] = output.EmphasisSecondary
 		case t.IsBlocked():
-			blocked[i] = true
+			emphasis[i] = output.EmphasisMuted
 		}
 	}
 
-	var opts []TableOption
-	if len(primary) > 0 || len(blockers) > 0 || len(blocked) > 0 {
-		opts = append(opts,
-			WithPrimaryRows(primary),
-			WithSecondaryRows(blockers),
-			WithMutedRows(blocked),
-		)
-	}
-	renderTTYTable(w, headers, rows, termWidth(), opts...)
+	_ = renderStyledList(w, formatTable, rows, emphasis) //nolint:errcheck // best-effort output
+}
+
+// workspaceTaskRow is the row schema for the workspace tasks table
+// (cross-project view, includes Project column).
+type workspaceTaskRow struct {
+	Project  string `table:"Project"`
+	ID       string `table:"ID"`
+	Title    string `table:"Title"`
+	Status   string `table:"Status"`
+	Assigned string `table:"Assigned"`
 }
 
 // renderWorkspaceTable renders a task table with an additional Project column.
 func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
-	headers := []string{"Project", "ID", "Title", "Status", "Assigned"}
-
-	rows := make([][]string, 0, len(tasks))
-	for _, t := range tasks {
+	rows := make([]workspaceTaskRow, len(tasks))
+	for i, t := range tasks {
 		assignee := "-"
 		if t.AssignedTo != nil {
 			assignee = *t.AssignedTo
@@ -368,17 +374,19 @@ func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
 		if t.ProjectID != nil && *t.ProjectID != "" {
 			proj = projectLabel(*t.ProjectID)
 		}
-
-		rows = append(rows, []string{
-			proj,
-			formatTaskAlias(t),
-			t.Title,
-			formatStatus(t.Status),
-			assignee,
-		})
+		rows[i] = workspaceTaskRow{
+			Project: proj,
+			ID:      formatTaskAlias(t),
+			Title:   t.Title,
+			// Cell values must be plain — kit/output's tabwriter (non-TTY)
+			// passes them through verbatim, so any pre-styled lipgloss
+			// escapes would leak into piped output.
+			Status:   formatStatusPlain(t.Status),
+			Assigned: assignee,
+		}
 	}
 
-	renderTTYTable(w, headers, rows, termWidth())
+	_ = renderStyledList(w, formatTable, rows, nil) //nolint:errcheck // best-effort output
 }
 
 // formatStatusPlain returns the human-readable status label without ANSI

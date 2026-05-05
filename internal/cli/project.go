@@ -205,6 +205,17 @@ var ProjectListCmd = &cobra.Command{
 	},
 }
 
+// projectRow is the row schema for `tlc project list` table output.
+// kit/output reads `table:""` tags to derive headers; json tags are
+// reused for JSON/YAML output upstream.
+type projectRow struct {
+	ID       string `table:"ID"        json:"project_id"`
+	Label    string `table:"Label"     json:"label,omitempty"`
+	DBPath   string `table:"DB Path"   json:"db_path"`
+	SpaceURI string `table:"Space URI" json:"space_uri,omitempty"`
+	Status   string `table:"Status"    json:"status"`
+}
+
 func renderProjectTable(cmd *cobra.Command, projects []core.RegisteredProject) {
 	w := cmd.OutOrStdout()
 
@@ -214,20 +225,18 @@ func renderProjectTable(cmd *cobra.Command, projects []core.RegisteredProject) {
 		return
 	}
 
-	headers := []string{"ID", "Label", "DB Path", "Space URI", "Status"}
-
-	rows := make([][]string, 0, len(projects))
-	for _, p := range projects {
-		rows = append(rows, []string{
-			p.ProjectID,
-			p.Label,
-			p.DBPath,
-			p.SpaceURI,
-			p.Status,
-		})
+	rows := make([]projectRow, len(projects))
+	for i, p := range projects {
+		rows[i] = projectRow{
+			ID:       p.ProjectID,
+			Label:    p.Label,
+			DBPath:   p.DBPath,
+			SpaceURI: p.SpaceURI,
+			Status:   p.Status,
+		}
 	}
 
-	renderTTYTable(w, headers, rows, termWidth())
+	_ = renderStyledList(w, formatTable, rows, nil) //nolint:errcheck // best-effort output
 }
 
 var ProjectPruneCmd = &cobra.Command{

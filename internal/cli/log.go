@@ -118,42 +118,50 @@ func formatLogs(cmd *cobra.Command, logs []*core.LogEntry, format string) {
 	}
 }
 
+// logTableRow is the row schema for `tlc log` table output.
+type logTableRow struct {
+	Timestamp string `table:"Timestamp"`
+	TaskID    string `table:"Task ID"`
+	Action    string `table:"Action"`
+	By        string `table:"By"`
+	Note      string `table:"Note"`
+}
+
 func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 	if len(logs) == 0 {
 		_, _ = fmt.Fprintln(w, "No logs found")
 		return
 	}
 
-	headers := []string{"Timestamp", "Task ID", "Action", "By", "Note"}
-
 	// Resolve display aliases for the task IDs we render. Looking up
 	// every log's task individually would be O(N) round-trips; instead
 	// we open storage once and cache by task ID.
 	aliasByTaskID := resolveLogTaskAliases(logs)
 
-	rows := make([][]string, 0, len(logs))
-	for _, l := range logs {
-		timestamp := l.Timestamp.Format("2006-01-02 15:04:05")
+	rows := make([]logTableRow, len(logs))
+	for i, l := range logs {
 		note := l.Note
 		if len(note) > 47 {
 			note = note[:47] + "..."
 		}
-
 		taskCell := l.TaskID
 		if alias, ok := aliasByTaskID[l.TaskID]; ok && alias != "" {
 			taskCell = alias
 		}
-
-		rows = append(rows, []string{
-			timestamp,
-			taskCell,
-			formatLogAction(l.Action),
-			l.By,
-			note,
-		})
+		rows[i] = logTableRow{
+			Timestamp: l.Timestamp.Format("2006-01-02 15:04:05"),
+			TaskID:    taskCell,
+			// Plain action — kit/output's tabwriter (non-TTY) passes
+			// cell values through verbatim, so pre-styled lipgloss
+			// escapes from formatLogAction would leak into pipes
+			// (breaks `tlc log --all | grep CLAIMED`).
+			Action: l.Action,
+			By:     l.By,
+			Note:   note,
+		}
 	}
 
-	renderTTYTable(w, headers, rows, termWidth())
+	_ = renderStyledList(w, formatTable, rows, nil) //nolint:errcheck // best-effort output
 	_, _ = fmt.Fprintf(w, "\nShowing %d log entries\n", len(logs))
 }
 
