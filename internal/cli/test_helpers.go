@@ -265,10 +265,10 @@ func resetTestDB(t *testing.T) string {
 	})
 
 	// Write a minimal config so initConfig reads this instead of ~/.config/tlc/config.yaml.
-	// Include task.todo_file pointing to a non-existent path so ingestTODOWith
+	// Include task.todo_file pointing to a non-existent path so importFromProjection
 	// returns early and does not read the real user todo.txt into the test DB.
 	cfgPath := filepath.Join(tmpDir, ".tlc.yaml")
-	todoPath := filepath.Join(tmpDir, "todo.txt") // does not exist; ingestTODOWith returns early
+	todoPath := filepath.Join(tmpDir, "todo.txt") // does not exist; importFromProjection returns early
 	cfgContent := "storage:\n  backend: sqlite\n  db_path: " + dbPath + "\ntask:\n  todo_file: " + todoPath + "\n"
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("failed to write test config: %v", err)

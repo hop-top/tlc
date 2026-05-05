@@ -231,7 +231,7 @@ func TestProjectScoping_TODOFileSync(t *testing.T) {
 
 	proj1ID := "org/project1"
 
-	t.Run("syncToProjectTODO only exports project tasks", func(t *testing.T) {
+	t.Run("writeProjectionLocal only exports project tasks", func(t *testing.T) {
 		t.Logf("Local .tlc/todo.txt contains only tasks for the current project")
 		t.Logf("Tasks from other projects are excluded")
 		task1 := &core.Task{

@@ -371,7 +371,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Sync pull from %s complete: %d created, %d updated, %d conflicts detected\n",
 		system, createdCount, updatedCount, conflictCount)
 
-	return syncTODOAll()
+	return writeProjection()
 }
 
 var SyncPullCmd = &cobra.Command{
@@ -525,7 +525,7 @@ var SyncPushCmd = &cobra.Command{
 			}
 		}
 
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 

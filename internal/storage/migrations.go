@@ -456,7 +456,7 @@ var migrations = []migration{
 		`,
 	},
 	{
-		// Drop phantom mirror rows minted by ingestTODOWith (T-1148).
+		// Drop phantom mirror rows minted by importFromProjection (T-1148).
 		// Every ingest of a serialized todo.txt line keyed each task by
 		// its T-NNNN display alias instead of resolving to the canonical
 		// typeid. The result: a parallel "T-NNNN" row with empty

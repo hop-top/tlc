@@ -53,11 +53,11 @@ func TestConfigDirs_OverridePropagates(t *testing.T) {
 	}
 }
 
-// T-0585: Regression — syncToProjectTODO preserves subdirectory in todo_file.
+// T-0585: Regression — writeProjectionLocal preserves subdirectory in todo_file.
 // Verifies that filepath.Dir on a todo_file like "notes/todo.md" joined with
 // configDir creates the intermediate "notes" directory, not just configDir.
 func TestTodoFileSubdirectory_PathJoin(t *testing.T) {
-	// Simulate the path logic used by syncToProjectTODO and doctor:
+	// Simulate the path logic used by writeProjectionLocal and doctor:
 	// todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), todoName)
 	// os.MkdirAll(filepath.Dir(todoFile), 0o750)
 	configPath := filepath.Join("project", ".tlc", "config.yaml")

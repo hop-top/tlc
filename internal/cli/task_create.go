@@ -56,7 +56,7 @@ var TaskCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
@@ -155,7 +155,7 @@ func createTaskInteractive(initialTitle string) error {
 	if err != nil {
 		return err
 	}
-	return syncToTODO()
+	return writeProjectionGlobal()
 }
 
 func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling) error {

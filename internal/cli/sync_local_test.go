@@ -60,8 +60,8 @@ func TestIngestTODOWith_ProjectContextSkipsUnknownGlobalTasks(t *testing.T) {
 	}
 	defer s.Close()
 
-	if err := ingestTODOWith(s); err != nil {
-		t.Fatalf("ingestTODOWith failed: %v", err)
+	if err := importFromProjection(s); err != nil {
+		t.Fatalf("importFromProjection failed: %v", err)
 	}
 
 	ctx := context.Background()
@@ -161,9 +161,9 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 	), 0o600)
 	viper.Set("task.todo_file", todoFile)
 
-	err = ingestTODOWith(s)
+	err = importFromProjection(s)
 	if err != nil {
-		t.Fatalf("ingestTODOWith returned error: %v", err)
+		t.Fatalf("importFromProjection returned error: %v", err)
 	}
 
 	// project-a's task must remain unchanged (foreign-project line skipped).
@@ -175,16 +175,19 @@ func TestIngestTODOWith_ProjectContextUpdatesExistingTaskOnly(t *testing.T) {
 		t.Errorf("project-a task title mutated: %q", keptA.Title)
 	}
 
-	// project-b's task should have been updated by the matching line.
-	updatedTask, _ := s.GetTaskInProject(ctx, projectTaskID, projectB)
-	if updatedTask == nil {
+	// project-b's task must remain unchanged. SQLite is the source of
+	// truth; the projection file is an output only. Import never writes
+	// file state back into the DB — doing so silently reverts user-issued
+	// updates (T-1285). The matching TLS line is a no-op for existing rows.
+	keptB, _ := s.GetTaskInProject(ctx, projectTaskID, projectB)
+	if keptB == nil {
 		t.Fatal("expected project-b task to remain in DB")
 	}
-	if updatedTask.Title != "Updated task title" {
-		t.Errorf("expected project-b task title to be updated, got %q", updatedTask.Title)
+	if keptB.Title != "Existing task in project-b" {
+		t.Errorf("project-b task title mutated by import: %q", keptB.Title)
 	}
-	if updatedTask.Status != core.StatusInProgress {
-		t.Errorf("expected project-b task status to be updated, got %q", updatedTask.Status)
+	if keptB.Status != core.StatusTodo {
+		t.Errorf("project-b task status mutated by import: %q", keptB.Status)
 	}
 
 	// And no stray T-NNNN-keyed mirror was minted.
@@ -250,8 +253,8 @@ func TestIngestTODOWith_ProjectContextIgnoresForeignSameID(t *testing.T) {
 	), 0o600)
 	viper.Set("task.todo_file", todoFile)
 
-	if err := ingestTODOWith(s); err != nil {
-		t.Fatalf("ingestTODOWith returned error: %v", err)
+	if err := importFromProjection(s); err != nil {
+		t.Fatalf("importFromProjection returned error: %v", err)
 	}
 
 	retrieved, err := s.GetTaskInProject(ctx, "T-0001", "project-b")
@@ -546,7 +549,7 @@ func TestInitDoesNotTriggerGlobalIngestion(t *testing.T) {
 }
 
 // captureIngestStdout redirects os.Stdout for the duration of fn and
-// returns whatever was written. Used to assert that ingestTODOWith
+// returns whatever was written. Used to assert that importFromProjection
 // does not surface per-row UNIQUE-constraint warnings on a clean
 // re-ingest path.
 func captureIngestStdout(t *testing.T, fn func()) string {
@@ -574,7 +577,7 @@ func captureIngestStdout(t *testing.T, fn func()) string {
 }
 
 // TestIngestTODOWith_T1234_NoWarningsOnReIngest is a regression test
-// for T-1234: when ingestTODOWith encounters TLS lines whose IDs
+// for T-1234: when importFromProjection encounters TLS lines whose IDs
 // already exist in the DB under a different project_id (typical for
 // the shared global todo.txt after track lifecycle transitions), it
 // must not attempt INSERT and emit "Warning: failed to create task
@@ -629,7 +632,7 @@ func TestIngestTODOWith_T1234_NoWarningsOnReIngest(t *testing.T) {
 	}
 
 	// Build a global todo.txt that lists the same N tasks WITHOUT a
-	// project_id token. ingestTODOWith runs in no-project context,
+	// project_id token. importFromProjection runs in no-project context,
 	// so lineProjectID == "" → falls through to the lookup-then-insert
 	// path with project_id="". The lookup misses (rows live under
 	// "foo"), and the pre-fix code attempts INSERT, which fails on
@@ -647,21 +650,21 @@ func TestIngestTODOWith_T1234_NoWarningsOnReIngest(t *testing.T) {
 	viper.Set("task.todo_file", todoFile)
 
 	output := captureIngestStdout(t, func() {
-		if err := ingestTODOWith(s); err != nil {
-			t.Fatalf("ingestTODOWith returned error: %v", err)
+		if err := importFromProjection(s); err != nil {
+			t.Fatalf("importFromProjection returned error: %v", err)
 		}
 	})
 	_ = s.Close()
 
 	if strings.Contains(output, "Warning: failed to create task") {
 		t.Fatalf(
-			"ingestTODOWith printed UNIQUE-constraint warnings on "+
+			"importFromProjection printed UNIQUE-constraint warnings on "+
 				"re-ingest of already-existing task IDs (T-1234 "+
 				"regression). Output:\n%s", output)
 	}
 	if strings.Contains(output, "UNIQUE constraint failed") {
 		t.Fatalf(
-			"ingestTODOWith leaked a UNIQUE-constraint message on "+
+			"importFromProjection leaked a UNIQUE-constraint message on "+
 				"re-ingest. Output:\n%s", output)
 	}
 }

@@ -35,16 +35,16 @@ func taskAliasSeq(id string) (int64, bool) {
 	return seq, true
 }
 
-// syncTODOAll syncs tasks to both global and project-specific todo.txt files.
-func syncTODOAll() error {
-	if err := syncToTODO(); err != nil {
+// writeProjection syncs tasks to both global and project-specific todo.txt files.
+func writeProjection() error {
+	if err := writeProjectionGlobal(); err != nil {
 		return err
 	}
-	return syncToProjectTODO()
+	return writeProjectionLocal()
 }
 
-// syncToTODO exports all tasks from SQLite to the TODO file in TLS format.
-func syncToTODO() error {
+// writeProjectionGlobal exports all tasks from SQLite to the TODO file in TLS format.
+func writeProjectionGlobal() error {
 	s, err := getStorage()
 	if err != nil {
 		return err
@@ -81,8 +81,8 @@ func syncToTODO() error {
 	return nil
 }
 
-// syncToProjectTODO exports project-scoped tasks to the local .tlc/todo.txt file.
-func syncToProjectTODO() error {
+// writeProjectionLocal exports project-scoped tasks to the local .tlc/todo.txt file.
+func writeProjectionLocal() error {
 	proj := core.DetectProject()
 	if proj == nil || !proj.InProject {
 		return nil
@@ -127,10 +127,10 @@ func syncToProjectTODO() error {
 	return nil
 }
 
-// ingestTODOWith reads the TODO file and updates the given storage if changes are found.
+// importFromProjection reads the TODO file and updates the given storage if changes are found.
 // This variant accepts a pre-opened storage to avoid opening a second connection
 // during lazy initialization in getStorage().
-func ingestTODOWith(s *storage.SQLiteStorage) error {
+func importFromProjection(s *storage.SQLiteStorage) error {
 	f, err := os.Open(viper.GetString("task.todo_file"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -214,53 +214,40 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 		}
 
 		existing, _ := s.GetTaskInProject(ctx, task.ID, lookupProjectID) //nolint:errcheck // nil means create new
-		if existing == nil {
-			// Before attempting INSERT, probe for an existing row with this
-			// ID under any project bucket. tasks.id is a global PRIMARY KEY
-			// (no compound PK on (project_id, id)), so an INSERT here would
-			// fail with "UNIQUE constraint failed: tasks.id". This is the
-			// T-1234 path: stale global todo.txt lines describe IDs that
-			// already exist in the DB under a different (or absent) project
-			// scope. Skip silently — never re-emit warnings on a happy-path
-			// read. A clean rebuild is available via 'tlc tasks sync'.
-			if anyExists, _ := s.TaskIDExists(ctx, task.ID); anyExists {
+		if existing != nil {
+			// SQLite is the source of truth; the projection file is an
+			// output only. Never write file state back into the DB —
+			// doing so silently reverts user-issued status updates the
+			// instant a stale projection file is read (T-1285).
+			continue
+		}
+		// Before attempting INSERT, probe for an existing row with this
+		// ID under any project bucket. tasks.id is a global PRIMARY KEY
+		// (no compound PK on (project_id, id)), so an INSERT here would
+		// fail with "UNIQUE constraint failed: tasks.id". This is the
+		// T-1234 path: stale global todo.txt lines describe IDs that
+		// already exist in the DB under a different (or absent) project
+		// scope. Skip silently — never re-emit warnings on a happy-path
+		// read. A clean rebuild is available via 'tlc task sync-projection'.
+		if anyExists, _ := s.TaskIDExists(ctx, task.ID); anyExists {
+			skippedExistingIDs++
+			continue
+		}
+		if task.CreatedAt.IsZero() {
+			task.CreatedAt = time.Now()
+		}
+		if task.UpdatedAt.IsZero() {
+			task.UpdatedAt = task.CreatedAt
+		}
+		if err := s.CreateTask(ctx, task); err != nil {
+			// Last-ditch race guard: another writer inserted the same
+			// ID between the probe and CreateTask. Treat as already-
+			// existing and stay quiet.
+			if isUniqueIDConflict(err) {
 				skippedExistingIDs++
 				continue
 			}
-			if task.CreatedAt.IsZero() {
-				task.CreatedAt = time.Now()
-			}
-			if task.UpdatedAt.IsZero() {
-				task.UpdatedAt = task.CreatedAt
-			}
-			if err := s.CreateTask(ctx, task); err != nil {
-				// Last-ditch race guard: another writer inserted the same
-				// ID between the probe and CreateTask. Treat as already-
-				// existing and stay quiet.
-				if isUniqueIDConflict(err) {
-					skippedExistingIDs++
-					continue
-				}
-				fmt.Printf("Warning: failed to create task %s: %v\n", task.ID, err)
-			}
-		} else {
-			if existing.Status != task.Status || existing.Title != task.Title {
-				existing.Status = task.Status
-				existing.Title = task.Title
-				existing.AssignedTo = task.AssignedTo
-				existing.Tags = task.Tags
-				if task.UpdatedAt.IsZero() || task.UpdatedAt.Equal(existing.UpdatedAt) {
-					existing.UpdatedAt = time.Now()
-				} else {
-					existing.UpdatedAt = task.UpdatedAt
-				}
-				for k, v := range task.Meta {
-					existing.Meta[k] = v
-				}
-				if err := s.UpdateTask(ctx, existing); err != nil {
-					fmt.Printf("Warning: failed to update task %s: %v\n", existing.ID, err)
-				}
-			}
+			fmt.Printf("Warning: failed to create task %s: %v\n", task.ID, err)
 		}
 	}
 
@@ -283,7 +270,7 @@ func ingestTODOWith(s *storage.SQLiteStorage) error {
 }
 
 // isUniqueIDConflict reports whether err is a SQLite UNIQUE-constraint
-// failure on tasks.id. Used as a defensive race-guard in ingestTODOWith
+// failure on tasks.id. Used as a defensive race-guard in importFromProjection
 // so that a concurrent insert between the TaskIDExists probe and the
 // CreateTask call is treated as already-existing rather than as a
 // user-facing warning.

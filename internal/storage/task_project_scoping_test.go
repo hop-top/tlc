@@ -68,7 +68,7 @@ storage:
 	require.NoError(t, s.CreateTask(ctx, task1))
 	require.NoError(t, s.CreateTask(ctx, task2))
 
-	t.Run("syncToProjectTODO filters by project", func(t *testing.T) {
+	t.Run("writeProjectionLocal filters by project", func(t *testing.T) {
 		t.Logf("Verifies project-specific todo.txt filtering")
 		t.Logf("Only writes tasks matching the project_id")
 		// Get tasks filtered by project
@@ -98,7 +98,7 @@ storage:
 		assert.NotContains(t, fileContent, "Task in project 2")
 	})
 
-	t.Run("syncToTODO includes all tasks", func(t *testing.T) {
+	t.Run("writeProjectionGlobal includes all tasks", func(t *testing.T) {
 		t.Logf("Global todo.txt contains tasks from all projects")
 		globalTodoFile := filepath.Join(tempDir, "global-todo.txt")
 

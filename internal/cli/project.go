@@ -164,7 +164,7 @@ var ProjectImportCmd = &cobra.Command{
 			"Imported: %d created, %d updated, %d skipped, %d logs\n",
 			created, updated, skipped, logsImported)
 
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 

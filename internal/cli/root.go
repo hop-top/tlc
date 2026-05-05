@@ -674,7 +674,7 @@ var dbSyncOnce sync.Once
 func ensureDBSynced(s *storage.SQLiteStorage) {
 	dbSyncOnce.Do(func() {
 		// Sync local TODO file into SQLite
-		if err := ingestTODOWith(s); err != nil {
+		if err := importFromProjection(s); err != nil {
 			log.Warn("Failed to ingest TODO file", "error", err)
 		}
 

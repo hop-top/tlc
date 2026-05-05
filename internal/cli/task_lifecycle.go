@@ -89,7 +89,7 @@ var TaskClaimCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
@@ -152,7 +152,7 @@ var TaskUnclaimCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
@@ -220,7 +220,7 @@ var TaskAssignCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
@@ -289,7 +289,7 @@ var TaskUnassignCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
@@ -358,7 +358,7 @@ var TaskCompleteCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
@@ -431,7 +431,7 @@ var TaskReopenCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 

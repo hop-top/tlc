@@ -492,9 +492,9 @@ func TestBuildTaskReference(t *testing.T) {
 }
 
 // TestTaskCreateCmd_NoDuplicateRow exercises the full create+sync path that
-// the CLI runs in production: create writes the task, syncTODOAll renders
+// the CLI runs in production: create writes the task, writeProjection renders
 // todo.txt (with the T-NNNN alias as the leading id token), then a second
-// create triggers ingestTODOWith on that file. Before the fix, the second
+// create triggers importFromProjection on that file. Before the fix, the second
 // create minted an empty mirror row keyed by T-NNNN.
 //
 // Refs: tlc/T-1148.
@@ -502,7 +502,7 @@ func TestTaskCreateCmd_NoDuplicateRow(t *testing.T) {
 	dbPath := resetTestDB(t)
 	viper.Set("storage.db_path", dbPath)
 
-	// Point task.todo_file at a real, writable path so syncTODOAll
+	// Point task.todo_file at a real, writable path so writeProjection
 	// flushes the alias-prefixed line. The next CreateTask invocation
 	// re-ingests that file and (pre-fix) creates the mirror row.
 	tmpDir := filepath.Dir(dbPath)
@@ -511,7 +511,7 @@ func TestTaskCreateCmd_NoDuplicateRow(t *testing.T) {
 
 	ctx := context.Background()
 
-	// First create: writes the typeid row, then syncTODOAll flushes
+	// First create: writes the typeid row, then writeProjection flushes
 	// the alias-keyed line into todo.txt.
 	cmd1 := newTestCmd()
 	cmd1.AddCommand(TaskCmd)
@@ -524,11 +524,11 @@ func TestTaskCreateCmd_NoDuplicateRow(t *testing.T) {
 	}
 
 	// Force the next getStorage() to re-run ensureDBSynced (and thus
-	// ingestTODOWith) — production runs once per process; tests run
+	// importFromProjection) — production runs once per process; tests run
 	// many commands in one process.
 	dbSyncOnce = sync.Once{}
 
-	// Second create: triggers ingestTODOWith on the todo.txt that
+	// Second create: triggers importFromProjection on the todo.txt that
 	// holds the first task's alias line.
 	cmd2 := newTestCmd()
 	cmd2.AddCommand(TaskCmd)

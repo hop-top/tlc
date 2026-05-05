@@ -304,7 +304,7 @@ var TaskUpdateCmd = &cobra.Command{
 		}
 
 		if len(resolved) > 0 {
-			return syncTODOAll()
+			return writeProjection()
 		}
 		fmt.Println("No changes specified; use --title, --description, --status, --assigned-to, or other flags to update")
 		return nil
@@ -437,7 +437,7 @@ var TaskDeleteCmd = &cobra.Command{
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
-		return syncTODOAll()
+		return writeProjection()
 	},
 }
 
