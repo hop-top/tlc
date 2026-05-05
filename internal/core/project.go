@@ -229,26 +229,82 @@ func handleFallbackMode() *ProjectDetection {
 	}
 }
 
+// configHasProjectID reports whether the YAML at path declares
+// project.id == projectID. Returns false for missing or unparseable
+// files (the caller treats absence as "no claim").
+func configHasProjectID(path, projectID string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var existing map[string]interface{}
+	if yaml.Unmarshal(data, &existing) != nil {
+		return false
+	}
+	if proj, ok := existing["project"].(map[interface{}]interface{}); ok {
+		if id, _ := proj["id"].(string); id == projectID {
+			return true
+		}
+	}
+	if proj, ok := existing["project"].(map[string]interface{}); ok {
+		if id, _ := proj["id"].(string); id == projectID {
+			return true
+		}
+	}
+	return false
+}
+
+// canonicalConfigClaimsProject walks up from cwd looking for any
+// existing local config (across both .tlc/ and .hop/tlc/ layouts,
+// flat-file and dir variants) that already declares projectID. Used
+// by CreateConfigWithInferredID to suppress recreating a mode's
+// config when another mode's canonical config exists at or above cwd
+// with the same project ID (T-1303).
+//
+// Walk-up matters because tlc is frequently invoked from a project
+// subdirectory; a check rooted only at cwd would miss the canonical
+// config at the project root.
+func canonicalConfigClaimsProject(projectID string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+
+	candidates := []string{
+		filepath.Join(config.LocalConfigDir(config.ModeStandalone), "config.yaml"),
+		config.LocalConfigFile(config.ModeStandalone),
+		filepath.Join(config.LocalConfigDir(config.ModeHop), "config.yaml"),
+		config.LocalConfigFile(config.ModeHop),
+	}
+
+	for {
+		for _, c := range candidates {
+			if configHasProjectID(filepath.Join(cwd, c), projectID) {
+				return true
+			}
+		}
+		parent := filepath.Dir(cwd)
+		if parent == cwd {
+			return false
+		}
+		cwd = parent
+	}
+}
+
 func CreateConfigWithInferredID(projectID string) error {
 	mode := config.DetectMode()
 	configDir := config.LocalConfigDir(mode)
 	configPath := filepath.Join(configDir, "config.yaml")
 
-	// Skip rewrite if config already exists with the same project ID
-	if data, err := os.ReadFile(configPath); err == nil {
-		var existing map[string]interface{}
-		if yaml.Unmarshal(data, &existing) == nil {
-			if proj, ok := existing["project"].(map[interface{}]interface{}); ok {
-				if proj["id"] == projectID {
-					return nil
-				}
-			}
-			if proj, ok := existing["project"].(map[string]interface{}); ok {
-				if proj["id"] == projectID {
-					return nil
-				}
-			}
-		}
+	// Skip rewrite if any ancestor already has a config claiming this
+	// project ID, regardless of the entry mode currently detected. This
+	// prevents tlc from auto-recreating .hop/tlc/config.yaml in repos
+	// whose canonical config is .tlc/config.yaml (and vice versa) when
+	// both ancestors are present (e.g. .hop/ used by git-hop tooling
+	// alongside a standalone .tlc/ dir; T-1303). The walk-up matters
+	// when tlc is invoked from a project subdirectory.
+	if canonicalConfigClaimsProject(projectID) {
+		return nil
 	}
 
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
