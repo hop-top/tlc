@@ -133,7 +133,7 @@ tlc task complete T-0046 --note "shipped in v1.2"
 tlc task complete T-0046 --no-verify        # bypass state machine (NOT --force)
 
 tlc task reopen T-0046 --note "reason"      # --note required
-tlc task delete T-0046 --yes                # -y skips confirmation prompt
+tlc task delete T-0046 --yes --note "reason"  # --note required (default policy); -y skips prompt
 ```
 
 ---
@@ -162,7 +162,7 @@ tlc task claim "*" --no-prompt
 
 # Batch update
 tlc task update T-0041 T-0042 --priority P1 --no-prompt
-tlc task delete T-0041 T-0042 --yes --no-prompt
+tlc task delete T-0041 T-0042 --yes --no-prompt --note "obsolete after milestone close"
 ```
 
 ---

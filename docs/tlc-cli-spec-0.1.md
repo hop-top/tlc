@@ -379,19 +379,25 @@ tlc task update <task-id|pattern>... [flags]
 | `--set-meta` | `-m` | key=value | Set metadata (repeatable) |
 | `--unset-meta` | | key | Remove metadata (repeatable) |
 | `--force` | | bool | Bypass workflow state machine rules |
+| `--note` | `-n` | string | Transition note; recorded against the STATUS_CHANGED log when `--status` is set. Defaults to `"Manual update"` if absent. |
 
 #### Behavior
 
 1. Validates status transitions (see task-crud-spec-0.1.md)
 2. Updates updated_at timestamp
 3. Writes appropriate log entry (STATUS_CHANGED, ASSIGNED, etc.)
-4. Returns updated task
+4. When `--status` is set, the value of `--note|-n` becomes the
+   transition note on the STATUS_CHANGED log entry
+5. Returns updated task
 
 #### Examples
 
 ```bash
 # Change status
 tlc task update T-0042 --status DONE
+
+# Change status with explicit note
+tlc task update T-0042 --status DONE --note "shipped in v1.2"
 
 # Update title and add tag
 tlc task update T-0042 \
@@ -416,26 +422,45 @@ tlc task delete <task-id|pattern>... [flags]
 
 #### Flags
 
-| Flag | Type | Description |
-|------|------|-------------|
-| `--force` | bool | Hard delete (permanent) |
-| `--yes` | bool | Skip confirmation |
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--force` | | bool | Hard delete (permanent) |
+| `--yes` | `-y` | bool | Skip confirmation |
+| `--note` | `-n` | string | Delete reason; recorded as a `DELETED` log entry that survives the row removal. **Required by the default `delete-requires-note` policy** — see [policies.md](policies.md). |
+
+#### Behavior
+
+1. Resolves task IDs / patterns
+2. Confirms (unless `--yes`)
+3. Writes a `DELETED` log entry carrying `--note` (T-1232 dropped the
+   `task_logs` cascade, so the entry survives the parent delete)
+4. Publishes `kit.runtime.entity.pre_persisted` with `op=delete` —
+   the policy engine vetoes here. The default
+   `delete-requires-note` rule denies when `--note` is empty (exit 4).
+5. Removes the task row
 
 #### Examples
 
 ```bash
-# Delete with confirmation
-tlc task delete T-0042
-
-# Delete skipping confirmation
+# Default policy rejects this — exit 4
 tlc task delete T-0042 --yes
 
-# Delete multiple tasks (requires --yes or --no-prompt)
-tlc task delete T-0042 T-0043 --yes
+# With note (passes the default policy)
+tlc task delete T-0042 --yes --note "duplicate of T-0099"
 
-# Delete by pattern (no prompt)
-tlc task delete 'T-004\d' --no-prompt
+# Delete multiple tasks
+tlc task delete T-0042 T-0043 --yes --note "obsolete after milestone close"
+
+# Delete by pattern
+tlc task delete 'T-004\d' --no-prompt --note "cleanup of stale exploration tasks"
 ```
+
+#### Disabling the note requirement
+
+The note requirement is enforced by a policy in
+`$XDG_CONFIG_HOME/tlc/policies.yaml`, not by the CLI itself.
+Operators who want the pre-T-1192 behavior edit or remove the
+`delete-requires-note` rule from that file. See [policies.md](policies.md).
 
 ---
 
@@ -1676,12 +1701,24 @@ tasks are grouped by their `project_id`.
 | 1 | General error |
 | 2 | Invalid usage (bad arguments) |
 | 3 | Not found (task, flow, etc.) |
-| 4 | Validation error |
+| 4 | Conflict — validation error or **policy denied** (see [policies.md](policies.md)) |
 | 5 | Permission denied |
 | 6 | Conflict (sync, concurrent edit) |
 | 7 | Timeout |
 | 8 | Network error |
 | 9 | Authentication error |
+
+Exit code `4` is shared between local validation failures (bad
+field value, broken transition rule) and policy vetoes
+(`PolicyDeniedError` from `kit/runtime/policy`). Stderr carries the
+distinguishing message:
+
+```text
+$ tlc task delete T-0042 --yes
+Error: policy "delete-requires-note" denied: deleting a task requires --note explaining why
+$ echo $?
+4
+```
 
 ---
 

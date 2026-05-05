@@ -112,12 +112,14 @@ TODO → IN_PROGRESS → DONE
 ```
 
 ```bash
-tlc task claim   T-0046                  # TODO → IN_PROGRESS
-tlc task unclaim T-0046                  # IN_PROGRESS → TODO
-tlc task complete T-0046                 # IN_PROGRESS → DONE
-tlc task complete T-0046 --no-verify     # bypass state machine (NOT --force)
-tlc task update   T-0046 --status IN_PROGRESS --force  # force any transition
-tlc task reopen   T-0046 --note "reason" # DONE/SKIPPED → TODO (--note required)
+tlc task claim   T-0046                              # TODO → IN_PROGRESS
+tlc task unclaim T-0046                              # IN_PROGRESS → TODO
+tlc task complete T-0046                             # IN_PROGRESS → DONE
+tlc task complete T-0046 --no-verify                 # bypass state machine (NOT --force)
+tlc task update   T-0046 --status IN_PROGRESS --note "reason"  # records on STATUS_CHANGED
+tlc task update   T-0046 --status IN_PROGRESS --force          # force any transition
+tlc task reopen   T-0046 --note "reason"             # DONE/SKIPPED → TODO (--note required)
+tlc task delete   T-0046 --yes --note "reason"       # --note required by default policy
 ```
 
 Bypass flags (NOT interchangeable):
@@ -324,6 +326,7 @@ tlc task complete T-0046 --no-verify
 |-------|-------|-----|
 | `cannot transition from TODO to DONE` | skipped claim | `tlc task claim <id>` first |
 | `--note is required` | reopen/unassign without note | add `--note "<reason>"` |
+| `policy "delete-requires-note" denied: ...` (exit 4) | `tlc task delete` without `--note` | add `--note "<reason>"`; see [policies.md](policies.md) |
 | `task delete requires confirmation` | missing --yes | add `--yes` |
 | `task T-XXXX not found` | wrong ID or project | `tlc task list` to verify |
 | `project not found in registry` | not initialised | `tlc init` in project root |

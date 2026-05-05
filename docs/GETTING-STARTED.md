@@ -311,8 +311,8 @@ tlc task update T-0010 T-0011 T-0012 --add-tag hotfix
 # Reopen a set of terminal tasks with an audit note
 tlc task reopen T-0020 T-0021 --note "Regression found in v2.1"
 
-# Delete multiple tasks (requires --yes for >1)
-tlc task delete T-0030 T-0031 --yes
+# Delete multiple tasks (requires --yes for >1; default policy requires --note)
+tlc task delete T-0030 T-0031 --yes --note "obsolete after migration"
 
 # Use * glob to unclaim everything (requires --no-prompt in non-TTY)
 tlc task unclaim '*' --no-prompt

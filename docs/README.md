@@ -46,6 +46,7 @@ The System persona (P5) validates configuration and environment at startup to en
 ## Spec Map (Non-Overlapping Ownership)
 
 - [Flows & Assignees](flows-and-assignees.md) - Workflow automation and capability-based task assignment
+- [Policies](policies.md) - Declarative state-change guards (`--note` enforcement, custom rules) via kit/runtime/policy
 - [Development Setup](development-setup.md) - Development workflow, watch modes, and tooling
 - [Editor Setup](editor-setup.md) - IDE/editor integration guides
 - [Docker Usage](docker.md) - Container deployment and usage

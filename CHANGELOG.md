@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Added
+
+- `--note|-n` flag on `tlc task update` (when `--status` is set) and
+  `tlc task delete` (T-1178). Note text is recorded on the
+  STATUS_CHANGED / DELETED `task_logs` entry, mirroring the existing
+  `tlc task complete --note` pattern.
+- `tlc/runtime/policy` adoption: declarative policy YAML at
+  `$XDG_CONFIG_HOME/tlc/policies.yaml`, evaluated against state
+  changes via kit's policy engine. First boot seeds the file from
+  a bundled default; existing user files are never overwritten.
+  Default policy: `delete-requires-note`. See
+  [`docs/policies.md`](docs/policies.md). (T-1192)
+
+### Changed
+
+- Schema migration v15: `task_logs` rebuilt without
+  `ON DELETE CASCADE` on `task_id` so transition notes — including
+  delete reasons recorded via `--note` — survive task deletion.
+  Migration applies automatically on first run; existing rows are
+  preserved. (T-1232)
+
+### Note for operators
+
+- `tlc task delete <id>` without `--note` now exits 4 with a
+  `policy "delete-requires-note" denied: ...` error. Update scripts
+  to pass `--note "<reason>"`. To restore the pre-T-1192 behavior
+  temporarily, edit `$XDG_CONFIG_HOME/tlc/policies.yaml` and remove
+  the `delete-requires-note` rule.
+
 ### chore
 - kit: migrate to role-based hierarchy (`hop.top/kit/go/<role>/<pkg>`).
   All 16 kit packages tlc imports moved from flat to role-based paths
