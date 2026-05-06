@@ -805,40 +805,44 @@ func preParseChdir(args []string) ([]string, string, bool) {
 	return out, target, true
 }
 
-// resolvePreChdirTarget expands ~ and converts the target to an
-// absolute path. The target must be an existing directory. Kit's
-// ChdirResolver (which can map non-dir targets to tool-specific
-// directories) is intentionally not consulted here — the pre-parse
-// only handles the common path case. Targets that are not directories
-// fall through with an error so the user gets a clear message before
-// kit gets a chance to run.
+// resolvePreChdirTarget expands ~ and converts the target to an absolute
+// path. When the target resolves to an existing directory, that wins
+// (preserving backward-compatible filesystem semantics). Otherwise the
+// target is fuzzy-matched against the global tlc project registry via
+// resolveChdirToProject; this lets `tlc -C wsm` chdir to the registered
+// hop-top/wsm project root.
+//
+// Path-on-disk wins over registry matches by design: a stray local
+// directory called `wsm` should not be silently shadowed by a registered
+// project of the same name.
 func resolvePreChdirTarget(target string) (string, error) {
 	if target == "" {
-		return "", fmt.Errorf("-C/--chdir requires a non-empty path")
+		return "", fmt.Errorf("-C/--chdir requires a non-empty path or project name")
 	}
 	// Expand leading ~ to the user's home directory.
-	if strings.HasPrefix(target, "~") {
+	expanded := target
+	if strings.HasPrefix(expanded, "~") {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve ~ in %q: %w", target, err)
 		}
 		switch {
-		case target == "~":
-			target = home
-		case strings.HasPrefix(target, "~/"):
-			target = filepath.Join(home, target[2:])
+		case expanded == "~":
+			expanded = home
+		case strings.HasPrefix(expanded, "~/"):
+			expanded = filepath.Join(home, expanded[2:])
 		}
 	}
-	abs, err := filepath.Abs(target)
+	abs, err := filepath.Abs(expanded)
 	if err != nil {
 		return "", fmt.Errorf("cannot resolve %q: %w", target, err)
 	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		return "", fmt.Errorf("cannot chdir to %q: %w", target, err)
+	if info, statErr := os.Stat(abs); statErr == nil && info.IsDir() {
+		return abs, nil
 	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("cannot chdir to %q: not a directory", target)
-	}
-	return abs, nil
+	// Path doesn't exist or isn't a directory; fall through to registry
+	// fuzzy-match. A non-directory path (e.g. a binary named `tlc` in
+	// CWD) shouldn't shadow a registered project of the same name —
+	// the user obviously didn't ask to chdir into a regular file.
+	return resolveChdirToProject(target)
 }

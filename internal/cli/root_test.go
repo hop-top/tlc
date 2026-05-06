@@ -641,9 +641,22 @@ func TestResolvePreChdirTarget_TildeAndRelative(t *testing.T) {
 		t.Errorf("~ did not resolve to absolute path: %q", got)
 	}
 
-	// Non-existent path returns an error.
+	// Non-existent path with a slash (won't fuzzy-match anything in the
+	// registry) falls through and errors. The message must reference the
+	// input target so users see what failed.
 	if _, err := resolvePreChdirTarget(filepath.Join(tmpDir, "does-not-exist")); err == nil {
-		t.Errorf("expected error for non-existent path")
+		t.Errorf("expected error for non-existent path that doesn't fuzzy-match")
+	}
+
+	// A regular file (not a directory) at the resolved path also falls
+	// through to fuzzy match — a non-directory path shouldn't shadow a
+	// registered project of the same name.
+	regular := filepath.Join(tmpDir, "regular-file")
+	if err := os.WriteFile(regular, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolvePreChdirTarget(regular); err == nil {
+		t.Errorf("expected error when path is a regular file with no matching project")
 	}
 }
 
