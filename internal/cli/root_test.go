@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -644,8 +645,12 @@ func TestResolvePreChdirTarget_TildeAndRelative(t *testing.T) {
 	// Non-existent path with a slash (won't fuzzy-match anything in the
 	// registry) falls through and errors. The message must reference the
 	// input target so users see what failed.
-	if _, err := resolvePreChdirTarget(filepath.Join(tmpDir, "does-not-exist")); err == nil {
+	missingPath := filepath.Join(tmpDir, "does-not-exist")
+	_, err = resolvePreChdirTarget(missingPath)
+	if err == nil {
 		t.Errorf("expected error for non-existent path that doesn't fuzzy-match")
+	} else if !strings.Contains(err.Error(), missingPath) && !strings.Contains(err.Error(), "does-not-exist") {
+		t.Errorf("error must reference the input target; got: %v", err)
 	}
 
 	// A regular file (not a directory) at the resolved path also falls

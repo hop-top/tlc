@@ -837,12 +837,20 @@ func resolvePreChdirTarget(target string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot resolve %q: %w", target, err)
 	}
-	if info, statErr := os.Stat(abs); statErr == nil && info.IsDir() {
+	info, statErr := os.Stat(abs)
+	switch {
+	case statErr == nil && info.IsDir():
 		return abs, nil
+	case statErr == nil:
+		// Path exists but isn't a directory (e.g. a binary named `tlc`
+		// in CWD). Fall through to fuzzy-match — a regular file
+		// shouldn't shadow a registered project of the same name.
+	case os.IsNotExist(statErr):
+		// Path doesn't exist; fuzzy-match the registry.
+	default:
+		// Permission denied, I/O error, etc. — surface the real error
+		// rather than masking it with a misleading "no match" message.
+		return "", fmt.Errorf("cannot stat %q: %w", target, statErr)
 	}
-	// Path doesn't exist or isn't a directory; fall through to registry
-	// fuzzy-match. A non-directory path (e.g. a binary named `tlc` in
-	// CWD) shouldn't shadow a registered project of the same name —
-	// the user obviously didn't ask to chdir into a regular file.
 	return resolveChdirToProject(target)
 }

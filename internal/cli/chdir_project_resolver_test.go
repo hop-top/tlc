@@ -2,6 +2,8 @@ package cli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -109,5 +111,58 @@ func TestChdirResolveError_OtherErrorPassesThrough(t *testing.T) {
 	got := chdirResolveError("foo", other).Error()
 	if !strings.Contains(got, "foo") || !strings.Contains(got, "disk on fire") {
 		t.Errorf("non-hay errors must wrap target + cause; got: %s", got)
+	}
+}
+
+func TestReadDBPathFromConfig(t *testing.T) {
+	tmp := t.TempDir()
+
+	t.Run("missing file returns empty", func(t *testing.T) {
+		got := readDBPathFromConfig(filepath.Join(tmp, "does-not-exist.yaml"))
+		if got != "" {
+			t.Errorf("missing file should return empty; got %q", got)
+		}
+	})
+
+	t.Run("malformed yaml returns empty", func(t *testing.T) {
+		path := filepath.Join(tmp, "bad.yaml")
+		if err := os.WriteFile(path, []byte("storage: {db_path: [oops"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got := readDBPathFromConfig(path)
+		if got != "" {
+			t.Errorf("malformed yaml should return empty; got %q", got)
+		}
+	})
+
+	t.Run("missing storage section returns empty", func(t *testing.T) {
+		path := filepath.Join(tmp, "no-storage.yaml")
+		if err := os.WriteFile(path, []byte("output:\n  format: json\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got := readDBPathFromConfig(path)
+		if got != "" {
+			t.Errorf("missing storage section should return empty; got %q", got)
+		}
+	})
+
+	t.Run("storage.db_path set returns it", func(t *testing.T) {
+		path := filepath.Join(tmp, "ok.yaml")
+		body := "storage:\n  backend: sqlite\n  db_path: /custom/path/tlc.db\n"
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got := readDBPathFromConfig(path)
+		if got != "/custom/path/tlc.db" {
+			t.Errorf("got %q; want /custom/path/tlc.db", got)
+		}
+	})
+}
+
+func TestRegistryDBPath_EnvOverride(t *testing.T) {
+	t.Setenv("TLC_STORAGE_DB_PATH", "/env/override.db")
+	got := registryDBPath()
+	if got != "/env/override.db" {
+		t.Errorf("env override should win; got %q", got)
 	}
 }
