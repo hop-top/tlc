@@ -11,6 +11,7 @@ import (
 
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 	"hop.top/kit/go/console/alias"
 	kitconfig "hop.top/kit/go/core/config"
 	"hop.top/kit/go/core/xdg"
@@ -159,14 +160,35 @@ func findFirstNonFlag(slice []string) (int, string) {
 	return -1, ""
 }
 
-// migrateLegacyAliases reads the deprecated viper "aliases:" map and
-// migrates entries into the YAML store(s). Idempotent: skips when the
-// target store is already non-empty. Logs the deprecation warning once
-// per process when the legacy key is present.
+// migrateLegacyAliases reads the deprecated `aliases:` block from each
+// loaded config file directly (not via viper's merged view) and routes
+// each block to the YAML alias store that matches the source's scope:
+//
+//   - user-level config → global aliases.yaml (xdg ConfigDir/tlc/)
+//   - project-level config (any layout) → project-local aliases.yaml
+//     (next to the config file's tlc dir, or alongside the flat config)
+//
+// Per-source routing prevents scope drift: legacy entries from
+// user-global config never get co-mingled into a project-local store
+// just because the user happens to be running tlc inside a project at
+// migration time. Each source's entries land in the store of matching
+// visibility, and the legacy key is stripped from each source file
+// independently after a successful per-source migration.
+//
+// Idempotent: when a target store already contains every entry from a
+// given source, the migration step is a no-op and we proceed straight
+// to the strip step (the legacy key may still be sitting in config.yaml
+// from a previous run that pre-dates per-source routing).
+//
+// Errors during migration of one source do not block other sources;
+// each is logged independently and the strip step for that one source
+// is skipped.
 func migrateLegacyAliases() {
 	migrateLegacyAliasesOnce.Do(func() {
-		raw := viper.GetStringMapString("aliases")
-		if len(raw) == 0 {
+		// Cheap upfront probe via viper's merged view: when no source
+		// has any legacy entries, viper.GetStringMapString returns an
+		// empty map and we can early-return without any I/O.
+		if len(viper.GetStringMapString("aliases")) == 0 {
 			return
 		}
 		log.Warn(
@@ -174,129 +196,251 @@ func migrateLegacyAliases() {
 				"to <config-dir>/aliases.yaml — remove the key from config.yaml",
 		)
 
-		// Decide where the legacy entries live: when the closest config
-		// file is a project-local file, treat them as project aliases;
-		// otherwise treat them as global aliases.
-		target := ""
-		if used := viper.ConfigFileUsed(); used != "" {
-			if isLocalConfigFile(used) {
-				target = localAliasPath()
-			}
+		for _, cfgPath := range allLegacyConfigPaths() {
+			migrateLegacyAliasesFromSource(cfgPath)
 		}
-		if target == "" {
-			gp, err := globalAliasPath()
-			if err != nil {
-				log.Warn("alias migration: cannot resolve global path", "error", err)
-				return
-			}
-			target = gp
-		}
-
-		store := alias.NewStore(target)
-		if err := store.Load(); err != nil {
-			log.Warn("alias migration: load failed", "path", target, "error", err)
-			return
-		}
-
-		// Migrate when the YAML store is empty. When non-empty, treat the
-		// migration as already-done and skip straight to the strip step
-		// (the legacy key may still be sitting in config.yaml from a
-		// previous run that pre-dates the auto-strip behaviour).
-		if len(store.All()) == 0 {
-			var migrated int
-			for k, v := range raw {
-				if v == "" {
-					continue
-				}
-				if err := store.Set(k, v); err != nil {
-					log.Warn("alias migration: skip entry", "name", k, "error", err)
-					continue
-				}
-				migrated++
-			}
-			if migrated == 0 {
-				return
-			}
-			if err := store.Save(); err != nil {
-				log.Warn("alias migration: save failed", "path", target, "error", err)
-				return
-			}
-			log.Info("Migrated legacy aliases to YAML store",
-				"count", migrated, "path", target)
-			// Re-load so verifyMigratedKeys reads the freshly-written
-			// values rather than the pre-Save in-memory state.
-			if err := store.Load(); err != nil {
-				log.Warn("alias migration: reload after save failed", "path", target, "error", err)
-				return
-			}
-		}
-
-		// Defensive verification: only strip the legacy aliases: key from
-		// config.yaml after confirming the merged YAML alias view
-		// actually contains every entry the legacy map had. The cost of
-		// a recurring deprecation warning << the cost of silently
-		// losing aliases.
-		if !verifyMigratedKeys(raw) {
-			log.Warn("alias migration: skipping config.yaml strip — merged YAML store is missing legacy entries")
-			return
-		}
-		stripLegacyAliasesFromConfigs()
 	})
 }
 
-// verifyMigratedKeys confirms every entry in `legacy` is reachable in
-// the merged YAML alias view (seeded + global + project, with project
-// overriding global per loadMergedAliases). Returns false on any load
-// error or missing/divergent entry — callers must skip the strip step
-// in that case.
-//
-// This must consult the merged view rather than just the migration
-// target: the legacy key may have come from a different scope than
-// where the migrator wrote (e.g. legacy in user-global config.yaml,
-// migrator wrote to project-local store because cwd is inside a
-// project). Strip safety requires the entries be reachable somewhere
-// after migration, not necessarily co-located with the legacy key.
-func verifyMigratedKeys(legacy map[string]string) bool {
-	merged, err := loadMergedAliases()
+// migrateLegacyAliasesFromSource handles one config file's `aliases:`
+// block: parse it directly, route to the matching scope's YAML store,
+// migrate (if the target store is missing entries), verify, and strip
+// the legacy key from the source file. Errors are logged but never
+// fail the function — other sources still get processed.
+func migrateLegacyAliasesFromSource(cfgPath string) {
+	entries, err := readAliasesBlock(cfgPath)
 	if err != nil {
-		return false
+		log.Warn("alias migration: cannot read source config", "path", cfgPath, "error", err)
+		return
 	}
-	for k, v := range legacy {
+	if len(entries) == 0 {
+		return // no legacy block in this file; nothing to do
+	}
+
+	target, err := storePathForConfig(cfgPath)
+	if err != nil {
+		log.Warn("alias migration: cannot resolve target store", "source", cfgPath, "error", err)
+		return
+	}
+	store := alias.NewStore(target)
+	if err := store.Load(); err != nil {
+		log.Warn("alias migration: load target store failed", "path", target, "error", err)
+		return
+	}
+
+	// Migrate any entries the target store is missing. Pre-existing
+	// entries in the target are preserved (don't clobber a user-edited
+	// alias with a stale legacy value). When a key collides with a
+	// divergent value in the target, mark the source as having a
+	// conflict and skip the strip step at the end — but keep migrating
+	// the source's other non-conflicting keys so partial progress isn't
+	// lost on the next run.
+	stored := store.All()
+	var migrated int
+	hasConflict := false
+	for k, v := range entries {
 		if v == "" {
-			continue // empty values are skipped by the migrator; ignore here
+			continue
 		}
-		got, ok := merged[k]
+		if existing, ok := stored[k]; ok && existing == v {
+			continue // already migrated
+		}
+		if _, ok := stored[k]; ok {
+			// Same key, different value: target wins. Don't overwrite;
+			// flag the source for skip-strip; continue with other keys.
+			log.Warn("alias migration: target store has divergent value; will skip strip for this source",
+				"alias", k, "source", cfgPath, "target", target)
+			hasConflict = true
+			continue
+		}
+		if err := store.Set(k, v); err != nil {
+			log.Warn("alias migration: set failed", "alias", k, "error", err)
+			hasConflict = true
+			continue
+		}
+		migrated++
+	}
+	if migrated > 0 {
+		if err := store.Save(); err != nil {
+			log.Warn("alias migration: save failed", "path", target, "error", err)
+			return
+		}
+		log.Info("Migrated legacy aliases to YAML store",
+			"count", migrated, "source", cfgPath, "target", target)
+		if err := store.Load(); err != nil {
+			log.Warn("alias migration: reload after save failed", "path", target, "error", err)
+			return
+		}
+	}
+
+	// Skip strip when any key conflicted with the target store: leaving
+	// the legacy block in place is how the user notices the divergence
+	// and decides which value to keep. Non-conflicting keys above were
+	// still migrated (partial progress preserved for the next run).
+	if hasConflict {
+		log.Warn("alias migration: skipping strip — at least one key diverges between source and target",
+			"source", cfgPath, "target", target)
+		return
+	}
+
+	// Defensive verification: every entry from this source must now be
+	// present in the target store with matching value.
+	if !verifyEntriesInStore(entries, store) {
+		log.Warn("alias migration: skipping strip — target store is missing entries from source",
+			"source", cfgPath, "target", target)
+		return
+	}
+
+	// Strip the legacy `aliases:` key from this source.
+	if err := unsetAliasesAtPath(cfgPath); err != nil {
+		if errors.Is(err, kitconfig.ErrKeyNotFound) {
+			return // already stripped
+		}
+		log.Warn("alias migration: strip failed", "path", cfgPath, "error", err)
+		return
+	}
+	log.Info("Removed deprecated aliases: key from config.yaml", "path", cfgPath)
+}
+
+// readAliasesBlock parses path directly (not via viper) and extracts
+// the top-level `aliases:` map. Returns an empty map when the file is
+// missing, has no `aliases:` key, or the key holds a non-map value
+// (e.g. scalar or list — treated as "no legacy aliases here" rather
+// than as a fatal parse error so a user with an unexpected shape
+// still gets the rest of the migration).
+//
+// Errors only on I/O failures or YAML that fails the top-level parse.
+// Per-entry shape problems (non-string keys/values under aliases:)
+// are silently skipped: the entry is left out of the returned map but
+// the function does not error. Callers see "no legacy block here" and
+// move on.
+func readAliasesBlock(path string) (map[string]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	// Parse permissively into a yaml.Node so we can branch on the
+	// shape of the `aliases:` value rather than relying on
+	// strict map[string]string unmarshalling (which errors on any
+	// scalar/list/non-string value).
+	var root yaml.Node
+	if err := yaml.Unmarshal(raw, &root); err != nil {
+		return nil, err
+	}
+	mapping := unwrapDocumentMapping(&root)
+	if mapping == nil {
+		return nil, nil
+	}
+	aliasesNode := findMappingValue(mapping, "aliases")
+	if aliasesNode == nil || aliasesNode.Kind != yaml.MappingNode {
+		// No aliases: key, or it holds a non-map value. Treat both as
+		// "no legacy block here" — caller sees an empty result and
+		// moves on without warning the user about exotic shapes.
+		return nil, nil
+	}
+	out := make(map[string]string, len(aliasesNode.Content)/2)
+	for i := 0; i+1 < len(aliasesNode.Content); i += 2 {
+		k := aliasesNode.Content[i]
+		v := aliasesNode.Content[i+1]
+		if k.Kind != yaml.ScalarNode || v.Kind != yaml.ScalarNode {
+			continue // skip non-scalar entries silently
+		}
+		out[k.Value] = v.Value
+	}
+	return out, nil
+}
+
+// unwrapDocumentMapping returns the top-level mapping node of a parsed
+// YAML doc, walking past the document wrapper. Returns nil for empty
+// or non-mapping documents.
+func unwrapDocumentMapping(root *yaml.Node) *yaml.Node {
+	if root == nil {
+		return nil
+	}
+	if root.Kind == yaml.DocumentNode {
+		if len(root.Content) == 0 {
+			return nil
+		}
+		root = root.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	return root
+}
+
+// findMappingValue returns the value node paired with key in mapping,
+// or nil if key is absent. mapping must be a YAML MappingNode.
+func findMappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		k := mapping.Content[i]
+		if k.Kind == yaml.ScalarNode && k.Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// storePathForConfig returns the YAML alias store path that should
+// receive entries from cfgPath. Project-shaped config files route to
+// the project-local store sitting next to the config (or alongside the
+// flat config); other paths (user-level, system) route to the global
+// store under the user's xdg ConfigDir.
+func storePathForConfig(cfgPath string) (string, error) {
+	if isLocalConfigFile(cfgPath) {
+		return projectStorePathFor(cfgPath), nil
+	}
+	return globalAliasPath()
+}
+
+// projectStorePathFor returns the project-local aliases.yaml path that
+// pairs with cfgPath. Layout:
+//
+//	<root>/.tlc/config.yaml      → <root>/.tlc/aliases.yaml
+//	<root>/.tlc.yaml             → <root>/.tlc/aliases.yaml
+//	<root>/.hop/tlc/config.yaml  → <root>/.hop/tlc/aliases.yaml
+//	<root>/.hop/tlc.yaml         → <root>/.hop/tlc/aliases.yaml
+//
+// The flat-layout variants intentionally land in a sibling dir so a
+// project that mixes flat and dir layouts (transient state during
+// migration) shares one store.
+func projectStorePathFor(cfgPath string) string {
+	dir := filepath.Dir(cfgPath)
+	base := filepath.Base(cfgPath)
+	switch base {
+	case ".tlc.yaml":
+		return filepath.Join(dir, ".tlc", "aliases.yaml")
+	case "tlc.yaml":
+		// .hop/tlc.yaml: dir is "<root>/.hop", store at "<root>/.hop/tlc/aliases.yaml"
+		if filepath.Base(dir) == ".hop" {
+			return filepath.Join(dir, "tlc", "aliases.yaml")
+		}
+		// Bare tlc.yaml without .hop parent: degrade to sibling.
+		return filepath.Join(dir, "tlc", "aliases.yaml")
+	default:
+		// Dir layout: cfgPath is .../{.tlc,tlc}/config.yaml; store sits
+		// next to it.
+		return filepath.Join(dir, "aliases.yaml")
+	}
+}
+
+// verifyEntriesInStore confirms every entry in src is present in store
+// with matching value. Returns false on any divergence.
+func verifyEntriesInStore(src map[string]string, store *alias.Store) bool {
+	stored := store.All()
+	for k, v := range src {
+		if v == "" {
+			continue
+		}
+		got, ok := stored[k]
 		if !ok || got != v {
 			return false
 		}
 	}
 	return true
-}
-
-// stripLegacyAliasesFromConfigs removes the deprecated `aliases:` key
-// from every tlc config file in the loaded cascade. Uses
-// kit/core/config.Unset which preserves comments + ordering, writes
-// atomically, and cleans empty parent mappings. Errors are logged but
-// never fail the CLI run — leaving the key in place just means the
-// deprecation warning fires again on the next invocation.
-//
-// Walks the full project cascade (all ancestor `.tlc/config.yaml`,
-// `.tlc.yaml`, `.hop/tlc/config.yaml`, `.hop/tlc.yaml` files between
-// cwd and the project boundary) plus the user-level config. System
-// configs (/etc/tlc/) are skipped (root-only).
-func stripLegacyAliasesFromConfigs() {
-	for _, path := range allLegacyConfigPaths() {
-		if err := unsetAliasesAtPath(path); err != nil {
-			if errors.Is(err, kitconfig.ErrKeyNotFound) {
-				continue // legacy key wasn't in this file; OK
-			}
-			log.Warn("alias migration: failed to strip legacy key from config",
-				"path", path, "error", err)
-			continue
-		}
-		log.Info("Removed deprecated aliases: key from config.yaml",
-			"path", path)
-	}
 }
 
 // unsetAliasesAtPath strips the top-level `aliases:` key from a single
