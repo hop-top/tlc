@@ -274,57 +274,74 @@ func verifyMigratedKeys(legacy map[string]string) bool {
 }
 
 // stripLegacyAliasesFromConfigs removes the deprecated `aliases:` key
-// from every tlc config.yaml file in the user/project scopes. Uses
+// from every tlc config file in the loaded cascade. Uses
 // kit/core/config.Unset which preserves comments + ordering, writes
 // atomically, and cleans empty parent mappings. Errors are logged but
 // never fail the CLI run — leaving the key in place just means the
 // deprecation warning fires again on the next invocation.
 //
-// Skips ScopeSystem (root-only). Walks both standalone (.tlc/) and
-// hop-mode (.hop/tlc/) markers because tlc supports both layouts.
+// Walks the full project cascade (all ancestor `.tlc/config.yaml`,
+// `.tlc.yaml`, `.hop/tlc/config.yaml`, `.hop/tlc.yaml` files between
+// cwd and the project boundary) plus the user-level config. System
+// configs (/etc/tlc/) are skipped (root-only).
 func stripLegacyAliasesFromConfigs() {
-	// Build options for the canonical tlc config cascade. Pass both
-	// standalone and hop-mode project markers so the project-scope
-	// strip works in either layout.
-	markers := []string{
-		".tlc/config.yaml",
-		".hop/tlc/config.yaml",
-	}
-	opts := kitconfig.OptionsForToolWithMarkers("tlc", markers)
-
-	for _, scope := range []kitconfig.Scope{kitconfig.ScopeProject, kitconfig.ScopeUser} {
-		path, perr := kitconfig.ScopePath(opts, scope)
-		if perr != nil {
-			// Empty scope path: nothing to strip in this scope.
-			continue
-		}
-		if err := kitconfig.Unset("aliases", scope, opts); err != nil {
+	for _, path := range allLegacyConfigPaths() {
+		if err := unsetAliasesAtPath(path); err != nil {
 			if errors.Is(err, kitconfig.ErrKeyNotFound) {
 				continue // legacy key wasn't in this file; OK
 			}
 			log.Warn("alias migration: failed to strip legacy key from config",
-				"scope", scopeName(scope), "path", path, "error", err)
+				"path", path, "error", err)
 			continue
 		}
 		log.Info("Removed deprecated aliases: key from config.yaml",
-			"scope", scopeName(scope), "path", path)
+			"path", path)
 	}
 }
 
-// scopeName renders a kit Scope value as a stable lowercase string for
-// log output. Mirrors what the kit/core/config package would expose
-// publicly if it did.
-func scopeName(s kitconfig.Scope) string {
-	switch s {
-	case kitconfig.ScopeSystem:
-		return "system"
-	case kitconfig.ScopeUser:
-		return "user"
-	case kitconfig.ScopeProject:
-		return "project"
-	default:
-		return "unknown"
+// unsetAliasesAtPath strips the top-level `aliases:` key from a single
+// config file. Treats the file as the project-scope target so callers
+// can iterate over an arbitrary cascade without conflating each entry
+// with kit's user/project distinction.
+func unsetAliasesAtPath(path string) error {
+	opts := kitconfig.Options{ProjectConfigPath: path}
+	return kitconfig.Unset("aliases", kitconfig.ScopeProject, opts)
+}
+
+// allLegacyConfigPaths enumerates every config file that may carry a
+// legacy `aliases:` key in the current process's view: the full
+// project cascade for the active mode (so flat `.tlc.yaml` + dir
+// `.tlc/config.yaml` + ancestor files are all covered) plus the
+// user-level config. Returns absolute paths in cascade order
+// (closest-to-cwd first), deduplicated, and skips system configs.
+func allLegacyConfigPaths() []string {
+	seen := make(map[string]struct{})
+	var out []string
+
+	// Project cascade: walk findAllConfigs to honor the same flat/dir
+	// + ancestor walking that initConfig uses for viper merging.
+	if cwd, err := os.Getwd(); err == nil {
+		for _, p := range findAllConfigs(cwd, "") {
+			if abs, err := filepath.Abs(p); err == nil {
+				if _, ok := seen[abs]; !ok {
+					seen[abs] = struct{}{}
+					out = append(out, abs)
+				}
+			}
+		}
 	}
+
+	// User-level config (XDG / OS-native).
+	if userPath, err := config.UserConfigPath(); err == nil && userPath != "" {
+		if abs, err := filepath.Abs(userPath); err == nil {
+			if _, ok := seen[abs]; !ok {
+				seen[abs] = struct{}{}
+				out = append(out, abs)
+			}
+		}
+	}
+
+	return out
 }
 
 var migrateLegacyAliasesOnce sync.Once

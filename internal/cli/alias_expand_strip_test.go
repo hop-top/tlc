@@ -268,6 +268,88 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 			}
 		}
 	})
+
+	// FlatProjectLayout asserts strip works against `<root>/.tlc.yaml`
+	// (flat standalone layout) rather than `<root>/.tlc/config.yaml`.
+	t.Run("FlatProjectLayout", func(t *testing.T) {
+		tmpDir := setupStripTest(t)
+		cfgPath := filepath.Join(tmpDir, ".tlc.yaml")
+		writeFile(t, cfgPath, ""+
+			"aliases:\n"+
+			"  tl: task list\n"+
+			"git:\n"+
+			"  track: false\n",
+		)
+
+		primeViper(t, cfgPath)
+		migrateLegacyAliases()
+
+		cfg := readYAMLMap(t, cfgPath)
+		if _, ok := cfg["aliases"]; ok {
+			t.Errorf(".tlc.yaml still has aliases: key after strip")
+		}
+		if git, ok := cfg["git"].(map[string]any); !ok || git["track"] != false {
+			t.Errorf("git: section not preserved in flat layout: %v", cfg["git"])
+		}
+	})
+
+	// HopModeDirLayout asserts strip works against `<root>/.hop/tlc/config.yaml`
+	// (hop-mode dir layout). The migration target lands at .hop/tlc/aliases.yaml.
+	t.Run("HopModeDirLayout", func(t *testing.T) {
+		tmpDir := setupStripTest(t)
+		// Create the .hop/tlc/ subdir so the localAliasPath walker finds it.
+		if err := os.MkdirAll(filepath.Join(tmpDir, ".hop", "tlc"), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		cfgPath := filepath.Join(tmpDir, ".hop", "tlc", "config.yaml")
+		writeFile(t, cfgPath, ""+
+			"aliases:\n"+
+			"  tl: task list\n"+
+			"output:\n"+
+			"  format: json\n",
+		)
+
+		primeViper(t, cfgPath)
+		migrateLegacyAliases()
+
+		// Strip succeeded.
+		cfg := readYAMLMap(t, cfgPath)
+		if _, ok := cfg["aliases"]; ok {
+			t.Errorf(".hop/tlc/config.yaml still has aliases: key after strip")
+		}
+		// Migration landed somewhere reachable; output section preserved.
+		if out, ok := cfg["output"].(map[string]any); !ok || out["format"] != "json" {
+			t.Errorf("output: section not preserved in hop-mode layout: %v", cfg["output"])
+		}
+	})
+
+	// UserScopeOnlyLayout asserts strip works when the legacy key lives in
+	// the user-level config (XDG) and no project config exists. This is
+	// the common case for users who set `aliases:` in their global config
+	// before the YAML store existed.
+	t.Run("UserScopeOnlyLayout", func(t *testing.T) {
+		tmpDir := setupStripTest(t)
+		// XDG_CONFIG_HOME is already pointed at tmpDir by setupStripTest;
+		// create <tmpDir>/tlc/config.yaml as the user-level config.
+		userCfg := filepath.Join(tmpDir, "tlc", "config.yaml")
+		writeFile(t, userCfg, ""+
+			"aliases:\n"+
+			"  tl: task list\n"+
+			"output:\n"+
+			"  format: yaml\n",
+		)
+
+		primeViper(t, userCfg)
+		migrateLegacyAliases()
+
+		cfg := readYAMLMap(t, userCfg)
+		if _, ok := cfg["aliases"]; ok {
+			t.Errorf("user-level config.yaml still has aliases: key after strip")
+		}
+		if out, ok := cfg["output"].(map[string]any); !ok || out["format"] != "yaml" {
+			t.Errorf("output: section not preserved in user-scope strip: %v", cfg["output"])
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
