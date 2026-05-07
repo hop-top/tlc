@@ -28,13 +28,22 @@ const (
 )
 
 // ErrNotFound is the shared sentinel for "the thing you asked for
-// doesn't exist". Callers use errors.Is(err, cli.ErrNotFound) (or wrap
-// it via fmt.Errorf("...: %w", cli.ErrNotFound)) so exitCodeFor can
-// classify the error as ExitNotFound (3).
+// doesn't exist". Callers use errors.Is(err, cli.ErrNotFound) (or
+// wrap it via a typed error whose Unwrap() returns ErrNotFound — see
+// trackNotFoundError in track_resolve.go for the pattern).
 //
-// Existing typed errors (uri.ErrTaskNotFound, cli.ErrTrackNotFound)
-// implement Is() against this sentinel so callers don't need to know
-// every flavour.
+// exitCodeFor in root.go classifies an error as ExitNotFound (3) when
+// any of the following matches:
+//
+//   - errors.Is(err, ErrNotFound)         (this sentinel)
+//   - errors.Is(err, ErrTrackNotFound)    (legacy track-resolution sentinel)
+//   - errors.As(err, &*uri.ErrTaskNotFound)
+//   - errors.As(err, &*uri.ErrProjectNotFound)
+//
+// Don't wrap ErrNotFound via fmt.Errorf("...: %w", ErrNotFound)
+// directly — that appends ": not found" to the displayed message.
+// Prefer a small typed wrapper that returns the actionable string
+// from Error() and exposes ErrNotFound via Unwrap().
 var ErrNotFound = errors.New("not found")
 
 // ErrUnauthorized is the shared sentinel for auth-failure paths
@@ -51,22 +60,13 @@ type ExitCodeError struct {
 
 func (e *ExitCodeError) Error() string { return e.Message }
 
-// errTaskNotFound returns an actionable error for a missing task.
-// Tells the agent which command to run to see available tasks.
-// Wraps ErrNotFound so callers + exitCodeFor classify the error
-// uniformly via errors.Is.
-func errTaskNotFound(id string) error {
-	return fmt.Errorf("task %s not found; run 'tlc task list' to see available tasks: %w", id, ErrNotFound)
-}
-
-// errProjectNotFound returns an actionable error for an unregistered project.
-// Tells the agent how to register the project.
-func errProjectNotFound(projectID string) error {
-	return fmt.Errorf(
-		"project %q not found in registry; run 'tlc init' in the project root to register it: %w",
-		projectID, ErrNotFound,
-	)
-}
+// Note: errTaskNotFound + errProjectNotFound helpers used to live here
+// but had zero call sites. The actual not-found errors are produced by
+// internal/uri (ErrTaskNotFound, ErrProjectNotFound) which implement
+// AsCLIError() for kit middleware classification, and by
+// internal/cli.trackNotFoundError in track_resolve.go for tracks. If
+// you need a new not-found path, follow the trackNotFoundError pattern
+// rather than reintroducing fmt.Errorf wrappers around ErrNotFound.
 
 // errTransitionNotAllowed returns an actionable error for a blocked state-machine transition.
 // Lists the valid next statuses and the escape hatch.
