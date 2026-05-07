@@ -1,19 +1,70 @@
 package cli
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// Process exit codes used by tlc, classified per docs/exit-codes.md.
+//
+// 0 — success (no error)
+// 1 — generic failure (default for any unmapped error)
+// 2 — usage error (cobra default; unknown flag / bad args)
+// 3 — not found (task/track/flow/project missing)
+// 4 — conflict (policy denial, duplicate ID, state-machine refusal)
+// 5 — unauthorized (auth failure, sync 401/403)
+//
+// exitCodeFor in root.go maps errors to these codes. New error sites
+// should wrap one of the sentinels below (or use a typed error that
+// signals the right class via Is()) so the mapping picks them up
+// automatically.
+const (
+	ExitOK           = 0
+	ExitGeneric      = 1
+	ExitUsage        = 2
+	ExitNotFound     = 3
+	ExitConflict     = 4
+	ExitUnauthorized = 5
+)
+
+// ErrNotFound is the shared sentinel for "the thing you asked for
+// doesn't exist". Callers use errors.Is(err, cli.ErrNotFound) (or wrap
+// it via fmt.Errorf("...: %w", cli.ErrNotFound)) so exitCodeFor can
+// classify the error as ExitNotFound (3).
+//
+// Existing typed errors (uri.ErrTaskNotFound, cli.ErrTrackNotFound)
+// implement Is() against this sentinel so callers don't need to know
+// every flavour.
+var ErrNotFound = errors.New("not found")
+
+// ErrUnauthorized is the shared sentinel for auth-failure paths
+// (login refusal, sync 401/403, missing credential). Maps to
+// ExitUnauthorized (5).
+var ErrUnauthorized = errors.New("unauthorized")
+
+// ExitCodeError wraps a process exit code so callers can request a
+// specific code without rewiring the sentinel match.
+type ExitCodeError struct {
+	Code    int
+	Message string
+}
+
+func (e *ExitCodeError) Error() string { return e.Message }
 
 // errTaskNotFound returns an actionable error for a missing task.
 // Tells the agent which command to run to see available tasks.
+// Wraps ErrNotFound so callers + exitCodeFor classify the error
+// uniformly via errors.Is.
 func errTaskNotFound(id string) error {
-	return fmt.Errorf("task %s not found; run 'tlc task list' to see available tasks", id)
+	return fmt.Errorf("task %s not found; run 'tlc task list' to see available tasks: %w", id, ErrNotFound)
 }
 
 // errProjectNotFound returns an actionable error for an unregistered project.
 // Tells the agent how to register the project.
 func errProjectNotFound(projectID string) error {
 	return fmt.Errorf(
-		"project %q not found in registry; run 'tlc init' in the project root to register it",
-		projectID,
+		"project %q not found in registry; run 'tlc init' in the project root to register it: %w",
+		projectID, ErrNotFound,
 	)
 }
 

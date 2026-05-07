@@ -15,13 +15,8 @@ import (
 	xrr "hop.top/xrr"
 )
 
-// ExitCodeError wraps a process exit code so callers can detect specific codes.
-type ExitCodeError struct {
-	Code    int
-	Message string
-}
-
-func (e *ExitCodeError) Error() string { return e.Message }
+// ExitCodeError lives in errors.go; keep this file focused on the
+// `tlc flow test` command wiring.
 
 func init() {
 	FlowCmd.AddCommand(NewFlowTestCmd())

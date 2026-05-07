@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sahilm/fuzzy"
+	"hop.top/kit/go/console/output"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
@@ -14,6 +15,25 @@ import (
 // ErrTrackNotFound is returned when no track matches and zero fuzzy
 // candidates exist — the caller may offer to auto-create.
 var ErrTrackNotFound = errors.New("track not found")
+
+// trackNotFoundError carries the user-facing message and routes through
+// kit's cli middleware as a NOT_FOUND envelope (exit 3). Wraps the
+// ErrTrackNotFound sentinel so existing errors.Is callers keep working.
+type trackNotFoundError struct {
+	msg string
+}
+
+func (e *trackNotFoundError) Error() string  { return e.msg }
+func (e *trackNotFoundError) Unwrap() error  { return ErrTrackNotFound }
+func (e *trackNotFoundError) AsCLIError() *output.Error {
+	return output.NotFoundError(e.msg)
+}
+
+// newTrackNotFoundError constructs a typed not-found error from the
+// existing message format.
+func newTrackNotFoundError(format string, args ...any) error {
+	return &trackNotFoundError{msg: fmt.Sprintf(format, args...)}
+}
 
 // currentProjectID returns the active project ID for the current cwd,
 // or "" if no project context is detected.
@@ -52,9 +72,9 @@ func resolveTrackID(
 	if core.IsTrackID(input) {
 		id, err := core.ParseTrackRef(ctx, s, projectID, input)
 		if err != nil {
-			return "", fmt.Errorf(
-				"track %q: %w; run 'tlc track list' to see available tracks",
-				input, ErrTrackNotFound,
+			return "", newTrackNotFoundError(
+				"track %q not found; run 'tlc track list' to see available tracks",
+				input,
 			)
 		}
 		return id, nil
@@ -86,10 +106,9 @@ func resolveTrackID(
 		)
 	}
 	if len(all) == 0 {
-		return "", fmt.Errorf(
-			"track %q: %w; no tracks exist; "+
-				"run 'tlc track create' first",
-			input, ErrTrackNotFound,
+		return "", newTrackNotFoundError(
+			"track %q not found; no tracks exist; run 'tlc track create' first",
+			input,
 		)
 	}
 
@@ -125,10 +144,9 @@ func resolveTrackID(
 	// 3. Fuzzy match.
 	results := fuzzy.Find(lower, ids)
 	if len(results) == 0 {
-		return "", fmt.Errorf(
-			"track %q: %w; run 'tlc track list' "+
-				"to see available tracks",
-			input, ErrTrackNotFound,
+		return "", newTrackNotFoundError(
+			"track %q not found; run 'tlc track list' to see available tracks",
+			input,
 		)
 	}
 	if len(results) == 1 || results[0].Score > results[1].Score {

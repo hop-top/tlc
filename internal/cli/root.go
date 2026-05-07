@@ -26,6 +26,7 @@ import (
 	"hop.top/tlc/internal/events"
 	"hop.top/tlc/internal/extensions"
 	"hop.top/tlc/internal/storage"
+	"hop.top/tlc/internal/uri"
 	"hop.top/kit/go/core/upgrade"
 )
 
@@ -356,21 +357,24 @@ func Execute() {
 }
 
 // exitCodeFor maps the error returned by kitRootInstance.Execute to a
-// classified process exit code.  Defaults to 1.  PolicyDeniedError
-// (and anything wrapping domain.ErrConflict) maps to 4 so policy
-// refusals are scriptable; ExitCodeError forwards its own code; an
-// *output.Error envelope already carries the desired ExitCode.
+// classified process exit code per docs/exit-codes.md.
+//
+//	0 — success
+//	1 — generic failure (default)
+//	2 — usage error (cobra default; not produced here)
+//	3 — not found    (ErrNotFound, uri.ErrTaskNotFound, ErrTrackNotFound)
+//	4 — conflict     (policy denial, domain.ErrConflict)
+//	5 — unauthorized (ErrUnauthorized)
+//
+// ExitCodeError forwards its own code; *output.Error carries an
+// ExitCode field that takes precedence over sentinel matching when set.
 func exitCodeFor(err error) int {
 	if err == nil {
-		return 0
+		return ExitOK
 	}
-	var pde *policy.PolicyDeniedError
-	if errors.As(err, &pde) {
-		return 4
-	}
-	if errors.Is(err, domain.ErrConflict) {
-		return 4
-	}
+	// Explicit per-error overrides win: an ExitCodeError or *output.Error
+	// callers built deliberately should not be reclassified by the
+	// sentinel cascade below.
 	var exErr *ExitCodeError
 	if errors.As(err, &exErr) {
 		return exErr.Code
@@ -379,7 +383,31 @@ func exitCodeFor(err error) int {
 	if errors.As(err, &oe) && oe.ExitCode != 0 {
 		return oe.ExitCode
 	}
-	return 1
+	// Conflict (4): policy denials + domain conflicts.
+	var pde *policy.PolicyDeniedError
+	if errors.As(err, &pde) {
+		return ExitConflict
+	}
+	if errors.Is(err, domain.ErrConflict) {
+		return ExitConflict
+	}
+	// Unauthorized (5): credential/auth failures.
+	if errors.Is(err, ErrUnauthorized) {
+		return ExitUnauthorized
+	}
+	// Not found (3): shared sentinel + the typed errors that pre-date it.
+	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrTrackNotFound) {
+		return ExitNotFound
+	}
+	var taskNotFound *uri.ErrTaskNotFound
+	if errors.As(err, &taskNotFound) {
+		return ExitNotFound
+	}
+	var projNotFound *uri.ErrProjectNotFound
+	if errors.As(err, &projNotFound) {
+		return ExitNotFound
+	}
+	return ExitGeneric
 }
 
 func initConfig() {
