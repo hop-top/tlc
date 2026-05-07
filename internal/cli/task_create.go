@@ -244,6 +244,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	}
 
 	// Link to track if specified.
+	var parentTrackType string
 	if taskTrack != "" {
 		resolved, trackErr := resolveTrackID(ctx, s, taskTrack)
 		if trackErr != nil && errors.Is(trackErr, ErrTrackNotFound) {
@@ -258,6 +259,21 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 			return trackErr
 		}
 		task.TrackID = &resolved
+		// Read parent track type for the stage gate so feature_freeze
+		// can permit fix/chore tasks under fix/chore tracks. Errors are
+		// non-fatal here — the gate falls back to treating an unknown
+		// type as a feature task (the most-restrictive default).
+		if tr, _ := s.GetTrack(ctx, resolved); tr != nil {
+			parentTrackType = tr.Type
+		}
+	}
+
+	// Stage gate: refuse the create when the active scope's stage
+	// forbids it. Empty scope (no project context) skips the gate.
+	if task.ProjectID != nil && *task.ProjectID != "" {
+		if err := core.GateTaskCreate(*task.ProjectID, parentTrackType); err != nil {
+			return err
+		}
 	}
 
 	if task.Reference == "" {

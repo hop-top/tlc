@@ -55,6 +55,17 @@ var trackCreateCmd = &cobra.Command{
 			)
 		}
 
+		// Stage gate: refuse the create up-front when the active scope's
+		// kit/core/stage forbids it (feature_freeze / maintenance / sunset
+		// / archived per the default policy table). Scope is the project
+		// detected for cwd; an empty scope skips the gate so stage-naive
+		// adopters see no change. See core.GateTrackCreate for the table.
+		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
+			if err := core.GateTrackCreate(proj.ProjectID, trackCreateType); err != nil {
+				return err
+			}
+		}
+
 		s, err := getStorageRaw()
 		if err != nil {
 			return err
