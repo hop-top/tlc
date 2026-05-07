@@ -100,20 +100,19 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 		}
 	})
 
-	t.Run("DefensiveSkipWhenStoreMissingKey", func(t *testing.T) {
+	t.Run("DefensiveSkipOnDivergentValue", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
 		cfgPath := writeProjectConfig(t, tmpDir, ""+
 			"aliases:\n"+
-			"  tl: task list\n"+
-			"  missing: some cmd\n",
+			"  tl: task list --status TODO\n",
 		)
 
-		// Pre-populate aliases.yaml with ONLY tl, no `missing`. The migrator
-		// sees the store as non-empty and skips the migration step, then
-		// runs the strip-verify step which must fail because `missing`
-		// would be lost.
+		// Pre-populate aliases.yaml with `tl` mapped to a DIFFERENT value
+		// than the legacy key. Per-source migration must refuse to clobber
+		// the user-edited value: skip the strip and leave the legacy key
+		// in place so the user notices the divergence.
 		aliasesPath := filepath.Join(tmpDir, ".tlc", "aliases.yaml")
-		writeFile(t, aliasesPath, "tl: task list\n")
+		writeFile(t, aliasesPath, "tl: task list --status DONE\n")
 
 		primeViper(t, cfgPath)
 		migrateLegacyAliases()
@@ -122,16 +121,16 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 		cfg := readYAMLMap(t, cfgPath)
 		legacy, ok := cfg["aliases"].(map[string]any)
 		if !ok {
-			t.Fatalf("aliases: key was stripped despite missing entry; got %v", cfg)
+			t.Fatalf("aliases: key was stripped despite divergent value; got %v", cfg)
 		}
-		if legacy["missing"] != "some cmd" {
-			t.Errorf("missing entry not preserved in config.yaml; got %v", legacy)
+		if legacy["tl"] != "task list --status TODO" {
+			t.Errorf("legacy entry not preserved in config.yaml; got %v", legacy)
 		}
 
-		// aliases.yaml unchanged (still only tl).
+		// aliases.yaml unchanged (user-edited value wins).
 		got := readYAMLMap(t, aliasesPath)
-		if _, has := got["missing"]; has {
-			t.Errorf("aliases.yaml unexpectedly grew a 'missing' entry: %v", got)
+		if got["tl"] != "task list --status DONE" {
+			t.Errorf("user-edited aliases.yaml value clobbered; got %v", got)
 		}
 	})
 
@@ -320,6 +319,65 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 		// Migration landed somewhere reachable; output section preserved.
 		if out, ok := cfg["output"].(map[string]any); !ok || out["format"] != "json" {
 			t.Errorf("output: section not preserved in hop-mode layout: %v", cfg["output"])
+		}
+	})
+
+	// PerSourceRoutingPreventsScopeDrift asserts the headline T-1343 fix:
+	// when the legacy key lives in user-global config but cwd is inside a
+	// project (with no aliases: in the project config), entries route to
+	// the GLOBAL aliases.yaml — not the project-local one. This preserves
+	// scope visibility: a user-global alias remains usable from outside
+	// any project. Conversely, a project-local legacy block routes only
+	// to that project's store.
+	t.Run("PerSourceRoutingPreventsScopeDrift", func(t *testing.T) {
+		tmpDir := setupStripTest(t)
+
+		// User-global config carries the only legacy block.
+		userCfg := filepath.Join(tmpDir, "tlc", "config.yaml")
+		writeFile(t, userCfg, ""+
+			"aliases:\n"+
+			"  global-only: task list --mine\n",
+		)
+
+		// Project-local config exists but has no aliases:.
+		projCfg := writeProjectConfig(t, tmpDir, "git:\n  track: false\n")
+
+		// Prime viper with the project config so ConfigFileUsed() returns
+		// the project-local file (the historical "closest config wins"
+		// pre-T-1343 behavior would have routed the user-global entry
+		// to the project store; the new per-source routing must NOT).
+		primeViper(t, projCfg)
+		// Add the user config as an additional layer so the merged view
+		// surfaces the user-global aliases.
+		viper.SetConfigFile(userCfg)
+		if err := viper.MergeInConfig(); err != nil {
+			t.Fatal(err)
+		}
+		viper.SetConfigFile(projCfg) // restore "closest" pointer
+		migrateLegacyAliases()
+
+		// Global aliases.yaml got the entry (XDG_CONFIG_HOME → tmpDir/tlc/).
+		globalStore := filepath.Join(tmpDir, "tlc", "aliases.yaml")
+		gotGlobal := readYAMLMap(t, globalStore)
+		if gotGlobal["global-only"] != "task list --mine" {
+			t.Errorf("global aliases.yaml missing user-scope entry; got %v", gotGlobal)
+		}
+
+		// Project-local aliases.yaml does NOT have the user-scope entry.
+		projStore := filepath.Join(tmpDir, ".tlc", "aliases.yaml")
+		gotProj := readYAMLMap(t, projStore)
+		if _, leaked := gotProj["global-only"]; leaked {
+			t.Errorf("user-scope entry leaked into project store: %v", gotProj)
+		}
+
+		// User config legacy key was stripped; project config unchanged.
+		userAfter := readYAMLMap(t, userCfg)
+		if _, ok := userAfter["aliases"]; ok {
+			t.Errorf("user config still has aliases: key after strip")
+		}
+		projAfter := readYAMLMap(t, projCfg)
+		if _, ok := projAfter["aliases"]; ok {
+			t.Errorf("project config gained an aliases: key it shouldn't have: %v", projAfter)
 		}
 	})
 
