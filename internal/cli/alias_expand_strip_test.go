@@ -408,6 +408,77 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 			t.Errorf("output: section not preserved in user-scope strip: %v", cfg["output"])
 		}
 	})
+
+	// MalformedAliasesShape asserts that exotic aliases: shapes (scalar,
+	// list, mixed types) are tolerated rather than triggering a parse-
+	// error warning. The source is treated as "no legacy block here";
+	// other sources still get processed.
+	t.Run("MalformedAliasesShape", func(t *testing.T) {
+		for _, shape := range []struct {
+			name    string
+			content string
+		}{
+			{name: "scalar", content: "aliases: not-a-map\n"},
+			{name: "list", content: "aliases:\n  - one\n  - two\n"},
+		} {
+			t.Run(shape.name, func(t *testing.T) {
+				tmpDir := setupStripTest(t)
+				cfgPath := writeProjectConfig(t, tmpDir, shape.content+"git:\n  track: false\n")
+
+				before := mustReadFile(t, cfgPath)
+				primeViper(t, cfgPath)
+				migrateLegacyAliases()
+				after := mustReadFile(t, cfgPath)
+
+				// Malformed shape → migration treats it as "no legacy
+				// block"; config.yaml is untouched, no warnings about
+				// parse failure, no aliases.yaml created.
+				if string(before) != string(after) {
+					t.Errorf("config.yaml mutated despite malformed aliases shape;\nbefore:\n%s\nafter:\n%s",
+						before, after)
+				}
+				aliasesPath := filepath.Join(tmpDir, ".tlc", "aliases.yaml")
+				if _, err := os.Stat(aliasesPath); err == nil {
+					t.Errorf("aliases.yaml unexpectedly created on malformed shape")
+				}
+			})
+		}
+	})
+
+	// PartialMigrationOnConflict asserts that when one key conflicts and
+	// another is missing, the missing key is migrated and the strip is
+	// skipped (because of the conflict). Replaces the prior behaviour of
+	// returning on the first conflict — that orphaned non-conflicting
+	// keys until the next run.
+	t.Run("PartialMigrationOnConflict", func(t *testing.T) {
+		tmpDir := setupStripTest(t)
+		cfgPath := writeProjectConfig(t, tmpDir, ""+
+			"aliases:\n"+
+			"  conflict: value-from-source\n"+
+			"  fresh: task list --new\n",
+		)
+		// Pre-populate target with a divergent value for `conflict`.
+		aliasesPath := filepath.Join(tmpDir, ".tlc", "aliases.yaml")
+		writeFile(t, aliasesPath, "conflict: value-from-store\n")
+
+		primeViper(t, cfgPath)
+		migrateLegacyAliases()
+
+		// `fresh` migrated despite the conflict on `conflict`.
+		got := readYAMLMap(t, aliasesPath)
+		if got["fresh"] != "task list --new" {
+			t.Errorf("non-conflicting key not migrated; got %v", got)
+		}
+		// `conflict` value preserved (target wins).
+		if got["conflict"] != "value-from-store" {
+			t.Errorf("conflict value clobbered; got %v", got)
+		}
+		// Strip skipped because of the conflict.
+		cfg := readYAMLMap(t, cfgPath)
+		if _, ok := cfg["aliases"]; !ok {
+			t.Errorf("aliases: key was stripped despite conflict; got %v", cfg)
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------

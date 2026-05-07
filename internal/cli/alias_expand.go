@@ -230,9 +230,14 @@ func migrateLegacyAliasesFromSource(cfgPath string) {
 
 	// Migrate any entries the target store is missing. Pre-existing
 	// entries in the target are preserved (don't clobber a user-edited
-	// alias with a stale legacy value).
+	// alias with a stale legacy value). When a key collides with a
+	// divergent value in the target, mark the source as having a
+	// conflict and skip the strip step at the end — but keep migrating
+	// the source's other non-conflicting keys so partial progress isn't
+	// lost on the next run.
 	stored := store.All()
 	var migrated int
+	hasConflict := false
 	for k, v := range entries {
 		if v == "" {
 			continue
@@ -241,17 +246,17 @@ func migrateLegacyAliasesFromSource(cfgPath string) {
 			continue // already migrated
 		}
 		if _, ok := stored[k]; ok {
-			// Same key with a different value: the YAML store wins
-			// (user-edited or migrated from another source). Don't
-			// overwrite, and don't strip — leave the legacy key in
-			// place so the user notices the divergence.
-			log.Warn("alias migration: target store has divergent value; skipping source",
+			// Same key, different value: target wins. Don't overwrite;
+			// flag the source for skip-strip; continue with other keys.
+			log.Warn("alias migration: target store has divergent value; will skip strip for this source",
 				"alias", k, "source", cfgPath, "target", target)
-			return
+			hasConflict = true
+			continue
 		}
 		if err := store.Set(k, v); err != nil {
 			log.Warn("alias migration: set failed", "alias", k, "error", err)
-			return
+			hasConflict = true
+			continue
 		}
 		migrated++
 	}
@@ -266,6 +271,16 @@ func migrateLegacyAliasesFromSource(cfgPath string) {
 			log.Warn("alias migration: reload after save failed", "path", target, "error", err)
 			return
 		}
+	}
+
+	// Skip strip when any key conflicted with the target store: leaving
+	// the legacy block in place is how the user notices the divergence
+	// and decides which value to keep. Non-conflicting keys above were
+	// still migrated (partial progress preserved for the next run).
+	if hasConflict {
+		log.Warn("alias migration: skipping strip — at least one key diverges between source and target",
+			"source", cfgPath, "target", target)
+		return
 	}
 
 	// Defensive verification: every entry from this source must now be
@@ -289,8 +304,16 @@ func migrateLegacyAliasesFromSource(cfgPath string) {
 
 // readAliasesBlock parses path directly (not via viper) and extracts
 // the top-level `aliases:` map. Returns an empty map when the file is
-// missing, has no `aliases:` key, or the key holds a non-map value.
-// Errors only on I/O failures or malformed YAML.
+// missing, has no `aliases:` key, or the key holds a non-map value
+// (e.g. scalar or list — treated as "no legacy aliases here" rather
+// than as a fatal parse error so a user with an unexpected shape
+// still gets the rest of the migration).
+//
+// Errors only on I/O failures or YAML that fails the top-level parse.
+// Per-entry shape problems (non-string keys/values under aliases:)
+// are silently skipped: the entry is left out of the returned map but
+// the function does not error. Callers see "no legacy block here" and
+// move on.
 func readAliasesBlock(path string) (map[string]string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -299,13 +322,66 @@ func readAliasesBlock(path string) (map[string]string, error) {
 		}
 		return nil, err
 	}
-	var doc struct {
-		Aliases map[string]string `yaml:"aliases"`
-	}
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
+	// Parse permissively into a yaml.Node so we can branch on the
+	// shape of the `aliases:` value rather than relying on
+	// strict map[string]string unmarshalling (which errors on any
+	// scalar/list/non-string value).
+	var root yaml.Node
+	if err := yaml.Unmarshal(raw, &root); err != nil {
 		return nil, err
 	}
-	return doc.Aliases, nil
+	mapping := unwrapDocumentMapping(&root)
+	if mapping == nil {
+		return nil, nil
+	}
+	aliasesNode := findMappingValue(mapping, "aliases")
+	if aliasesNode == nil || aliasesNode.Kind != yaml.MappingNode {
+		// No aliases: key, or it holds a non-map value. Treat both as
+		// "no legacy block here" — caller sees an empty result and
+		// moves on without warning the user about exotic shapes.
+		return nil, nil
+	}
+	out := make(map[string]string, len(aliasesNode.Content)/2)
+	for i := 0; i+1 < len(aliasesNode.Content); i += 2 {
+		k := aliasesNode.Content[i]
+		v := aliasesNode.Content[i+1]
+		if k.Kind != yaml.ScalarNode || v.Kind != yaml.ScalarNode {
+			continue // skip non-scalar entries silently
+		}
+		out[k.Value] = v.Value
+	}
+	return out, nil
+}
+
+// unwrapDocumentMapping returns the top-level mapping node of a parsed
+// YAML doc, walking past the document wrapper. Returns nil for empty
+// or non-mapping documents.
+func unwrapDocumentMapping(root *yaml.Node) *yaml.Node {
+	if root == nil {
+		return nil
+	}
+	if root.Kind == yaml.DocumentNode {
+		if len(root.Content) == 0 {
+			return nil
+		}
+		root = root.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	return root
+}
+
+// findMappingValue returns the value node paired with key in mapping,
+// or nil if key is absent. mapping must be a YAML MappingNode.
+func findMappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		k := mapping.Content[i]
+		if k.Kind == yaml.ScalarNode && k.Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	return nil
 }
 
 // storePathForConfig returns the YAML alias store path that should
