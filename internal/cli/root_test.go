@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -641,9 +642,26 @@ func TestResolvePreChdirTarget_TildeAndRelative(t *testing.T) {
 		t.Errorf("~ did not resolve to absolute path: %q", got)
 	}
 
-	// Non-existent path returns an error.
-	if _, err := resolvePreChdirTarget(filepath.Join(tmpDir, "does-not-exist")); err == nil {
-		t.Errorf("expected error for non-existent path")
+	// Non-existent path with a slash (won't fuzzy-match anything in the
+	// registry) falls through and errors. The message must reference the
+	// input target so users see what failed.
+	missingPath := filepath.Join(tmpDir, "does-not-exist")
+	_, err = resolvePreChdirTarget(missingPath)
+	if err == nil {
+		t.Errorf("expected error for non-existent path that doesn't fuzzy-match")
+	} else if !strings.Contains(err.Error(), missingPath) && !strings.Contains(err.Error(), "does-not-exist") {
+		t.Errorf("error must reference the input target; got: %v", err)
+	}
+
+	// A regular file (not a directory) at the resolved path also falls
+	// through to fuzzy match — a non-directory path shouldn't shadow a
+	// registered project of the same name.
+	regular := filepath.Join(tmpDir, "regular-file")
+	if err := os.WriteFile(regular, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolvePreChdirTarget(regular); err == nil {
+		t.Errorf("expected error when path is a regular file with no matching project")
 	}
 }
 
