@@ -8,6 +8,10 @@
 //
 // Precedence: project > global. ExpandAliases (alias_expand.go) merges both
 // stores at expansion time with project entries overriding global.
+//
+// Migration history: the `aliases:` key was deprecated when this package
+// was introduced; auto-strip behaviour was added later (see RELEASING.md
+// or CHANGELOG.md unreleased section, T-1342).
 package cli
 
 import (

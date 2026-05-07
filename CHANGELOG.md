@@ -23,6 +23,16 @@
   Migration applies automatically on first run; existing rows are
   preserved. (T-1232)
 
+### Deprecated
+
+- Legacy `aliases:` key in `config.yaml` is now auto-removed after a one-time
+  migration to `<config-dir>/aliases.yaml`. The deprecation warning that
+  previously fired on every tlc invocation is now a single one-time message;
+  on subsequent runs, no warning. No user action required — migration is
+  defensive (won't strip the legacy key unless the YAML store has every
+  legacy entry first). User-level + project-level configs both covered;
+  system config (`/etc/tlc/`) intentionally untouched (root-only). (T-1339)
+
 ### Note for operators
 
 - `tlc task delete <id>` without `--note` now exits 4 with a

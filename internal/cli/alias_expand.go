@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"hop.top/kit/go/console/alias"
+	kitconfig "hop.top/kit/go/core/config"
 	"hop.top/kit/go/core/xdg"
 	"hop.top/tlc/internal/config"
 )
@@ -195,32 +197,134 @@ func migrateLegacyAliases() {
 			log.Warn("alias migration: load failed", "path", target, "error", err)
 			return
 		}
-		// Idempotent: only migrate when the YAML store is empty so we do
-		// not clobber previously-migrated/edited entries.
-		if len(store.All()) > 0 {
-			return
-		}
-		var migrated int
-		for k, v := range raw {
-			if v == "" {
-				continue
+
+		// Migrate when the YAML store is empty. When non-empty, treat the
+		// migration as already-done and skip straight to the strip step
+		// (the legacy key may still be sitting in config.yaml from a
+		// previous run that pre-dates the auto-strip behaviour).
+		if len(store.All()) == 0 {
+			var migrated int
+			for k, v := range raw {
+				if v == "" {
+					continue
+				}
+				if err := store.Set(k, v); err != nil {
+					log.Warn("alias migration: skip entry", "name", k, "error", err)
+					continue
+				}
+				migrated++
 			}
-			if err := store.Set(k, v); err != nil {
-				log.Warn("alias migration: skip entry", "name", k, "error", err)
-				continue
+			if migrated == 0 {
+				return
 			}
-			migrated++
+			if err := store.Save(); err != nil {
+				log.Warn("alias migration: save failed", "path", target, "error", err)
+				return
+			}
+			log.Info("Migrated legacy aliases to YAML store",
+				"count", migrated, "path", target)
+			// Re-load so verifyMigratedKeys reads the freshly-written
+			// values rather than the pre-Save in-memory state.
+			if err := store.Load(); err != nil {
+				log.Warn("alias migration: reload after save failed", "path", target, "error", err)
+				return
+			}
 		}
-		if migrated == 0 {
+
+		// Defensive verification: only strip the legacy aliases: key from
+		// config.yaml after confirming the merged YAML alias view
+		// actually contains every entry the legacy map had. The cost of
+		// a recurring deprecation warning << the cost of silently
+		// losing aliases.
+		if !verifyMigratedKeys(raw) {
+			log.Warn("alias migration: skipping config.yaml strip — merged YAML store is missing legacy entries")
 			return
 		}
-		if err := store.Save(); err != nil {
-			log.Warn("alias migration: save failed", "path", target, "error", err)
-			return
-		}
-		log.Info("Migrated legacy aliases to YAML store",
-			"count", migrated, "path", target)
+		stripLegacyAliasesFromConfigs()
 	})
+}
+
+// verifyMigratedKeys confirms every entry in `legacy` is reachable in
+// the merged YAML alias view (seeded + global + project, with project
+// overriding global per loadMergedAliases). Returns false on any load
+// error or missing/divergent entry — callers must skip the strip step
+// in that case.
+//
+// This must consult the merged view rather than just the migration
+// target: the legacy key may have come from a different scope than
+// where the migrator wrote (e.g. legacy in user-global config.yaml,
+// migrator wrote to project-local store because cwd is inside a
+// project). Strip safety requires the entries be reachable somewhere
+// after migration, not necessarily co-located with the legacy key.
+func verifyMigratedKeys(legacy map[string]string) bool {
+	merged, err := loadMergedAliases()
+	if err != nil {
+		return false
+	}
+	for k, v := range legacy {
+		if v == "" {
+			continue // empty values are skipped by the migrator; ignore here
+		}
+		got, ok := merged[k]
+		if !ok || got != v {
+			return false
+		}
+	}
+	return true
+}
+
+// stripLegacyAliasesFromConfigs removes the deprecated `aliases:` key
+// from every tlc config.yaml file in the user/project scopes. Uses
+// kit/core/config.Unset which preserves comments + ordering, writes
+// atomically, and cleans empty parent mappings. Errors are logged but
+// never fail the CLI run — leaving the key in place just means the
+// deprecation warning fires again on the next invocation.
+//
+// Skips ScopeSystem (root-only). Walks both standalone (.tlc/) and
+// hop-mode (.hop/tlc/) markers because tlc supports both layouts.
+func stripLegacyAliasesFromConfigs() {
+	// Build options for the canonical tlc config cascade. Pass both
+	// standalone and hop-mode project markers so the project-scope
+	// strip works in either layout.
+	markers := []string{
+		".tlc/config.yaml",
+		".hop/tlc/config.yaml",
+	}
+	opts := kitconfig.OptionsForToolWithMarkers("tlc", markers)
+
+	for _, scope := range []kitconfig.Scope{kitconfig.ScopeProject, kitconfig.ScopeUser} {
+		path, perr := kitconfig.ScopePath(opts, scope)
+		if perr != nil {
+			// Empty scope path: nothing to strip in this scope.
+			continue
+		}
+		if err := kitconfig.Unset("aliases", scope, opts); err != nil {
+			if errors.Is(err, kitconfig.ErrKeyNotFound) {
+				continue // legacy key wasn't in this file; OK
+			}
+			log.Warn("alias migration: failed to strip legacy key from config",
+				"scope", scopeName(scope), "path", path, "error", err)
+			continue
+		}
+		log.Info("Removed deprecated aliases: key from config.yaml",
+			"scope", scopeName(scope), "path", path)
+	}
+}
+
+// scopeName renders a kit Scope value as a stable lowercase string for
+// log output. Mirrors what the kit/core/config package would expose
+// publicly if it did.
+func scopeName(s kitconfig.Scope) string {
+	switch s {
+	case kitconfig.ScopeSystem:
+		return "system"
+	case kitconfig.ScopeUser:
+		return "user"
+	case kitconfig.ScopeProject:
+		return "project"
+	default:
+		return "unknown"
+	}
 }
 
 var migrateLegacyAliasesOnce sync.Once
