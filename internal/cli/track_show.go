@@ -144,7 +144,7 @@ func renderTrackShowDetail(
 ) {
 	// Header
 	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", formatTrackAlias(t))))
-	if isVerboseOutput() && t.ID != "" && t.ID != formatTrackAlias(t) {
+	if isShowTypeIDOutput() && t.ID != "" && t.ID != formatTrackAlias(t) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("ID:"), t.ID)
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)

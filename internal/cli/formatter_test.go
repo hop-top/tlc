@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -187,16 +188,21 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 		}
 	})
 
-	t.Run("VerboseShowsFullURI", func(t *testing.T) {
-		viper.Set("output.verbose", true)
+	t.Run("ShowTypeIDOptInRevealsFullURI", func(t *testing.T) {
+		// `output.show_typeid` opts in to typeid display (replaces the
+		// pre-decoupling assumption that `output.verbose` was the gate).
+		// Verbose still controls debug logging but no longer leaks typeids
+		// into every render — see isShowTypeIDOutput in formatter.go.
+		viper.Set("output.show_typeid", true)
+		t.Cleanup(func() { viper.Set("output.show_typeid", false) })
 		var buf bytes.Buffer
 		renderTaskDetail(&buf, autoTask, nil)
 		out := buf.String()
 		if !strings.Contains(out, "Reference:") {
-			t.Errorf("verbose output must show Reference line; got:\n%s", out)
+			t.Errorf("show-typeid output must show Reference line; got:\n%s", out)
 		}
 		if !strings.Contains(out, "tlc://hop-top/tlc/"+typeid) {
-			t.Errorf("verbose output must contain full URI; got:\n%s", out)
+			t.Errorf("show-typeid output must contain full URI; got:\n%s", out)
 		}
 	})
 
@@ -210,6 +216,70 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 		}
 		if !strings.Contains(out, "github:issues/123") {
 			t.Errorf("default output must contain external ref value; got:\n%s", out)
+		}
+	})
+}
+
+// TestIsShowTypeIDOutput pins the decoupling between `output.verbose` and
+// typeid display: a user enabling verbose for debug logging should NOT
+// see typeids leak into every render. Only the explicit opt-ins below
+// flip the gate.
+func TestIsShowTypeIDOutput(t *testing.T) {
+	prevVerbose := viper.GetBool("output.verbose")
+	prevShow := viper.GetBool("output.show_typeid")
+	prevLevel := viper.GetInt("output.verbose_level")
+	t.Cleanup(func() {
+		viper.Set("output.verbose", prevVerbose)
+		viper.Set("output.show_typeid", prevShow)
+		viper.Set("output.verbose_level", prevLevel)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+	})
+
+	t.Run("default is false", func(t *testing.T) {
+		viper.Set("output.verbose", false)
+		viper.Set("output.show_typeid", false)
+		viper.Set("output.verbose_level", 0)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if isShowTypeIDOutput() {
+			t.Errorf("expected false when nothing opts in")
+		}
+	})
+
+	t.Run("verbose alone does NOT enable", func(t *testing.T) {
+		viper.Set("output.verbose", true)
+		viper.Set("output.show_typeid", false)
+		viper.Set("output.verbose_level", 0)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if isShowTypeIDOutput() {
+			t.Errorf("verbose should NOT pull in typeid display (decoupling)")
+		}
+	})
+
+	t.Run("output.show_typeid opt-in", func(t *testing.T) {
+		viper.Set("output.verbose", false)
+		viper.Set("output.show_typeid", true)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if !isShowTypeIDOutput() {
+			t.Errorf("output.show_typeid=true must enable")
+		}
+	})
+
+	t.Run("TLC_SHOW_TYPEID env opt-in", func(t *testing.T) {
+		viper.Set("output.verbose", false)
+		viper.Set("output.show_typeid", false)
+		t.Setenv("TLC_SHOW_TYPEID", "1")
+		if !isShowTypeIDOutput() {
+			t.Errorf("TLC_SHOW_TYPEID=1 must enable")
+		}
+	})
+
+	t.Run("verbose level 2+ opts in", func(t *testing.T) {
+		viper.Set("output.verbose", true)
+		viper.Set("output.show_typeid", false)
+		viper.Set("output.verbose_level", 2)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if !isShowTypeIDOutput() {
+			t.Errorf("verbose_level >= 2 (i.e. -VV) must enable")
 		}
 	})
 }

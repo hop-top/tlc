@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/kit/go/runtime/bus"
 	kitcli "hop.top/kit/go/console/cli"
+	kitconfig "hop.top/kit/go/core/config"
 	"hop.top/kit/go/console/output"
 	"hop.top/kit/go/runtime/domain"
 	"hop.top/kit/go/runtime/policy"
@@ -33,6 +34,11 @@ import (
 const backendSQLite = "sqlite"
 
 var (
+	// cfgFile is a test-only seam. Production users pass -c/--config
+	// via kit's StringArray flag (see kitRoot for the binding); the
+	// global viper key "config" carries the parsed value. Tests need
+	// to inject a config file path at runtime without going through
+	// flag parsing, so initConfig also honors this var when non-empty.
 	cfgFile    string
 	tlcVersion = "dev" // overridden at build time via -ldflags
 )
@@ -165,9 +171,10 @@ func kitRoot() *kitcli.Root {
 	cmd.Long = "TLC provides commands for task management, flow execution, and collaboration."
 
 	// --- TLC-specific persistent flags ---
-	// kit provides --quiet, --no-color, --format, and --verbose/-V
-	// (count flag) — re-registered in kit's new go/console/cli layout.
-	cmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
+	// kit provides --quiet, --no-color, --format, --verbose/-V (count
+	// flag) and -c/--config (StringArrayP — repeatable, supports both
+	// `key=value` overrides and bare paths) in the kit/console/cli
+	// layout. tlc consumes -c via root.ConfigArgs() during initConfig.
 
 	// Persistent global flags from cli-conventions §5.
 	// See docs/global-flags.md for behaviour and viper bindings.
@@ -192,6 +199,13 @@ func kitRoot() *kitcli.Root {
 	// Bind TLC flags to the global viper using namespaced keys.
 	if err := viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format")); err != nil {
 		log.Warn("Failed to bind format flag", "error", err)
+	}
+	// kit binds -c/--config (StringArray, supports `key=value` overrides
+	// and bare paths) to its own root.Viper. Bridge to the global viper
+	// so initConfig can read it without referencing kitRootInstance
+	// (avoids an init cycle through cobra.OnInitialize).
+	if err := viper.BindPFlag("config", cmd.PersistentFlags().Lookup("config")); err != nil {
+		log.Warn("Failed to bind config flag", "error", err)
 	}
 	// kit binds --verbose to its own viper as a count; alias the flat
 	// "verbose" key on the global viper to TLC's namespaced key.
@@ -413,18 +427,35 @@ func exitCodeFor(err error) int {
 func initConfig() {
 	setDefaults()
 
-	// normalizedCfgFile holds the resolved explicit config path (if any).
-	// We always run the normal cascade first so that system/user/project
-	// defaults are present; then we merge the explicit file on top.
-	normalizedCfgFile := ""
+	// kit's -c/--config is a StringArray that supports two token shapes:
+	//   - bare path → load as additional config file after the cascade
+	//   - key=value → apply as an override after files load
+	// Resolve paths now (preserving tlc's project-shortname lookup) so
+	// any "hard fail" surfaces before we touch viper. Overrides apply
+	// post-cascade so they win over file layers. Read from the global
+	// viper (kit binds the flag there per kitRoot()) to avoid touching
+	// kitRootInstance from inside cobra.OnInitialize — referencing it
+	// here would form an init cycle since kitRootInstance := kitRoot()
+	// and kitRoot() registers OnInitialize(initConfig).
+	rawConfigTokens := viper.GetStringSlice("config")
 	if cfgFile != "" {
-		resolved, err := resolveConfigFlag(cfgFile)
-		if err != nil {
+		// Test-only seam: when set, treat it as a single bare path token.
+		rawConfigTokens = append(rawConfigTokens, cfgFile)
+	}
+	extraPaths, configOverrides, err := kitconfig.ParseConfigArgs(rawConfigTokens)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid -c/--config: %s\n", err)
+		os.Exit(1)
+	}
+	resolvedExtraPaths := make([]string, 0, len(extraPaths))
+	for _, p := range extraPaths {
+		resolved, rErr := resolveConfigFlag(p)
+		if rErr != nil {
 			// Hard fail: shortname not found as file or registry project.
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Error: %s\n", rErr)
 			os.Exit(1)
 		}
-		normalizedCfgFile = resolved
+		resolvedExtraPaths = append(resolvedExtraPaths, resolved)
 	}
 
 	{
@@ -479,13 +510,18 @@ func initConfig() {
 		}
 	}
 
-	// Merge the explicit --config file on top of the cascade so its keys
-	// override anything loaded from system/user/project configs.
-	if normalizedCfgFile != "" {
-		viper.SetConfigFile(normalizedCfgFile)
+	// Merge each explicit -c <path> on top of the cascade so its keys
+	// override anything loaded from system/user/project configs. Files
+	// merge in argument order; overrides (key=value tokens) apply last
+	// so they win over every file layer.
+	for _, path := range resolvedExtraPaths {
+		viper.SetConfigFile(path)
 		if err := viper.MergeInConfig(); err != nil {
-			log.Warn("Failed to read config file", "path", normalizedCfgFile, "error", err)
+			log.Warn("Failed to read config file", "path", path, "error", err)
 		}
+	}
+	for k, v := range configOverrides {
+		viper.Set(k, v)
 	}
 
 	viper.SetEnvPrefix("TLC")
