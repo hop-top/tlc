@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -33,16 +34,16 @@ var TaskShowCmd = &cobra.Command{
 
 		ctx := context.Background()
 
-		var errs []string
+		var errs []error
 		for i, id := range args {
 			canonical, parseErr := parseTaskRefForCLI(ctx, s, id)
 			if parseErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", id, parseErr))
+				errs = append(errs, fmt.Errorf("%s: %w", id, parseErr))
 				continue
 			}
 			res, resolveErr := uri.NewResolver(s).ResolveTask(ctx, canonical)
 			if resolveErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", id, resolveErr))
+				errs = append(errs, fmt.Errorf("%s: %w", id, resolveErr))
 				continue
 			}
 			task := res.Task
@@ -61,7 +62,7 @@ var TaskShowCmd = &cobra.Command{
 				}
 				logs, err = res.Storage.GetLogs(ctx, task.ID, direction)
 				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: failed to get logs: %v", id, err))
+					errs = append(errs, fmt.Errorf("%s: failed to get logs: %w", id, err))
 					continue
 				}
 			}
@@ -95,7 +96,13 @@ var TaskShowCmd = &cobra.Command{
 		}
 
 		if len(errs) > 0 {
-			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+			// errors.Join preserves each wrapped sentinel so exitCodeFor
+			// classifies the result (e.g. all not-found → ExitNotFound).
+			joined := errors.Join(errs...)
+			if len(args) == 1 {
+				return joined
+			}
+			return fmt.Errorf("some tasks failed: %w", joined)
 		}
 		return nil
 	},
