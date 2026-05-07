@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
 	"hop.top/kit/go/console/alias"
+	kitconfig "hop.top/kit/go/core/config"
 	"hop.top/kit/go/core/xdg"
 	"hop.top/tlc/internal/config"
 )
@@ -195,32 +197,151 @@ func migrateLegacyAliases() {
 			log.Warn("alias migration: load failed", "path", target, "error", err)
 			return
 		}
-		// Idempotent: only migrate when the YAML store is empty so we do
-		// not clobber previously-migrated/edited entries.
-		if len(store.All()) > 0 {
-			return
-		}
-		var migrated int
-		for k, v := range raw {
-			if v == "" {
-				continue
+
+		// Migrate when the YAML store is empty. When non-empty, treat the
+		// migration as already-done and skip straight to the strip step
+		// (the legacy key may still be sitting in config.yaml from a
+		// previous run that pre-dates the auto-strip behaviour).
+		if len(store.All()) == 0 {
+			var migrated int
+			for k, v := range raw {
+				if v == "" {
+					continue
+				}
+				if err := store.Set(k, v); err != nil {
+					log.Warn("alias migration: skip entry", "name", k, "error", err)
+					continue
+				}
+				migrated++
 			}
-			if err := store.Set(k, v); err != nil {
-				log.Warn("alias migration: skip entry", "name", k, "error", err)
-				continue
+			if migrated == 0 {
+				return
 			}
-			migrated++
+			if err := store.Save(); err != nil {
+				log.Warn("alias migration: save failed", "path", target, "error", err)
+				return
+			}
+			log.Info("Migrated legacy aliases to YAML store",
+				"count", migrated, "path", target)
+			// Re-load so verifyMigratedKeys reads the freshly-written
+			// values rather than the pre-Save in-memory state.
+			if err := store.Load(); err != nil {
+				log.Warn("alias migration: reload after save failed", "path", target, "error", err)
+				return
+			}
 		}
-		if migrated == 0 {
+
+		// Defensive verification: only strip the legacy aliases: key from
+		// config.yaml after confirming the merged YAML alias view
+		// actually contains every entry the legacy map had. The cost of
+		// a recurring deprecation warning << the cost of silently
+		// losing aliases.
+		if !verifyMigratedKeys(raw) {
+			log.Warn("alias migration: skipping config.yaml strip — merged YAML store is missing legacy entries")
 			return
 		}
-		if err := store.Save(); err != nil {
-			log.Warn("alias migration: save failed", "path", target, "error", err)
-			return
-		}
-		log.Info("Migrated legacy aliases to YAML store",
-			"count", migrated, "path", target)
+		stripLegacyAliasesFromConfigs()
 	})
+}
+
+// verifyMigratedKeys confirms every entry in `legacy` is reachable in
+// the merged YAML alias view (seeded + global + project, with project
+// overriding global per loadMergedAliases). Returns false on any load
+// error or missing/divergent entry — callers must skip the strip step
+// in that case.
+//
+// This must consult the merged view rather than just the migration
+// target: the legacy key may have come from a different scope than
+// where the migrator wrote (e.g. legacy in user-global config.yaml,
+// migrator wrote to project-local store because cwd is inside a
+// project). Strip safety requires the entries be reachable somewhere
+// after migration, not necessarily co-located with the legacy key.
+func verifyMigratedKeys(legacy map[string]string) bool {
+	merged, err := loadMergedAliases()
+	if err != nil {
+		return false
+	}
+	for k, v := range legacy {
+		if v == "" {
+			continue // empty values are skipped by the migrator; ignore here
+		}
+		got, ok := merged[k]
+		if !ok || got != v {
+			return false
+		}
+	}
+	return true
+}
+
+// stripLegacyAliasesFromConfigs removes the deprecated `aliases:` key
+// from every tlc config file in the loaded cascade. Uses
+// kit/core/config.Unset which preserves comments + ordering, writes
+// atomically, and cleans empty parent mappings. Errors are logged but
+// never fail the CLI run — leaving the key in place just means the
+// deprecation warning fires again on the next invocation.
+//
+// Walks the full project cascade (all ancestor `.tlc/config.yaml`,
+// `.tlc.yaml`, `.hop/tlc/config.yaml`, `.hop/tlc.yaml` files between
+// cwd and the project boundary) plus the user-level config. System
+// configs (/etc/tlc/) are skipped (root-only).
+func stripLegacyAliasesFromConfigs() {
+	for _, path := range allLegacyConfigPaths() {
+		if err := unsetAliasesAtPath(path); err != nil {
+			if errors.Is(err, kitconfig.ErrKeyNotFound) {
+				continue // legacy key wasn't in this file; OK
+			}
+			log.Warn("alias migration: failed to strip legacy key from config",
+				"path", path, "error", err)
+			continue
+		}
+		log.Info("Removed deprecated aliases: key from config.yaml",
+			"path", path)
+	}
+}
+
+// unsetAliasesAtPath strips the top-level `aliases:` key from a single
+// config file. Treats the file as the project-scope target so callers
+// can iterate over an arbitrary cascade without conflating each entry
+// with kit's user/project distinction.
+func unsetAliasesAtPath(path string) error {
+	opts := kitconfig.Options{ProjectConfigPath: path}
+	return kitconfig.Unset("aliases", kitconfig.ScopeProject, opts)
+}
+
+// allLegacyConfigPaths enumerates every config file that may carry a
+// legacy `aliases:` key in the current process's view: the full
+// project cascade for the active mode (so flat `.tlc.yaml` + dir
+// `.tlc/config.yaml` + ancestor files are all covered) plus the
+// user-level config. Returns absolute paths in cascade order
+// (closest-to-cwd first), deduplicated, and skips system configs.
+func allLegacyConfigPaths() []string {
+	seen := make(map[string]struct{})
+	var out []string
+
+	// Project cascade: walk findAllConfigs to honor the same flat/dir
+	// + ancestor walking that initConfig uses for viper merging.
+	if cwd, err := os.Getwd(); err == nil {
+		for _, p := range findAllConfigs(cwd, "") {
+			if abs, err := filepath.Abs(p); err == nil {
+				if _, ok := seen[abs]; !ok {
+					seen[abs] = struct{}{}
+					out = append(out, abs)
+				}
+			}
+		}
+	}
+
+	// User-level config (XDG / OS-native).
+	if userPath, err := config.UserConfigPath(); err == nil && userPath != "" {
+		if abs, err := filepath.Abs(userPath); err == nil {
+			if _, ok := seen[abs]; !ok {
+				seen[abs] = struct{}{}
+				out = append(out, abs)
+			}
+		}
+	}
+
+	return out
 }
 
 var migrateLegacyAliasesOnce sync.Once
