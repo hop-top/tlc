@@ -19,14 +19,15 @@ var (
 	oauthFlow bool
 )
 
-// authStore resolves the credential store backend from viper. The
-// `auth.backend` config key selects the kit storage/secret backend; the empty
-// default routes to KeychainStore so existing users see no behaviour change.
+// authStore resolves the credential store backend from viper. Delegates
+// to auth.NewDefaultStore so cli, extensions, and future plugins share
+// the same backend selector — see auth.NewDefaultStore for resolution
+// rules.
 func authStore() auth.Store {
-	backend := viper.GetString("auth.backend")
-	store, err := auth.NewStore("tlc", backend)
+	store, err := auth.NewDefaultStore("tlc", viper.GetViper())
 	if err != nil {
-		log.Fatal("Failed to open credential store", "backend", backend, "error", err)
+		log.Fatal("Failed to open credential store",
+			"backend", viper.GetString(auth.AuthBackendKey), "error", err)
 	}
 	return store
 }
