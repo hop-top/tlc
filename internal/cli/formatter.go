@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,9 +86,44 @@ func formatTaskTrackDisplay(trackID string) string {
 }
 
 // isVerboseOutput reports whether the user requested verbose output via
-// the --verbose / -V flag.
+// the --verbose / -V flag (or output.verbose in config).
 func isVerboseOutput() bool {
 	return viper.GetBool("output.verbose")
+}
+
+// isShowTypeIDOutput reports whether the user wants durable TypeIDs
+// rendered alongside human-readable aliases in default output.
+//
+// Distinct from isVerboseOutput on purpose: a user enabling
+// `output.verbose: true` in config typically wants extra debug
+// logging, not typeids polluting every "Created task T-NNNN" echo.
+//
+// Returns true when ANY of:
+//   - output.show_typeid is set in config (explicit opt-in)
+//   - TLC_SHOW_TYPEID env parses as truthy via strconv.ParseBool
+//     (accepts 1/t/T/TRUE/true/True/etc.; trims whitespace)
+//   - -VV or higher (verbose count flag, level >= 2) is set
+//
+// Default false. Use this to gate `ID:` companion lines and any other
+// site that prints a durable typeid next to its human-readable
+// counterpart.
+func isShowTypeIDOutput() bool {
+	if viper.GetBool("output.show_typeid") {
+		return true
+	}
+	if v := strings.TrimSpace(os.Getenv("TLC_SHOW_TYPEID")); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil && b {
+			return true
+		}
+	}
+	// kit registers --verbose / -V as a stackable Count flag and binds
+	// it as int on the global viper at "output.verbose" (see kitRoot in
+	// root.go). -V = 1, -VV = 2, etc. Level >= 2 opts in to typeid
+	// display alongside debug logging.
+	if viper.GetInt("output.verbose") >= 2 {
+		return true
+	}
+	return false
 }
 
 func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) error {
@@ -499,7 +535,7 @@ func isDefaultRef(ref, taskID string) bool {
 
 func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Task: %s", formatTaskAlias(t))))
-	if isVerboseOutput() && t.ID != "" && t.ID != formatTaskAlias(t) {
+	if isShowTypeIDOutput() && t.ID != "" && t.ID != formatTaskAlias(t) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("ID:"), t.ID)
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)
@@ -556,10 +592,11 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Tags:"), strings.Join(t.Tags, ", "))
 	// Reference: hide auto-generated internal refs (tlc://<project>/<typeid>)
-	// from default human output — typeid only surfaces in verbose / machine
-	// modes per render policy. External refs (github:..., docs/..., https://...)
-	// remain visible because they carry information the alias does not.
-	if isVerboseOutput() || !core.IsInternalTaskRef(t.Reference, t) {
+	// from default human output — the embedded typeid only surfaces when
+	// the user explicitly opts in. External refs (github:..., docs/...,
+	// https://...) remain visible because they carry information the alias
+	// does not.
+	if isShowTypeIDOutput() || !core.IsInternalTaskRef(t.Reference, t) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))

@@ -298,7 +298,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		alias = task.ID
 	}
 	_, _ = fmt.Fprintf(w, "Created task %s: %s\n", alias, task.Title)
-	if isVerboseOutput() && alias != task.ID {
+	if isShowTypeIDOutput() && alias != task.ID {
 		_, _ = fmt.Fprintf(w, "  ID: %s\n", task.ID)
 	}
 	return nil

@@ -83,7 +83,7 @@ var trackCreateCmd = &cobra.Command{
 
 		w := cmd.OutOrStdout()
 		_, _ = fmt.Fprintf(w, "Created track %s: %s\n", formatTrackAlias(track), track.Title)
-		if isVerboseOutput() && track.ID != "" && track.ID != formatTrackAlias(track) {
+		if isShowTypeIDOutput() && track.ID != "" && track.ID != formatTrackAlias(track) {
 			_, _ = fmt.Fprintf(w, "  ID:     %s\n", track.ID)
 		}
 		_, _ = fmt.Fprintf(w, "  Type:   %s\n", track.Type)

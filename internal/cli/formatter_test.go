@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -187,16 +188,21 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 		}
 	})
 
-	t.Run("VerboseShowsFullURI", func(t *testing.T) {
-		viper.Set("output.verbose", true)
+	t.Run("ShowTypeIDOptInRevealsFullURI", func(t *testing.T) {
+		// `output.show_typeid` opts in to typeid display (replaces the
+		// pre-decoupling assumption that `output.verbose` was the gate).
+		// Verbose still controls debug logging but no longer leaks typeids
+		// into every render — see isShowTypeIDOutput in formatter.go.
+		viper.Set("output.show_typeid", true)
+		t.Cleanup(func() { viper.Set("output.show_typeid", false) })
 		var buf bytes.Buffer
 		renderTaskDetail(&buf, autoTask, nil)
 		out := buf.String()
 		if !strings.Contains(out, "Reference:") {
-			t.Errorf("verbose output must show Reference line; got:\n%s", out)
+			t.Errorf("show-typeid output must show Reference line; got:\n%s", out)
 		}
 		if !strings.Contains(out, "tlc://hop-top/tlc/"+typeid) {
-			t.Errorf("verbose output must contain full URI; got:\n%s", out)
+			t.Errorf("show-typeid output must contain full URI; got:\n%s", out)
 		}
 	})
 
@@ -210,6 +216,80 @@ func TestRenderTaskDetail_ReferenceVisibility(t *testing.T) {
 		}
 		if !strings.Contains(out, "github:issues/123") {
 			t.Errorf("default output must contain external ref value; got:\n%s", out)
+		}
+	})
+}
+
+// TestIsShowTypeIDOutput pins the decoupling between `output.verbose`
+// (kit's count flag bound at the global viper) and typeid display.
+// kit registers --verbose as a stackable Count flag (-V=1, -VV=2, ...);
+// only count >= 2 should opt in to typeid display.
+func TestIsShowTypeIDOutput(t *testing.T) {
+	prevVerboseInt := viper.GetInt("output.verbose")
+	prevShow := viper.GetBool("output.show_typeid")
+	t.Cleanup(func() {
+		viper.Set("output.verbose", prevVerboseInt)
+		viper.Set("output.show_typeid", prevShow)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+	})
+
+	t.Run("default is false", func(t *testing.T) {
+		viper.Set("output.verbose", 0)
+		viper.Set("output.show_typeid", false)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if isShowTypeIDOutput() {
+			t.Errorf("expected false when nothing opts in")
+		}
+	})
+
+	t.Run("-V (verbose=1) does NOT enable", func(t *testing.T) {
+		viper.Set("output.verbose", 1)
+		viper.Set("output.show_typeid", false)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if isShowTypeIDOutput() {
+			t.Errorf("single -V should NOT pull in typeid display (decoupling)")
+		}
+	})
+
+	t.Run("output.show_typeid opt-in", func(t *testing.T) {
+		viper.Set("output.verbose", 0)
+		viper.Set("output.show_typeid", true)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if !isShowTypeIDOutput() {
+			t.Errorf("output.show_typeid=true must enable")
+		}
+	})
+
+	t.Run("TLC_SHOW_TYPEID env opt-in (truthy variants)", func(t *testing.T) {
+		viper.Set("output.verbose", 0)
+		viper.Set("output.show_typeid", false)
+		// strconv.ParseBool accepts: 1, t, T, TRUE, true, True, 0, f,
+		// F, FALSE, false, False. Whitespace is trimmed before parsing.
+		for _, value := range []string{"1", "true", "True", "TRUE", "t", "T", "  true  "} {
+			t.Setenv("TLC_SHOW_TYPEID", value)
+			if !isShowTypeIDOutput() {
+				t.Errorf("TLC_SHOW_TYPEID=%q must enable", value)
+			}
+		}
+	})
+
+	t.Run("TLC_SHOW_TYPEID env falsy does not enable", func(t *testing.T) {
+		viper.Set("output.verbose", 0)
+		viper.Set("output.show_typeid", false)
+		for _, value := range []string{"0", "false", "FALSE", "no", "garbage", ""} {
+			t.Setenv("TLC_SHOW_TYPEID", value)
+			if isShowTypeIDOutput() {
+				t.Errorf("TLC_SHOW_TYPEID=%q must NOT enable", value)
+			}
+		}
+	})
+
+	t.Run("-VV (verbose count >= 2) opts in", func(t *testing.T) {
+		viper.Set("output.verbose", 2)
+		viper.Set("output.show_typeid", false)
+		_ = os.Unsetenv("TLC_SHOW_TYPEID")
+		if !isShowTypeIDOutput() {
+			t.Errorf("verbose count >= 2 (i.e. -VV) must enable")
 		}
 	})
 }
