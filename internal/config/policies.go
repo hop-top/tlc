@@ -16,12 +16,34 @@ import (
 //go:embed policies_default.yaml
 var defaultPoliciesYAML []byte
 
+// stagePoliciesYAML is the optional stage-aware bundle adopters append
+// to their policies.yaml when they want CEL-driven enforcement on top
+// of the in-process gate (core.GateTrackCreate / core.GateTaskCreate).
+// See policies_stage.yaml's comment block for activation steps.
+//
+//go:embed policies_stage.yaml
+var stagePoliciesYAML []byte
+
 // DefaultPoliciesYAML returns the bundled policy bytes.  Callers use
 // these when no user-supplied policies.yaml exists, and to seed the
 // user file on first boot so adopters can edit it in place.
 func DefaultPoliciesYAML() []byte {
 	out := make([]byte, len(defaultPoliciesYAML))
 	copy(out, defaultPoliciesYAML)
+	return out
+}
+
+// StagePoliciesYAML returns the optional stage-aware policy bundle.
+// Returned bytes are a defensive copy so callers can mutate them
+// without poisoning the embedded blob.
+//
+// The bundle is NOT auto-applied: tlc's in-process gate already covers
+// the create paths. Adopters that wire kit/runtime/policy with a
+// stage resolver and want fanout coverage append these rules to their
+// $XDG_CONFIG_HOME/tlc/policies.yaml manually.
+func StagePoliciesYAML() []byte {
+	out := make([]byte, len(stagePoliciesYAML))
+	copy(out, stagePoliciesYAML)
 	return out
 }
 

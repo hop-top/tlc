@@ -1,0 +1,65 @@
+# Optional stage policy bundle for tlc adopters who run kit/runtime/policy
+# alongside the in-process stage gate (core.GateTrackCreate /
+# core.GateTaskCreate). Both the gate and these CEL rules implement the
+# same policy table — adopters can pick either layer:
+#
+#   - Code-level gate (default, no opt-in): rejects creates at the cli
+#     entry point. Behaviour is hard-wired in core/stage_gate.go and
+#     covers every adopter as soon as `kit/core/stage` reports a
+#     non-active stage on the current scope.
+#
+#   - CEL-level gate (opt-in): append the policies below to your
+#     $XDG_CONFIG_HOME/tlc/policies.yaml after running `tlc init` once
+#     to seed the bundled defaults. Wire a stage resolver in your tlc
+#     fork via policy.WithStageResolver(stage.Read-based map). The CEL
+#     rules then fan out to every kit-published `tlc.entity.*` topic,
+#     not just the create entry points — useful for catching mutations
+#     that bypass the cli (programmatic SDK callers, future plugins).
+#
+# Bindings used below mirror kit/runtime/policy/stage.yaml:
+#   stage.mode  — current stage value (active|public_feedback|...)
+#   entity.kind — "track" | "task"
+#   entity.op   — "create" | "update" | "delete"
+#   entity.track_type — "feature" | "fix" | "chore" | "docs" | "feedback"
+policies:
+  - name: tlc-archived-blocks-all-mutations
+    on: kit.runtime.entity.pre_validated
+    when: 'stage.mode == "archived" && entity.op in ["create", "update", "delete"]'
+    effect: deny
+    otherwise: allow
+    message: "scope is archived; mutations not allowed"
+
+  - name: tlc-sunset-blocks-creates
+    on: kit.runtime.entity.pre_validated
+    when: 'stage.mode == "sunset" && entity.op == "create"'
+    effect: deny
+    otherwise: allow
+    message: "scope is in sunset; new entities not allowed (updates/deletes ok)"
+
+  - name: tlc-feature-freeze-blocks-track-create
+    on: kit.runtime.entity.pre_validated
+    when: 'stage.mode == "feature_freeze" && entity.kind == "track" && entity.op == "create"'
+    effect: deny
+    otherwise: allow
+    message: "scope is in feature_freeze; new tracks not allowed (fix/chore tasks ok)"
+
+  - name: tlc-feature-freeze-blocks-feature-tasks
+    on: kit.runtime.entity.pre_validated
+    when: 'stage.mode == "feature_freeze" && entity.kind == "task" && (entity.track_type == "feature" || entity.track_type == "refactor")'
+    effect: deny
+    otherwise: allow
+    message: "scope is in feature_freeze; only fix/chore/docs tasks allowed"
+
+  - name: tlc-maintenance-blocks-track-create
+    on: kit.runtime.entity.pre_validated
+    when: 'stage.mode == "maintenance" && entity.kind == "track" && entity.op == "create"'
+    effect: deny
+    otherwise: allow
+    message: "scope is in maintenance; no new tracks (fix/chore/docs tasks only)"
+
+  - name: tlc-public-feedback-allows-feedback-only-tracks
+    on: kit.runtime.entity.pre_validated
+    when: 'stage.mode == "public_feedback" && entity.kind == "track" && entity.op == "create" && entity.track_type != "feedback"'
+    effect: deny
+    otherwise: allow
+    message: "scope is in public_feedback; only feedback-typed tracks may be created"
