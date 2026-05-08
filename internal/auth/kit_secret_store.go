@@ -157,6 +157,39 @@ func (s *KitSecretStore) List(service string) ([]string, error) {
 	return accounts, nil
 }
 
+// BackendResolver returns the configured auth backend name. Implemented
+// by *viper.Viper (GetString) and any other config source that exposes
+// a string-keyed lookup. Defining the seam here lets auth stay free of a
+// hard viper import while letting CLI / extensions / future plugins
+// share a single backend selector.
+type BackendResolver interface {
+	GetString(key string) string
+}
+
+// AuthBackendKey is the viper config key consulted by NewDefaultStore.
+// Centralising the literal lets adopters reuse the same key in tests
+// and config docs.
+const AuthBackendKey = "auth.backend"
+
+// NewDefaultStore returns a Store using the backend selected by the
+// supplied resolver under AuthBackendKey. Empty / unset routes to the
+// legacy keychain backend so existing users see no behaviour change.
+//
+// Use this from any tlc subsystem that needs a credential store (cli,
+// extensions, future plugins) so the resolver is the single source of
+// truth — never construct KeychainStore / KitSecretStore directly.
+//
+// A nil resolver behaves like an empty resolver and therefore selects
+// the keyring backend, keeping callers tolerant of partial wiring (e.g.
+// boot-time tests that haven't initialised viper yet).
+func NewDefaultStore(appName string, r BackendResolver) (Store, error) {
+	var backend string
+	if r != nil {
+		backend = r.GetString(AuthBackendKey)
+	}
+	return NewStore(appName, backend)
+}
+
 // NewStore returns a Store implementation selected by backend name.
 //
 // "" or "keyring" returns the existing KeychainStore so behaviour stays bit-
