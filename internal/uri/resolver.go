@@ -87,6 +87,9 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 	//   tlc/T-0001                 → Space=tlc       ID=T-0001
 	//     → projectID=tlc          taskID=T-0001
 	projectID, taskID := uriutil.SplitProjectTask(u.Space, u.ID)
+	// Re-normalise the extracted task ID so URI forms accept the same
+	// case-insensitive aliases as bare inputs (e.g. ".../t-0001" → T-0001).
+	taskID = NormalizeTaskID(taskID)
 
 	if projectID == "" {
 		task, err := r.storage.GetTask(ctx, taskID)

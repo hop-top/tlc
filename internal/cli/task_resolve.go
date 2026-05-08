@@ -24,7 +24,7 @@ func isPattern(s string) bool {
 // core.ParseTaskRef. Anything else (cross-project URIs, scheme-prefixed
 // refs, etc.) keeps falling through to uri.NewResolver below.
 var (
-	taskRefAliasRe  = regexp.MustCompile(`^@?T-\d+$`)
+	taskRefAliasRe  = regexp.MustCompile(`(?i)^@?T-\d+$`)
 	taskRefDigitsRe = regexp.MustCompile(`^\d+$`)
 )
 

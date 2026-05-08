@@ -77,6 +77,28 @@ func TestResolveTask_ByCanonicalID(t *testing.T) {
 	assert.Same(t, s, res.Storage)
 }
 
+func TestResolveTask_LowercaseBareID(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	task := &core.Task{ID: "T-0034", Title: "case insensitive", Status: core.StatusTodo}
+	require.NoError(t, s.CreateTask(ctx, task))
+
+	res, err := NewResolver(s).ResolveTask(ctx, "t-0034")
+	require.NoError(t, err)
+	assert.Equal(t, "T-0034", res.Task.ID)
+}
+
+func TestResolveTask_LowercaseInProjectURI(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	newRegisteredProject(t, s, "hop-top/tlc")
+
+	res, err := NewResolver(s).ResolveTask(ctx, "task://hop-top/tlc/t-0001")
+	require.NoError(t, err)
+	assert.Equal(t, "T-0001", res.Task.ID)
+}
+
 func TestResolveTask_ByBareNumber(t *testing.T) {
 	s := newTestStorage(t)
 	ctx := context.Background()

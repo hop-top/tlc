@@ -9,7 +9,8 @@ import (
 )
 
 // taskAliasRe matches the T-NNNN+ display alias form (≥1 digits).
-var taskAliasRe = regexp.MustCompile(`^T-(\d+)$`)
+// Case-insensitive so "t-0034" resolves identically to "T-0034".
+var taskAliasRe = regexp.MustCompile(`(?i)^T-(\d+)$`)
 
 // bareDigitsRe matches a bare numeric task reference like "42".
 var bareDigitsRe = regexp.MustCompile(`^\d+$`)

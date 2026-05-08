@@ -105,6 +105,26 @@ func TestResolveTaskIDs_RegexNoMatch(t *testing.T) {
 	}
 }
 
+func TestResolveTaskIDs_LowercaseAlias(t *testing.T) {
+	_, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+	ctx := context.Background()
+	s.CreateTask(ctx, &core.Task{ID: "T-0034", Title: "A", Status: core.StatusTodo})
+
+	resolved, confirm, err := resolveTaskIDs(ctx, []string{"t-0034"}, s, core.Query{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resolved) != 1 || resolved[0].Task.ID != "T-0034" {
+		t.Errorf("expected T-0034, got %v", resolved)
+	}
+	if confirm {
+		t.Error("exact lowercase ID should not require confirmation")
+	}
+}
+
 func TestResolveTaskIDs_RegexSingleMatchNoConfirm(t *testing.T) {
 	_, cleanup := setupTestDir(t)
 	defer cleanup()
