@@ -42,6 +42,12 @@ func TestNormalizeTaskID(t *testing.T) {
 
 		// Pass-through: non-numeric T- suffix (unknown format).
 		{"T-abc", "T-abc"},
+
+		// Case-insensitive T- prefix: lowercase normalises to canonical.
+		{"t-0046", "T-0046"},
+		{"t-46", "T-0046"},
+		{"@t-0001", "T-0001"},
+		{"T-0046", "T-0046"}, // sanity: uppercase still works
 	}
 
 	for _, tc := range cases {

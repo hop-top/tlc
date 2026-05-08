@@ -427,6 +427,16 @@ func exitCodeFor(err error) int {
 func initConfig() {
 	setDefaults()
 
+	// Enable AutomaticEnv early so TLC_-prefixed env vars feed every
+	// viper.Get call below, including TLC_CONFIG (documented in
+	// docs/tlc-cli-spec-0.1.md and tlc-config-spec-0.1.md). Without
+	// this, env-driven config-path selection silently no-ops because
+	// the GetStringSlice("config") read below would happen before env
+	// reflection was configured.
+	viper.SetEnvPrefix("TLC")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
 	// kit's -c/--config is a StringArray that supports two token shapes:
 	//   - bare path → load as additional config file after the cascade
 	//   - key=value → apply as an override after files load
@@ -438,6 +448,11 @@ func initConfig() {
 	// here would form an init cycle since kitRootInstance := kitRoot()
 	// and kitRoot() registers OnInitialize(initConfig).
 	rawConfigTokens := viper.GetStringSlice("config")
+	// TLC_CONFIG is the env-equivalent of -c <path>. AutomaticEnv binds
+	// it to the "config" viper key, but viper.GetStringSlice on a
+	// scalar env value returns a one-element slice of the raw string
+	// (yaml-parsed comma splits would also collapse here), so a single
+	// path works as expected.
 	if cfgFile != "" {
 		// Test-only seam: when set, treat it as a single bare path token.
 		rawConfigTokens = append(rawConfigTokens, cfgFile)
@@ -524,9 +539,10 @@ func initConfig() {
 		viper.Set(k, v)
 	}
 
-	viper.SetEnvPrefix("TLC")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
+	// AutomaticEnv was enabled at the top of initConfig so TLC_CONFIG
+	// could feed the -c parsing. Re-running it here would be a no-op
+	// (idempotent) but is unnecessary; left as a comment for the next
+	// reader who wonders why env wiring isn't here.
 
 	if viper.ConfigFileUsed() != "" && viper.GetBool("output.verbose") {
 		log.Debug("Using config file", "path", viper.ConfigFileUsed())

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,9 +99,10 @@ func isVerboseOutput() bool {
 // logging, not typeids polluting every "Created task T-NNNN" echo.
 //
 // Returns true when ANY of:
-//   - --cols id (or -V -V — verbose level 2+) is requested
 //   - output.show_typeid is set in config (explicit opt-in)
-//   - TLC_SHOW_TYPEID env is truthy
+//   - TLC_SHOW_TYPEID env parses as truthy via strconv.ParseBool
+//     (accepts 1/t/T/TRUE/true/True/etc.; trims whitespace)
+//   - -VV or higher (verbose count flag, level >= 2) is set
 //
 // Default false. Use this to gate `ID:` companion lines and any other
 // site that prints a durable typeid next to its human-readable
@@ -109,11 +111,16 @@ func isShowTypeIDOutput() bool {
 	if viper.GetBool("output.show_typeid") {
 		return true
 	}
-	if v := os.Getenv("TLC_SHOW_TYPEID"); v == "1" || v == "true" || v == "yes" {
-		return true
+	if v := strings.TrimSpace(os.Getenv("TLC_SHOW_TYPEID")); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil && b {
+			return true
+		}
 	}
-	// -VV (verbose >= 2) opts in too — kit's --verbose is a count flag.
-	if viper.GetInt("output.verbose_level") >= 2 {
+	// kit registers --verbose / -V as a stackable Count flag and binds
+	// it as int on the global viper at "output.verbose" (see kitRoot in
+	// root.go). -V = 1, -VV = 2, etc. Level >= 2 opts in to typeid
+	// display alongside debug logging.
+	if viper.GetInt("output.verbose") >= 2 {
 		return true
 	}
 	return false
