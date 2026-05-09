@@ -169,7 +169,7 @@ func nodeLabel(t *core.Task) string {
 	if len(title) > 45 {
 		title = title[:42] + "..."
 	}
-	return fmt.Sprintf("%s: %s [%s]", t.ID, title, t.Status)
+	return fmt.Sprintf("%s: %s [%s]", formatTaskAlias(t), title, t.Status)
 }
 
 // renderASCIIGraph prints a text-based graph.

@@ -76,7 +76,7 @@ var TaskUpdateCmd = &cobra.Command{
 			if cmd.Flags().Changed("status") {
 				normalized, ok := NormalizeStatus(taskUpdateStatus)
 				if !ok {
-					errs = append(errs, fmt.Sprintf("%s: unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", task.ID, taskUpdateStatus))
+					errs = append(errs, fmt.Sprintf("%s: unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", formatTaskAlias(task), taskUpdateStatus))
 					continue
 				}
 				nextStatus := core.TaskStatus(normalized)
@@ -137,7 +137,7 @@ var TaskUpdateCmd = &cobra.Command{
 			if len(taskUpdateAddBlockedBy) > 0 {
 				validated, err := validateBlockedByRefs(ctx, s, res.Storage, taskUpdateAddBlockedBy)
 				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+					errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 					continue
 				}
 				task.AddBlockedBy(validated)
@@ -196,14 +196,14 @@ var TaskUpdateCmd = &cobra.Command{
 						)
 						if createErr != nil {
 							errs = append(errs, fmt.Sprintf(
-								"%s: %v", task.ID, createErr,
+								"%s: %v", formatTaskAlias(task), createErr,
 							))
 							continue
 						}
 						resolved = created
 					} else if trackErr != nil {
 						errs = append(errs, fmt.Sprintf(
-							"%s: %v", task.ID, trackErr,
+							"%s: %v", formatTaskAlias(task), trackErr,
 						))
 						continue
 					}
@@ -218,7 +218,7 @@ var TaskUpdateCmd = &cobra.Command{
 				} else {
 					t, err := util.ParseUntil(taskUpdateDue)
 					if err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --due: %v", task.ID, err))
+						errs = append(errs, fmt.Sprintf("%s: invalid --due: %v", formatTaskAlias(task), err))
 						continue
 					}
 					task.DueAt = &t
@@ -231,7 +231,7 @@ var TaskUpdateCmd = &cobra.Command{
 				} else {
 					t, err := util.ParseUntil(taskUpdateRemindAt)
 					if err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --remind-at: %v", task.ID, err))
+						errs = append(errs, fmt.Sprintf("%s: invalid --remind-at: %v", formatTaskAlias(task), err))
 						continue
 					}
 					task.RemindAt = &t
@@ -243,7 +243,7 @@ var TaskUpdateCmd = &cobra.Command{
 					task.RRule = ""
 				} else {
 					if err := core.ValidateRRule(taskUpdateRRule); err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --rrule: %v", task.ID, err))
+						errs = append(errs, fmt.Sprintf("%s: invalid --rrule: %v", formatTaskAlias(task), err))
 						continue
 					}
 					task.RRule = taskUpdateRRule
@@ -275,7 +275,7 @@ var TaskUpdateCmd = &cobra.Command{
 				Tags:        task.Tags,
 				Reference:   task.Reference,
 			}); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 
@@ -283,7 +283,7 @@ var TaskUpdateCmd = &cobra.Command{
 
 			// Local DB is the source of truth; commit it first.
 			if err := res.Storage.UpdateTask(ctx, task); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to update: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: failed to update: %v", formatTaskAlias(task), err))
 				continue
 			}
 
@@ -336,11 +336,11 @@ var TaskDeleteCmd = &cobra.Command{
 		} else if len(resolved) == 1 && !taskDeleteYes && !taskNoPrompt {
 			task := resolved[0].Task
 			if !deletePromptInteractive(cmd) {
-				return errDeleteRequiresYes(task.ID)
+				return errDeleteRequiresYes(formatTaskAlias(task))
 			}
 			var confirm bool
 			err := huh.NewConfirm().
-				Title(fmt.Sprintf("Delete task %s (%s)?", task.ID, task.Title)).
+				Title(fmt.Sprintf("Delete task %s (%s)?", formatTaskAlias(task), task.Title)).
 				Description("This action cannot be undone.").
 				Value(&confirm).
 				Run()
@@ -348,7 +348,7 @@ var TaskDeleteCmd = &cobra.Command{
 				return fmt.Errorf("failed to run confirm dialog: %w", err)
 			}
 			if !confirm {
-				return fmt.Errorf("delete aborted; task %s was not deleted", task.ID)
+				return fmt.Errorf("delete aborted; task %s was not deleted", formatTaskAlias(task))
 			}
 		}
 
@@ -382,7 +382,7 @@ var TaskDeleteCmd = &cobra.Command{
 				Tags:        task.Tags,
 				Reference:   task.Reference,
 			}); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 
@@ -398,13 +398,13 @@ var TaskDeleteCmd = &cobra.Command{
 				if denied := policyAsCLIError(err); denied != nil {
 					return denied
 				}
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
 				if err := deleteSyncedTask(policyCtx, task, res.Storage); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+					errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 					continue
 				}
 			}
@@ -423,7 +423,7 @@ var TaskDeleteCmd = &cobra.Command{
 				}
 				if err := res.Storage.AddLog(policyCtx, logEntry); err != nil {
 					_, _ = fmt.Fprintf(cmd.OutOrStderr(),
-						"Warning: failed to write delete log for %s: %v\n", task.ID, err)
+						"Warning: failed to write delete log for %s: %v\n", formatTaskAlias(task), err)
 				}
 			}
 
