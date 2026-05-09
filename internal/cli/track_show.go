@@ -232,7 +232,7 @@ func renderTrackShowDetail(
 		if len(strategy.CriticalPath) > 0 {
 			_, _ = fmt.Fprintf(w, "\nCritical Path (%d tasks): %s\n",
 				len(strategy.CriticalPath),
-				strings.Join(strategy.CriticalPath, " \u2192 "))
+				core.FormatCriticalPath(strategy.CriticalPath, tasks))
 		}
 	}
 }

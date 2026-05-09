@@ -132,6 +132,139 @@ func TestRenderBatchSummary_Empty(t *testing.T) {
 	}
 }
 
+// taskWithTypeIDAndSeq mirrors production tasks: durable typeid as ID,
+// display alias derived from Seq. Used to assert renderers prefer the
+// alias over the typeid.
+func taskWithTypeIDAndSeq(typeid string, seq int64, title string, deps ...string) *Task {
+	t := taskWithDeps(typeid, title, deps...)
+	t.Seq = seq
+	return t
+}
+
+func TestRenderDepTree_HidesTypeID(t *testing.T) {
+	tasks := []*Task{
+		taskWithTypeIDAndSeq("task_01kr613t07fs3aer4d7gwc15c1", 1, "Root"),
+		taskWithTypeIDAndSeq("task_01kr613t07fs3seytf1wb4nt79", 2, "Leaf",
+			"task_01kr613t07fs3aer4d7gwc15c1"),
+	}
+
+	g, err := NewDepGraph(tasks)
+	if err != nil {
+		t.Fatalf("NewDepGraph: %v", err)
+	}
+	strategy, err := g.ComputeStrategy()
+	if err != nil {
+		t.Fatalf("ComputeStrategy: %v", err)
+	}
+
+	tree := RenderDepTree(strategy, tasks)
+	if strings.Contains(tree, "task_01") {
+		t.Errorf("dep tree must not leak typeid:\n%s", tree)
+	}
+	for _, alias := range []string{"T-0001", "T-0002"} {
+		if !strings.Contains(tree, alias) {
+			t.Errorf("dep tree missing alias %q:\n%s", alias, tree)
+		}
+	}
+}
+
+func TestRenderBatchSummary_HidesTypeID(t *testing.T) {
+	tasks := []*Task{
+		taskWithTypeIDAndSeq("task_01kr613t07fs3aer4d7gwc15c1", 1, "Root"),
+		taskWithTypeIDAndSeq("task_01kr613t07fs3seytf1wb4nt79", 2, "Leaf",
+			"task_01kr613t07fs3aer4d7gwc15c1"),
+	}
+
+	g, err := NewDepGraph(tasks)
+	if err != nil {
+		t.Fatalf("NewDepGraph: %v", err)
+	}
+	strategy, err := g.ComputeStrategy()
+	if err != nil {
+		t.Fatalf("ComputeStrategy: %v", err)
+	}
+
+	summary := RenderBatchSummary(strategy)
+	if strings.Contains(summary, "task_01") {
+		t.Errorf("batch summary must not leak typeid:\n%s", summary)
+	}
+	for _, alias := range []string{"T-0001", "T-0002"} {
+		if !strings.Contains(summary, alias) {
+			t.Errorf("batch summary missing alias %q:\n%s", alias, summary)
+		}
+	}
+}
+
+func TestFormatCriticalPath_HidesTypeID(t *testing.T) {
+	tasks := []*Task{
+		taskWithTypeIDAndSeq("task_01kr613t07fs3aer4d7gwc15c1", 1, "Root"),
+		taskWithTypeIDAndSeq("task_01kr613t07fs3seytf1wb4nt79", 2, "Leaf",
+			"task_01kr613t07fs3aer4d7gwc15c1"),
+	}
+
+	path := []string{
+		"task_01kr613t07fs3aer4d7gwc15c1",
+		"task_01kr613t07fs3seytf1wb4nt79",
+	}
+	got := FormatCriticalPath(path, tasks)
+	want := "T-0001 → T-0002"
+	if got != want {
+		t.Errorf("FormatCriticalPath: got %q want %q", got, want)
+	}
+}
+
+func TestFormatCriticalPath_UnknownIDFallsBack(t *testing.T) {
+	tasks := []*Task{
+		taskWithTypeIDAndSeq("task_known", 7, "Known"),
+	}
+	got := FormatCriticalPath([]string{"task_known", "task_unknown"}, tasks)
+	want := "T-0007 → task_unknown"
+	if got != want {
+		t.Errorf("FormatCriticalPath fallback: got %q want %q", got, want)
+	}
+}
+
+func TestFormatCriticalPath_Empty(t *testing.T) {
+	if got := FormatCriticalPath(nil, nil); got != "" {
+		t.Errorf("empty path: got %q", got)
+	}
+	if got := FormatCriticalPath([]string{}, nil); got != "" {
+		t.Errorf("empty path: got %q", got)
+	}
+}
+
+func TestRenderMermaid_HidesTypeIDInLabels(t *testing.T) {
+	tasks := []*Task{
+		taskWithTypeIDAndSeq("task_01kr613t07fs3aer4d7gwc15c1", 1, "Root"),
+		taskWithTypeIDAndSeq("task_01kr613t07fs3seytf1wb4nt79", 2, "Leaf",
+			"task_01kr613t07fs3aer4d7gwc15c1"),
+	}
+
+	g, err := NewDepGraph(tasks)
+	if err != nil {
+		t.Fatalf("NewDepGraph: %v", err)
+	}
+	strategy, err := g.ComputeStrategy()
+	if err != nil {
+		t.Fatalf("ComputeStrategy: %v", err)
+	}
+
+	out := RenderMermaid(strategy, tasks)
+	// Labels must show alias, not typeid.
+	for _, alias := range []string{"T-0001", "T-0002"} {
+		if !strings.Contains(out, alias) {
+			t.Errorf("Mermaid labels missing alias %q:\n%s", alias, out)
+		}
+	}
+	// Mermaid node identifiers (mermaidNodeID) and edges still derive
+	// from t.ID — that's an internal graph identifier, not display.
+	// We only assert the human-visible label segment doesn't carry
+	// the typeid as the display token before the title.
+	if strings.Contains(out, "task_01kr613t07fs3aer4d7gwc15c1 Root") {
+		t.Errorf("Mermaid label leaked typeid as display token:\n%s", out)
+	}
+}
+
 func TestRenderBatchSummary_Sequential(t *testing.T) {
 	tasks := []*Task{
 		taskWithDeps("T-0001", "A"),
