@@ -132,11 +132,11 @@ func TestRenderBatchSummary_Empty(t *testing.T) {
 	}
 }
 
-// taskWithTypeIDAndSeq mirrors production tasks: durable typeid as ID,
+// taskWithTypeIDAndSeq mirrors production tasks: durable TypeID as ID,
 // display alias derived from Seq. Used to assert renderers prefer the
-// alias over the typeid.
-func taskWithTypeIDAndSeq(typeid string, seq int64, title string, deps ...string) *Task {
-	t := taskWithDeps(typeid, title, deps...)
+// alias over the TypeID.
+func taskWithTypeIDAndSeq(typeID string, seq int64, title string, deps ...string) *Task {
+	t := taskWithDeps(typeID, title, deps...)
 	t.Seq = seq
 	return t
 }
