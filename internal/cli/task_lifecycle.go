@@ -393,11 +393,12 @@ var TaskReopenCmd = &cobra.Command{
 
 			wm := core.DefaultWorkflow()
 			if !wm.IsTerminal(task.Status) {
+				alias := formatTaskAlias(task)
 				errs = append(errs, fmt.Sprintf(
 					"%s: cannot be reopened: current status %s is not terminal "+
 						"(terminal statuses: DONE, SKIPPED); use 'tlc task update %s --status <status> --force' "+
 						"to force a status change instead",
-					task.ID, task.Status, task.ID,
+					alias, task.Status, alias,
 				))
 				continue
 			}
