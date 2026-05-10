@@ -448,9 +448,13 @@ func resetTaskFlags() {
 	logSortDirection = ""
 	logAll = false
 
+	// Reset task exec flags.
+	resetTaskExecFlags()
+
 	// Reset track flags.
 	resetTrackFlags()
 	resetTrackGraphFlags()
+	resetTrackExecFlags()
 
 	// Reset flow flags.
 	resetFlowFlags()

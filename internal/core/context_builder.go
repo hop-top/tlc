@@ -17,6 +17,7 @@ var fileRefPattern = regexp.MustCompile(
 type BuildOpts struct {
 	PromptFile   string   // --prompt override; empty = auto-generate
 	ContextFiles []string // --context extra files
+	CtxtRefs     []string // --ctxt query handles (id[?filter])
 	RepoRoot     string   // default: "/workspace"
 }
 
@@ -76,6 +77,7 @@ func (b *ContextBuilder) BuildForTask(
 		TrackID:         trackID,
 		RepoRoot:        opts.repoRoot(),
 		Files:           files,
+		CtxtRefs:        opts.CtxtRefs,
 		Prompt:          prompt,
 	}
 	return ac, nil
@@ -112,6 +114,7 @@ func (b *ContextBuilder) BuildForFlowStep(
 		StepTitle:  step.Title,
 		RepoRoot:   opts.repoRoot(),
 		Files:      opts.ContextFiles,
+		CtxtRefs:   opts.CtxtRefs,
 		Prompt:     prompt,
 	}
 	return ac, nil

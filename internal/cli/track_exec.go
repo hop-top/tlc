@@ -16,6 +16,7 @@ var (
 	trackExecDryRun       bool
 	trackExecNoState      bool
 	trackExecTrustProject bool
+	trackExecCtxtRefs     []string
 )
 
 // trackExecCmd implements `tlc track exec <id> --agent <name>`.
@@ -46,7 +47,12 @@ Examples:
 			registry.TrustProject(registry.ProjectConfigPath())
 		}
 
-		agentCfg, err := registry.Get(trackExecAgent)
+		resolvedAgent, err := resolveAgentName(registry, trackExecAgent)
+		if err != nil {
+			return err
+		}
+
+		agentCfg, err := registry.Get(resolvedAgent)
 		if err != nil {
 			if _, ok := err.(*core.ErrTrustRequired); ok {
 				return fmt.Errorf(
@@ -80,38 +86,56 @@ Examples:
 		// Resolve linked TODO tasks in dependency order.
 		builder := core.NewContextBuilder(s)
 		taskContexts, err := builder.BuildForTrack(ctx, trackID, core.BuildOpts{
+			CtxtRefs: trackExecCtxtRefs,
 			RepoRoot: repoRootForMode(trackExecLocal),
 		})
 		if err != nil {
 			return err
 		}
 
+		// Build an alias lookup once so the loops below can show
+		// T-NNNN instead of the durable typeid.
+		taskSvc := core.NewTaskService(s, s)
+		trackSvc := core.NewTrackService(s, s)
+		trackDisplay := trackDisplayID(ctx, trackSvc, trackID)
+		taskAlias := make(map[string]string, len(taskContexts))
+		for _, ac := range taskContexts {
+			if t, err := s.GetTask(ctx, ac.TaskID); err == nil && t != nil {
+				taskAlias[ac.TaskID] = formatTaskAlias(t)
+			} else {
+				taskAlias[ac.TaskID] = ac.TaskID
+			}
+		}
+
 		if trackExecDryRun {
 			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "Dry run — track %s\n", trackID)
-			_, _ = fmt.Fprintf(out, "  Agent: %s\n", trackExecAgent)
-			_, _ = fmt.Fprintf(out, "  Tasks: %d\n\n", len(taskContexts))
+			_, _ = fmt.Fprintf(out, "Dry run — track %s\n", trackDisplay)
+			_, _ = fmt.Fprintf(out, "  Agent: %s\n", resolvedAgent)
+			_, _ = fmt.Fprintf(out, "  Tasks: %d\n", len(taskContexts))
+			if len(trackExecCtxtRefs) > 0 {
+				_, _ = fmt.Fprintf(out, "  Ctxt:  %v\n", trackExecCtxtRefs)
+			}
+			_, _ = fmt.Fprintln(out)
 			for i, ac := range taskContexts {
 				_, _ = fmt.Fprintf(out, "  %d. %s: %s\n",
-					i+1, ac.TaskID, ac.TaskTitle)
+					i+1, taskAlias[ac.TaskID], ac.TaskTitle)
 			}
 			return nil
 		}
 
 		// Execute tasks sequentially.
-		taskSvc := core.NewTaskService(s, s)
 		updater := core.NewStateUpdater(taskSvc, GetEventBus())
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 			"Executing track %s (%d tasks) via agent %s\n\n",
-			trackID, len(taskContexts), trackExecAgent)
+			trackDisplay, len(taskContexts), resolvedAgent)
 
 		for i, ac := range taskContexts {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[%d/%d] %s: %s\n",
-				i+1, len(taskContexts), ac.TaskID, ac.TaskTitle)
+				i+1, len(taskContexts), taskAlias[ac.TaskID], ac.TaskTitle)
 
 			if err := taskExecForTrack(
-				ctx, cmd, trackExecAgent, ac.TaskID,
+				ctx, cmd, resolvedAgent, ac.TaskID, taskAlias[ac.TaskID], ac,
 				agentCfg, s, updater,
 				trackExecLocal, trackExecNoState,
 			); err != nil {
@@ -120,7 +144,7 @@ Examples:
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-			"\nTrack %s execution complete.\n", trackID)
+			"\nTrack %s execution complete.\n", trackDisplay)
 		return nil
 	},
 }
@@ -134,6 +158,20 @@ func init() {
 	f.BoolVar(&trackExecNoState, "no-state-update", false, "Skip state transitions")
 	f.BoolVar(&trackExecTrustProject, "trust-project", false,
 		"Trust project-local agent config without prompting")
+	f.StringSliceVar(&trackExecCtxtRefs, "ctxt", nil,
+		"ctxt query handle (id[?filter], repeatable) the agent may query")
 
 	TrackCmd.AddCommand(trackExecCmd)
+}
+
+// resetTrackExecFlags clears package-level flag state. Called by the
+// shared resetTaskFlags() test helper.
+func resetTrackExecFlags() {
+	trackExecAgent = ""
+	trackExecLocal = false
+	trackExecTimeout = 0
+	trackExecDryRun = false
+	trackExecNoState = false
+	trackExecTrustProject = false
+	trackExecCtxtRefs = nil
 }
