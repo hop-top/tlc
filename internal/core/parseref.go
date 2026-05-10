@@ -135,3 +135,17 @@ func FormatTaskAlias(t *Task) string {
 	}
 	return FormatTaskSeq(t.Seq)
 }
+
+// FormatTaskDisplay returns the display alias when available, otherwise
+// the task ID. Used by renderers that must always show *something* and
+// can't gracefully degrade when seq is unset (e.g. dep tree, batch
+// summary, critical path). Empty input yields empty output.
+func FormatTaskDisplay(t *Task) string {
+	if t == nil {
+		return ""
+	}
+	if alias := FormatTaskSeq(t.Seq); alias != "" {
+		return alias
+	}
+	return t.ID
+}

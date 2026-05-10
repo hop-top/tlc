@@ -21,6 +21,7 @@ type AgentContext struct {
 	StepTitle       string   `json:"step_title,omitempty"`
 	RepoRoot        string   `json:"repo_root"`
 	Files           []string `json:"files,omitempty"`
+	CtxtRefs        []string `json:"ctxt_refs,omitempty"`
 	Prompt          string   `json:"prompt"`
 }
 

@@ -32,7 +32,12 @@ check_flag() {
   # Extract just the flag name (last arg) — bash 3.2 compat (no negative indices)
   local flag="${subcmd[${#subcmd[@]}-1]}"
   local parent=("${subcmd[@]:0:${#subcmd[@]}-1}")
-  if "${parent[@]}" --help 2>&1 | grep -qF -- "$flag"; then
+  # Capture --help output, then grep. Avoids the SIGPIPE/pipefail
+  # interaction that bites when `grep -q` closes the pipe early on
+  # large help payloads.
+  local out
+  out="$("${parent[@]}" --help 2>&1)" || true
+  if printf '%s\n' "$out" | grep -qF -- "$flag"; then
     echo "  OK  $label"
     ((PASS++)) || true
   else
@@ -151,9 +156,12 @@ check_flag "agent run --async"          $TLC agent run --async
 check_flag "agent run --local"          $TLC agent run --local
 check_flag "agent run --trust-project"  $TLC agent run --trust-project
 check_flag "task exec --agent"          $TLC task exec --agent
-check_flag "task exec --local"          $TLC task exec --local
+check_flag "task exec --with-pod"       $TLC task exec --with-pod
+check_flag "task exec --force"          $TLC task exec --force
+check_flag "task exec --ctxt"           $TLC task exec --ctxt
 check_flag "track exec --agent"         $TLC track exec --agent
 check_flag "track exec --local"         $TLC track exec --local
+check_flag "track exec --ctxt"          $TLC track exec --ctxt
 
 echo
 echo "-- schema command --"

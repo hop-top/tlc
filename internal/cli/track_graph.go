@@ -112,23 +112,11 @@ func runTrackGraph(cmd *cobra.Command, args []string) error {
 
 		if trackGraphCriticalPath && len(strategy.CriticalPath) > 0 {
 			_, _ = fmt.Fprintf(w, "\nCritical Path: %s\n",
-				formatCriticalPath(strategy.CriticalPath))
+				core.FormatCriticalPath(strategy.CriticalPath, tasks))
 		}
 	}
 
 	return nil
-}
-
-// formatCriticalPath renders a critical path as "A -> B -> C".
-func formatCriticalPath(ids []string) string {
-	if len(ids) == 0 {
-		return "(none)"
-	}
-	result := ids[0]
-	for _, id := range ids[1:] {
-		result += " \u2192 " + id
-	}
-	return result
 }
 
 func init() {

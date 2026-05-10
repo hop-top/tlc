@@ -66,12 +66,12 @@ var TaskClaimCmd = &cobra.Command{
 				appendAuditLog(task, user, "CLAIMED", details, taskClaimNote, task.UpdatedAt)
 			}
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), transErr))
 				continue
 			}
 
 			if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 
@@ -139,12 +139,12 @@ var TaskUnclaimCmd = &cobra.Command{
 				appendAuditLog(task, user, "UNCLAIMED", details, taskUnclaimNote, task.UpdatedAt)
 			}
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), transErr))
 				continue
 			}
 
 			if err := saveTaskWithLog(ctx, cmd, task, log, res.Storage); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", taskDisplayID(task))
@@ -211,7 +211,7 @@ var TaskAssignCmd = &cobra.Command{
 			}
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 
@@ -281,7 +281,7 @@ var TaskUnassignCmd = &cobra.Command{
 			}
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", taskDisplayID(task))
@@ -341,19 +341,15 @@ var TaskCompleteCmd = &cobra.Command{
 				appendAuditLog(task, user, "COMPLETED", details, taskCompleteNote, task.UpdatedAt)
 			}
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), transErr))
 				continue
 			}
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
-			alias := core.FormatTaskAlias(task)
-			if alias == "" {
-				alias = task.ID
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", alias)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", formatTaskAlias(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -397,11 +393,12 @@ var TaskReopenCmd = &cobra.Command{
 
 			wm := core.DefaultWorkflow()
 			if !wm.IsTerminal(task.Status) {
+				alias := formatTaskAlias(task)
 				errs = append(errs, fmt.Sprintf(
 					"%s: cannot be reopened: current status %s is not terminal "+
 						"(terminal statuses: DONE, SKIPPED); use 'tlc task update %s --status <status> --force' "+
 						"to force a status change instead",
-					task.ID, task.Status, task.ID,
+					alias, task.Status, alias,
 				))
 				continue
 			}
@@ -418,12 +415,12 @@ var TaskReopenCmd = &cobra.Command{
 				initialStatus, user, taskReopenNote, wm, true,
 			)
 			if transErr != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to reopen task: %v", task.ID, transErr))
+				errs = append(errs, fmt.Sprintf("%s: failed to reopen task: %v", formatTaskAlias(task), transErr))
 				continue
 			}
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", task.ID, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", taskDisplayID(task))

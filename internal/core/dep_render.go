@@ -70,12 +70,14 @@ func renderNode(
 	annotation := ""
 	if len(deps) > 1 {
 		depIDs := make([]string, len(deps))
-		copy(depIDs, deps)
+		for i, dep := range deps {
+			depIDs[i] = FormatTaskDisplay(tasks[dep])
+		}
 		sort.Strings(depIDs)
 		annotation = fmt.Sprintf(" [depends: %s]", strings.Join(depIDs, ", "))
 	}
 
-	fmt.Fprintf(b, "%s%s%s (%s)%s\n", prefix, connector, t.ID, t.Title, annotation)
+	fmt.Fprintf(b, "%s%s%s (%s)%s\n", prefix, connector, FormatTaskDisplay(t), t.Title, annotation)
 
 	if visited[id] {
 		return
@@ -121,7 +123,7 @@ func RenderBatchSummary(strategy *ExecutionStrategy) string {
 	for _, batch := range strategy.Batches {
 		ids := make([]string, len(batch.Tasks))
 		for i, t := range batch.Tasks {
-			ids[i] = t.ID
+			ids[i] = FormatTaskDisplay(t)
 		}
 
 		mode := "sequential"
@@ -187,7 +189,7 @@ func RenderMermaid(strategy *ExecutionStrategy, tasks []*Task) string {
 		for _, t := range batch.Tasks {
 			nid := mermaidNodeID(t.ID)
 			b.WriteString(fmt.Sprintf("    %s[\"%s %s\"]\n",
-				nid, t.ID, escapeMermaid(t.Title)))
+				nid, FormatTaskDisplay(t), escapeMermaid(t.Title)))
 		}
 
 		b.WriteString("  end\n")
@@ -200,6 +202,32 @@ func RenderMermaid(strategy *ExecutionStrategy, tasks []*Task) string {
 // node identifier "T0074" (no hyphens).
 func mermaidNodeID(id string) string {
 	return strings.ReplaceAll(id, "-", "")
+}
+
+// FormatCriticalPath renders the strategy's critical path as
+// "A → B → C", substituting display aliases (T-NNNN) when seq is set
+// and falling back to the raw task ID otherwise. Pass the same task
+// slice used to build the strategy.
+func FormatCriticalPath(path []string, tasks []*Task) string {
+	if len(path) == 0 {
+		return ""
+	}
+	taskMap := make(map[string]*Task, len(tasks))
+	for _, t := range tasks {
+		if t == nil || t.ID == "" {
+			continue
+		}
+		taskMap[t.ID] = t
+	}
+	parts := make([]string, len(path))
+	for i, id := range path {
+		if t, ok := taskMap[id]; ok {
+			parts[i] = FormatTaskDisplay(t)
+		} else {
+			parts[i] = id
+		}
+	}
+	return strings.Join(parts, " → ")
 }
 
 // escapeMermaid escapes characters that are special in Mermaid labels.
