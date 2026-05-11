@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,8 +21,12 @@ import (
 //
 // Same invariant for CreatedAt / UpdatedAt / LastSyncAt / StaleFiredAt.
 func TestTaskTemporalFields_UTCRoundTrip(t *testing.T) {
-	dbPath := "test_task_utc_round_trip.db"
-	t.Cleanup(func() { _ = os.Remove(dbPath) })
+	// t.TempDir auto-cleans the entire directory, which catches the
+	// SQLite WAL sidecars (-wal, -shm — NewSQLiteStorage enables WAL
+	// mode) AND the migration backup files (written under .dbs/) that
+	// neither a plain os.Remove(dbPath) nor a fixed cwd-relative path
+	// would clean up.
+	dbPath := filepath.Join(t.TempDir(), "test_task_utc_round_trip.db")
 
 	storage, err := NewSQLiteStorage(dbPath)
 	if err != nil {
