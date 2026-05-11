@@ -329,12 +329,15 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			assignee = *t.AssignedTo
 		}
 
+		// Table column: humanise DueAt relative to now ("in 3d",
+		// "2h ago"). JSON/YAML output paths stay on RFC3339 via
+		// the structured marshaller. Spec §6, T-1384.
 		dueCol := "-"
 		if t.DueAt != nil {
 			if t.IsOverdue() {
-				dueCol = "! " + DisplayTimePtr(t.DueAt, LayoutDate)
+				dueCol = "! " + DisplayTimePtrRelative(t.DueAt)
 			} else {
-				dueCol = DisplayTimePtr(t.DueAt, LayoutDate)
+				dueCol = DisplayTimePtrRelative(t.DueAt)
 			}
 		}
 
@@ -559,7 +562,8 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Blocked Reason:"), *t.BlockedReason)
 	}
 	if t.StaleFiredAt != nil {
-		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Fired At:"), DisplayTimePtr(t.StaleFiredAt, LayoutRFC3339))
+		// Detail view: humanise past timestamps ("2d ago"). T-1384.
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Fired At:"), DisplayTimePtrRelative(t.StaleFiredAt))
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Track:"), formatTaskTrackDisplay(*t.TrackID))
@@ -599,8 +603,12 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	if isShowTypeIDOutput() || !core.IsInternalTaskRef(t.Reference, t) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
 	}
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), DisplayTime(t.CreatedAt, LayoutRFC3339))
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), DisplayTime(t.UpdatedAt, LayoutRFC3339))
+	// Detail view: CreatedAt/UpdatedAt humanise ("2d ago", "5m ago").
+	// DueAt/RemindAt above stay absolute because a specific deadline
+	// is more useful than a relative one when deep-inspecting a task.
+	// T-1384.
+	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), DisplayTimeRelative(t.CreatedAt))
+	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), DisplayTimeRelative(t.UpdatedAt))
 
 	if t.Description != "" {
 		_, _ = fmt.Fprintln(w, "\nDescription:")

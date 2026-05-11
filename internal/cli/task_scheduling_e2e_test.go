@@ -365,7 +365,18 @@ func TestTaskList_DueColumn(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "2025-05-01") {
-		t.Errorf("list should show due date, got: %s", output)
+	// T-1384: table format renders DueAt humanised ("Nd ago" /
+	// "in Nd"). The 2025-05-01 fixture is in the past relative to
+	// any plausible test runtime, so the marker shows "! " plus a
+	// "ago" suffix. Assert the structural shape rather than an
+	// exact number that drifts with wall-clock time.
+	if !strings.Contains(output, "ago") {
+		t.Errorf("list should show humanised past due ('ago'), got: %s", output)
+	}
+	if !strings.Contains(output, "! ") {
+		t.Errorf("list should show overdue marker '! ', got: %s", output)
+	}
+	if strings.Contains(output, "2025-05-01") {
+		t.Errorf("table column should not leak absolute date 2025-05-01 (humanise per T-1384), got: %s", output)
 	}
 }

@@ -115,12 +115,14 @@ Usage:
 			return fmt.Errorf("flow execution failed: %w", err)
 		}
 
+		// Post-execution recap (table-style detail). Humanise
+		// Started/Ended ("2m ago"). T-1384.
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFlow execution completed!\n")
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Run ID: %s\n", run.ID)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n", run.Status)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Started: %s\n", DisplayTime(run.StartedAt, LayoutDateTime))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Started: %s\n", DisplayTimeRelative(run.StartedAt))
 		if run.EndedAt != nil {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Ended: %s\n", DisplayTimePtr(run.EndedAt, LayoutDateTime))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Ended: %s\n", DisplayTimePtrRelative(run.EndedAt))
 			duration := run.EndedAt.Sub(run.StartedAt)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Duration: %s\n", duration)
 		}
@@ -212,12 +214,14 @@ func printFlowRun(cmd *cobra.Command, run *core.FlowRun, format string) {
 	case formatJSON, formatYAML:
 		_ = output.Render(out, format, run) //nolint:errcheck // best-effort output
 	default:
+		// printFlowRun detail (table-style). Humanise Started/Ended.
+		// JSON/YAML branch above keeps RFC3339. T-1384.
 		_, _ = fmt.Fprintf(out, "Flow Run: %s\n", run.ID)
 		_, _ = fmt.Fprintf(out, "  Flow ID: %s\n", run.FlowID)
 		_, _ = fmt.Fprintf(out, "  Status: %s\n", formatFlowStatus(run.Status))
-		_, _ = fmt.Fprintf(out, "  Started: %s\n", DisplayTime(run.StartedAt, LayoutDateTime))
+		_, _ = fmt.Fprintf(out, "  Started: %s\n", DisplayTimeRelative(run.StartedAt))
 		if run.EndedAt != nil {
-			_, _ = fmt.Fprintf(out, "  Ended: %s\n", DisplayTimePtr(run.EndedAt, LayoutDateTime))
+			_, _ = fmt.Fprintf(out, "  Ended: %s\n", DisplayTimePtrRelative(run.EndedAt))
 			duration := run.EndedAt.Sub(run.StartedAt)
 			_, _ = fmt.Fprintf(out, "  Duration: %s\n", duration)
 		}
@@ -267,8 +271,9 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 			// Plain status — kit/output's tabwriter (non-TTY) passes
 			// cell values through verbatim, so pre-styled lipgloss
 			// escapes from formatFlowStatus would leak into pipes.
-			Status:   string(r.Status),
-			Started:  DisplayTime(r.StartedAt, LayoutDateTime),
+			Status: string(r.Status),
+			// Table column: humanise StartedAt ("5m ago"). T-1384.
+			Started:  DisplayTimeRelative(r.StartedAt),
 			Duration: duration,
 		}
 	}

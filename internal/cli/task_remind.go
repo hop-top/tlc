@@ -68,13 +68,16 @@ var TaskRemindCmd = &cobra.Command{
 			upcoming = append(upcoming, t)
 		}
 
+		// `task remind` is a table-style view per spec §6, so DueAt
+		// and reminder timestamps humanise across all sections
+		// ("overdue 2h", "in 3h", "in 2d"). T-1384.
 		if taskRemindCheck {
 			if len(overdue) > 0 {
 				for _, t := range overdue {
 					fmt.Fprintf(os.Stderr,
 						"OVERDUE: %s %s (due %s)\n",
 						t.ID, t.Title,
-						DisplayTimePtr(t.DueAt, LayoutDate),
+						DisplayTimePtrRelative(t.DueAt),
 					)
 				}
 				return fmt.Errorf(
@@ -91,7 +94,7 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range overdue {
 				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
-					DisplayTimePtr(t.DueAt, LayoutDateMinute),
+					DisplayTimePtrRelative(t.DueAt),
 				)
 			}
 			fmt.Fprintln(w)
@@ -102,7 +105,7 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range dueToday {
 				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
-					DisplayTimePtr(t.DueAt, LayoutTimeOnly),
+					DisplayTimePtrRelative(t.DueAt),
 				)
 			}
 			fmt.Fprintln(w)
@@ -113,9 +116,9 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range upcoming {
 				label := ""
 				if t.DueAt != nil {
-					label = "due " + DisplayTimePtr(t.DueAt, LayoutDate)
+					label = "due " + DisplayTimePtrRelative(t.DueAt)
 				} else if nr := t.NextReminder(); nr != nil {
-					label = "next " + DisplayTime(*nr, LayoutDateMinute)
+					label = "next " + DisplayTimeRelative(*nr)
 				}
 				fmt.Fprintf(w, "  %s  %-40s  %s\n",
 					t.ID, t.Title, label,

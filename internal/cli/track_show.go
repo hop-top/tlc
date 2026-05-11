@@ -168,10 +168,13 @@ func renderTrackShowDetail(
 		assignee,
 	)
 
+	// Detail view: humanise CreatedAt/UpdatedAt ("2d ago"). The
+	// JSON/YAML projection in buildTrackShowOutput keeps absolute
+	// LayoutDate for tooling. T-1384.
 	_, _ = fmt.Fprintf(w, "%s %s    %s %s\n",
-		labelStyle.Render("Created:"), DisplayTime(t.CreatedAt, LayoutDate),
+		labelStyle.Render("Created:"), DisplayTimeRelative(t.CreatedAt),
 		lipgloss.NewStyle().Foreground(mutedColor).Render("Updated:"),
-		DisplayTime(t.UpdatedAt, LayoutDate),
+		DisplayTimeRelative(t.UpdatedAt),
 	)
 
 	// Progress summary

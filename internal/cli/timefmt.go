@@ -26,6 +26,18 @@ func DisplayTimePtr(t *time.Time, layout string) string {
 	return displaytime.DisplayTimePtr(t, layout)
 }
 
+// DisplayTimeRelative renders t humanised relative to now ("2h ago",
+// "in 3d"). Use for table-format columns; JSON/YAML render paths keep
+// DisplayTime with LayoutRFC3339. See displaytime.DisplayTimeRelative.
+func DisplayTimeRelative(t time.Time) string {
+	return displaytime.DisplayTimeRelative(t)
+}
+
+// DisplayTimePtrRelative is the *time.Time variant; nil renders as "".
+func DisplayTimePtrRelative(t *time.Time) string {
+	return displaytime.DisplayTimePtrRelative(t)
+}
+
 // warnDisplayTimezone forwards to displaytime.WarnInvalid so root.go
 // can keep a stable internal-cli symbol.
 func warnDisplayTimezone() {
