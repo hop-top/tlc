@@ -90,6 +90,12 @@ var (
 	taskListPriority  []string
 	taskListBlockedBy []string
 
+	// Temporal filters (T-0908). See task_list.go for parsing/validation.
+	taskListDueBefore string
+	taskListDueAfter  string
+	taskListOverdue   bool
+	taskListNoDue     bool
+
 	taskNoPrompt bool
 
 	taskTrack       string

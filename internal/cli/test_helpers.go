@@ -397,6 +397,10 @@ func resetTaskFlags() {
 	taskListBlocked = false
 	taskListPriority = []string{}
 	taskListBlockedBy = []string{}
+	taskListDueBefore = ""
+	taskListDueAfter = ""
+	taskListOverdue = false
+	taskListNoDue = false
 
 	taskStaleRunHooks = false
 

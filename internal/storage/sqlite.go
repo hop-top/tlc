@@ -717,9 +717,32 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		whereClauses = append(whereClauses, "archived = 0")
 	}
 
+	// Temporal filters (T-0908). due_at is stored as RFC3339 UTC TEXT
+	// per docs/temporal-spec-0.1.md §4. RFC3339's lexicographic byte
+	// ordering matches chronological ordering when all values share the
+	// same offset (writes use UTC with the `Z` suffix uniformly — see
+	// the INSERT/UPDATE paths above), so a string `<` / `>` against an
+	// RFC3339 literal is a correct chronological compare.
+	if query.DueBefore != nil {
+		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at < ?")
+		args = append(args, query.DueBefore.UTC().Format(time.RFC3339))
+	}
+	if query.DueAfter != nil {
+		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at > ?")
+		args = append(args, query.DueAfter.UTC().Format(time.RFC3339))
+	}
+	if query.HasDue != nil {
+		if *query.HasDue {
+			whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at != ''")
+		} else {
+			whereClauses = append(whereClauses, "(due_at IS NULL OR due_at = '')")
+		}
+	}
+
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
+
 
 	// Sorting
 	var orderParts []string

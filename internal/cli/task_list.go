@@ -11,6 +11,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/workspace"
@@ -144,6 +145,15 @@ var TaskListCmd = &cobra.Command{
 			}
 		}
 
+		// Temporal filter validation + parsing (T-0908).
+		// Mutual exclusion is checked here, before opening storage, so
+		// errors surface against the user's flags without I/O side
+		// effects. Parsing uses util.ParseUntil per
+		// docs/temporal-spec-0.1.md §5 (forward-looking expressions).
+		if err := applyTemporalFilters(cmd, &query); err != nil {
+			return err
+		}
+
 		// Workspace mode: query across workspace projects.
 		if cmd.Flags().Changed("workspace") {
 			return runTaskListWorkspace(cmd, ctx, query)
@@ -186,8 +196,8 @@ var TaskListCmd = &cobra.Command{
 			}
 		}
 
-		// Post-query filter for --stale, --blocked, --blocked-by.
-		if taskListStale || taskListBlocked || len(taskListBlockedBy) > 0 {
+		// Post-query filter for --stale, --blocked, --blocked-by, --overdue.
+		if taskListStale || taskListBlocked || len(taskListBlockedBy) > 0 || taskListOverdue {
 			filtered := tasks[:0]
 			for _, t := range tasks {
 				if taskListStale && !t.IsStale() {
@@ -198,6 +208,11 @@ var TaskListCmd = &cobra.Command{
 				}
 				if len(taskListBlockedBy) > 0 && !taskBlockedByAny(t, taskListBlockedBy) {
 					continue
+				}
+				if taskListOverdue {
+					if t.Status == core.StatusDone || t.Status == core.StatusSkipped {
+						continue
+					}
 				}
 				filtered = append(filtered, t)
 			}
@@ -362,6 +377,59 @@ func init() {
 	TaskListCmd.Flags().StringVar(&taskListTrack, "track", "", "Filter by track ID")
 	TaskListCmd.Flags().StringVar(&taskListOutput, "output", "", "Write output to a file instead of stdout")
 	TaskListCmd.Flags().BoolVar(&taskListIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
+
+	// Temporal filters (T-0908). Values for --due-before/--due-after are
+	// parsed with util.ParseUntil per docs/temporal-spec-0.1.md §5.
+	TaskListCmd.Flags().StringVar(&taskListDueBefore, "due-before", "", "Show tasks with due_at before the given time (e.g. tomorrow, 2026-05-12, +24h)")
+	TaskListCmd.Flags().StringVar(&taskListDueAfter, "due-after", "", "Show tasks with due_at after the given time")
+	TaskListCmd.Flags().BoolVar(&taskListOverdue, "overdue", false, "Show overdue tasks (due_at < now AND status not in DONE,SKIPPED)")
+	TaskListCmd.Flags().BoolVar(&taskListNoDue, "no-due", false, "Show only tasks with no due date set")
+}
+
+// applyTemporalFilters validates and applies --due-before, --due-after,
+// --overdue, and --no-due to the query. Mutually-exclusive combinations
+// are rejected with a clear error. Time strings are parsed via
+// util.ParseUntil per docs/temporal-spec-0.1.md §5.
+func applyTemporalFilters(cmd *cobra.Command, query *core.Query) error {
+	hasDueBefore := cmd.Flags().Changed("due-before")
+	hasDueAfter := cmd.Flags().Changed("due-after")
+
+	// Mutual exclusion: --overdue conflicts with --due-before / --due-after.
+	if taskListOverdue && (hasDueBefore || hasDueAfter) {
+		return fmt.Errorf("--overdue is mutually exclusive with --due-before / --due-after")
+	}
+	// Mutual exclusion: --no-due cannot be combined with the others.
+	if taskListNoDue && (hasDueBefore || hasDueAfter || taskListOverdue) {
+		return fmt.Errorf("--no-due is mutually exclusive with --due-before / --due-after / --overdue")
+	}
+
+	if hasDueBefore && taskListDueBefore != "" {
+		t, err := util.ParseUntil(taskListDueBefore)
+		if err != nil {
+			return fmt.Errorf("invalid --due-before %q: %w", taskListDueBefore, err)
+		}
+		query.DueBefore = &t
+	}
+	if hasDueAfter && taskListDueAfter != "" {
+		t, err := util.ParseUntil(taskListDueAfter)
+		if err != nil {
+			return fmt.Errorf("invalid --due-after %q: %w", taskListDueAfter, err)
+		}
+		query.DueAfter = &t
+	}
+	if taskListOverdue {
+		now := time.Now().UTC()
+		query.DueBefore = &now
+		// Status exclusion (DONE / SKIPPED) is applied post-query in
+		// the same way --stale / --blocked filter results — adding it
+		// to query.Filters would merge under the existing OR-joined
+		// status group and silently widen the result set.
+	}
+	if taskListNoDue {
+		f := false
+		query.HasDue = &f
+	}
+	return nil
 }
 
 // taskBlockedByAny reports whether t is blocked by any of the given IDs.
