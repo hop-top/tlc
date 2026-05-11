@@ -312,11 +312,11 @@ func validateBlockedByRefs(ctx context.Context, registryStorage, localStorage *s
 		if isCrossProject {
 			resolverStorage = registryStorage
 		} else {
-			// Translate a local-scope display alias (T-NNNN) or bare
-			// seq into the durable typeid via parseTaskRefForCLI — the
-			// same translation positional task args go through. Without
+			// Translate a local-scope display alias or bare seq into
+			// the durable typeid via parseTaskRefForCLI — the same
+			// translation positional task args go through. Without
 			// this, GetTask would query the typeid column with the raw
-			// display string and miss. (T-0620 in aps backlog.)
+			// display string and miss.
 			translated, err := parseTaskRefForCLI(ctx, localStorage, normalizedRef)
 			if err == nil && translated != "" {
 				normalizedRef = translated
