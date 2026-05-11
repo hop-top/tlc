@@ -66,7 +66,8 @@ var (
 	taskDeleteYes  bool
 	taskDeleteNote string
 
-	taskUpdateNote string
+	taskUpdateNote  string
+	taskUpdateAmend bool
 
 	taskClaimNote        string
 	taskUnclaimNote      string

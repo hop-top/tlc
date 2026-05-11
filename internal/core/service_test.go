@@ -188,6 +188,17 @@ func (m *mockRepo) ListLogs(_ context.Context, _ LogQuery) ([]*LogEntry, error) 
 	return m.logs, nil
 }
 
+func (m *mockRepo) UpdateLogNote(_ context.Context, logID int64, note string, meta map[string]any) error {
+	for _, l := range m.logs {
+		if l.ID == logID {
+			l.Note = note
+			l.Meta = meta
+			return nil
+		}
+	}
+	return nil
+}
+
 func TestTaskService_Transition(t *testing.T) {
 	repo := &mockRepo{tasks: make(map[string]*Task)}
 	service := NewTaskService(repo, repo)

@@ -26,6 +26,17 @@ func (m *mockLogRepo) ListLogs(_ context.Context, _ core.LogQuery) ([]*core.LogE
 	return m.entries, nil
 }
 
+func (m *mockLogRepo) UpdateLogNote(_ context.Context, logID int64, note string, meta map[string]any) error {
+	for _, e := range m.entries {
+		if e.ID == logID {
+			e.Note = note
+			e.Meta = meta
+			return nil
+		}
+	}
+	return nil
+}
+
 func TestAuditSubscriber_PersistsEvent(t *testing.T) {
 	b := bus.New()
 	defer b.Close(context.Background())

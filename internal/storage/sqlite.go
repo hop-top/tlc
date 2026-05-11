@@ -801,6 +801,30 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 	})
 }
 
+// UpdateLogNote rewrites the note and meta of an existing log entry.
+// Used by `tlc task update --amend` to edit the most recent log in
+// place. Returns an error if the log row does not exist.
+func (s *SQLiteStorage) UpdateLogNote(ctx context.Context, logID int64, note string, meta map[string]any) error {
+	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
+		metaJSON, _ := json.Marshal(meta)
+		res, err := tx.ExecContext(ctx, `
+			UPDATE task_logs SET note = ?, meta = ? WHERE id = ?`,
+			note, string(metaJSON), logID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update log entry: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to read rows affected: %w", err)
+		}
+		if n == 0 {
+			return fmt.Errorf("log entry %d not found", logID)
+		}
+		return nil
+	})
+}
+
 func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*core.LogEntry, error) {
 	order := "DESC"
 	if strings.ToUpper(sortDirection) == sqlOrderASC {

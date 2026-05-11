@@ -273,6 +273,21 @@ func (m *MockLogRepository) ListLogs(ctx context.Context, query LogQuery) ([]*Lo
 	return m.Logs, nil
 }
 
+// UpdateLogNote rewrites the note and meta of an existing log entry by
+// ID. Used by `tlc task update --amend` to edit logs in place.
+func (m *MockLogRepository) UpdateLogNote(_ context.Context, logID int64, note string, meta map[string]any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, l := range m.Logs {
+		if l.ID == logID {
+			l.Note = note
+			l.Meta = meta
+			return nil
+		}
+	}
+	return fmt.Errorf("log entry %d not found", logID)
+}
+
 // MockAgentRunner is a configurable AgentRunner for unit tests.
 // CanHandleFunc defaults to always-true when nil.
 // RunFunc defaults to returning an empty output map when nil.
