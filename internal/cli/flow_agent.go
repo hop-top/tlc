@@ -10,10 +10,19 @@ var (
 	flowRunTrustProject bool
 )
 
-// buildFlowAgentRunner creates a ContainerAgentRunner when --agent is
-// set on flow run. Returns nil if no agent is configured.
+// buildFlowAgentRunner creates a ContainerAgentRunner when --agent or
+// --agent-local is set on flow run. Returns nil when neither flag is
+// present (steps fall back to the DB-only ephemeral path).
+//
+// --agent-local alone is sufficient because individual flow steps may
+// declare their own `agent: <name>` in YAML; the runner consults
+// step.Agent.Name when its own AgentName is empty (see
+// ContainerAgentRunner.CanHandle / Run). Requiring --agent here caused
+// T-0948: flow steps with a YAML-declared agent silently no-op'd when
+// the user passed only --agent-local because no runner was wired up
+// and executeTemplateStep fell through to the DB-only completion path.
 func buildFlowAgentRunner() core.AgentRunner {
-	if flowRunAgent == "" {
+	if flowRunAgent == "" && !flowRunAgentLocal {
 		return nil
 	}
 
