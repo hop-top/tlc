@@ -107,16 +107,16 @@ var trackUpdateCmd = &cobra.Command{
 		}
 
 		// Parse --due ahead of the mutation closure so an invalid value
-		// fails before any write. The "" / "-" / "null" sentinels clear
-		// the field; anything else goes through util.ParseUntil per the
-		// temporal spec (UTC RFC3339 on the wire).
+		// fails before any write. The "" / "-" sentinels clear the field
+		// (mirrors task update); anything else goes through util.ParseUntil
+		// per the temporal spec (UTC RFC3339 on the wire).
 		var (
 			dueClear  bool
 			parsedDue *time.Time
 		)
 		if dueChanged {
 			raw := trackUpdateDue
-			if raw == "" || raw == "-" || raw == "null" {
+			if raw == "" || raw == "-" {
 				dueClear = true
 			} else {
 				dt, perr := util.ParseUntil(raw)

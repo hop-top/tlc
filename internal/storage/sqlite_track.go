@@ -31,7 +31,7 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 
 		var dueAtSQL sql.NullString
 		if track.DueAt != nil {
-			dueAtSQL = sql.NullString{String: track.DueAt.Format(time.RFC3339), Valid: true}
+			dueAtSQL = sql.NullString{String: track.DueAt.UTC().Format(time.RFC3339), Valid: true}
 		}
 
 		_, err := tx.ExecContext(ctx, `
@@ -128,7 +128,7 @@ func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) erro
 
 		var dueAtSQL sql.NullString
 		if track.DueAt != nil {
-			dueAtSQL = sql.NullString{String: track.DueAt.Format(time.RFC3339), Valid: true}
+			dueAtSQL = sql.NullString{String: track.DueAt.UTC().Format(time.RFC3339), Valid: true}
 		}
 
 		res, err := tx.ExecContext(ctx, `
@@ -335,10 +335,11 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 		}
 	}
 	if dueAtStr.Valid && dueAtStr.String != "" {
-		t, err := parseRFC3339(dueAtStr.String)
+		parsed, err := parseRFC3339(dueAtStr.String)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse track due_at: %w", err)
 		}
+		t := parsed.UTC()
 		track.DueAt = &t
 	}
 
@@ -384,10 +385,11 @@ func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 		}
 	}
 	if dueAtStr.Valid && dueAtStr.String != "" {
-		t, err := parseRFC3339(dueAtStr.String)
+		parsed, err := parseRFC3339(dueAtStr.String)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse track due_at: %w", err)
 		}
+		t := parsed.UTC()
 		track.DueAt = &t
 	}
 

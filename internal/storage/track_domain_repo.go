@@ -72,7 +72,7 @@ func BindTrack(t core.Track) (cols []string, vals []any) {
 
 	var dueAt any
 	if t.DueAt != nil {
-		dueAt = t.DueAt.Format(time.RFC3339)
+		dueAt = t.DueAt.UTC().Format(time.RFC3339)
 	}
 
 	cols = []string{
@@ -117,6 +117,7 @@ func populateTrack(
 		if perr != nil {
 			return fmt.Errorf("failed to parse track due_at: %w", perr)
 		}
+		parsed = parsed.UTC()
 		t.DueAt = &parsed
 	}
 	return nil

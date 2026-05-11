@@ -20,7 +20,8 @@ func TestMigrationV18_TracksDueAt(t *testing.T) {
 	s := newTrackTestStorage(t)
 	ctx := context.Background()
 
-	// Schema is at HEAD after NewSQLiteStorage; assert HEAD == 18.
+	// Schema is at HEAD after NewSQLiteStorage; assert HEAD >= 18
+	// (v18 shipped or any later migration applied on top).
 	version, err := s.SchemaVersion()
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)

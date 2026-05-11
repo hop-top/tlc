@@ -15,6 +15,8 @@ func TestTrackCreate_Due(t *testing.T) {
 	withTestLock(func() {
 		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
+		resetTrackFlags()
+		defer resetTrackFlags()
 
 		cmd := newTestCmd()
 		cmd.AddCommand(TrackCmd)
@@ -59,6 +61,8 @@ func TestTrackUpdate_ClearDue(t *testing.T) {
 	withTestLock(func() {
 		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
+		resetTrackFlags()
+		defer resetTrackFlags()
 
 		s, err := getStorageRaw()
 		if err != nil {
@@ -107,6 +111,8 @@ func TestTrackUpdate_OverwriteDue(t *testing.T) {
 	withTestLock(func() {
 		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
+		resetTrackFlags()
+		defer resetTrackFlags()
 
 		s, err := getStorageRaw()
 		if err != nil {
