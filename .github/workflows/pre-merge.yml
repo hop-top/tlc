@@ -1,0 +1,21 @@
+name: pre-merge
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  pre-merge:
+    name: pre-merge gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: make pre-merge
+        run: make pre-merge

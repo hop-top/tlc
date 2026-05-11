@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build build-plugins build-shims test test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild
+.PHONY: help install build build-plugins build-shims test test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild smoke-chdir pre-merge
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -184,6 +184,35 @@ pre-commit-install: ## Install pre-commit hooks
 
 verify: lint test ## Run linting and tests (CI-like checks)
 	@echo "$(COLOR_GREEN)✓ All verification checks passed$(COLOR_RESET)"
+
+smoke-chdir: ## Run the -C/--chdir end-to-end smoke (builds tlc, exercises two projects)
+	@echo "$(COLOR_BLUE)Running -C/--chdir smoke...$(COLOR_RESET)"
+	@go test -run TestChdir_Smoke_E2E_SwitchesProject -count=1 ./cmd/tlc/
+	@echo "$(COLOR_GREEN)✓ chdir smoke passed$(COLOR_RESET)"
+
+# Pre-merge gate enforces the three checks every PR to main must pass:
+#   1. build       — `go build ./...` (buildvcs disabled for worktree compatibility)
+#   2. static vet  — `go vet ./...` (canonical static check used by `make check`;
+#                    golangci-lint exists separately but currently has heavy
+#                    pre-existing lint debt + a v2.12 config-schema regression
+#                    in the shared CI lint workflow — out of scope here)
+#   3. e2e smoke   — `-C/--chdir` smoke test exercising the recently landed
+#                    chdir pre-parse (2b9335e / 814c397)
+pre-merge: ## Pre-merge gate: build, vet, and -C smoke (every PR to main must pass)
+	@echo "$(COLOR_BOLD)Running pre-merge gate...$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[1/3] Build...$(COLOR_RESET)"
+	@GOFLAGS=-buildvcs=false go build ./...
+	@echo "$(COLOR_GREEN)✓ Build passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[2/3] Vet...$(COLOR_RESET)"
+	@GOFLAGS=-buildvcs=false go vet ./...
+	@echo "$(COLOR_GREEN)✓ Vet passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[3/3] -C/--chdir smoke...$(COLOR_RESET)"
+	@GOFLAGS=-buildvcs=false $(MAKE) --no-print-directory smoke-chdir
+	@echo ""
+	@echo "$(COLOR_GREEN)$(COLOR_BOLD)✓ Pre-merge gate passed$(COLOR_RESET)"
 
 validate-docs: ## Validate tlc command examples in docs/AGENTS.md (Refs: tlc/T-0067)
 	@echo "$(COLOR_BLUE)Validating doc command examples...$(COLOR_RESET)"
