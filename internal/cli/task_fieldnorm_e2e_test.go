@@ -512,3 +512,169 @@ func TestFieldNorm_E2E_CreateUnknownPriority(t *testing.T) {
 		t.Errorf("expected error to mention 'garbage', got: %v", err)
 	}
 }
+
+func TestFieldNorm_E2E_UpdatePriorityLowercase(t *testing.T) {
+	for _, tc := range []struct {
+		input  string
+		expect core.Priority
+	}{
+		{"p0", core.PriorityP0},
+		{"p1", core.PriorityP1},
+		{"p2", core.PriorityP2},
+		{"p3", core.PriorityP3},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			ctx, cleanup := setupTestDir(t)
+			defer cleanup()
+			s, _ := getStorageRaw()
+			defer s.Close()
+
+			_ = s.CreateTask(ctx, &core.Task{
+				ID:     "T-0001",
+				Title:  "update lowercase priority",
+				Status: core.StatusTodo,
+			})
+
+			resetTaskFlags()
+			cmd := newTestCmd()
+			cmd.AddCommand(TaskCmd)
+			buf := new(bytes.Buffer)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", tc.input})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("task update --priority %s: %v", tc.input, err)
+			}
+
+			got := mustGetTask(t, ctx, s, "T-0001")
+			if got.Priority != tc.expect {
+				t.Errorf("input %q: got priority %q, want %q", tc.input, got.Priority, tc.expect)
+			}
+		})
+	}
+}
+
+func TestFieldNorm_E2E_UpdatePriorityAlias(t *testing.T) {
+	for _, tc := range []struct {
+		alias  string
+		expect core.Priority
+	}{
+		{"critical", core.PriorityP0},
+		{"high", core.PriorityP1},
+		{"medium", core.PriorityP2},
+		{"low", core.PriorityP3},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			ctx, cleanup := setupTestDir(t)
+			defer cleanup()
+			s, _ := getStorageRaw()
+			defer s.Close()
+
+			_ = s.CreateTask(ctx, &core.Task{
+				ID:     "T-0001",
+				Title:  "update alias priority",
+				Status: core.StatusTodo,
+			})
+
+			resetTaskFlags()
+			cmd := newTestCmd()
+			cmd.AddCommand(TaskCmd)
+			buf := new(bytes.Buffer)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", tc.alias})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("task update --priority %s: %v", tc.alias, err)
+			}
+
+			got := mustGetTask(t, ctx, s, "T-0001")
+			if got.Priority != tc.expect {
+				t.Errorf("alias %q: got priority %q, want %q", tc.alias, got.Priority, tc.expect)
+			}
+		})
+	}
+}
+
+func TestFieldNorm_E2E_UpdateEffortLowercase(t *testing.T) {
+	for _, tc := range []struct {
+		input  string
+		expect core.Effort
+	}{
+		{"xs", core.EffortXS},
+		{"s", core.EffortS},
+		{"m", core.EffortM},
+		{"l", core.EffortL},
+		{"xl", core.EffortXL},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			ctx, cleanup := setupTestDir(t)
+			defer cleanup()
+			s, _ := getStorageRaw()
+			defer s.Close()
+
+			_ = s.CreateTask(ctx, &core.Task{
+				ID:     "T-0001",
+				Title:  "update lowercase effort",
+				Status: core.StatusTodo,
+			})
+
+			resetTaskFlags()
+			cmd := newTestCmd()
+			cmd.AddCommand(TaskCmd)
+			buf := new(bytes.Buffer)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", tc.input})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("task update --effort %s: %v", tc.input, err)
+			}
+
+			got := mustGetTask(t, ctx, s, "T-0001")
+			if got.Effort != tc.expect {
+				t.Errorf("input %q: got effort %q, want %q", tc.input, got.Effort, tc.expect)
+			}
+		})
+	}
+}
+
+func TestFieldNorm_E2E_UpdateEffortAlias(t *testing.T) {
+	for _, tc := range []struct {
+		alias  string
+		expect core.Effort
+	}{
+		{"tiny", core.EffortXS},
+		{"small", core.EffortS},
+		{"medium", core.EffortM},
+		{"large", core.EffortL},
+		{"huge", core.EffortXL},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			ctx, cleanup := setupTestDir(t)
+			defer cleanup()
+			s, _ := getStorageRaw()
+			defer s.Close()
+
+			_ = s.CreateTask(ctx, &core.Task{
+				ID:     "T-0001",
+				Title:  "update alias effort",
+				Status: core.StatusTodo,
+			})
+
+			resetTaskFlags()
+			cmd := newTestCmd()
+			cmd.AddCommand(TaskCmd)
+			buf := new(bytes.Buffer)
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", tc.alias})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("task update --effort %s: %v", tc.alias, err)
+			}
+
+			got := mustGetTask(t, ctx, s, "T-0001")
+			if got.Effort != tc.expect {
+				t.Errorf("alias %q: got effort %q, want %q", tc.alias, got.Effort, tc.expect)
+			}
+		})
+	}
+}

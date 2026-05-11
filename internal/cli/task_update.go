@@ -99,18 +99,20 @@ var TaskUpdateCmd = &cobra.Command{
 			}
 
 			if cmd.Flags().Changed("effort") {
-				if !core.ValidEffort(core.Effort(taskUpdateEffort)) {
+				normalized, ok := NormalizeEffort(taskUpdateEffort)
+				if !ok {
 					return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
 				}
-				task.Effort = core.Effort(taskUpdateEffort)
+				task.Effort = core.Effort(normalized)
 				changed = true
 			}
 
 			if cmd.Flags().Changed("priority") {
-				if !core.ValidPriority(core.Priority(taskUpdatePriority)) {
+				normalized, ok := NormalizePriority(taskUpdatePriority)
+				if !ok {
 					return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
 				}
-				task.Priority = core.Priority(taskUpdatePriority)
+				task.Priority = core.Priority(normalized)
 				changed = true
 			}
 
