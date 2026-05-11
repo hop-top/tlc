@@ -120,18 +120,31 @@ func resolveBlockedBySummaries(ctx context.Context, registryStorage, taskStorage
 	summaries := make([]relatedTaskSummary, 0, len(refs))
 	for _, ref := range refs {
 		resolverStorage := taskStorage
-		if strings.Contains(ref, "/") || strings.Contains(ref, "://") {
+		crossProject := strings.Contains(ref, "/") || strings.Contains(ref, "://")
+		if crossProject {
 			resolverStorage = registryStorage
 		}
 
 		resolved, err := uri.NewResolver(resolverStorage).ResolveTask(ctx, ref)
 		if err != nil {
+			// The user-supplied ref is the only thing we have when
+			// resolution fails. Render it as-is rather than pretending
+			// to convert a typeid we cannot look up.
 			summaries = append(summaries, relatedTaskSummary{Ref: ref, Title: "(missing)"})
 			continue
 		}
 
+		// Render with the canonical display alias (T-NNNN) rather than
+		// the raw typeid in `ref`. Qualify with the resolved task's
+		// project when crossing project boundaries so the formatter can
+		// shorten/elide as appropriate.
+		displayRef := taskDisplayRef(resolved.Task)
+		if crossProject && resolved.Task.ProjectID != nil && *resolved.Task.ProjectID != "" {
+			displayRef = *resolved.Task.ProjectID + "/" + displayRef
+		}
+
 		summaries = append(summaries, relatedTaskSummary{
-			Ref:    ref,
+			Ref:    displayRef,
 			Title:  resolved.Task.Title,
 			Status: resolved.Task.Status,
 		})
@@ -241,10 +254,27 @@ func matchesTaskReference(blockedBy []string, candidates map[string]struct{}) bo
 }
 
 func relatedTaskRef(task *core.Task) string {
+	display := taskDisplayRef(task)
 	if task.ProjectID != nil && *task.ProjectID != "" {
-		return *task.ProjectID + "/" + task.ID
+		return *task.ProjectID + "/" + display
 	}
-	return task.ID
+	return display
+}
+
+// taskDisplayRef returns the human-readable identifier for a task,
+// matching the precedence in formatTaskAlias: a legacy non-typeid
+// Task.ID (e.g. "T-0042" from pre-typeid rows) wins so we keep parity
+// with the seq the row was originally created under; otherwise we
+// synthesise the T-NNNN alias from Seq via core.FormatTaskDisplay,
+// which itself falls back to the raw ID when Seq is unset.
+func taskDisplayRef(t *core.Task) string {
+	if t == nil {
+		return ""
+	}
+	if t.ID != "" && !core.IsTaskID(t.ID) {
+		return t.ID
+	}
+	return core.FormatTaskDisplay(t)
 }
 
 func sameProject(left, right *string) bool {

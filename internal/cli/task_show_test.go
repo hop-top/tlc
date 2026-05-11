@@ -521,6 +521,89 @@ func TestRenderTaskRelations_ShortRefs(t *testing.T) {
 	}
 }
 
+// TestTaskShow_BlockedBy_RendersDisplayID is a regression test for the
+// "Blocked By" / "Blocking" sections leaking raw typeids (task_01k…) when
+// blocked_by entries are stored as durable typeids. After the fix, the
+// renderer must convert them to display IDs (T-NNNN) via FormatTaskDisplay.
+func TestTaskShow_BlockedBy_RendersDisplayID(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	// Base task — stored with a durable typeid as its ID and Seq=1 so
+	// FormatTaskDisplay yields T-0001. This mirrors production rows
+	// where Task.ID is the typeid and Task.Seq drives display.
+	baseID := "task_01kqnzg72be3zsg5zmh73y94c9"
+	if err := s.CreateTask(ctx, &core.Task{
+		ID:     baseID,
+		Seq:    1,
+		Title:  "Base task",
+		Status: core.StatusTodo,
+	}); err != nil {
+		t.Fatalf("setup CreateTask(base) failed: %v", err)
+	}
+
+	// Dependent task — stores blocked_by as the raw typeid, exactly
+	// like the live aps T-0586 scenario.
+	depID := "task_01kqnzg72be4096bzj8r90h0gz"
+	if err := s.CreateTask(ctx, &core.Task{
+		ID:     depID,
+		Seq:    2,
+		Title:  "Dependent task",
+		Status: core.StatusTodo,
+		Meta: map[string]interface{}{
+			"blocked_by": []string{baseID},
+		},
+	}); err != nil {
+		t.Fatalf("setup CreateTask(dep) failed: %v", err)
+	}
+
+	// Show the dependent — exercises resolveBlockedBySummaries.
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "show", "T-0002"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task show dep failed: %v", err)
+	}
+	output := buf.String()
+	if !contains(output, "Blocked By:") {
+		t.Fatalf("expected Blocked By section, got: %s", output)
+	}
+	if !contains(output, "T-0001") {
+		t.Errorf("expected display ID T-0001 in Blocked By, got: %s", output)
+	}
+	if contains(output, "task_01k") || contains(output, "task_") {
+		t.Errorf("Blocked By leaked raw typeid; expected display ID, got: %s", output)
+	}
+
+	// Show the base — exercises relatedTaskRef (Blocking section).
+	cmd = newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf = new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "show", "T-0001"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task show base failed: %v", err)
+	}
+	output = buf.String()
+	if !contains(output, "Blocking:") {
+		t.Fatalf("expected Blocking section, got: %s", output)
+	}
+	if !contains(output, "T-0002") {
+		t.Errorf("expected display ID T-0002 in Blocking, got: %s", output)
+	}
+	if contains(output, "task_01k") || contains(output, "task_") {
+		t.Errorf("Blocking leaked raw typeid; expected display ID, got: %s", output)
+	}
+}
+
 // TestTaskDelete tests the delete command.
 func TestTaskDelete(t *testing.T) {
 	t.Run("DeleteTask", func(t *testing.T) {
