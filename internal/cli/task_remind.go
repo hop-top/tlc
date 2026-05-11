@@ -64,7 +64,7 @@ var TaskRemindCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr,
 						"OVERDUE: %s %s (due %s)\n",
 						t.ID, t.Title,
-						t.DueAt.Format("2006-01-02"),
+						DisplayTimePtr(t.DueAt, LayoutDate),
 					)
 				}
 				return fmt.Errorf(
@@ -81,7 +81,7 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range overdue {
 				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
-					t.DueAt.Format("2006-01-02 15:04"),
+					DisplayTimePtr(t.DueAt, LayoutDateMinute),
 				)
 			}
 			fmt.Fprintln(w)
@@ -92,7 +92,7 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range dueToday {
 				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
-					t.DueAt.Format("15:04"),
+					DisplayTimePtr(t.DueAt, LayoutTimeOnly),
 				)
 			}
 			fmt.Fprintln(w)
@@ -103,9 +103,9 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range upcoming {
 				label := ""
 				if t.DueAt != nil {
-					label = "due " + t.DueAt.Format("2006-01-02")
+					label = "due " + DisplayTimePtr(t.DueAt, LayoutDate)
 				} else if nr := t.NextReminder(); nr != nil {
-					label = "next " + nr.Format("2006-01-02 15:04")
+					label = "next " + DisplayTime(*nr, LayoutDateMinute)
 				}
 				fmt.Fprintf(w, "  %s  %-40s  %s\n",
 					t.ID, t.Title, label,

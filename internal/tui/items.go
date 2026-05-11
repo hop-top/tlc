@@ -8,6 +8,7 @@ import (
 	kitcli "hop.top/kit/go/console/cli"
 	kittui "hop.top/kit/go/console/tui"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/displaytime"
 	"hop.top/tlc/internal/tui/styles"
 )
 
@@ -94,7 +95,7 @@ func (fi *flowRunItem) Render(_ int) string {
 		statusStr = string(fi.run.Status)
 	}
 
-	startedAt := fi.run.StartedAt.Format("2006-01-02 15:04:05")
+	startedAt := displaytime.DisplayTime(fi.run.StartedAt, displaytime.LayoutDateTime)
 
 	line := fmt.Sprintf("%s %s %s %s (%s)",
 		cursor, fi.run.ID, fi.run.FlowID, statusStr, startedAt,

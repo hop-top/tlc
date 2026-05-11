@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	kittui "hop.top/kit/go/console/tui"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/displaytime"
 )
 
 const (
@@ -260,7 +261,7 @@ func (m Model) detailView() string {
 		fmt.Fprintf(&s, "\nLogs (%s):\n", strings.ToUpper(m.logSortDirection))
 		for _, l := range m.taskLogs {
 			fmt.Fprintf(&s, "  %s  %-15s (%s) %s\n",
-				l.Timestamp.Format("2006-01-02 15:04:05"),
+				displaytime.DisplayTime(l.Timestamp, displaytime.LayoutDateTime),
 				l.Action,
 				l.By,
 				l.Note,

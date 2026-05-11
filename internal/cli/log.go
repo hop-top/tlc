@@ -149,7 +149,7 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 			taskCell = alias
 		}
 		rows[i] = logTableRow{
-			Timestamp: l.Timestamp.Format("2006-01-02 15:04:05"),
+			Timestamp: DisplayTime(l.Timestamp, LayoutDateTime),
 			TaskID:    taskCell,
 			// Plain action — kit/output's tabwriter (non-TTY) passes
 			// cell values through verbatim, so pre-styled lipgloss

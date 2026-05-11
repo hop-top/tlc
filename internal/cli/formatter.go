@@ -263,10 +263,10 @@ func formatTLS(t *core.Task) string {
 	}
 
 	if !t.CreatedAt.IsZero() {
-		parts = append(parts, "created_at="+t.CreatedAt.Format(time.RFC3339))
+		parts = append(parts, "created_at="+DisplayTime(t.CreatedAt, LayoutRFC3339))
 	}
 	if !t.UpdatedAt.IsZero() {
-		parts = append(parts, "updated_at="+t.UpdatedAt.Format(time.RFC3339))
+		parts = append(parts, "updated_at="+DisplayTime(t.UpdatedAt, LayoutRFC3339))
 	}
 
 	for k, v := range t.Meta {
@@ -332,9 +332,9 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		dueCol := "-"
 		if t.DueAt != nil {
 			if t.IsOverdue() {
-				dueCol = "! " + t.DueAt.Format("2006-01-02")
+				dueCol = "! " + DisplayTimePtr(t.DueAt, LayoutDate)
 			} else {
-				dueCol = t.DueAt.Format("2006-01-02")
+				dueCol = DisplayTimePtr(t.DueAt, LayoutDate)
 			}
 		}
 
@@ -559,7 +559,7 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Blocked Reason:"), *t.BlockedReason)
 	}
 	if t.StaleFiredAt != nil {
-		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Fired At:"), t.StaleFiredAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Stale Fired At:"), DisplayTimePtr(t.StaleFiredAt, LayoutRFC3339))
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Track:"), formatTaskTrackDisplay(*t.TrackID))
@@ -569,10 +569,10 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		if t.IsOverdue() {
 			dueLabel = "Due (OVERDUE):"
 		}
-		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render(dueLabel), t.DueAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render(dueLabel), DisplayTimePtr(t.DueAt, LayoutRFC3339))
 	}
 	if t.RemindAt != nil {
-		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Remind At:"), t.RemindAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Remind At:"), DisplayTimePtr(t.RemindAt, LayoutRFC3339))
 	}
 	if t.RRule != "" {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("RRule:"), t.RRule)
@@ -599,8 +599,8 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	if isShowTypeIDOutput() || !core.IsInternalTaskRef(t.Reference, t) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Reference:"), resolveTaskReference(t))
 	}
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), t.CreatedAt.Format(time.RFC3339))
-	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), t.UpdatedAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Created:"), DisplayTime(t.CreatedAt, LayoutRFC3339))
+	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Updated:"), DisplayTime(t.UpdatedAt, LayoutRFC3339))
 
 	if t.Description != "" {
 		_, _ = fmt.Fprintln(w, "\nDescription:")
@@ -617,7 +617,7 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 		_, _ = fmt.Fprintln(w, "\nLogs:")
 		for _, l := range logs {
 			_, _ = fmt.Fprintf(w, "  %s  %-15s (%s) %s\n",
-				l.Timestamp.Format("2006-01-02 15:04:05"),
+				DisplayTime(l.Timestamp, LayoutDateTime),
 				l.Action,
 				l.By,
 				l.Note,

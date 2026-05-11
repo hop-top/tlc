@@ -712,6 +712,11 @@ func setupLogging() {
 	}
 
 	log.SetDefault(logger)
+
+	// One-shot ui.timezone validity check. Runs after the logger is
+	// installed so the warning lands through the configured sink (file,
+	// stderr) and never on every render. See spec §6.
+	warnDisplayTimezone()
 }
 
 func setDefaults() {

@@ -733,7 +733,7 @@ func checkRegisteredProjects(_ bool) checkResult {
 			inactive++
 			inactiveDetails = append(inactiveDetails,
 				fmt.Sprintf("%s (last seen: %s)", p.ProjectID,
-					p.LastSeenAt.Format("2006-01-02")))
+					DisplayTime(p.LastSeenAt, LayoutDate)))
 		}
 	}
 
