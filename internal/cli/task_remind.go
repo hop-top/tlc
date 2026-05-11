@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/displaytime"
 )
 
 var (
@@ -30,7 +31,16 @@ var TaskRemindCmd = &cobra.Command{
 			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
+		// Overdue uses absolute-instant comparison (Before), so it is
+		// timezone-agnostic and does not need normalisation. "Due today"
+		// is a wall-clock bucket, so both sides must be projected into
+		// the configured display timezone before extracting Y/M/D —
+		// otherwise a task due at, e.g., 23:30 UTC on day N renders as
+		// "today" in UTC but should be "tomorrow" in Asia/Tokyo (or vice
+		// versa around midnight). See docs/temporal-spec-0.1.md §6.
+		loc := displaytime.Resolve()
 		now := time.Now()
+		nowInDisplay := now.In(loc)
 		var overdue, dueToday, upcoming []*core.Task
 
 		for _, t := range tasks {
@@ -48,8 +58,8 @@ var TaskRemindCmd = &cobra.Command{
 					overdue = append(overdue, t)
 					continue
 				}
-				y1, m1, d1 := now.Date()
-				y2, m2, d2 := t.DueAt.Date()
+				y1, m1, d1 := nowInDisplay.Date()
+				y2, m2, d2 := t.DueAt.In(loc).Date()
 				if y1 == y2 && m1 == m2 && d1 == d2 {
 					dueToday = append(dueToday, t)
 					continue
@@ -64,7 +74,7 @@ var TaskRemindCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr,
 						"OVERDUE: %s %s (due %s)\n",
 						t.ID, t.Title,
-						t.DueAt.Format("2006-01-02"),
+						DisplayTimePtr(t.DueAt, LayoutDate),
 					)
 				}
 				return fmt.Errorf(
@@ -81,7 +91,7 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range overdue {
 				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
-					t.DueAt.Format("2006-01-02 15:04"),
+					DisplayTimePtr(t.DueAt, LayoutDateMinute),
 				)
 			}
 			fmt.Fprintln(w)
@@ -92,7 +102,7 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range dueToday {
 				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
-					t.DueAt.Format("15:04"),
+					DisplayTimePtr(t.DueAt, LayoutTimeOnly),
 				)
 			}
 			fmt.Fprintln(w)
@@ -103,9 +113,9 @@ var TaskRemindCmd = &cobra.Command{
 			for _, t := range upcoming {
 				label := ""
 				if t.DueAt != nil {
-					label = "due " + t.DueAt.Format("2006-01-02")
+					label = "due " + DisplayTimePtr(t.DueAt, LayoutDate)
 				} else if nr := t.NextReminder(); nr != nil {
-					label = "next " + nr.Format("2006-01-02 15:04")
+					label = "next " + DisplayTime(*nr, LayoutDateMinute)
 				}
 				fmt.Fprintf(w, "  %s  %-40s  %s\n",
 					t.ID, t.Title, label,

@@ -118,9 +118,9 @@ Usage:
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFlow execution completed!\n")
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Run ID: %s\n", run.ID)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n", run.Status)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Started: %s\n", run.StartedAt.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Started: %s\n", DisplayTime(run.StartedAt, LayoutDateTime))
 		if run.EndedAt != nil {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Ended: %s\n", run.EndedAt.Format("2006-01-02 15:04:05"))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Ended: %s\n", DisplayTimePtr(run.EndedAt, LayoutDateTime))
 			duration := run.EndedAt.Sub(run.StartedAt)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Duration: %s\n", duration)
 		}
@@ -215,9 +215,9 @@ func printFlowRun(cmd *cobra.Command, run *core.FlowRun, format string) {
 		_, _ = fmt.Fprintf(out, "Flow Run: %s\n", run.ID)
 		_, _ = fmt.Fprintf(out, "  Flow ID: %s\n", run.FlowID)
 		_, _ = fmt.Fprintf(out, "  Status: %s\n", formatFlowStatus(run.Status))
-		_, _ = fmt.Fprintf(out, "  Started: %s\n", run.StartedAt.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(out, "  Started: %s\n", DisplayTime(run.StartedAt, LayoutDateTime))
 		if run.EndedAt != nil {
-			_, _ = fmt.Fprintf(out, "  Ended: %s\n", run.EndedAt.Format("2006-01-02 15:04:05"))
+			_, _ = fmt.Fprintf(out, "  Ended: %s\n", DisplayTimePtr(run.EndedAt, LayoutDateTime))
 			duration := run.EndedAt.Sub(run.StartedAt)
 			_, _ = fmt.Fprintf(out, "  Duration: %s\n", duration)
 		}
@@ -268,7 +268,7 @@ func renderFlowRunsTable(out io.Writer, runs []*core.FlowRun) {
 			// cell values through verbatim, so pre-styled lipgloss
 			// escapes from formatFlowStatus would leak into pipes.
 			Status:   string(r.Status),
-			Started:  r.StartedAt.Format("2006-01-02 15:04:05"),
+			Started:  DisplayTime(r.StartedAt, LayoutDateTime),
 			Duration: duration,
 		}
 	}

@@ -223,7 +223,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 			} else {
 				log.Info("Reconnected to existing project",
 					"project_id", finalProjectID,
-					"registered", existing.RegisteredAt.Format("2006-01-02"))
+					"registered", DisplayTime(existing.RegisteredAt, LayoutDate))
 			}
 		} else {
 			// New project: register it

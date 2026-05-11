@@ -110,12 +110,12 @@ var AgentStatusCmd = &cobra.Command{
 		_, _ = fmt.Fprintf(out, "  Queue:   %s\n", job.Queue)
 		_, _ = fmt.Fprintf(out, "  Type:    %s\n", job.Type)
 		_, _ = fmt.Fprintf(out, "  Status:  %s\n", job.Status)
-		_, _ = fmt.Fprintf(out, "  Created: %s\n", job.CreatedAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(out, "  Created: %s\n", DisplayTime(job.CreatedAt, LayoutRFC3339))
 		if job.StartedAt != nil {
-			_, _ = fmt.Fprintf(out, "  Started: %s\n", job.StartedAt.Format(time.RFC3339))
+			_, _ = fmt.Fprintf(out, "  Started: %s\n", DisplayTimePtr(job.StartedAt, LayoutRFC3339))
 		}
 		if job.EndedAt != nil {
-			_, _ = fmt.Fprintf(out, "  Ended:   %s\n", job.EndedAt.Format(time.RFC3339))
+			_, _ = fmt.Fprintf(out, "  Ended:   %s\n", DisplayTimePtr(job.EndedAt, LayoutRFC3339))
 		}
 		if job.Error != "" {
 			_, _ = fmt.Fprintf(out, "  Error:   %s\n", job.Error)

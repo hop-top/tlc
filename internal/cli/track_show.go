@@ -127,8 +127,8 @@ func buildTrackShowOutput(
 		Status:            string(t.Status),
 		State:             stateStrs,
 		Assignee:          assignee,
-		CreatedAt:         t.CreatedAt.Format("2006-01-02"),
-		UpdatedAt:         t.UpdatedAt.Format("2006-01-02"),
+		CreatedAt:         DisplayTime(t.CreatedAt, LayoutDate),
+		UpdatedAt:         DisplayTime(t.UpdatedAt, LayoutDate),
 		Progress:          progress,
 		ExecutionStrategy: strategy,
 	}
@@ -169,9 +169,9 @@ func renderTrackShowDetail(
 	)
 
 	_, _ = fmt.Fprintf(w, "%s %s    %s %s\n",
-		labelStyle.Render("Created:"), t.CreatedAt.Format("2006-01-02"),
+		labelStyle.Render("Created:"), DisplayTime(t.CreatedAt, LayoutDate),
 		lipgloss.NewStyle().Foreground(mutedColor).Render("Updated:"),
-		t.UpdatedAt.Format("2006-01-02"),
+		DisplayTime(t.UpdatedAt, LayoutDate),
 	)
 
 	// Progress summary

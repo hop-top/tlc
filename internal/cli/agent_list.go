@@ -135,7 +135,7 @@ func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord, s taskAlia
 			Target:   fmt.Sprintf("%s:%s", r.TargetType, target),
 			Status:   r.Status,
 			Exit:     fmt.Sprintf("%d", r.ExitCode),
-			Started:  r.StartedAt.Format("2006-01-02 15:04"),
+			Started:  DisplayTime(r.StartedAt, LayoutDateMinute),
 			Duration: duration,
 		}
 	}

@@ -125,7 +125,7 @@ func buildPromptContext(ctx context.Context, registryStorage, taskStorage *stora
 		pc.RecentLogs = make([]promptLogEntry, limit)
 		for i, log := range logs[:limit] {
 			pc.RecentLogs[i] = promptLogEntry{
-				Timestamp: log.Timestamp.Format("2006-01-02 15:04"),
+				Timestamp: DisplayTime(log.Timestamp, LayoutDateMinute),
 				By:        log.By,
 				Action:    log.Action,
 			}

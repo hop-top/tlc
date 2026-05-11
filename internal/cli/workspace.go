@@ -155,7 +155,7 @@ func printWorkspaceListTable(cmd *cobra.Command, data []workspaceListData) {
 			}
 
 			for _, p := range sp.Projects {
-				seen := p.LastSeenAt.Format("2006-01-02")
+				seen := DisplayTime(p.LastSeenAt, LayoutDate)
 				_, _ = fmt.Fprintf(w, "    %-*s  %-*s  %-8s %s\n",
 					maxID, p.ProjectID,
 					maxPath, p.DBPath,
