@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -39,8 +40,8 @@ func writeFlowAgentLocalFixture(t *testing.T, tmpDir, status string, exitCode in
 	script := "#!/bin/sh\n" +
 		"echo invoked >> '" + sentinel + "'\n" +
 		"echo '{\"version\":1,\"status\":\"" + status + "\",\"summary\":\"agent ran\",\"exit_code\":" +
-		itoa(exitCode) + "}'\n" +
-		"exit " + itoa(exitCode) + "\n"
+		strconv.Itoa(exitCode) + "}'\n" +
+		"exit " + strconv.Itoa(exitCode) + "\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake agent: %v", err)
 	}
@@ -72,28 +73,6 @@ steps:
 		t.Fatalf("write flow.yaml: %v", err)
 	}
 	return flowPath, sentinel
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var buf [20]byte
-	pos := len(buf)
-	for i > 0 {
-		pos--
-		buf[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		pos--
-		buf[pos] = '-'
-	}
-	return string(buf[pos:])
 }
 
 // TestFlowRun_AgentLocal_DispatchesAgent is the primary regression for
