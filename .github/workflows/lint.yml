@@ -9,4 +9,6 @@ on:
 jobs:
   lint:
     uses: hop-top/kit/.github/workflows/lint.yml@main
+    with:
+      version: v2.8.0
     secrets: inherit
