@@ -516,6 +516,62 @@ func TestReconcile_DistinctSpecsNotMerged(t *testing.T) {
 	}
 }
 
+// TestReconcile_PreExistingDuplicateTitlesMatchByIndex covers the
+// loadExistingTasks duplicate-title special case: when two existing
+// mapped tasks share a title, loadExistingTasks deliberately drops
+// that title from titleIdx so the pair falls back to index matching.
+// The matchSpec index-fallback guard added by T-0947 must allow that
+// fallback to succeed for pre-existing duplicates, otherwise an
+// unchanged plan would delete-and-recreate them every reconcile.
+func TestReconcile_PreExistingDuplicateTitlesMatchByIndex(t *testing.T) {
+	specs := []PlanTaskSpec{
+		{Title: "Task A", Description: "first"},
+		{Title: "Task A", Description: "second"},
+	}
+
+	svc, taskRepo, mapping := setupTrackWithTasks(t, specs)
+	ctx := context.Background()
+	originalFirst := mapping[0]
+	originalSecond := mapping[1]
+
+	// v2 is identical to v1; both entries should match their existing
+	// counterparts by position (titleIdx is empty for "Task A").
+	unchangedSpecs := []PlanTaskSpec{
+		{Title: "Task A", Description: "first"},
+		{Title: "Task A", Description: "second"},
+	}
+
+	rec, err := svc.ReconcileTasksFromPlan(
+		ctx, "test-track", unchangedSpecs, "", taskRepo, mapping,
+	)
+	if err != nil {
+		t.Fatalf("ReconcileTasksFromPlan: %v", err)
+	}
+
+	if len(rec.Created) != 0 {
+		t.Errorf("expected 0 created (unchanged plan), got %d (%v)",
+			len(rec.Created), rec.Created)
+	}
+	if len(rec.Deleted) != 0 {
+		t.Errorf("expected 0 deleted (unchanged plan), got %d (%v)",
+			len(rec.Deleted), rec.Deleted)
+	}
+
+	track, _ := svc.GetTrack(ctx, "test-track")
+	if len(track.PlanMapping) != 2 {
+		t.Fatalf("expected mapping len 2, got %d (%v)",
+			len(track.PlanMapping), track.PlanMapping)
+	}
+	if track.PlanMapping[0] != originalFirst {
+		t.Errorf("mapping[0]=%s, want originalFirst=%s",
+			track.PlanMapping[0], originalFirst)
+	}
+	if track.PlanMapping[1] != originalSecond {
+		t.Errorf("mapping[1]=%s, want originalSecond=%s",
+			track.PlanMapping[1], originalSecond)
+	}
+}
+
 func TestReconcile_BlockedByUpdatedAfterReconciliation(t *testing.T) {
 	specs := []PlanTaskSpec{
 		{Title: "Task A"},

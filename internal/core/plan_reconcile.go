@@ -134,13 +134,17 @@ func (rc *reconcileCtx) matchSpec(idx int, spec PlanTaskSpec) string {
 	if id, ok := rc.titleIdx[spec.Title]; ok && !rc.matched[id] {
 		return id
 	}
-	// Index fallback (handles renames). Only safe when the candidate
-	// task's title isn't being explicitly claimed by another spec via
-	// title match; otherwise we'd merge an inserted/renamed spec onto
-	// a task that another spec will rightfully claim.
+	// Index fallback (handles renames + pre-existing duplicate titles).
+	// Block this fallback only when the candidate task's title is being
+	// claimed by another spec via title match — i.e., the title is in
+	// the new plan AND the existing task is not a pre-existing
+	// duplicate (since duplicates are deliberately removed from
+	// titleIdx and must match by position).
 	if id, ok := rc.oldMap[idx]; ok && !rc.matched[id] {
 		if existingTask, exists := rc.existing[id]; exists {
-			if !rc.specTitles[existingTask.Title] {
+			titleClaimedByTitleMatch := rc.specTitles[existingTask.Title] &&
+				!rc.duplicateTitles[existingTask.Title]
+			if !titleClaimedByTitleMatch {
 				return id
 			}
 		}
