@@ -316,7 +316,11 @@ func TestTaskShow_StaleFields_E2E(t *testing.T) {
 
 	timeout := 48 * time.Hour
 	reason := "waiting for infra ticket"
-	firedAt := time.Now().UTC().Truncate(time.Second)
+	// Offset firedAt safely inside the "2h ago" bucket (RelativeTime
+	// emits "Nh ago" for [N*1h, (N+1)*1h) since now). Using time.Now()
+	// directly would land in "just now" until cmd.Execute() crosses the
+	// 1m threshold on slow CI, then flake to "1m ago".
+	firedAt := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
 
 	task := &core.Task{
 		ID:            "T-0001",
@@ -354,15 +358,14 @@ func TestTaskShow_StaleFields_E2E(t *testing.T) {
 		t.Errorf("expected BlockedReason %q in output, got: %s", reason, output)
 	}
 	// T-1384: task-show humanises StaleFiredAt in the detail view.
-	// The fixture stamps firedAt = now (truncated to the second), so
-	// by the time we render it the value is at most a few hundred ms
-	// in the past — RelativeTime maps that to "just now". The label
-	// itself may be word-wrapped by lipgloss when the terminal is
-	// narrow, so we don't assert the label literal; the value alone
-	// is enough to prove the humanised render fired. We also assert
+	// firedAt is stamped 2h ago (see setup) — safely inside RelativeTime's
+	// "2h ago" bucket, so the assertion is stable regardless of how long
+	// cmd.Execute() takes. The label itself may be word-wrapped by lipgloss
+	// when the terminal is narrow, so we don't assert the label literal;
+	// the value alone proves the humanised render fired. We also assert
 	// the original RFC3339 string is absent.
-	if !contains(output, "just now") {
-		t.Errorf("expected humanised StaleFiredAt 'just now' in output, got: %s", output)
+	if !contains(output, "2h ago") {
+		t.Errorf("expected humanised StaleFiredAt '2h ago' in output, got: %s", output)
 	}
 	if contains(output, firedAt.Format(time.RFC3339)) {
 		t.Errorf("StaleFiredAt should render humanised in detail view, not RFC3339 %q; got: %s",

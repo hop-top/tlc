@@ -702,7 +702,13 @@ func TestTaskListTableHumanisesDue(t *testing.T) {
 		t.Fatalf("CreateTask T-0002: %v", err)
 	}
 
+	// viper is process-global; save+restore prevents this test's
+	// output.format setting from leaking into later tests in the
+	// cli package that don't reset it.
+	priorFormat := viper.GetString("output.format")
 	viper.Set("output.format", formatTable)
+	t.Cleanup(func() { viper.Set("output.format", priorFormat) })
+
 	cmd := newTestCmd()
 	cmd.AddCommand(TaskCmd)
 	buf := new(bytes.Buffer)
