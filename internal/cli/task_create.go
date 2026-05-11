@@ -161,11 +161,30 @@ func createTaskInteractive(initialTitle string) error {
 func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling) error {
 	description = unescapeMarkdown(description)
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
-	if !core.ValidEffort(core.Effort(effort)) {
-		return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", effort)
+
+	// Normalize enum fields (empty stays empty — those fields are optional).
+	// Done before config validation so downstream rules see canonical values
+	// and so the storage row only ever contains canonical forms.
+	if status != "" {
+		normalized, ok := NormalizeStatus(status)
+		if !ok {
+			return fmt.Errorf("unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", status)
+		}
+		status = normalized
 	}
-	if !core.ValidPriority(core.Priority(priority)) {
-		return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", priority)
+	if effort != "" {
+		normalized, ok := NormalizeEffort(effort)
+		if !ok {
+			return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", effort)
+		}
+		effort = normalized
+	}
+	if priority != "" {
+		normalized, ok := NormalizePriority(priority)
+		if !ok {
+			return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", priority)
+		}
+		priority = normalized
 	}
 
 	// Config-driven validation for create.

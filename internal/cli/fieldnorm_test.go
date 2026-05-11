@@ -104,6 +104,64 @@ func TestNormalizePriority(t *testing.T) {
 	}
 }
 
+func TestNormalizeEffort(t *testing.T) {
+	tests := []struct {
+		input  string
+		want   string
+		wantOK bool
+	}{
+		// exact canonical
+		{"XS", "XS", true},
+		{"S", "S", true},
+		{"M", "M", true},
+		{"L", "L", true},
+		{"XL", "XL", true},
+		// case-insensitive
+		{"xs", "XS", true},
+		{"s", "S", true},
+		{"m", "M", true},
+		{"l", "L", true},
+		{"xl", "XL", true},
+		{"Xs", "XS", true},
+		{"xL", "XL", true},
+		// descriptive aliases
+		{"extra-small", "XS", true},
+		{"extrasmall", "XS", true},
+		{"xsmall", "XS", true},
+		{"tiny", "XS", true},
+		{"small", "S", true},
+		{"medium", "M", true},
+		{"med", "M", true},
+		{"large", "L", true},
+		{"extra-large", "XL", true},
+		{"extralarge", "XL", true},
+		{"xlarge", "XL", true},
+		{"huge", "XL", true},
+		// mixed-case alias
+		{"Medium", "M", true},
+		{"LARGE", "L", true},
+		{"Extra-Small", "XS", true},
+		// whitespace trimming
+		{"  m  ", "M", true},
+		{" small ", "S", true},
+		// no match
+		{"xyz", "", false},
+		{"", "", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got, ok := NormalizeEffort(tc.input)
+			if ok != tc.wantOK {
+				t.Errorf("NormalizeEffort(%q) ok=%v, want %v", tc.input, ok, tc.wantOK)
+			}
+			if ok && got != tc.want {
+				t.Errorf("NormalizeEffort(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestUnescapeMarkdown(t *testing.T) {
 	tests := []struct {
 		input string
@@ -120,6 +178,34 @@ func TestUnescapeMarkdown(t *testing.T) {
 		got := unescapeMarkdown(tc.input)
 		if got != tc.want {
 			t.Errorf("unescapeMarkdown(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// TestNormalizeEffort_FuzzyTieDeterministic guards against the
+// non-deterministic fuzzy fallback in normalizeEnum. The effort
+// alias table has multiple keys that score-tie for ambiguous inputs
+// like "extra" (which fuzzy-matches both "extralarge" and
+// "extrasmall" with score 205). Pre-fix, the winner depended on Go
+// map iteration order — different between runs. After fix, the
+// resolver picks a stable winner regardless of map traversal.
+//
+// Calling NormalizeEffort("extra") 100 times in a row must produce
+// the same result every time. Without sorted alias keys this test
+// can pass once and fail on the next invocation because Go
+// randomises map iteration per process.
+func TestNormalizeEffort_FuzzyTieDeterministic(t *testing.T) {
+	first, ok := NormalizeEffort("extra")
+	if !ok {
+		t.Fatalf("expected 'extra' to resolve via fuzzy, got !ok")
+	}
+	for i := 0; i < 100; i++ {
+		got, ok := NormalizeEffort("extra")
+		if !ok {
+			t.Fatalf("iteration %d: !ok", i)
+		}
+		if got != first {
+			t.Fatalf("non-deterministic resolution: first=%q got=%q at iteration %d", first, got, i)
 		}
 	}
 }

@@ -372,7 +372,14 @@ func TestTaskUpdateClearBlockedBy(t *testing.T) {
 	}
 }
 
-// TestTaskCreateWithPriorityInvalid tests that an invalid priority value is rejected.
+// TestTaskCreateWithPriorityInvalid tests that an unresolvable priority
+// value is rejected on create.
+//
+// Story 069 added "high" → P1 to the priority alias table, and story 070
+// (this work) wires NormalizePriority into the create path. So uppercase
+// inputs like "HIGH" now resolve to P1 and are accepted — that is the
+// intended new behavior. This test uses a value that the alias table,
+// lowercase canonical match, and fuzzy fallback all reject.
 func TestTaskCreateWithPriorityInvalid(t *testing.T) {
 	_, cleanup := setupTestDir(t)
 	defer cleanup()
@@ -383,7 +390,7 @@ func TestTaskCreateWithPriorityInvalid(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "create", "Bad Priority Task", "--priority", "HIGH"})
+	cmd.SetArgs([]string{"task", "create", "Bad Priority Task", "--priority", "garbage"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected error for invalid priority, got nil")
@@ -525,7 +532,13 @@ func TestTaskUpdateEffort(t *testing.T) {
 	}
 }
 
-// TestTaskUpdateEffortInvalid tests that an invalid effort value is rejected.
+// TestTaskUpdateEffortInvalid tests that an unresolvable effort value
+// is rejected on update.
+//
+// Story 070 (T-1351) added "huge" → XL to the effort alias table, so
+// "HUGE" → huge → XL is now valid (the intended new behavior). This
+// test uses a value that the alias table, lowercase canonical match,
+// and fuzzy fallback all reject.
 func TestTaskUpdateEffortInvalid(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
@@ -539,7 +552,7 @@ func TestTaskUpdateEffortInvalid(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", "HUGE"})
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", "garbage"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected error for invalid effort, got nil")
@@ -575,7 +588,13 @@ func TestTaskUpdatePriority(t *testing.T) {
 	}
 }
 
-// TestTaskUpdatePriorityInvalid tests that an invalid priority value is rejected.
+// TestTaskUpdatePriorityInvalid tests that an unresolvable priority
+// value is rejected on update.
+//
+// Story 069 added "critical" → P0 to the priority alias table, so
+// "CRITICAL" → critical → P0 is now valid (the intended behavior).
+// This test uses a value that the alias table, lowercase canonical
+// match, and fuzzy fallback all reject.
 func TestTaskUpdatePriorityInvalid(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
@@ -590,7 +609,7 @@ func TestTaskUpdatePriorityInvalid(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", "CRITICAL"})
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", "garbage"})
 
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected error for invalid priority, got nil")
