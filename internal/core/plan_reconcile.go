@@ -27,10 +27,15 @@ type reconcileCtx struct {
 	existing        map[string]*Task
 	titleIdx        map[string]string
 	duplicateTitles map[string]bool
-	oldMap          map[int]string
-	matched         map[string]bool
-	newMap          map[int]string
-	result          *ReconcileResult
+	// specTitles is the set of titles present in the incoming spec
+	// list. Used by the index fallback to avoid stealing a task whose
+	// title is explicitly claimed by another spec elsewhere (the
+	// "inserted in the middle" case).
+	specTitles map[string]bool
+	oldMap     map[int]string
+	matched    map[string]bool
+	newMap     map[int]string
+	result     *ReconcileResult
 }
 
 // ReconcileTasksFromPlan reconciles an existing plan mapping with
@@ -45,16 +50,20 @@ func (s *TrackService) ReconcileTasksFromPlan(
 	existingMapping map[int]string,
 ) (*ReconcileResult, error) {
 	rc := &reconcileCtx{
-		svc:       s,
-		ctx:       ctx,
-		trackID:   trackID,
-		projectID: projectID,
-		idGen:     idGen,
-		now:       time.Now().UTC(),
-		oldMap:    existingMapping,
-		matched:   make(map[string]bool),
-		newMap:    make(map[int]string, len(specs)),
-		result:    &ReconcileResult{},
+		svc:        s,
+		ctx:        ctx,
+		trackID:    trackID,
+		projectID:  projectID,
+		idGen:      idGen,
+		now:        time.Now().UTC(),
+		oldMap:     existingMapping,
+		matched:    make(map[string]bool),
+		newMap:     make(map[int]string, len(specs)),
+		result:     &ReconcileResult{},
+		specTitles: make(map[string]bool, len(specs)),
+	}
+	for _, sp := range specs {
+		rc.specTitles[sp.Title] = true
 	}
 
 	if err := rc.loadExistingTasks(); err != nil {
@@ -112,16 +121,32 @@ func (rc *reconcileCtx) loadExistingTasks() error {
 }
 
 // matchSpec finds an existing task for a plan spec. Returns ""
-// when no match is found.
+// when no match is found. An existing task can only be claimed once
+// per reconciliation pass; subsequent specs that resolve to the same
+// task fall through to creating a new task. This prevents two plan
+// entries with overlapping match keys from collapsing onto a single
+// task row, and prevents an insertion-in-the-middle from stealing
+// the displaced task via the index fallback.
 func (rc *reconcileCtx) matchSpec(idx int, spec PlanTaskSpec) string {
-	// Title match first (handles reorders).
-	if id, ok := rc.titleIdx[spec.Title]; ok {
+	// Title match first (handles reorders). Skip if already claimed
+	// by an earlier spec — subsequent specs with the same title fall
+	// through and end up as their own new task row.
+	if id, ok := rc.titleIdx[spec.Title]; ok && !rc.matched[id] {
 		return id
 	}
-	// Index fallback (handles renames).
-	if id, ok := rc.oldMap[idx]; ok {
-		if _, exists := rc.existing[id]; exists {
-			return id
+	// Index fallback (handles renames + pre-existing duplicate titles).
+	// Block this fallback only when the candidate task's title is being
+	// claimed by another spec via title match — i.e., the title is in
+	// the new plan AND the existing task is not a pre-existing
+	// duplicate (since duplicates are deliberately removed from
+	// titleIdx and must match by position).
+	if id, ok := rc.oldMap[idx]; ok && !rc.matched[id] {
+		if existingTask, exists := rc.existing[id]; exists {
+			titleClaimedByTitleMatch := rc.specTitles[existingTask.Title] &&
+				!rc.duplicateTitles[existingTask.Title]
+			if !titleClaimedByTitleMatch {
+				return id
+			}
 		}
 	}
 	return ""
