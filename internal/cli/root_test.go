@@ -59,6 +59,14 @@ func TestRootCmdDefault(t *testing.T) {
 // TestFindAllConfigs tests config file discovery
 // Finds config files up to the configured boundary.
 func TestFindAllConfigs(t *testing.T) {
+	// Pin entry mode so findAllConfigs (which calls config.DetectMode())
+	// does not flip to ModeHop based on the test runner's cwd. When the
+	// test binary runs from a git-hop worktree, an ancestor .hop/ dir
+	// would otherwise flip mode and cause findAllConfigs to scan for
+	// .hop/tlc.yaml instead of the .tlc.yaml files this fixture seeds.
+	// Tracked as T-1379.
+	t.Setenv("TLC_MODE", "standalone")
+
 	tmpDir, _ := os.MkdirTemp("", "tlc-findconfigs-*")
 	defer os.RemoveAll(tmpDir)
 
