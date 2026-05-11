@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 type Operator string
 
 const (
@@ -33,4 +35,10 @@ type Query struct {
 	IncludeArchived bool
 	AllProjects     bool   // If true, don't filter by current project
 	StatusPriority  string // Status value to sort first (e.g. "IN_PROGRESS")
+
+	// Temporal filters on tasks.due_at (T-0908). See TaskFilter docs and
+	// internal/storage/sqlite.go::ListTasks for SQL pushdown semantics.
+	DueBefore *time.Time
+	DueAfter  *time.Time
+	HasDue    *bool
 }

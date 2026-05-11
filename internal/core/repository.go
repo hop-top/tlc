@@ -78,6 +78,19 @@ type TaskFilter struct {
 	Search     string
 	Offset     int
 	Limit      int
+
+	// Temporal filters (T-0908). All compare against the RFC3339 UTC
+	// string stored in tasks.due_at. RFC3339's lexicographic byte order
+	// matches chronological order when all values use the same offset
+	// (Z) — see internal/storage/sqlite.go::ListTasks for the SQL
+	// pushdown and the verifying comment.
+	DueBefore *time.Time
+	DueAfter  *time.Time
+	// HasDue constrains nullability of due_at:
+	//   nil   → no constraint
+	//   true  → require non-null due_at
+	//   false → require null due_at
+	HasDue *bool
 }
 
 // TrackRepository defines the interface for track persistence.
