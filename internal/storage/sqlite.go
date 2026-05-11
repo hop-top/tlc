@@ -806,7 +806,10 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 // place. Returns an error if the log row does not exist.
 func (s *SQLiteStorage) UpdateLogNote(ctx context.Context, logID int64, note string, meta map[string]any) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		metaJSON, _ := json.Marshal(meta)
+		metaJSON, err := json.Marshal(meta)
+		if err != nil {
+			return fmt.Errorf("failed to marshal log meta: %w", err)
+		}
 		res, err := tx.ExecContext(ctx, `
 			UPDATE task_logs SET note = ?, meta = ? WHERE id = ?`,
 			note, string(metaJSON), logID,

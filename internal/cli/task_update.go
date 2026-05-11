@@ -573,7 +573,7 @@ func init() {
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindAt, "remind-at", "", "One-shot reminder time")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRRule, "rrule", "", "Recurring reminder RRULE (use '-' to clear)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
-	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded on status transition)")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded on status transition; required with --amend)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateAmend, "amend", false, "Rewrite the most recent log entry's note in place instead of appending; pair with --note. Terminal tasks (DONE/SKIPPED) require --force.")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
@@ -598,7 +598,14 @@ func amendLatestLogNote(ctx context.Context, store interface {
 		)
 	}
 
-	logs, err := store.GetLogs(ctx, task.ID, "desc")
+	// Use ListLogs (not GetLogs) because GetLogs applies core.DetectProject
+	// scoping which can target the wrong project_id when amending a task
+	// resolved from a different project DB. Limit 1 keeps the read tight.
+	logs, err := store.ListLogs(ctx, core.LogQuery{
+		TaskID:        task.ID,
+		Limit:         1,
+		SortDirection: "desc",
+	})
 	if err != nil {
 		return fmt.Errorf("failed to read logs: %w", err)
 	}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -196,7 +197,7 @@ func (m *mockRepo) UpdateLogNote(_ context.Context, logID int64, note string, me
 			return nil
 		}
 	}
-	return nil
+	return fmt.Errorf("log entry %d not found", logID)
 }
 
 func TestTaskService_Transition(t *testing.T) {
