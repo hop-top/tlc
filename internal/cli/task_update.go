@@ -99,20 +99,32 @@ var TaskUpdateCmd = &cobra.Command{
 			}
 
 			if cmd.Flags().Changed("effort") {
-				normalized, ok := NormalizeEffort(taskUpdateEffort)
-				if !ok {
-					return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
+				// "" and "-" clear the field, matching the existing
+				// pattern for --due, --remind-at, --rrule, --assigned-to.
+				if taskUpdateEffort == "" || taskUpdateEffort == "-" {
+					task.Effort = ""
+				} else {
+					normalized, ok := NormalizeEffort(taskUpdateEffort)
+					if !ok {
+						return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
+					}
+					task.Effort = core.Effort(normalized)
 				}
-				task.Effort = core.Effort(normalized)
 				changed = true
 			}
 
 			if cmd.Flags().Changed("priority") {
-				normalized, ok := NormalizePriority(taskUpdatePriority)
-				if !ok {
-					return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
+				// "" and "-" clear the field, matching the existing
+				// pattern for --due, --remind-at, --rrule, --assigned-to.
+				if taskUpdatePriority == "" || taskUpdatePriority == "-" {
+					task.Priority = ""
+				} else {
+					normalized, ok := NormalizePriority(taskUpdatePriority)
+					if !ok {
+						return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
+					}
+					task.Priority = core.Priority(normalized)
 				}
-				task.Priority = core.Priority(normalized)
 				changed = true
 			}
 

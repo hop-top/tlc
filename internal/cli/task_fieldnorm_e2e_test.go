@@ -678,3 +678,135 @@ func TestFieldNorm_E2E_UpdateEffortAlias(t *testing.T) {
 		})
 	}
 }
+
+// TestFieldNorm_E2E_UpdateEffortClearEmpty locks in that an explicitly
+// empty effort value on update clears the field, matching the
+// pre-T-1353 contract where core.ValidEffort accepted "". Repo
+// convention (see also --due, --remind-at, --rrule) accepts "" as a
+// clear sentinel.
+func TestFieldNorm_E2E_UpdateEffortClearEmpty(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	_ = s.CreateTask(ctx, &core.Task{
+		ID:     "T-0001",
+		Title:  "task with effort",
+		Status: core.StatusTodo,
+		Effort: core.EffortL,
+	})
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", ""})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --effort '': %v", err)
+	}
+
+	got := mustGetTask(t, ctx, s, "T-0001")
+	if got.Effort != "" {
+		t.Errorf("expected effort cleared, got %q", got.Effort)
+	}
+}
+
+// TestFieldNorm_E2E_UpdateEffortClearDash locks in the "-" clear
+// sentinel for effort, matching the existing pattern for --due,
+// --remind-at, --rrule, --assigned-to.
+func TestFieldNorm_E2E_UpdateEffortClearDash(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	_ = s.CreateTask(ctx, &core.Task{
+		ID:     "T-0001",
+		Title:  "task with effort",
+		Status: core.StatusTodo,
+		Effort: core.EffortL,
+	})
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--effort", "-"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --effort -: %v", err)
+	}
+
+	got := mustGetTask(t, ctx, s, "T-0001")
+	if got.Effort != "" {
+		t.Errorf("expected effort cleared, got %q", got.Effort)
+	}
+}
+
+// TestFieldNorm_E2E_UpdatePriorityClearEmpty — symmetric to the effort
+// clear-empty test. Pre-T-1353, core.ValidPriority accepted "" and the
+// field would be cleared. The normalizer-on-empty path must preserve
+// that contract.
+func TestFieldNorm_E2E_UpdatePriorityClearEmpty(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	_ = s.CreateTask(ctx, &core.Task{
+		ID:       "T-0001",
+		Title:    "task with priority",
+		Status:   core.StatusTodo,
+		Priority: core.PriorityP1,
+	})
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", ""})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --priority '': %v", err)
+	}
+
+	got := mustGetTask(t, ctx, s, "T-0001")
+	if got.Priority != "" {
+		t.Errorf("expected priority cleared, got %q", got.Priority)
+	}
+}
+
+func TestFieldNorm_E2E_UpdatePriorityClearDash(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	_ = s.CreateTask(ctx, &core.Task{
+		ID:       "T-0001",
+		Title:    "task with priority",
+		Status:   core.StatusTodo,
+		Priority: core.PriorityP1,
+	})
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", "-"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update --priority -: %v", err)
+	}
+
+	got := mustGetTask(t, ctx, s, "T-0001")
+	if got.Priority != "" {
+		t.Errorf("expected priority cleared, got %q", got.Priority)
+	}
+}

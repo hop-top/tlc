@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/sahilm/fuzzy"
@@ -130,10 +131,14 @@ func normalizeEnum(input string, aliases map[string]string, canonical []string) 
 	}
 
 	// 3. Fuzzy match against alias keys, then resolve via alias table.
+	// Sort keys so the fuzzy fallback is deterministic when multiple
+	// aliases tie on score (fuzzy.Find preserves input order for ties,
+	// and Go map iteration order is randomised per range).
 	aliasKeys := make([]string, 0, len(aliases))
 	for k := range aliases {
 		aliasKeys = append(aliasKeys, k)
 	}
+	sort.Strings(aliasKeys)
 	if results := fuzzy.Find(key, aliasKeys); len(results) > 0 {
 		if v, ok := aliases[aliasKeys[results[0].Index]]; ok {
 			return v, true
