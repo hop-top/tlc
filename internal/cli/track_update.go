@@ -62,6 +62,45 @@ var trackUpdateCmd = &cobra.Command{
 				return parseErr
 			}
 			planFm = fm
+
+			// Guard against the silent track-mismatch bug (T-0857): if
+			// the plan's frontmatter declares tracks: [...], every entry
+			// must reference the track the user passed on the CLI.
+			// Otherwise the CLI-supplied id wins (per scope) but only
+			// after we surface the conflict instead of silently routing
+			// tasks to the wrong place.
+			if fm != nil && len(fm.Tracks) > 0 {
+				track, getErr := s.GetTrack(ctx, id)
+				if getErr != nil {
+					return fmt.Errorf(
+						"get track %q for plan validation: %w", id, getErr,
+					)
+				}
+				if track == nil {
+					return fmt.Errorf(
+						"track %q not found; run 'tlc track list' to "+
+							"see available tracks", id,
+					)
+				}
+				for _, ref := range fm.Tracks {
+					ref = strings.TrimSpace(ref)
+					if ref == "" {
+						continue
+					}
+					if ref == track.ID || ref == track.Slug {
+						continue
+					}
+					return fmt.Errorf(
+						"plan %q frontmatter tracks: [%s] does not "+
+							"match target track %q (slug %q); "+
+							"re-run with the matching track id or "+
+							"fix the plan frontmatter",
+						trackUpdateAddPlan,
+						strings.Join(fm.Tracks, ", "),
+						track.ID, track.Slug,
+					)
+				}
+			}
 		}
 
 		err = svc.UpdateTrack(ctx, id, func(t *core.Track) error {
