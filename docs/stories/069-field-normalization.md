@@ -9,7 +9,7 @@ status: shipped
 **Persona**: [AI Agent](../personas/ai-agent.md)
 **Related Personas**: [Solo Developer](../personas/solo-developer.md)
 **Priority**: P1
-**Related**: [070 - Case-Insensitive + Alias Field Matching on Create + Update](070-field-normalization-writes.md)
+**Related**: [082 - Case-Insensitive + Alias Field Matching on Create + Update](082-field-normalization-writes.md)
 
 ## Story
 

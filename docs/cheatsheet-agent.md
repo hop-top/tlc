@@ -342,9 +342,9 @@ tlc task complete T-0046 --no-verify
 |-------|--------|-------|
 | `id` | `T-XXXX` | stable; auto-assigned |
 | `title` | string | required |
-| `status` | `TODO` `IN_PROGRESS` `DONE` `SKIPPED` | uppercase |
-| `priority` | `P0` `P1` `P2` `P3` | P0 = highest |
-| `effort` | `XS` `S` `M` `L` `XL` | size estimate |
+| `status` | `TODO` `IN_PROGRESS` `DONE` `SKIPPED` | canonical uppercase; case-insensitive on input, accepts aliases (see below) |
+| `priority` | `P0` `P1` `P2` `P3` | P0 = highest; case-insensitive on input, accepts aliases (see below) |
+| `effort` | `XS` `S` `M` `L` `XL` | size estimate; case-insensitive on input, accepts aliases (see below) |
 | `assigned_to` | profile/username | optional |
 | `blocked_by` | `[]task-id` | dependency list |
 | `blocked` | string | current blocker reason |
@@ -354,3 +354,41 @@ tlc task complete T-0046 --no-verify
 | `updated_at` | ISO 8601 | updated on any change |
 | `stale_timeout` | duration | per-task override; inherits project default |
 | `track_id` | track slug | optional; links task to track |
+
+### Accepted forms (status / priority / effort)
+
+All three enum fields are case-insensitive and accept aliases on
+**filter** (`task list`, since story 069), **create** (`task create`,
+since story 082 / PR #114), and **update** (`task update`, since
+story 082 / PR #114). Source of truth: `internal/cli/fieldnorm.go`.
+
+| Field | Canonical | Accepts (case-insensitive) |
+|-------|-----------|----------------------------|
+| `status` | `TODO` | `todo`, `open`, `to-do` |
+| `status` | `IN_PROGRESS` | `in_progress`, `wip`, `inprogress`, `in-progress` |
+| `status` | `DONE` | `done`, `complete`, `completed`, `finish`, `finished` |
+| `status` | `SKIPPED` | `skipped`, `skip` |
+| `priority` | `P0` | `p0`, `0`, `critical` |
+| `priority` | `P1` | `p1`, `1`, `high` |
+| `priority` | `P2` | `p2`, `2`, `medium`, `med` |
+| `priority` | `P3` | `p3`, `3`, `low` |
+| `effort` | `XS` | `xs`, `extra-small`, `extrasmall`, `xsmall`, `tiny` |
+| `effort` | `S` | `s`, `small` |
+| `effort` | `M` | `m`, `medium`, `med` |
+| `effort` | `L` | `l`, `large` |
+| `effort` | `XL` | `xl`, `extra-large`, `extralarge`, `xlarge`, `huge` |
+
+### Clear sentinels (update path)
+
+To clear an optional field on `task update`, pass `""` or `-` (mirrors
+the existing `--assigned-to -` pattern). Shipped in PR #114:
+
+```bash
+tlc task update T-0046 --assigned-to -   # clear assignee
+tlc task update T-0046 --priority ""     # clear priority
+tlc task update T-0046 --priority -      # clear priority
+tlc task update T-0046 --effort ""       # clear effort
+tlc task update T-0046 --effort -        # clear effort
+tlc task update T-0046 --track -         # unlink from track
+tlc task update T-0046 --rrule -         # clear recurring reminder
+```

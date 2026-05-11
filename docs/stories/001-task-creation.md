@@ -52,46 +52,35 @@ As a Solo Developer, I want to create tasks with title, description, tags, and a
 
 ## Tests
 
-### E2E
-- ❌ `tests/integration/task_test.go` — NOT YET IMPLEMENTED
-  - Needed: `TestTaskCreation`, `TestTaskCreationWithMetadata`, `TestInteractiveTaskCreation`, `TestTaskIDGeneration`
-
-### Unit
-- ✅ `internal/cli/task_test.go` — PARTIAL
-   - ✅ Exists: `TestTaskCommands/CreateTask` (covers scenarios 1-2, tags creation)
-   - ❌ Missing: Interactive mode validation (scenario 3)
-   - ❌ Missing: ID sequencing/conflict validation (scenario 4)
-   - ❌ Missing: Assignee field verification in created tasks
-   - ❌ Missing: Tag queryability after creation (scenario 2)
-- ✅ `internal/core/task_test.go` — PARTIAL
-   - ✅ Exists: `TestTask_Transition` (basic state management)
-   - ❌ Missing: Task creation and ID generation tests
-   - ❌ Missing: Assignee field verification tests
+### Unit / CLI E2E
+- ✅ `internal/cli/task_create_test.go` — `TestTaskCreate/CreateTask` (basic create, title, storage row)
+- ✅ `internal/cli/task_create_test.go` — `TestTaskCreate/CreateTaskWithAssignee` + standalone `TestTaskCreateWithAssignee` (assignee persisted)
+- ✅ `internal/cli/task_create_test.go` — `TestTaskCreate/CreateTaskWithTags` + standalone `TestTaskCreateWithTags` (tags persisted)
+- ✅ `internal/cli/task_create_test.go` — `TestTaskCreate/CreateTaskWithCustomID` (`--id` flag)
+- ✅ `internal/cli/task_create_test.go` — `TestTaskCreate/CreateTaskWithReference` (`--reference` flag)
+- ✅ `internal/cli/task_create_test.go` — `TestTaskCreate/VerifyIDSequencing` (no-conflict sequencing)
+- ✅ `internal/cli/task_create_test.go` — `TestBuildTaskReference` (`tlc://` URL format)
+- ✅ `internal/cli/task_list_test.go` — `TestTaskList/FilterTasksByTag` (tag queryability)
+- ✅ `internal/cli/task_list_test.go` — `TestTaskList/FilterTasksByAssignee` (assignee queryability)
+- ❌ Interactive mode (`-i`) — no test
+- ❌ Auto-detect `project_id` populated on created task — no direct test (only URL-builder unit test covers project formatting)
 
 ## Acceptance Criteria Validation Status
 
 | Scenario | Criteria | Test Coverage | Status |
 |----------|----------|---|--------|
-| 1 | Basic task creation (title, auto-ID, status, reference, project_id) | `TestTaskCommands/CreateTask` | ⚠️ PARTIAL |
-| 2a | Create with tags (`--tag auth --tag security`) | `TestTaskCommands/CreateTask` | ✅ COVERED |
-| 2b | Create with assignee (`--assigned-to engineer-1`) | Not tested | ❌ NOT COVERED |
-| 2c | Queryable by tag | Not tested | ❌ NOT COVERED |
-| 2d | Queryable by assignee | Not tested | ❌ NOT COVERED |
+| 1 | Basic task creation (title, auto-ID, status, reference, project_id) | `TestTaskCreate/CreateTask` + `TestBuildTaskReference` | ⚠️ PARTIAL (project_id auto-detect on task row not asserted) |
+| 2a | Create with tags (`--tag auth --tag security`) | `TestTaskCreate/CreateTaskWithTags` | ✅ COVERED |
+| 2b | Create with assignee (`--assigned-to engineer-1`) | `TestTaskCreate/CreateTaskWithAssignee` | ✅ COVERED |
+| 2c | Queryable by tag | `TestTaskList/FilterTasksByTag` | ✅ COVERED |
+| 2d | Queryable by assignee | `TestTaskList/FilterTasksByAssignee` | ✅ COVERED |
 | 3 | Interactive mode prompts (status limited to TODO/IN_PROGRESS/DONE, tags limited to predefined) | Not tested | ❌ NOT COVERED |
-| 4 | ID sequencing (no conflicts) | Not tested | ❌ NOT COVERED |
-| 5 | Custom ID and reference fields | Not tested | ❌ NOT COVERED |
-| 6 | Auto-detect project_id | Not tested | ❌ NOT COVERED |
+| 4 | ID sequencing (no conflicts) | `TestTaskCreate/VerifyIDSequencing` | ✅ COVERED |
+| 5 | Custom ID and reference fields | `TestTaskCreate/CreateTaskWithCustomID` + `TestTaskCreate/CreateTaskWithReference` | ✅ COVERED |
+| 6 | Auto-detect project_id populated on task row | Not tested directly | ❌ NOT COVERED |
 
 ## TODO
 
-- [ ] Create E2E test suite in `tests/integration/task_test.go` covering all 6 scenarios
-- [ ] Add interactive mode test to `internal/cli/task_test.go` (verify status options limited to TODO/IN_PROGRESS/DONE)
-- [ ] Add ID generation and sequencing tests to `internal/core/task_test.go`
-- [ ] Validate `tlc://` URL reference format in tests
-- [ ] **HIGH PRIORITY**: Test assignee field creation (`--assigned-to engineer-1`) and verification in storage
-- [ ] **HIGH PRIORITY**: Test tag queryability after creation (filter by `--tag auth`)
-- [ ] **HIGH PRIORITY**: Test assignee queryability after creation (filter by `--assigned-to engineer-1`)
-- [ ] Test custom task ID (--id flag)
-- [ ] Test reference field (--reference flag)
-- [ ] Test auto-detect project_id in task creation
+- [ ] Add interactive mode test (`tlc task create -i`) — verify status options limited to TODO/IN_PROGRESS/DONE
+- [ ] Add direct test that auto-detected `project_id` is persisted on the created task row (separate from `TestBuildTaskReference`)
 - [ ] Verify TODO.md sync after task creation (syncTODOAll)

@@ -2,9 +2,9 @@
 status: shipped
 ---
 
-# 070 - Case-Insensitive + Alias Field Matching on Create + Update
+# 082 - Case-Insensitive + Alias Field Matching on Create + Update
 
-**ID**: 070
+**ID**: 082
 **Feature**: Task Management — Write UX
 **Persona**: [AI Agent](../personas/ai-agent.md)
 **Related Personas**: [Solo Developer](../personas/solo-developer.md)
