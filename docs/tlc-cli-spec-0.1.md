@@ -135,19 +135,29 @@ tlc task create [title] [flags]
 
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
-| `--title` | `-t` | string | Task title (or use positional arg) |
+| `--id` | | string | Explicit task ID (e.g. `T-0042`); auto-generated if omitted |
 | `--description` | `-d` | string | Task description |
-| `--status` | `-s` | enum | Initial status (default: `TODO`) |
+| `--status` | `-s` | enum | Initial status (default: `TODO`); case-insensitive, accepts aliases (see story 082) |
 | `--assigned-to` | `-a` | string | Assignee username |
+| `--effort` | `-e` | enum | Effort estimate `XS S M L XL`; case-insensitive, accepts aliases (story 082) |
+| `--priority` | `-p` | enum | Priority `P0 P1 P2 P3`; case-insensitive, accepts aliases (story 082) |
+| `--blocked-by` | | string[] | Blocking task IDs (repeatable) |
 | `--tag` | | string[] | Tags (repeatable) |
 | `--reference` | `-r` | string | Reference pointer (default: auto-generate) |
-| `--meta` | `-m` | key=value | Metadata (repeatable) |
 | `--interactive` | `-i` | bool | Interactive prompt mode |
+| `--timeout` | | duration | Per-task stale timeout (e.g. `2h`, `30m`) |
+| `--track` | | string | Link task to a track ID |
+| `--due` | | string | Due date (`tomorrow`, `in 3d`, `2025-05-01`) |
+| `--remind-at` | | string | One-shot reminder time |
+| `--rrule` | | string | Recurring reminder RRULE (e.g. `FREQ=DAILY`, `FREQ=WEEKLY;BYDAY=MO,WE,FR`) |
+| `--no-auto-remind` | | bool | Suppress the default 12h-before-due reminder |
+| `--eva` | | string[] | Eva annotations (repeatable) |
+| `--no-prompt` | | bool | Skip confirmation prompts (inherited from `tlc task`) |
 
 #### Behavior
 
 1. Validates required fields (title, reference)
-2. Generates unique ID (e.g., `T-0042`)
+2. Generates unique ID (e.g., `T-0042`) unless `--id` is supplied
 3. Sets created_at timestamp
 4. Writes CREATED log entry
 5. Returns task ID
@@ -212,25 +222,29 @@ tlc task list [query] [flags]
 
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
-| `--status` | `-s` | enum[] | Filter by status (repeatable; default: `IN_PROGRESS`, `TODO`) |
+| `--status` | `-s` | enum[] | Filter by status (repeatable; default: `IN_PROGRESS`, `TODO`); case-insensitive, accepts aliases (story 069) |
 | `--assigned-to` | `-a` | string | Filter by assignee |
+| `--priority` | | enum[] | Filter by priority `P0 P1 P2 P3` (repeatable); case-insensitive, accepts aliases (story 069) |
 | `--tag` | | string[] | Filter by tag (repeatable) |
-| `--reference` | `-r` | string | Filter by reference pattern |
-| `--meta` | `-m` | key=value | Filter by metadata |
+| `--mine` | | bool | Shortcut for current user's tasks |
 | `--archived` | | bool | Show only archived tasks |
+| `--blocked` | | bool | Show only blocked tasks |
+| `--blocked-by` | | string[] | Show only tasks blocked by the given task IDs (repeatable) |
+| `--stale` | | bool | Show only stale tasks |
+| `--track` | | string | Filter by track ID |
+| `--summary` | | bool | Show grouped status counts instead of task list |
+| `--counters` | | bool | Show flat status counters |
 | `--sort-by` | | string | Sort field (default: `created_at`) |
-| `--order` | | enum | Sort order: `asc`, `desc` (default: `desc`) |
+| `--sort-direction` | | enum | Sort direction: `asc`, `desc` (default: `desc`) |
 | `--limit` | `-n` | int | Limit results (default: 100) |
 | `--offset` | | int | Skip results (default: 0) |
-| `--mine` | | bool | Shortcut for current user's tasks |
-| `--blocked` | | bool | Show only blocked tasks |
-| `--urgent` | | bool | Show only high-priority tasks |
-| `--summary` | | bool | Show grouped status counts instead of task list |
 | `--all-projects` | | bool | Show tasks from all projects |
 | `--workspace` | | string | Query across workspace projects |
 | `--space` | | string | Filter to specific space within workspace |
 | `--profile` | | string | Filter by aps profile (resolves to assigned_to) |
 | `--squad` | | string | Filter by aps squad members |
+| `--output` | | string | Write output to a file instead of stdout |
+| `--include-logs` | | bool | Include audit log entries (vtodo: emit VJOURNAL components) |
 
 #### Query Syntax
 
@@ -370,16 +384,44 @@ tlc task update <task-id|pattern>... [flags]
 
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
-| `--title` | `-t` | string | New title |
-| `--description` | `-d` | string | New description |
-| `--status` | `-s` | enum | New status |
-| `--assigned-to` | `-a` | string | New assignee |
+| `--title` | `-t` | string | New title (rejected when more than one target resolves; see scenario 10 in story 005) |
+| `--description` | `-d` | string | New description (replaces, does not append) |
+| `--status` | `-s` | enum | New status; case-insensitive, accepts aliases (story 082) |
+| `--assigned-to` | `-a` | string | New assignee (use `""` or `-` to clear) |
+| `--effort` | `-e` | enum | New effort `XS S M L XL`; case-insensitive, accepts aliases (story 082); use `""` or `-` to clear (PR #114) |
+| `--priority` | `-p` | enum | New priority `P0 P1 P2 P3`; case-insensitive, accepts aliases (story 082); use `""` or `-` to clear (PR #114) |
+| `--add-blocked-by` | | string[] | Add blocking task IDs (repeatable) |
+| `--remove-blocked-by` | | string[] | Remove blocking task IDs (repeatable) |
+| `--clear-blocked-by` | | bool | Clear all blocking task IDs |
+| `--add-eva` | | string[] | Add eva annotations (repeatable) |
+| `--remove-eva` | | string[] | Remove eva annotations (repeatable) |
+| `--clear-eva` | | bool | Clear all eva annotations |
 | `--add-tag` | | string[] | Add tags (repeatable) |
 | `--remove-tag` | | string[] | Remove tags (repeatable) |
-| `--set-meta` | `-m` | key=value | Set metadata (repeatable) |
-| `--unset-meta` | | key | Remove metadata (repeatable) |
+| `--blocked` | | string | Set blocked reason |
+| `--unblock` | | bool | Clear blocked reason |
+| `--timeout` | | duration | Per-task stale timeout (e.g. `2h`, `30m`) |
+| `--track` | | string | Link to track ID (use `-` to unlink) |
+| `--due` | | string | Due date (`tomorrow`, `in 3d`, `2025-05-01`) |
+| `--remind-at` | | string | One-shot reminder time |
+| `--rrule` | | string | Recurring reminder RRULE (use `-` to clear) |
+| `--no-auto-remind` | | bool | Suppress the default 12h-before-due reminder |
 | `--force` | | bool | Bypass workflow state machine rules |
 | `--note` | `-n` | string | Transition note; recorded against the STATUS_CHANGED log when `--status` is set. Defaults to `"Manual update"` if absent. |
+
+#### Multi-target / regex behavior
+
+The positional argument(s) accept literal task IDs, glob patterns
+(`T-004*`), or regex patterns (`'T-001\d'`). When >1 target resolves:
+
+- Bulk-safe flags apply to every resolved task: `--status`, `--priority`,
+  `--effort`, `--assigned-to`, `--add-tag`, `--remove-tag`,
+  `--add-blocked-by`, `--remove-blocked-by`, `--clear-blocked-by`,
+  `--add-eva`, `--remove-eva`, `--clear-eva`, `--blocked`, `--unblock`,
+  `--timeout`, `--track`, `--due`, `--remind-at`, `--rrule`.
+- `--title` is rejected (scenario 10 of story 005): exits with an error.
+- A confirmation prompt fires unless `--no-prompt` is passed
+  (scenario 11 of story 005).
 
 #### Behavior
 
