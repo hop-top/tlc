@@ -61,11 +61,21 @@ func seedTemporalLogs(t *testing.T) (taskID string, cleanup func()) {
 	return task.ID, cleanup
 }
 
+// setOutputFormatJSON sets viper output.format to "json" and registers
+// a t.Cleanup that restores the prior value. viper is process-global;
+// without restore, later tests in the package see leaked state.
+func setOutputFormatJSON(t *testing.T) {
+	t.Helper()
+	prior := viper.GetString("output.format")
+	viper.Set("output.format", "json")
+	t.Cleanup(func() { viper.Set("output.format", prior) })
+}
+
 // runLogJSON executes `tlc log <args>` with JSON output and returns the
 // decoded LogEntry slice + raw stderr/stdout for diagnosis.
 func runLogJSON(t *testing.T, args ...string) ([]*core.LogEntry, string, error) {
 	t.Helper()
-	viper.Set("output.format", "json")
+	setOutputFormatJSON(t)
 	cmd := newTestCmd()
 	cmd.AddCommand(logCmd)
 	buf := new(bytes.Buffer)
@@ -167,7 +177,7 @@ func TestLog_TemporalFilters_E2E(t *testing.T) {
 		taskID, _ := seedTemporalLogs(t)
 		defer resetTaskFlags()
 
-		viper.Set("output.format", "json")
+		setOutputFormatJSON(t)
 		cmd := newTestCmd()
 		cmd.AddCommand(logCmd)
 		buf := new(bytes.Buffer)
