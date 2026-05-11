@@ -624,3 +624,210 @@ func TestTaskCreateCmd_TaskListShowsOnceOnly(t *testing.T) {
 			target, got, out)
 	}
 }
+
+// TestTaskCreateWithBlockedBy_DisplayID_T0620 reproduces the bug reported
+// in T-0620 (aps backlog): --blocked-by must accept the display alias
+// "T-NNNN" the same way positional task args do. Pre-fix, this resolves
+// the alias against the typeid column and returns "task not found", even
+// though `tlc task show T-NNNN` works.
+//
+// The earlier TestTaskCreateWithBlockedBy used unrealistic fixtures
+// (s.CreateTask with literal ID:"T-0009") which wrote the display string
+// into the typeid column — that masked the bug. This test mints a real
+// typeid + seq via the normal create path, then exercises --blocked-by
+// against the resulting display alias.
+func TestTaskCreateWithBlockedBy_DisplayID_T0620(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	// Mint a real blocker row via storage.CreateTask so seq + typeid are
+	// auto-allocated (the production shape, not the literal-ID shortcut
+	// the earlier test used).
+	blocker := &core.Task{
+		ID:     core.NewTaskID(),
+		Title:  "Blocker A",
+		Status: core.StatusTodo,
+	}
+	if err := s.CreateTask(ctx, blocker); err != nil {
+		t.Fatalf("CreateTask(blocker): %v", err)
+	}
+	// Read it back to get the auto-allocated seq.
+	stored, err := s.GetTask(ctx, blocker.ID)
+	if err != nil || stored == nil {
+		t.Fatalf("GetTask(blocker.ID): err=%v stored=%v", err, stored)
+	}
+	displayAlias := core.FormatTaskAlias(stored)
+	if displayAlias == "" {
+		t.Fatalf("FormatTaskAlias returned empty for seq=%d", stored.Seq)
+	}
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{
+		"task", "create", "blocked by display id",
+		"--blocked-by", displayAlias,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task create --blocked-by %s: %v", displayAlias, err)
+	}
+
+	tasks, _ := s.ListTasks(ctx, core.Query{})
+	var got *core.Task
+	for _, candidate := range tasks {
+		if candidate.Title == "blocked by display id" {
+			got = candidate
+			break
+		}
+	}
+	if got == nil {
+		t.Fatal("created task not found")
+	}
+	blockedBy := got.BlockedBy()
+	if len(blockedBy) != 1 {
+		t.Fatalf("blocked_by len = %d, want 1: %v", len(blockedBy), blockedBy)
+	}
+	// The stored ref must point at the typeid (or display alias) of the
+	// real blocker — not be empty, not be the unchanged input string if
+	// that string wouldn't survive a later lookup.
+	if blockedBy[0] != blocker.ID && blockedBy[0] != displayAlias {
+		t.Errorf("blocked_by[0] = %q, want %q (typeid) or %q (alias)", blockedBy[0], blocker.ID, displayAlias)
+	}
+}
+
+// TestTaskUpdateAddBlockedBy_DisplayID_T0620 mirrors the create test
+// for the update path's --add-blocked-by flag.
+func TestTaskUpdateAddBlockedBy_DisplayID_T0620(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	blocker := &core.Task{
+		ID:     core.NewTaskID(),
+		Title:  "Blocker B",
+		Status: core.StatusTodo,
+	}
+	target := &core.Task{
+		ID:     core.NewTaskID(),
+		Title:  "Update target",
+		Status: core.StatusTodo,
+	}
+	if err := s.CreateTask(ctx, blocker); err != nil {
+		t.Fatalf("CreateTask(blocker): %v", err)
+	}
+	if err := s.CreateTask(ctx, target); err != nil {
+		t.Fatalf("CreateTask(target): %v", err)
+	}
+
+	storedBlocker, _ := s.GetTask(ctx, blocker.ID)
+	storedTarget, _ := s.GetTask(ctx, target.ID)
+	blockerAlias := core.FormatTaskAlias(storedBlocker)
+	targetAlias := core.FormatTaskAlias(storedTarget)
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{
+		"task", "update", targetAlias,
+		"--add-blocked-by", blockerAlias,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update %s --add-blocked-by %s: %v", targetAlias, blockerAlias, err)
+	}
+
+	updated, err := s.GetTask(ctx, target.ID)
+	if err != nil || updated == nil {
+		t.Fatalf("GetTask(target.ID): err=%v updated=%v", err, updated)
+	}
+	blockedBy := updated.BlockedBy()
+	if len(blockedBy) != 1 {
+		t.Fatalf("blocked_by len = %d, want 1: %v", len(blockedBy), blockedBy)
+	}
+	if blockedBy[0] != blocker.ID && blockedBy[0] != blockerAlias {
+		t.Errorf("blocked_by[0] = %q, want %q (typeid) or %q (alias)", blockedBy[0], blocker.ID, blockerAlias)
+	}
+}
+
+// TestTaskUpdateRemoveBlockedBy_DisplayID_T0620 covers the third flag
+// in T-0620's acceptance criteria: --remove-blocked-by must accept the
+// display alias even when the stored blocker reference is the typeid
+// form (the production shape).
+func TestTaskUpdateRemoveBlockedBy_DisplayID_T0620(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	defer s.Close()
+
+	blocker := &core.Task{
+		ID:     core.NewTaskID(),
+		Title:  "Blocker C",
+		Status: core.StatusTodo,
+	}
+	if err := s.CreateTask(ctx, blocker); err != nil {
+		t.Fatalf("CreateTask(blocker): %v", err)
+	}
+	storedBlocker, _ := s.GetTask(ctx, blocker.ID)
+	blockerAlias := core.FormatTaskAlias(storedBlocker)
+
+	// Create target with the blocker already in place (stored as typeid).
+	target := &core.Task{
+		ID:     core.NewTaskID(),
+		Title:  "Remove target",
+		Status: core.StatusTodo,
+	}
+	target.AddBlockedBy([]string{blocker.ID})
+	if err := s.CreateTask(ctx, target); err != nil {
+		t.Fatalf("CreateTask(target): %v", err)
+	}
+	storedTarget, _ := s.GetTask(ctx, target.ID)
+	targetAlias := core.FormatTaskAlias(storedTarget)
+
+	// Sanity: blocker is in place.
+	if len(storedTarget.BlockedBy()) != 1 {
+		t.Fatalf("setup failure: target.BlockedBy len = %d, want 1", len(storedTarget.BlockedBy()))
+	}
+
+	resetTaskFlags()
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{
+		"task", "update", targetAlias,
+		"--remove-blocked-by", blockerAlias,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task update %s --remove-blocked-by %s: %v", targetAlias, blockerAlias, err)
+	}
+
+	updated, err := s.GetTask(ctx, target.ID)
+	if err != nil || updated == nil {
+		t.Fatalf("GetTask(target.ID): err=%v updated=%v", err, updated)
+	}
+	if got := len(updated.BlockedBy()); got != 0 {
+		t.Errorf("blocker not removed via display alias: blocked_by len = %d, want 0: %v",
+			got, updated.BlockedBy())
+	}
+}
