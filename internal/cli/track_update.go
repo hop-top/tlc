@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/core"
 )
 
@@ -34,12 +36,13 @@ var trackUpdateCmd = &cobra.Command{
 		assignedChanged := cmd.Flags().Changed("assigned-to")
 		typeChanged := cmd.Flags().Changed("type")
 		addPlanChanged := cmd.Flags().Changed("add-plan")
+		dueChanged := cmd.Flags().Changed("due")
 
 		if !titleChanged && !statusChanged && !assignedChanged &&
-			!typeChanged && !addPlanChanged {
+			!typeChanged && !addPlanChanged && !dueChanged {
 			return fmt.Errorf(
 				"no update flags provided; use --title, --status, " +
-					"--assigned-to, --type, or --add-plan",
+					"--assigned-to, --type, --add-plan, or --due",
 			)
 		}
 
@@ -103,6 +106,27 @@ var trackUpdateCmd = &cobra.Command{
 			}
 		}
 
+		// Parse --due ahead of the mutation closure so an invalid value
+		// fails before any write. The "" / "-" / "null" sentinels clear
+		// the field; anything else goes through util.ParseUntil per the
+		// temporal spec (UTC RFC3339 on the wire).
+		var (
+			dueClear  bool
+			parsedDue *time.Time
+		)
+		if dueChanged {
+			raw := trackUpdateDue
+			if raw == "" || raw == "-" || raw == "null" {
+				dueClear = true
+			} else {
+				dt, perr := util.ParseUntil(raw)
+				if perr != nil {
+					return fmt.Errorf("invalid --due %q: %w", raw, perr)
+				}
+				parsedDue = &dt
+			}
+		}
+
 		err = svc.UpdateTrack(ctx, id, func(t *core.Track) error {
 			if titleChanged {
 				t.Title = trimMatchingQuotes(trackUpdateTitle)
@@ -125,6 +149,13 @@ var trackUpdateCmd = &cobra.Command{
 			}
 			if addPlanChanged && trackUpdateAddPlan != "" {
 				linkPlanToTrack(t, trackUpdateAddPlan)
+			}
+			if dueChanged {
+				if dueClear {
+					t.DueAt = nil
+				} else {
+					t.DueAt = parsedDue
+				}
 			}
 			return nil
 		})
@@ -340,5 +371,9 @@ func init() {
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateAddPlan, "add-plan", "",
 		"Link a plan file and optionally extract tasks from its frontmatter",
+	)
+	trackUpdateCmd.Flags().StringVar(
+		&trackUpdateDue, "due", "",
+		"Due date (tomorrow, in 3d, 2025-05-01, RFC3339; use '-' to clear)",
 	)
 }

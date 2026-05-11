@@ -91,6 +91,7 @@ type Track struct {
 	ProjectID   *string        `json:"project_id,omitempty" yaml:"project_id,omitempty"`
 	Meta        map[string]any `json:"meta,omitempty" yaml:"meta,omitempty"`
 	PlanMapping map[int]string `json:"plan_mapping,omitempty" yaml:"plan_mapping,omitempty"`
+	DueAt       *time.Time     `json:"due_at,omitempty" yaml:"due_at,omitempty"`
 }
 
 // trackSlugRe matches lowercase alphanumeric characters and hyphens, 3-64 chars.

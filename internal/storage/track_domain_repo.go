@@ -28,16 +28,16 @@ func NewTrackDomainRepo(store *SQLiteStorage) *TrackDomainRepo {
 func ScanTrack(row *sql.Row) (core.Track, error) {
 	var t core.Track
 	var createdAt, updatedAt string
-	var assignedTo, projectID, metaStr sql.NullString
+	var assignedTo, projectID, metaStr, dueAtStr sql.NullString
 
 	err := row.Scan(
 		&t.ID, &t.Slug, &t.Title, &t.Type, &t.Status,
-		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr,
+		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr, &dueAtStr,
 	)
 	if err != nil {
 		return t, err
 	}
-	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr); err != nil {
+	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr, dueAtStr); err != nil {
 		return t, err
 	}
 	return t, nil
@@ -47,16 +47,16 @@ func ScanTrack(row *sql.Row) (core.Track, error) {
 func ScanTrackRows(rows *sql.Rows) (core.Track, error) {
 	var t core.Track
 	var createdAt, updatedAt string
-	var assignedTo, projectID, metaStr sql.NullString
+	var assignedTo, projectID, metaStr, dueAtStr sql.NullString
 
 	err := rows.Scan(
 		&t.ID, &t.Slug, &t.Title, &t.Type, &t.Status,
-		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr,
+		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr, &dueAtStr,
 	)
 	if err != nil {
 		return t, err
 	}
-	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr); err != nil {
+	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr, dueAtStr); err != nil {
 		return t, err
 	}
 	return t, nil
@@ -70,15 +70,20 @@ func BindTrack(t core.Track) (cols []string, vals []any) {
 		pid = *t.ProjectID
 	}
 
+	var dueAt any
+	if t.DueAt != nil {
+		dueAt = t.DueAt.Format(time.RFC3339)
+	}
+
 	cols = []string{
 		"id", "slug", "title", "type", "status", "assigned_to",
-		"created_at", "updated_at", "project_id", "meta",
+		"created_at", "updated_at", "project_id", "meta", "due_at",
 	}
 	vals = []any{
 		t.ID, t.Slug, t.Title, t.Type, string(t.Status), t.AssignedTo,
 		t.CreatedAt.Format(time.RFC3339),
 		t.UpdatedAt.Format(time.RFC3339),
-		pid, string(metaJSON),
+		pid, string(metaJSON), dueAt,
 	}
 	return cols, vals
 }
@@ -87,7 +92,7 @@ func BindTrack(t core.Track) (cols []string, vals []any) {
 func populateTrack(
 	t *core.Track,
 	createdAt, updatedAt string,
-	assignedTo, projectID, metaStr sql.NullString,
+	assignedTo, projectID, metaStr, dueAtStr sql.NullString,
 ) error {
 	var err error
 	if t.CreatedAt, err = parseRFC3339(createdAt); err != nil {
@@ -106,6 +111,13 @@ func populateTrack(
 		if err := json.Unmarshal([]byte(metaStr.String), &t.Meta); err != nil {
 			return fmt.Errorf("failed to unmarshal track meta: %w", err)
 		}
+	}
+	if dueAtStr.Valid && dueAtStr.String != "" {
+		parsed, perr := parseRFC3339(dueAtStr.String)
+		if perr != nil {
+			return fmt.Errorf("failed to parse track due_at: %w", perr)
+		}
+		t.DueAt = &parsed
 	}
 	return nil
 }

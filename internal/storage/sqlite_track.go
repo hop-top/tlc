@@ -29,10 +29,15 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 			planMappingSQL = sql.NullString{String: string(pmJSON), Valid: true}
 		}
 
+		var dueAtSQL sql.NullString
+		if track.DueAt != nil {
+			dueAtSQL = sql.NullString{String: track.DueAt.Format(time.RFC3339), Valid: true}
+		}
+
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO tracks (id, slug, title, type, status, assigned_to,
-				created_at, updated_at, project_id, meta, plan_mapping)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				created_at, updated_at, project_id, meta, plan_mapping, due_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			track.ID, track.Slug, track.Title, track.Type, track.Status,
 			track.AssignedTo,
 			track.CreatedAt.Format(time.RFC3339),
@@ -40,6 +45,7 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 			projectID,
 			string(metaJSON),
 			planMappingSQL,
+			dueAtSQL,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert track: %w", err)
@@ -60,12 +66,12 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 		if scoped {
 			row = s.db.QueryRowContext(ctx, `
 				SELECT id, slug, title, type, status, assigned_to,
-					created_at, updated_at, project_id, meta, plan_mapping
+					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE id = ? AND project_id = ?`, id, proj.ProjectID)
 		} else {
 			row = s.db.QueryRowContext(ctx, `
 				SELECT id, slug, title, type, status, assigned_to,
-					created_at, updated_at, project_id, meta, plan_mapping
+					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
 		}
 	} else {
@@ -73,12 +79,12 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 		if scoped {
 			row = s.db.QueryRowContext(ctx, `
 				SELECT id, slug, title, type, status, assigned_to,
-					created_at, updated_at, project_id, meta, plan_mapping
+					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE slug = ? AND project_id = ?`, id, proj.ProjectID)
 		} else {
 			row = s.db.QueryRowContext(ctx, `
 				SELECT id, slug, title, type, status, assigned_to,
-					created_at, updated_at, project_id, meta, plan_mapping
+					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE slug = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
 		}
 	}
@@ -90,7 +96,7 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID string) (*core.Track, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, slug, title, type, status, assigned_to,
-			created_at, updated_at, project_id, meta, plan_mapping
+			created_at, updated_at, project_id, meta, plan_mapping, due_at
 		FROM tracks WHERE id = ? AND project_id = ?`, id, projectID)
 	return scanTrackFromRow(row)
 }
@@ -100,7 +106,7 @@ func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID str
 func (s *SQLiteStorage) GetTrackBySlug(ctx context.Context, projectID, slug string) (*core.Track, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, slug, title, type, status, assigned_to,
-			created_at, updated_at, project_id, meta, plan_mapping
+			created_at, updated_at, project_id, meta, plan_mapping, due_at
 		FROM tracks WHERE project_id = ? AND slug = ?`, projectID, slug)
 	return scanTrackFromRow(row)
 }
@@ -120,16 +126,23 @@ func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) erro
 			planMappingSQL = sql.NullString{String: string(pmJSON), Valid: true}
 		}
 
+		var dueAtSQL sql.NullString
+		if track.DueAt != nil {
+			dueAtSQL = sql.NullString{String: track.DueAt.Format(time.RFC3339), Valid: true}
+		}
+
 		res, err := tx.ExecContext(ctx, `
 			UPDATE tracks
 			SET title = ?, type = ?, status = ?, assigned_to = ?,
-				updated_at = ?, project_id = ?, meta = ?, plan_mapping = ?
+				updated_at = ?, project_id = ?, meta = ?, plan_mapping = ?,
+				due_at = ?
 			WHERE id = ? AND project_id = ?`,
 			track.Title, track.Type, track.Status, track.AssignedTo,
 			track.UpdatedAt.Format(time.RFC3339),
 			projectID,
 			string(metaJSON),
 			planMappingSQL,
+			dueAtSQL,
 			track.ID, projectID,
 		)
 		if err != nil {
@@ -213,7 +226,7 @@ func (s *SQLiteStorage) ListTracks(
 	query core.TrackQuery,
 ) ([]*core.Track, error) {
 	sqlQuery := `SELECT id, slug, title, type, status, assigned_to,
-		created_at, updated_at, project_id, meta, plan_mapping FROM tracks`
+		created_at, updated_at, project_id, meta, plan_mapping, due_at FROM tracks`
 	var args []interface{}
 	var whereClauses []string
 
@@ -284,12 +297,12 @@ func (s *SQLiteStorage) ListTracks(
 func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 	var track core.Track
 	var createdAtStr, updatedAtStr string
-	var assignedTo, projectID, metaStr, planMappingStr sql.NullString
+	var assignedTo, projectID, metaStr, planMappingStr, dueAtStr sql.NullString
 
 	err := row.Scan(
 		&track.ID, &track.Slug, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
-		&planMappingStr,
+		&planMappingStr, &dueAtStr,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -321,6 +334,13 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 			return nil, fmt.Errorf("failed to unmarshal plan_mapping: %w", err)
 		}
 	}
+	if dueAtStr.Valid && dueAtStr.String != "" {
+		t, err := parseRFC3339(dueAtStr.String)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse track due_at: %w", err)
+		}
+		track.DueAt = &t
+	}
 
 	return &track, nil
 }
@@ -329,12 +349,12 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 	var track core.Track
 	var createdAtStr, updatedAtStr string
-	var assignedTo, projectID, metaStr, planMappingStr sql.NullString
+	var assignedTo, projectID, metaStr, planMappingStr, dueAtStr sql.NullString
 
 	err := rows.Scan(
 		&track.ID, &track.Slug, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
-		&planMappingStr,
+		&planMappingStr, &dueAtStr,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan track row: %w", err)
@@ -362,6 +382,13 @@ func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 		if err := json.Unmarshal([]byte(planMappingStr.String), &track.PlanMapping); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal plan_mapping: %w", err)
 		}
+	}
+	if dueAtStr.Valid && dueAtStr.String != "" {
+		t, err := parseRFC3339(dueAtStr.String)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse track due_at: %w", err)
+		}
+		track.DueAt = &t
 	}
 
 	return &track, nil
