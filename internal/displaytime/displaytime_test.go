@@ -82,6 +82,32 @@ func TestDisplayTimeLocalFallbackUnsetTimezone(t *testing.T) {
 	}
 }
 
+func TestDisplayTimeLocalLiteralResolvesToTimeLocal(t *testing.T) {
+	// The documented default in the config spec is `ui.timezone: local`.
+	// LoadTimezone must accept the literal "local" string, return
+	// time.Local, and avoid the invalid-tz warning path that
+	// TestDisplayTimeInvalidTimezoneFallsBackToLocal exercises.
+	resetForTest(t, "local")
+	loc := Resolve()
+	if loc != time.Local {
+		t.Fatalf("ui.timezone=local should resolve to time.Local, got %v", loc)
+	}
+	// And no pending warning should have been buffered, since "local"
+	// is a valid value (distinct from an invalid IANA name).
+	tzMutex.Lock()
+	warn := tzWarn
+	tzMutex.Unlock()
+	if warn != "" {
+		t.Fatalf("ui.timezone=local should not buffer a warning, got %q", warn)
+	}
+	// Output must round-trip through RFC3339 like the other cases.
+	instant := time.Date(2026, 6, 15, 14, 30, 0, 0, time.UTC)
+	got := DisplayTime(instant, time.RFC3339)
+	if _, err := time.Parse(time.RFC3339, got); err != nil {
+		t.Fatalf("local-literal output not RFC3339-parseable: %q (%v)", got, err)
+	}
+}
+
 func TestDisplayTimeInvalidTimezoneFallsBackToLocal(t *testing.T) {
 	resetForTest(t, "Not/A_Real_Zone")
 	loc := Resolve()
