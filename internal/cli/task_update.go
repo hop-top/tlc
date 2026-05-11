@@ -45,6 +45,37 @@ var TaskUpdateCmd = &cobra.Command{
 			return fmt.Errorf("--title can only be set when updating a single task")
 		}
 
+		// --amend rewrites the most recent log entry in place rather
+		// than appending a new one. It is intentionally scoped to
+		// --note edits to avoid side effects from re-firing
+		// state-machine transitions; status amends would need partial
+		// rollback of the previous transition, which is too risky for
+		// CLI sugar. See T-0865.
+		if cmd.Flags().Changed("amend") && taskUpdateAmend {
+			if cmd.Flags().Changed("status") {
+				return fmt.Errorf("--amend with --status is not supported; status transitions cannot be safely amended (would skip workflow side effects); re-run without --amend to record a new transition")
+			}
+			if !cmd.Flags().Changed("note") {
+				return fmt.Errorf("--amend requires --note; re-run with: tlc task update <id> --amend --note \"<new note>\"")
+			}
+			var amendErrs []string
+			for _, res := range resolved {
+				task := res.Task
+				if res.Storage != s {
+					defer func() { _ = res.Storage.Close() }()
+				}
+				if err := amendLatestLogNote(ctx, res.Storage, task, taskUpdateNote, taskUpdateForce); err != nil {
+					amendErrs = append(amendErrs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
+					continue
+				}
+				fmt.Printf("Amended latest log for %s\n", formatTaskAlias(task))
+			}
+			if len(amendErrs) > 0 {
+				return fmt.Errorf("some tasks failed:\n%s", strings.Join(amendErrs, "\n"))
+			}
+			return nil
+		}
+
 		now := time.Now().UTC()
 		var errs []string
 
@@ -542,10 +573,69 @@ func init() {
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindAt, "remind-at", "", "One-shot reminder time")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRRule, "rrule", "", "Recurring reminder RRULE (use '-' to clear)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
-	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded on status transition)")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded on status transition; required with --amend)")
+	TaskUpdateCmd.Flags().BoolVar(&taskUpdateAmend, "amend", false, "Rewrite the most recent log entry's note in place instead of appending; pair with --note. Terminal tasks (DONE/SKIPPED) require --force.")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 	TaskDeleteCmd.Flags().StringVarP(&taskDeleteNote, "note", "n", "", "Delete note (recorded against the transition log)")
+}
+
+// amendLatestLogNote rewrites the note of the most recent log entry for
+// task in place, preserving the "Status changed from X to Y: " prefix on
+// status-transition entries. It refuses to amend tasks in terminal
+// statuses (DONE / SKIPPED) unless force is true. The amend is recorded
+// in the log row's meta as `amended_at` (ISO timestamp) so the audit
+// trail still shows the row was edited; no schema migration is needed
+// because task_logs.meta is a JSON column.
+func amendLatestLogNote(ctx context.Context, store interface {
+	core.LogRepository
+}, task *core.Task, newNote string, force bool) error {
+	wm := core.DefaultWorkflow()
+	if wm.IsTerminal(task.Status) && !force {
+		return fmt.Errorf(
+			"cannot amend log on terminal task (status=%s); re-run with --force to override",
+			task.Status,
+		)
+	}
+
+	// Use ListLogs (not GetLogs) because GetLogs applies core.DetectProject
+	// scoping which can target the wrong project_id when amending a task
+	// resolved from a different project DB. Limit 1 keeps the read tight.
+	logs, err := store.ListLogs(ctx, core.LogQuery{
+		TaskID:        task.ID,
+		Limit:         1,
+		SortDirection: "desc",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to read logs: %w", err)
+	}
+	if len(logs) == 0 {
+		return fmt.Errorf("no log entries to amend; use 'tlc task update <id> --status <s> --note \"...\"' to add one")
+	}
+	latest := logs[0]
+
+	// Preserve the status-transition prefix so the audit trail still
+	// reads naturally. The prefix shape is set by
+	// Task.TransitionWithWorkflow:
+	//   "Status changed from <FROM> to <TO>: <note>"
+	// For non-transition logs (CREATED, DELETED, …) the note is
+	// replaced verbatim.
+	rewritten := newNote
+	const prefix = "Status changed from "
+	if strings.HasPrefix(latest.Note, prefix) {
+		if idx := strings.Index(latest.Note, ": "); idx > 0 {
+			rewritten = latest.Note[:idx+2] + newNote
+		}
+	}
+
+	meta := latest.Meta
+	if meta == nil {
+		meta = make(map[string]any)
+	}
+	meta["amended_at"] = time.Now().UTC().Format(time.RFC3339)
+	meta["amended_by"] = core.GetCurrentUser()
+
+	return store.UpdateLogNote(ctx, latest.ID, rewritten, meta)
 }
 
 func deletePromptInteractive(cmd *cobra.Command) bool {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -186,6 +187,17 @@ func (m *mockRepo) GetLogs(_ context.Context, _ string, _ string) ([]*LogEntry, 
 
 func (m *mockRepo) ListLogs(_ context.Context, _ LogQuery) ([]*LogEntry, error) {
 	return m.logs, nil
+}
+
+func (m *mockRepo) UpdateLogNote(_ context.Context, logID int64, note string, meta map[string]any) error {
+	for _, l := range m.logs {
+		if l.ID == logID {
+			l.Note = note
+			l.Meta = meta
+			return nil
+		}
+	}
+	return fmt.Errorf("log entry %d not found", logID)
 }
 
 func TestTaskService_Transition(t *testing.T) {

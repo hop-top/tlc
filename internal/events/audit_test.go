@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -24,6 +25,17 @@ func (m *mockLogRepo) GetLogs(_ context.Context, _ string, _ string) ([]*core.Lo
 
 func (m *mockLogRepo) ListLogs(_ context.Context, _ core.LogQuery) ([]*core.LogEntry, error) {
 	return m.entries, nil
+}
+
+func (m *mockLogRepo) UpdateLogNote(_ context.Context, logID int64, note string, meta map[string]any) error {
+	for _, e := range m.entries {
+		if e.ID == logID {
+			e.Note = note
+			e.Meta = meta
+			return nil
+		}
+	}
+	return fmt.Errorf("log entry %d not found", logID)
 }
 
 func TestAuditSubscriber_PersistsEvent(t *testing.T) {

@@ -418,6 +418,8 @@ func resetTaskFlags() {
 	taskEva = []string{}
 	taskUpdateAddTags = []string{}
 	taskUpdateRemoveTags = []string{}
+	taskUpdateNote = ""
+	taskUpdateAmend = false
 
 	taskTrack = ""
 	taskListTrack = ""

@@ -54,6 +54,12 @@ type LogRepository interface {
 	GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*LogEntry, error)
 	// ListLogs returns a filtered list of logs across all tasks.
 	ListLogs(ctx context.Context, query LogQuery) ([]*LogEntry, error)
+	// UpdateLogNote rewrites the note and meta of an existing log entry.
+	// Used by `tlc task update --amend` to edit the most recent log in
+	// place rather than emit a new one. Implementations should overwrite
+	// the meta column wholesale; callers are expected to merge existing
+	// meta into the provided map before calling.
+	UpdateLogNote(ctx context.Context, logID int64, note string, meta map[string]any) error
 }
 
 type LogQuery struct {
