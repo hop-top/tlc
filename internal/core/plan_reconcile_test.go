@@ -384,6 +384,138 @@ func TestReconcile_ReorderedTasksMatchedByTitle(t *testing.T) {
 	}
 }
 
+// TestReconcile_NewTaskInsertedInMiddle reproduces the "drops new tasks"
+// half of T-0947. When a task is inserted in the middle of an existing
+// plan, the new spec at the inserted index must not be merged with the
+// previously-mapped task at that index via the index fallback.
+func TestReconcile_NewTaskInsertedInMiddle(t *testing.T) {
+	specs := []PlanTaskSpec{
+		{Title: "Task A"},
+		{Title: "Task B"},
+	}
+
+	svc, taskRepo, mapping := setupTrackWithTasks(t, specs)
+	ctx := context.Background()
+	originalA := mapping[0]
+	originalB := mapping[1]
+
+	// Insert "Task C" between A and B.
+	updatedSpecs := []PlanTaskSpec{
+		{Title: "Task A"},
+		{Title: "Task C"},
+		{Title: "Task B"},
+	}
+
+	rec, err := svc.ReconcileTasksFromPlan(
+		ctx, "test-track", updatedSpecs, "", taskRepo, mapping,
+	)
+	if err != nil {
+		t.Fatalf("ReconcileTasksFromPlan: %v", err)
+	}
+
+	if len(rec.Created) != 1 {
+		t.Errorf("expected 1 created (Task C), got %d (%v)",
+			len(rec.Created), rec.Created)
+	}
+	if len(rec.Deleted) != 0 {
+		t.Errorf("expected 0 deleted, got %d (%v)",
+			len(rec.Deleted), rec.Deleted)
+	}
+
+	// Verify Task A and Task B were preserved untouched.
+	taskA, _ := taskRepo.GetTask(ctx, originalA)
+	if taskA == nil || taskA.Title != "Task A" {
+		t.Errorf("Task A title corrupted: got %+v", taskA)
+	}
+	taskB, _ := taskRepo.GetTask(ctx, originalB)
+	if taskB == nil || taskB.Title != "Task B" {
+		t.Errorf("Task B title corrupted: got %+v", taskB)
+	}
+
+	// Verify final mapping has 3 distinct IDs.
+	track, _ := svc.GetTrack(ctx, "test-track")
+	if len(track.PlanMapping) != 3 {
+		t.Fatalf("expected mapping len 3, got %d (%v)",
+			len(track.PlanMapping), track.PlanMapping)
+	}
+	seen := map[string]int{}
+	for i, id := range track.PlanMapping {
+		seen[id]++
+		if seen[id] > 1 {
+			t.Errorf("mapping[%d]=%s is a duplicate; mapping=%v",
+				i, id, track.PlanMapping)
+		}
+	}
+	if track.PlanMapping[0] != originalA {
+		t.Errorf("mapping[0]=%s, want originalA=%s",
+			track.PlanMapping[0], originalA)
+	}
+	if track.PlanMapping[2] != originalB {
+		t.Errorf("mapping[2]=%s, want originalB=%s",
+			track.PlanMapping[2], originalB)
+	}
+}
+
+// TestReconcile_DistinctSpecsNotMerged reproduces the "merges unrelated
+// tasks" half of T-0947. When v2 contains two plan entries that both
+// match the same existing task by the current matching key (e.g.,
+// duplicate titles), each plan entry must end up as its own distinct
+// task row instead of collapsing into one.
+func TestReconcile_DistinctSpecsNotMerged(t *testing.T) {
+	specs := []PlanTaskSpec{
+		{Title: "Task A", Description: "first"},
+	}
+
+	svc, taskRepo, mapping := setupTrackWithTasks(t, specs)
+	ctx := context.Background()
+	originalA := mapping[0]
+
+	// v2 has two entries that share a title with the existing task.
+	updatedSpecs := []PlanTaskSpec{
+		{Title: "Task A", Description: "first"},
+		{Title: "Task A", Description: "second"},
+	}
+
+	rec, err := svc.ReconcileTasksFromPlan(
+		ctx, "test-track", updatedSpecs, "", taskRepo, mapping,
+	)
+	if err != nil {
+		t.Fatalf("ReconcileTasksFromPlan: %v", err)
+	}
+
+	if len(rec.Created) != 1 {
+		t.Errorf("expected 1 created (the new duplicate), got %d (%v)",
+			len(rec.Created), rec.Created)
+	}
+
+	track, _ := svc.GetTrack(ctx, "test-track")
+	if len(track.PlanMapping) != 2 {
+		t.Fatalf("expected mapping len 2, got %d (%v)",
+			len(track.PlanMapping), track.PlanMapping)
+	}
+	if track.PlanMapping[0] == track.PlanMapping[1] {
+		t.Fatalf("two distinct specs collapsed onto one task id %s; mapping=%v",
+			track.PlanMapping[0], track.PlanMapping)
+	}
+	if track.PlanMapping[0] != originalA {
+		t.Errorf("mapping[0]=%s, want originalA=%s",
+			track.PlanMapping[0], originalA)
+	}
+
+	// Confirm both tasks survive with their own descriptions.
+	t0, _ := taskRepo.GetTask(ctx, track.PlanMapping[0])
+	t1, _ := taskRepo.GetTask(ctx, track.PlanMapping[1])
+	if t0 == nil || t1 == nil {
+		t.Fatalf("expected both tasks to exist; t0=%v t1=%v", t0, t1)
+	}
+	if t0.Description != "first" {
+		t.Errorf("task[0] description = %q, want 'first'", t0.Description)
+	}
+	if t1.Description != "second" {
+		t.Errorf("task[1] description = %q, want 'second'", t1.Description)
+	}
+}
+
 func TestReconcile_BlockedByUpdatedAfterReconciliation(t *testing.T) {
 	specs := []PlanTaskSpec{
 		{Title: "Task A"},
