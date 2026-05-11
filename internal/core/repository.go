@@ -69,6 +69,13 @@ type LogQuery struct {
 	Limit         int
 	Offset        int
 	SortDirection string // "asc" or "desc"
+
+	// Temporal filters (T-1381). Both compare against the RFC3339
+	// timestamp stored in task_logs.timestamp. Storage formats values
+	// via util.FormatStorageTime (UTC RFC3339), so lexicographic byte
+	// order matches chronological order on the wire.
+	Since *time.Time
+	Until *time.Time
 }
 
 type TaskFilter struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/kit/go/console/output"
+	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/core"
 )
 
@@ -93,6 +94,29 @@ Examples:
 		// Default sort direction
 		if query.SortDirection == "" {
 			query.SortDirection = sortDesc
+		}
+
+		// Temporal filters (T-1381). Both --since and --until are
+		// past-leaning boundaries by convention (`tlc log --until '2
+		// hours ago'`), so they share util.ParseSince for parsing.
+		// util.ParseSince also accepts forward-looking inputs like
+		// "tomorrow"/"in 3d", so this does not lose expressiveness.
+		if logSince != "" {
+			t, err := util.ParseSince(logSince)
+			if err != nil {
+				return fmt.Errorf("invalid --since %q: %w; use formats like '2 days ago', '7d', or RFC3339", logSince, err)
+			}
+			query.Since = &t
+		}
+		if logUntil != "" {
+			t, err := util.ParseSince(logUntil)
+			if err != nil {
+				return fmt.Errorf("invalid --until %q: %w; use formats like 'yesterday', '1h', or RFC3339", logUntil, err)
+			}
+			query.Until = &t
+		}
+		if query.Since != nil && query.Until != nil && query.Since.After(*query.Until) {
+			return fmt.Errorf("--since %q is after --until %q; swap the values or widen the window", logSince, logUntil)
 		}
 
 		// Get logs
@@ -240,8 +264,8 @@ func init() {
 	logCmd.Flags().StringVar(&logTaskID, "task-id", "", "Filter by task ID")
 	logCmd.Flags().StringVar(&logAction, "action", "", "Filter by action type (e.g., CLAIMED, DONE, SYNC_PUSHED)")
 	logCmd.Flags().StringVar(&logBy, "by", "", "Filter by actor/user")
-	logCmd.Flags().StringVar(&logSince, "since", "", "Filter logs since timestamp (RFC3339)")
-	logCmd.Flags().StringVar(&logUntil, "until", "", "Filter logs until timestamp (RFC3339)")
+	logCmd.Flags().StringVar(&logSince, "since", "", "Show logs at-or-after the given time (e.g. '2 days ago', '7d', 2026-04-01)")
+	logCmd.Flags().StringVar(&logUntil, "until", "", "Show logs at-or-before the given time (e.g. 'yesterday', '1h', 2026-04-30)")
 	logCmd.Flags().IntVarP(&logLimit, "limit", "n", 100, "Maximum number of logs to return")
 	logCmd.Flags().IntVar(&logOffset, "offset", 0, "Skip first N logs (for pagination)")
 	logCmd.Flags().StringVar(&logSortDirection, "sort", sortDesc, "Sort direction: asc or desc")

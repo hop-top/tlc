@@ -1178,6 +1178,19 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 		args = append(args, query.By)
 	}
 
+	// Temporal filters (T-1381). task_logs.timestamp is stored as
+	// RFC3339 TEXT (see AddLog/CreateTaskWithLog). util.FormatStorageTime
+	// emits UTC RFC3339, which yields a lexicographically comparable
+	// boundary value — safe for `>=` / `<=` against the column.
+	if query.Since != nil {
+		whereClauses = append(whereClauses, "timestamp >= ?")
+		args = append(args, util.FormatStorageTime(*query.Since))
+	}
+	if query.Until != nil {
+		whereClauses = append(whereClauses, "timestamp <= ?")
+		args = append(args, util.FormatStorageTime(*query.Until))
+	}
+
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ") //nolint:gosec // G202: whereClauses built from validated field names
 	}
