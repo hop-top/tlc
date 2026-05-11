@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/core"
 )
 
@@ -12,12 +13,14 @@ var (
 	trackCreateType       string
 	trackCreateID         string
 	trackCreateAssignedTo string
+	trackCreateDue        string
 
 	trackUpdateTitle      string
 	trackUpdateStatus     string
 	trackUpdateAssignedTo string
 	trackUpdateType       string
 	trackUpdateAddPlan    string
+	trackUpdateDue        string
 
 	trackShowOutputPath  string
 	trackShowIncludeLogs bool
@@ -88,6 +91,14 @@ var trackCreateCmd = &cobra.Command{
 			AssignedTo: assignee,
 		}
 
+		if trackCreateDue != "" {
+			t, perr := util.ParseUntil(trackCreateDue)
+			if perr != nil {
+				return fmt.Errorf("invalid --due %q: %w", trackCreateDue, perr)
+			}
+			track.DueAt = &t
+		}
+
 		if err := svc.CreateTrack(ctx, track); err != nil {
 			return err
 		}
@@ -131,6 +142,10 @@ func init() {
 		&trackCreateAssignedTo, "assigned-to", "",
 		"Assignee (e.g. @me)",
 	)
+	trackCreateCmd.Flags().StringVar(
+		&trackCreateDue, "due", "",
+		"Due date (tomorrow, in 3d, 2025-05-01, RFC3339)",
+	)
 
 	TrackCmd.AddCommand(trackCreateCmd)
 	TrackCmd.AddCommand(trackUpdateCmd)
@@ -145,11 +160,13 @@ func resetTrackFlags() {
 	trackCreateType = ""
 	trackCreateID = ""
 	trackCreateAssignedTo = ""
+	trackCreateDue = ""
 	trackUpdateTitle = ""
 	trackUpdateStatus = ""
 	trackUpdateAssignedTo = ""
 	trackUpdateType = ""
 	trackUpdateAddPlan = ""
+	trackUpdateDue = ""
 	trackShowOutputPath = ""
 	trackShowIncludeLogs = false
 	trackAbandonNoPrompt = false

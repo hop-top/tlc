@@ -482,10 +482,20 @@ var migrations = []migration{
 		  AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = task_logs.task_id);
 		`,
 	},
+	{
+		// Add due_at to tracks (mirrors tasks.due_at from v12). UTC RFC3339
+		// strings per docs/temporal-spec-0.1.md §4. Optional, nullable.
+		// Index supports future temporal filters on track list (T-0908).
+		version: 18,
+		query: `
+		ALTER TABLE tracks ADD COLUMN due_at TEXT;
+		CREATE INDEX IF NOT EXISTS idx_tracks_due_at ON tracks(due_at);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 17
+const LatestMigrationVersion = 18
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {
