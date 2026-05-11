@@ -104,6 +104,64 @@ func TestNormalizePriority(t *testing.T) {
 	}
 }
 
+func TestNormalizeEffort(t *testing.T) {
+	tests := []struct {
+		input  string
+		want   string
+		wantOK bool
+	}{
+		// exact canonical
+		{"XS", "XS", true},
+		{"S", "S", true},
+		{"M", "M", true},
+		{"L", "L", true},
+		{"XL", "XL", true},
+		// case-insensitive
+		{"xs", "XS", true},
+		{"s", "S", true},
+		{"m", "M", true},
+		{"l", "L", true},
+		{"xl", "XL", true},
+		{"Xs", "XS", true},
+		{"xL", "XL", true},
+		// descriptive aliases
+		{"extra-small", "XS", true},
+		{"extrasmall", "XS", true},
+		{"xsmall", "XS", true},
+		{"tiny", "XS", true},
+		{"small", "S", true},
+		{"medium", "M", true},
+		{"med", "M", true},
+		{"large", "L", true},
+		{"extra-large", "XL", true},
+		{"extralarge", "XL", true},
+		{"xlarge", "XL", true},
+		{"huge", "XL", true},
+		// mixed-case alias
+		{"Medium", "M", true},
+		{"LARGE", "L", true},
+		{"Extra-Small", "XS", true},
+		// whitespace trimming
+		{"  m  ", "M", true},
+		{" small ", "S", true},
+		// no match
+		{"xyz", "", false},
+		{"", "", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got, ok := NormalizeEffort(tc.input)
+			if ok != tc.wantOK {
+				t.Errorf("NormalizeEffort(%q) ok=%v, want %v", tc.input, ok, tc.wantOK)
+			}
+			if ok && got != tc.want {
+				t.Errorf("NormalizeEffort(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestUnescapeMarkdown(t *testing.T) {
 	tests := []struct {
 		input string

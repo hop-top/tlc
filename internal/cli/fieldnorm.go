@@ -52,6 +52,36 @@ var priorityAliases = map[string]string{
 // priorityCanonical is the ordered list for fuzzy matching.
 var priorityCanonical = []string{"P0", "P1", "P2", "P3"}
 
+// effortAliases maps lowercase alias/variant → canonical uppercase value.
+// Single-letter canonicals (S, M, L) make fuzzy matching unreliable for
+// descriptive inputs like "small" or "medium", so each descriptive form
+// is registered explicitly here to be resolved at step 1 before fuzzy
+// runs.
+var effortAliases = map[string]string{
+	// canonical (lowercased)
+	"xs": "XS",
+	"s":  "S",
+	"m":  "M",
+	"l":  "L",
+	"xl": "XL",
+	// descriptive aliases
+	"extra-small": "XS",
+	"extrasmall":  "XS",
+	"xsmall":      "XS",
+	"tiny":        "XS",
+	"small":       "S",
+	"medium":      "M",
+	"med":         "M",
+	"large":       "L",
+	"extra-large": "XL",
+	"extralarge":  "XL",
+	"xlarge":      "XL",
+	"huge":        "XL",
+}
+
+// effortCanonical is the ordered list for fuzzy matching.
+var effortCanonical = []string{"XS", "S", "M", "L", "XL"}
+
 // NormalizeStatus resolves input to a canonical status string.
 // Resolution order: exact (case-insensitive) → alias → fuzzy.
 // Returns ("", false) when no match found.
@@ -64,6 +94,13 @@ func NormalizeStatus(input string) (string, bool) {
 // Returns ("", false) when no match found.
 func NormalizePriority(input string) (string, bool) {
 	return normalizeEnum(input, priorityAliases, priorityCanonical)
+}
+
+// NormalizeEffort resolves input to a canonical effort string.
+// Resolution order: exact (case-insensitive) → alias → fuzzy.
+// Returns ("", false) when no match found.
+func NormalizeEffort(input string) (string, bool) {
+	return normalizeEnum(input, effortAliases, effortCanonical)
 }
 
 // normalizeEnum is the shared resolution logic for any enum field.
