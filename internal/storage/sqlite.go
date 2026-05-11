@@ -11,18 +11,17 @@ import (
 	"sync"
 	"time"
 
+	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/core"
 	_ "modernc.org/sqlite"
 )
 
 // parseRFC3339 parses an RFC3339 timestamp string, returning an error
-// instead of silently producing a zero time on invalid input.
+// instead of silently producing a zero time on invalid input. Delegates
+// to util.ParseStorageTime so the returned time.Time is always
+// UTC-normalised regardless of any offset in the stored string.
 func parseRFC3339(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid RFC3339 timestamp %q: %w", s, err)
-	}
-	return t, nil
+	return util.ParseStorageTime(s)
 }
 
 // project calls projector.ProjectTask if a projector is set, logging errors.
@@ -128,7 +127,7 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 
 		var lastSyncAt *string
 		if task.LastSyncAt != nil {
-			s := task.LastSyncAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.LastSyncAt)
 			lastSyncAt = &s
 		}
 
@@ -139,18 +138,18 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 		}
 		var staleFiredAt *string
 		if task.StaleFiredAt != nil {
-			s := task.StaleFiredAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.StaleFiredAt)
 			staleFiredAt = &s
 		}
 
 		var dueAt *string
 		if task.DueAt != nil {
-			s := task.DueAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.DueAt)
 			dueAt = &s
 		}
 		var remindAt *string
 		if task.RemindAt != nil {
-			s := task.RemindAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.RemindAt)
 			remindAt = &s
 		}
 		var rrule *string
@@ -185,7 +184,7 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			INSERT INTO tasks (id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			task.ID, task.Seq, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
+			util.FormatStorageTime(task.CreatedAt), util.FormatStorageTime(task.UpdatedAt),
 			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
 			string(task.Effort), string(task.Priority), staleTimeout, task.BlockedReason, staleFiredAt,
 			task.TrackID, dueAt, remindAt, rrule, noAutoRemind,
@@ -230,8 +229,8 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
 
-	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
+	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
 
 	if metaStr.Valid {
 		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
@@ -247,7 +246,7 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 		task.OriginSystem = &originSystemStr.String
 	}
 	if lastSyncAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
 		task.LastSyncAt = &t
 	}
 	if projectIDStr.Valid {
@@ -267,18 +266,18 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 		task.BlockedReason = &blockedReasonStr.String
 	}
 	if staleFiredAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
 		task.StaleFiredAt = &t
 	}
 	if trackIDStr.Valid {
 		task.TrackID = &trackIDStr.String
 	}
 	if dueAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, dueAtStr.String)
+		t, _ := util.ParseStorageTime(dueAtStr.String)
 		task.DueAt = &t
 	}
 	if remindAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, remindAtStr.String)
+		t, _ := util.ParseStorageTime(remindAtStr.String)
 		task.RemindAt = &t
 	}
 	if rruleStr.Valid {
@@ -332,8 +331,8 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
 
-	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
+	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
 
 	if metaStr.Valid {
 		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
@@ -349,7 +348,7 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 		task.OriginSystem = &originSystemStr.String
 	}
 	if lastSyncAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
 		task.LastSyncAt = &t
 	}
 	if projectIDStr.Valid {
@@ -369,18 +368,18 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 		task.BlockedReason = &blockedReasonStr.String
 	}
 	if staleFiredAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
 		task.StaleFiredAt = &t
 	}
 	if trackIDStr.Valid {
 		task.TrackID = &trackIDStr.String
 	}
 	if dueAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, dueAtStr.String)
+		t, _ := util.ParseStorageTime(dueAtStr.String)
 		task.DueAt = &t
 	}
 	if remindAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, remindAtStr.String)
+		t, _ := util.ParseStorageTime(remindAtStr.String)
 		task.RemindAt = &t
 	}
 	if rruleStr.Valid {
@@ -424,7 +423,7 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 
 		var lastSyncAt *string
 		if task.LastSyncAt != nil {
-			s := task.LastSyncAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.LastSyncAt)
 			lastSyncAt = &s
 		}
 
@@ -435,18 +434,18 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 		}
 		var staleFiredAt *string
 		if task.StaleFiredAt != nil {
-			s := task.StaleFiredAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.StaleFiredAt)
 			staleFiredAt = &s
 		}
 
 		var dueAt *string
 		if task.DueAt != nil {
-			s := task.DueAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.DueAt)
 			dueAt = &s
 		}
 		var remindAt *string
 		if task.RemindAt != nil {
-			s := task.RemindAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.RemindAt)
 			remindAt = &s
 		}
 		var rrule *string
@@ -467,7 +466,7 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?, track_id = ?, due_at = ?, remind_at = ?, rrule = ?, no_auto_remind = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
+			util.FormatStorageTime(task.UpdatedAt), string(metaJSON), string(tagsJSON),
 			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority),
 			staleTimeout, task.BlockedReason, staleFiredAt, task.TrackID,
 			dueAt, remindAt, rrule, noAutoRemind, task.ID, projectID,
@@ -506,7 +505,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 		tagsJSON, _ := json.Marshal(task.Tags)
 		var lastSyncAt *string
 		if task.LastSyncAt != nil {
-			s := task.LastSyncAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.LastSyncAt)
 			lastSyncAt = &s
 		}
 
@@ -517,18 +516,18 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 		}
 		var staleFiredAt *string
 		if task.StaleFiredAt != nil {
-			s := task.StaleFiredAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.StaleFiredAt)
 			staleFiredAt = &s
 		}
 
 		var dueAt *string
 		if task.DueAt != nil {
-			s := task.DueAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.DueAt)
 			dueAt = &s
 		}
 		var remindAt *string
 		if task.RemindAt != nil {
-			s := task.RemindAt.Format(time.RFC3339)
+			s := util.FormatStorageTime(*task.RemindAt)
 			remindAt = &s
 		}
 		var rrule *string
@@ -549,7 +548,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?, track_id = ?, due_at = ?, remind_at = ?, rrule = ?, no_auto_remind = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			task.UpdatedAt.Format(time.RFC3339), string(metaJSON), string(tagsJSON),
+			util.FormatStorageTime(task.UpdatedAt), string(metaJSON), string(tagsJSON),
 			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority),
 			staleTimeout, task.BlockedReason, staleFiredAt, task.TrackID,
 			dueAt, remindAt, rrule, noAutoRemind, task.ID, projectID,
@@ -579,7 +578,7 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO task_logs (project_id, task_id, timestamp, by, action, note, meta)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			projectID, entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(logMetaJSON),
+			projectID, entry.TaskID, util.FormatStorageTime(entry.Timestamp), entry.By, entry.Action, entry.Note, string(logMetaJSON),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert log entry: %w", err)
@@ -681,7 +680,7 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan log row: %w", err)
 		}
-		entry.Timestamp, _ = time.Parse(time.RFC3339, timestampStr)
+		entry.Timestamp, _ = util.ParseStorageTime(timestampStr)
 		if metaStr.Valid {
 			if err := json.Unmarshal([]byte(metaStr.String), &entry.Meta); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
@@ -815,7 +814,7 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO task_logs (project_id, task_id, timestamp, by, action, note, meta)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			projectID, entry.TaskID, entry.Timestamp.Format(time.RFC3339), entry.By, entry.Action, entry.Note, string(metaJSON),
+			projectID, entry.TaskID, util.FormatStorageTime(entry.Timestamp), entry.By, entry.Action, entry.Note, string(metaJSON),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert log entry: %w", err)
@@ -923,8 +922,8 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 		return nil, fmt.Errorf("failed to scan task by origin: %w", err)
 	}
 
-	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
+	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
 
 	if metaStr.Valid {
 		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
@@ -940,7 +939,7 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 		task.OriginSystem = &originSystemStr.String
 	}
 	if lastSyncAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
 		task.LastSyncAt = &t
 	}
 	if projectIDStr.Valid {
@@ -960,18 +959,18 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 		task.BlockedReason = &blockedReasonStr.String
 	}
 	if staleFiredAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
 		task.StaleFiredAt = &t
 	}
 	if trackIDStr.Valid {
 		task.TrackID = &trackIDStr.String
 	}
 	if dueAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, dueAtStr.String)
+		t, _ := util.ParseStorageTime(dueAtStr.String)
 		task.DueAt = &t
 	}
 	if remindAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, remindAtStr.String)
+		t, _ := util.ParseStorageTime(remindAtStr.String)
 		task.RemindAt = &t
 	}
 	if rruleStr.Valid {
@@ -1043,7 +1042,7 @@ func (s *SQLiteStorage) CreateFlowRun(ctx context.Context, run *core.FlowRun) er
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO flow_runs (id, flow_id, status, started_at, ended_at, results)
 			VALUES (?, ?, ?, ?, ?, ?)`,
-			run.ID, run.FlowID, run.Status, run.StartedAt.Format(time.RFC3339),
+			run.ID, run.FlowID, run.Status, util.FormatStorageTime(run.StartedAt),
 			nil, string(resultsJSON),
 		)
 		if err != nil {
@@ -1068,9 +1067,9 @@ func (s *SQLiteStorage) GetFlowRun(ctx context.Context, id string) (*core.FlowRu
 		return nil, fmt.Errorf("failed to scan flow run: %w", err)
 	}
 
-	run.StartedAt, _ = time.Parse(time.RFC3339, startedAtStr)
+	run.StartedAt, _ = util.ParseStorageTime(startedAtStr)
 	if endedAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, endedAtStr.String)
+		t, _ := util.ParseStorageTime(endedAtStr.String)
 		run.EndedAt = &t
 	}
 	if resultsStr.Valid {
@@ -1087,7 +1086,7 @@ func (s *SQLiteStorage) UpdateFlowRun(ctx context.Context, run *core.FlowRun) er
 		resultsJSON, _ := json.Marshal(run.Results)
 		var endedAt interface{}
 		if run.EndedAt != nil {
-			endedAt = run.EndedAt.Format(time.RFC3339)
+			endedAt = util.FormatStorageTime(*run.EndedAt)
 		}
 
 		_, err := tx.ExecContext(ctx, `
@@ -1128,9 +1127,9 @@ func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*
 		if err := rows.Scan(&run.ID, &run.FlowID, &run.Status, &startedAtStr, &endedAtStr, &resultsStr); err != nil {
 			return nil, fmt.Errorf("failed to scan flow run row: %w", err)
 		}
-		run.StartedAt, _ = time.Parse(time.RFC3339, startedAtStr)
+		run.StartedAt, _ = util.ParseStorageTime(startedAtStr)
 		if endedAtStr.Valid {
-			t, _ := time.Parse(time.RFC3339, endedAtStr.String)
+			t, _ := util.ParseStorageTime(endedAtStr.String)
 			run.EndedAt = &t
 		}
 		if resultsStr.Valid {
@@ -1264,8 +1263,8 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	if err := rows.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &rruleStr, &noAutoRemindInt); err != nil {
 		return nil, fmt.Errorf("failed to scan task row: %w", err)
 	}
-	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
-	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
+	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
 	if metaStr.Valid {
 		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
@@ -1280,7 +1279,7 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 		task.OriginSystem = &originSystemStr.String
 	}
 	if lastSyncAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, lastSyncAtStr.String)
+		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
 		task.LastSyncAt = &t
 	}
 	if projectIDStr.Valid {
@@ -1300,18 +1299,18 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 		task.BlockedReason = &blockedReasonStr.String
 	}
 	if staleFiredAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, staleFiredAtStr.String)
+		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
 		task.StaleFiredAt = &t
 	}
 	if trackIDStr.Valid {
 		task.TrackID = &trackIDStr.String
 	}
 	if dueAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, dueAtStr.String)
+		t, _ := util.ParseStorageTime(dueAtStr.String)
 		task.DueAt = &t
 	}
 	if remindAtStr.Valid {
-		t, _ := time.Parse(time.RFC3339, remindAtStr.String)
+		t, _ := util.ParseStorageTime(remindAtStr.String)
 		task.RemindAt = &t
 	}
 	if rruleStr.Valid {
@@ -1356,8 +1355,8 @@ func (s *SQLiteStorage) LookupProject(ctx context.Context, projectID string) (*c
 		return nil, fmt.Errorf("failed to scan project row: %w", err)
 	}
 
-	p.RegisteredAt, _ = time.Parse(time.RFC3339, registeredAtStr)
-	p.LastSeenAt, _ = time.Parse(time.RFC3339, lastSeenAtStr)
+	p.RegisteredAt, _ = util.ParseStorageTime(registeredAtStr)
+	p.LastSeenAt, _ = util.ParseStorageTime(lastSeenAtStr)
 	if spaceURI.Valid {
 		p.SpaceURI = spaceURI.String
 	}
@@ -1490,8 +1489,8 @@ func scanProjects(rows *sql.Rows) ([]core.RegisteredProject, error) {
 			return nil, fmt.Errorf("failed to scan project row: %w", err)
 		}
 
-		p.RegisteredAt, _ = time.Parse(time.RFC3339, registeredAtStr)
-		p.LastSeenAt, _ = time.Parse(time.RFC3339, lastSeenAtStr)
+		p.RegisteredAt, _ = util.ParseStorageTime(registeredAtStr)
+		p.LastSeenAt, _ = util.ParseStorageTime(lastSeenAtStr)
 		if spaceURI.Valid {
 			p.SpaceURI = spaceURI.String
 		}
