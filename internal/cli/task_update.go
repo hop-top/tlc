@@ -159,7 +159,22 @@ var TaskUpdateCmd = &cobra.Command{
 			}
 
 			if len(taskUpdateRemoveBlockedBy) > 0 {
-				task.RemoveBlockedBy(taskUpdateRemoveBlockedBy)
+				// Translate display aliases and bare seq into typeid
+				// form before set-diff so users can remove blockers by
+				// the same ID they see in `task show`. parseTaskRefForCLI
+				// returns the input unchanged for cross-project refs
+				// and on resolution failure, so the translation is
+				// safe; empty/whitespace inputs are skipped to keep
+				// intent explicit.
+				translated := make([]string, 0, len(taskUpdateRemoveBlockedBy))
+				for _, raw := range taskUpdateRemoveBlockedBy {
+					if strings.TrimSpace(raw) == "" {
+						continue
+					}
+					ref, _ := parseTaskRefForCLI(ctx, res.Storage, raw)
+					translated = append(translated, ref)
+				}
+				task.RemoveBlockedBy(translated)
 				changed = true
 			}
 
