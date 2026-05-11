@@ -173,7 +173,9 @@ func renderLogTable(w io.Writer, logs []*core.LogEntry) {
 			taskCell = alias
 		}
 		rows[i] = logTableRow{
-			Timestamp: DisplayTime(l.Timestamp, LayoutDateTime),
+			// Table column: humanise log timestamps ("2h ago",
+			// "yesterday"). JSON/YAML stays on RFC3339. T-1384.
+			Timestamp: DisplayTimeRelative(l.Timestamp),
 			TaskID:    taskCell,
 			// Plain action — kit/output's tabwriter (non-TTY) passes
 			// cell values through verbatim, so pre-styled lipgloss

@@ -668,3 +668,84 @@ func TestTaskListFilterByBlockedBy(t *testing.T) {
 		t.Errorf("did not expect blocker itself in --blocked-by output; got: %s", output)
 	}
 }
+
+// TestTaskListTableHumanisesDue is the golden for T-1384 / spec §6:
+// the default table format must render DueAt humanised
+// (util.RelativeTime) for the Due column, not an absolute
+// "YYYY-MM-DD" / RFC3339 timestamp. JSON/YAML output keeps RFC3339 and
+// is covered by other tests; this test pins the table contract.
+func TestTaskListTableHumanisesDue(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	// Two tasks: one due 5 days from now, one overdue by 3 days. We
+	// stay inside the "Nd" HumanDuration bucket (24h ≤ d < 7d) so
+	// the assertion does not flake when wall-clock drift bumps the
+	// future delta below 5d-eps or pushes the past delta above 7d.
+	// Future offset gets +1h fudge so HumanDuration's downward
+	// truncation (it divides hours by 24) lands solidly at 5.
+	due5d := time.Now().Add(5*24*time.Hour + time.Hour)
+	overdue3d := time.Now().Add(-3 * 24 * time.Hour)
+
+	if err := s.CreateTask(ctx, &core.Task{
+		ID: "T-0001", Title: "Future-due task",
+		Status: core.StatusTodo, DueAt: &due5d,
+	}); err != nil {
+		t.Fatalf("CreateTask T-0001: %v", err)
+	}
+	if err := s.CreateTask(ctx, &core.Task{
+		ID: "T-0002", Title: "Overdue task",
+		Status: core.StatusInProgress, DueAt: &overdue3d,
+	}); err != nil {
+		t.Fatalf("CreateTask T-0002: %v", err)
+	}
+
+	// viper is process-global; save+restore prevents this test's
+	// output.format setting from leaking into later tests in the
+	// cli package that don't reset it.
+	priorFormat := viper.GetString("output.format")
+	viper.Set("output.format", formatTable)
+	t.Cleanup(func() { viper.Set("output.format", priorFormat) })
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list (table): %v", err)
+	}
+
+	output := buf.String()
+
+	// Future task: humanised "in 5d". The leading "in " distinguishes
+	// from past-due "Nd ago".
+	if !strings.Contains(output, "in 5d") {
+		t.Errorf("expected humanised future due 'in 5d' in table output; got:\n%s", output)
+	}
+	// Overdue: "3d ago" with the "! " overdue marker preserved.
+	if !strings.Contains(output, "3d ago") {
+		t.Errorf("expected humanised past due '3d ago' in table output; got:\n%s", output)
+	}
+	if !strings.Contains(output, "! 3d ago") {
+		t.Errorf("expected overdue marker '! 3d ago' in table output; got:\n%s", output)
+	}
+
+	// Absolute date strings must NOT appear in the Due column. Build
+	// the format that the old (pre-T-1384) render would have emitted
+	// and assert it is absent.
+	wantAbsentFuture := due5d.UTC().Format(LayoutDate)
+	if strings.Contains(output, wantAbsentFuture) {
+		t.Errorf("table output leaked absolute date %q (should be humanised); got:\n%s",
+			wantAbsentFuture, output)
+	}
+	wantAbsentPast := overdue3d.UTC().Format(LayoutDate)
+	if strings.Contains(output, wantAbsentPast) {
+		t.Errorf("table output leaked absolute date %q (should be humanised); got:\n%s",
+			wantAbsentPast, output)
+	}
+}

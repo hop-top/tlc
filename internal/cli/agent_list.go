@@ -130,12 +130,13 @@ func renderAgentRunsTable(out io.Writer, runs []*core.AgentRunRecord, s taskAlia
 			}
 		}
 		rows[i] = agentRunRow{
-			ID:       id,
-			Agent:    r.Agent,
-			Target:   fmt.Sprintf("%s:%s", r.TargetType, target),
-			Status:   r.Status,
-			Exit:     fmt.Sprintf("%d", r.ExitCode),
-			Started:  DisplayTime(r.StartedAt, LayoutDateMinute),
+			ID:     id,
+			Agent:  r.Agent,
+			Target: fmt.Sprintf("%s:%s", r.TargetType, target),
+			Status: r.Status,
+			Exit:   fmt.Sprintf("%d", r.ExitCode),
+			// Table column: humanise StartedAt ("3m ago"). T-1384.
+			Started:  DisplayTimeRelative(r.StartedAt),
 			Duration: duration,
 		}
 	}

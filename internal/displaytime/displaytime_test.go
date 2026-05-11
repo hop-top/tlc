@@ -149,3 +149,82 @@ func TestDisplayTimePtrNonNil(t *testing.T) {
 		t.Fatalf("DisplayTimePtr: want %q, got %q", want, got)
 	}
 }
+
+// TestDisplayTimeRelative covers the humanised render path used by
+// table-format columns (T-1384). Spec §6 says default table output
+// renders timestamps via util.RelativeTime / util.HumanDuration; this
+// test pins that contract through the displaytime façade.
+func TestDisplayTimeRelative(t *testing.T) {
+	resetForTest(t, "UTC")
+
+	// RelativeTime computes `time.Since(t)` at call time inside the
+	// helper, NOT at the time the test prepares the input. If the gap
+	// between preparing inputs and calling DisplayTimeRelative crosses
+	// an integer-bucket boundary (e.g. due to CI lag, GC pause), pinned
+	// assertions like "5m ago" can flake to "6m ago" and vice versa.
+	//
+	// Each subtest captures `now` itself, immediately before constructing
+	// its input. The window between input creation and helper invocation
+	// is now microseconds — well under any bucket.
+	//
+	// For the future-direction cases, HumanDuration truncates downward,
+	// so `now.Add(3h)` reads back as `2h something` ("in 2h"). Add a
+	// small fudge so the truncation lands on N.
+	const fudge = 100 * time.Millisecond
+
+	cases := []struct {
+		name   string
+		zero   bool          // when true, input is time.Time{} (skip offset)
+		offset time.Duration // applied to a fresh now in the subtest
+		want   string
+	}{
+		{"zero_time_empty", true, 0, ""},
+		{"just_now", false, -30 * time.Second, "just now"},
+		{"five_minutes_ago", false, -5 * time.Minute, "5m ago"},
+		{"two_hours_ago", false, -2 * time.Hour, "2h ago"},
+		// yesterday window is [24h, 48h) since now.
+		{"yesterday", false, -30 * time.Hour, "yesterday"},
+		// 48h or more renders as Nd ago.
+		{"three_days_ago", false, -3 * 24 * time.Hour, "3d ago"},
+		// Future cases use fudge to land on N after downward truncation.
+		{"in_three_hours", false, 3*time.Hour + fudge, "in 3h"},
+		{"in_two_days", false, 2*24*time.Hour + fudge, "in 2d"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var in time.Time
+			if !tc.zero {
+				in = time.Now().Add(tc.offset)
+			}
+			got := DisplayTimeRelative(in)
+			if got != tc.want {
+				t.Fatalf("DisplayTimeRelative(now%+v) = %q, want %q",
+					tc.offset, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDisplayTimePtrRelativeNil mirrors the DisplayTimePtr nil
+// contract: a nil *time.Time renders as "" so callers can use the
+// helper unconditionally on optional fields without an IsZero guard.
+func TestDisplayTimePtrRelativeNil(t *testing.T) {
+	resetForTest(t, "UTC")
+	got := DisplayTimePtrRelative(nil)
+	if got != "" {
+		t.Fatalf("DisplayTimePtrRelative(nil) = %q, want empty", got)
+	}
+}
+
+// TestDisplayTimePtrRelativeNonNil confirms the *time.Time variant
+// delegates to DisplayTimeRelative when the pointer is set.
+func TestDisplayTimePtrRelativeNonNil(t *testing.T) {
+	resetForTest(t, "UTC")
+	in := time.Now().Add(-2 * time.Hour)
+	got := DisplayTimePtrRelative(&in)
+	if got != "2h ago" {
+		t.Fatalf("DisplayTimePtrRelative(2h ago) = %q, want %q", got, "2h ago")
+	}
+}

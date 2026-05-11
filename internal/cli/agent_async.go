@@ -110,12 +110,14 @@ var AgentStatusCmd = &cobra.Command{
 		_, _ = fmt.Fprintf(out, "  Queue:   %s\n", job.Queue)
 		_, _ = fmt.Fprintf(out, "  Type:    %s\n", job.Type)
 		_, _ = fmt.Fprintf(out, "  Status:  %s\n", job.Status)
-		_, _ = fmt.Fprintf(out, "  Created: %s\n", DisplayTime(job.CreatedAt, LayoutRFC3339))
+		// Job detail (table-style). Humanise the timestamps; JSON
+		// branch above keeps RFC3339. T-1384.
+		_, _ = fmt.Fprintf(out, "  Created: %s\n", DisplayTimeRelative(job.CreatedAt))
 		if job.StartedAt != nil {
-			_, _ = fmt.Fprintf(out, "  Started: %s\n", DisplayTimePtr(job.StartedAt, LayoutRFC3339))
+			_, _ = fmt.Fprintf(out, "  Started: %s\n", DisplayTimePtrRelative(job.StartedAt))
 		}
 		if job.EndedAt != nil {
-			_, _ = fmt.Fprintf(out, "  Ended:   %s\n", DisplayTimePtr(job.EndedAt, LayoutRFC3339))
+			_, _ = fmt.Fprintf(out, "  Ended:   %s\n", DisplayTimePtrRelative(job.EndedAt))
 		}
 		if job.Error != "" {
 			_, _ = fmt.Fprintf(out, "  Error:   %s\n", job.Error)

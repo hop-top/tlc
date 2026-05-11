@@ -95,7 +95,8 @@ func (fi *flowRunItem) Render(_ int) string {
 		statusStr = string(fi.run.Status)
 	}
 
-	startedAt := displaytime.DisplayTime(fi.run.StartedAt, displaytime.LayoutDateTime)
+	// Table cell: humanise StartedAt ("3m ago"). T-1384.
+	startedAt := displaytime.DisplayTimeRelative(fi.run.StartedAt)
 
 	line := fmt.Sprintf("%s %s %s %s (%s)",
 		cursor, fi.run.ID, fi.run.FlowID, statusStr, startedAt,

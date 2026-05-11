@@ -121,3 +121,32 @@ func DisplayTimePtr(t *time.Time, layout string) string {
 	}
 	return DisplayTime(*t, layout)
 }
+
+// DisplayTimeRelative renders t humanised relative to now ("5m ago",
+// "in 3h", "yesterday", "2d ago") via util.RelativeTime. Use this on
+// the table-format render path for columns that read more naturally as
+// a duration than as a wall-clock timestamp (CreatedAt, UpdatedAt,
+// StartedAt, EndedAt, DueAt in table, etc.). JSON/YAML output paths
+// stay on DisplayTime + LayoutRFC3339 — see spec §6.
+//
+// A zero time renders as "" so callers can use it unconditionally on
+// optional fields without an IsZero guard. Resolve() is called for
+// consistency with DisplayTime (so the package's tz cache is warmed
+// before the first render); RelativeTime itself is timezone-agnostic
+// because durations do not depend on location.
+func DisplayTimeRelative(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	_ = Resolve()
+	return util.RelativeTime(t)
+}
+
+// DisplayTimePtrRelative is the *time.Time variant of
+// DisplayTimeRelative. Nil renders as "" per spec §6.
+func DisplayTimePtrRelative(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return DisplayTimeRelative(*t)
+}
