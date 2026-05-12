@@ -30,6 +30,10 @@ Examples:
   tlc track exec my-feature --agent claude
   tlc track exec my-feature --agent claude --local
   tlc track exec my-feature --agent claude --dry-run`,
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "no",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if trackExecAgent == "" {

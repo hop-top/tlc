@@ -17,8 +17,16 @@ import (
 var trackShowCmd = &cobra.Command{
 	Use:   "show <id>",
 	Short: "Show track details",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTrackShow,
+	Long: `Show full details for a track, including title, status, progress,
+linked tasks, and (with --include-logs) the audit log.
+
+Accepts track slugs or durable TypeIDs. Renders progress + state
+indicators based on the project's tracks.stale_threshold.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
+	Args: cobra.ExactArgs(1),
+	RunE: runTrackShow,
 }
 
 func runTrackShow(cmd *cobra.Command, args []string) error {

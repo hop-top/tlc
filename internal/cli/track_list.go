@@ -26,7 +26,15 @@ var (
 var trackListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tracks with filters",
-	RunE:  runTrackList,
+	Long: `List tracks in the active project (or all projects with
+--all-projects), filtered by status, lifecycle state, or type.
+
+Supports --status (repeatable, validated against TrackStatus values)
+and --state (single state flag); both can be combined.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
+	RunE: runTrackList,
 }
 
 func runTrackList(cmd *cobra.Command, _ []string) error {

@@ -15,7 +15,15 @@ import (
 var trackUpdateCmd = &cobra.Command{
 	Use:   "update <id>",
 	Short: "Update a track",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update a track's title, status, assignee, type, due date, or append
+a plan file.
+
+Status transitions follow the TrackService state machine. --add-plan
+attaches an additional planning document to the track's plan directory.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorageRaw()
 		if err != nil {
