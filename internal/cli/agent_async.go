@@ -83,7 +83,17 @@ func enqueueAgentJob(cmd *cobra.Command) (string, error) {
 var AgentStatusCmd = &cobra.Command{
 	Use:   "status <job-id>",
 	Short: "Check async agent job status",
-	Args:  cobra.ExactArgs(1),
+	Long: `Show the current status of an async agent job by its
+job ID. Reports queue, type, status, timestamps, and result or
+error.
+
+Example:
+  tlc agent status job:abc123`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jobID := args[0]
 		s, err := getStorage()
@@ -133,7 +143,17 @@ var AgentStatusCmd = &cobra.Command{
 var AgentCancelCmd = &cobra.Command{
 	Use:   "cancel <job-id>",
 	Short: "Cancel a queued agent job",
-	Args:  cobra.ExactArgs(1),
+	Long: `Cancel a queued or running agent job by its job ID.
+The job transitions to canceled state; partial work is not
+rolled back.
+
+Example:
+  tlc agent cancel job:abc123`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jobID := args[0]
 		s, err := getStorage()
@@ -159,6 +179,10 @@ processes jobs as they arrive. Ctrl-C to stop.
 
 Example:
   tlc agent watch`,
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		s, err := getStorage()
 		if err != nil {
