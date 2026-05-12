@@ -48,6 +48,8 @@ require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -89,7 +91,9 @@ require (
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/hashicorp/mdns v1.0.6 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matryer/is v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
@@ -121,6 +125,7 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tj/go-naturaldate v1.3.0 // indirect
 	github.com/trivago/tgo v1.0.7 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
@@ -141,7 +146,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace hop.top/kit => /Users/jadb/.w/ideacrafterslabs/kit/hops/main
+replace hop.top/kit => /Users/jadb/.w/ideacrafterslabs/kit/hops/12fcc-leak
 
 replace hop.top/hdl => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
 
