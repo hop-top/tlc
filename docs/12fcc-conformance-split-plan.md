@@ -229,3 +229,52 @@ None. All five bucket counts (86 / 61 / 48 / 1 / 8) and the command lists within
 
 Yes. C1/C2/C3 may proceed in parallel: they touch disjoint files (task_*/track_*/root.go vs agent_*/flow_*/sync_*/project.go/prompt_*/inbox.go vs the admin set). The only cross-batch concern is each batch will independently rebuild `./tlc` and run `--help` — coordinate that they merge into the umbrella branch sequentially (not in parallel) so the build stays clean.
 
+
+## Phase 4 — `--confirm` policy bridge (T-1392)
+
+Kit 12fcc-leak auto-enforces a `--confirm` gate on every command tagged `kit/side-effect=destructive*`. In a non-TTY context (CI, pipes, scripts) the gate refuses unless `--confirm=yes` is set; in TTY mode the default is `prompt` (kit prints `[y/N]` to stderr and reads stdin).
+
+Contract source: `kit/hops/12fcc-leak/go/console/cli/policy_runE.go:84-359`.
+
+- Flag registered on the root `PersistentFlags()` by `kitcli.New`: `policy_runE.go:21` + `cli.go:486-489`.
+- Accepted values: `auto | yes | no | prompt`. Empty defaults to `prompt` on a TTY, `no` otherwise. Invalid values normalise to `prompt`.
+- TTY detection via `github.com/mattn/go-isatty` on `cmd.InOrStdin()` (`policy_runE.go:77-82`).
+- Auto-enforcement: kit wraps every leaf's `RunE` via `wrapRunESubtree` → `wrapPolicyRunE` (`error_render.go:113-137`). The gate calls `gateConfirm` only when `kit/side-effect` is one of `destructive`, `destructive-local`, `destructive-shared` (or when a YAML policy lifted `require_confirm`). Commands that use cobra's `Run` instead of `RunE` are NOT wrapped — fix by converting to `RunE`.
+- Exit code on refusal: 5 (`output.UnauthorizedError` → `CodeUnauthorized`).
+
+### Strategy: hybrid (C)
+
+Local destructive-skip flags (`--yes`, `--no-prompt`, `-y`, `--force`) are kept as silent aliases. A `PreRunE` flips the persistent `--confirm=yes` whenever any of the named local booleans is true. This keeps existing scripts working without deprecation noise.
+
+Helper: `internal/cli/confirm_bridge.go` — `installConfirmBridge(cmd, names...)`. Wiring: `internal/cli/confirm_bridge_init.go`.
+
+### 12-command bridge table
+
+| Command | Side-effect | Local flag(s) | Bridge action |
+|---|---|---|---|
+| `task delete` | destructive-local | `--yes` / `-y`, `--no-prompt` (persistent on `task`) | `installConfirmBridge(TaskDeleteCmd, "yes", "no-prompt")` |
+| `task unassign` | destructive-local | `--no-prompt` (inherited) | `installConfirmBridge(TaskUnassignCmd, "no-prompt")` |
+| `task unclaim` | destructive-local | `--no-prompt` (inherited) | `installConfirmBridge(TaskUnclaimCmd, "no-prompt")` |
+| `track abandon` | destructive-local | `--no-prompt` | `installConfirmBridge(trackAbandonCmd, "no-prompt")` |
+| `track archive` | destructive-local | none | kit gate only |
+| `track delete` | destructive-local | none | kit gate only |
+| `agent cancel` | destructive-local | none | kit gate only |
+| `flow cancel` | destructive-local | none | kit gate only |
+| `flow reject` | destructive-local | none | kit gate only |
+| `project prune` | destructive-local | `--yes` / `-y` | `installConfirmBridge(ProjectPruneCmd, "yes")` |
+| `alias remove` | destructive-local | none | kit gate only |
+| `auth logout` | destructive-local | none | kit gate only (also: converted `Run` → `RunE` so the wrapper installs) |
+
+### Operator-facing behaviour changes
+
+- **CI / scripts that already pass `--yes` / `--no-prompt` / `-y`**: continue to work unchanged. The bridge translates them.
+- **CI / scripts that invoke a destructive without any skip flag**: now refused with exit 5 instead of running. Add `--confirm=yes` (preferred) or the legacy local flag.
+- **Interactive shells (TTY)**: behaviour unchanged — kit's central prompt and tlc's existing local prompts both run; the local prompt is what users see today because it fires first inside `RunE`. The kit prompt is reached only if the local flag bypasses tlc's prompt without setting `--confirm`, which the bridge prevents.
+- **`tlc auth logout`**: previously bypassed the gate by using `Run`; now uses `RunE` and is gated like its peers. Side effect: `log.Fatal` replaced with returned error, so the exit code is now driven through kit's error envelope rather than `log.Fatal`'s hardcoded `1`.
+
+### Tests
+
+- Unit: `internal/cli/confirm_bridge_test.go` — synthetic cobra root, three subtests.
+- E2E: `internal/cli/confirm_bridge_e2e_test.go` — exec'd tlc binary in a non-TTY pipe, three representative destructives (`task delete`, `flow cancel`, `auth logout`).
+
+Run with: `go test -run "TestConfirm" ./internal/cli/...`
