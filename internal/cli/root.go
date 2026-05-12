@@ -103,6 +103,7 @@ var commandGroups = map[string]string{
 	"log":     "knowledge",
 	"project": "knowledge",
 	"prompt":  "knowledge",
+	"status":  "knowledge",
 
 	// CURATE — metadata, intake, sync.
 	"tag":      "curate",
