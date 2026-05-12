@@ -377,7 +377,17 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 var SyncPullCmd = &cobra.Command{
 	Use:   "pull <system>",
 	Short: "Pull updates from an external system",
-	Args:  cobra.ExactArgs(1),
+	Long: `Pull task updates from a configured external system (e.g.,
+github, gitlab) into the local store. Creates new tasks, updates
+existing ones, and reports conflicts. Requires network access.
+
+Example:
+  tlc sync pull github`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSyncPull(cmd, args[0])
 	},
@@ -386,7 +396,17 @@ var SyncPullCmd = &cobra.Command{
 var SyncPushCmd = &cobra.Command{
 	Use:   "push <system>",
 	Short: "Push local changes to an external system",
-	Args:  cobra.ExactArgs(1),
+	Long: `Push local task changes to a configured external system (e.g.,
+github, gitlab). Pushes only tasks marked as needing push unless
+--force is set. Requires network access.
+
+Example:
+  tlc sync push github`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-shared",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
 		if viper.GetBool("runtime.offline") {
 			return output.UsageError("sync requires network; --offline is set")
@@ -532,7 +552,18 @@ var SyncPushCmd = &cobra.Command{
 var SyncConfigCmd = &cobra.Command{
 	Use:   "config <system>",
 	Short: "Configure sync settings for a system",
-	Args:  cobra.ExactArgs(1),
+	Long: `Configure sync settings for an external system (e.g., github,
+gitlab). Auto-discovers GitHub remote settings; otherwise prompts
+for required values. Fails if the system is already configured
+unless --force is set.
+
+Example:
+  tlc sync config github`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		system := args[0]
 		out := cmd.OutOrStdout()
@@ -572,6 +603,15 @@ var SyncConfigCmd = &cobra.Command{
 var SyncStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show sync status and push queue",
+	Long: `Show the current sync status, including any tasks pending
+push to external systems, grouped by origin system.
+
+Example:
+  tlc sync status`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(_ *cobra.Command, _ []string) error {
 		s, err := getStorage()
 		if err != nil {

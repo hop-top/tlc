@@ -26,6 +26,10 @@ var inboxProcessCmd = &cobra.Command{
 	Long: `Scan inbox create/ and transition/ dirs for pending
 files, create tasks or transition statuses, and move
 processed files to processed/ or failed/.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	RunE: runInboxProcess,
 }
 

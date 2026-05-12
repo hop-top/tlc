@@ -412,6 +412,10 @@ var ProjectInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize TLC in current directory",
 	Long:  "Create .tlc directory and default configuration file.",
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		return runInit(cmd, &storageBackend, &dbPath, &force, &fallbackMode, &duplicateIDStrategy)
 	},
