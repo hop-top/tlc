@@ -39,6 +39,9 @@ AND/OR semantics for filter mode:
   tlc tag feat,bug          → tasks tagged feat OR bug
   tlc tag feat bug          → tasks tagged feat AND bug
   tlc tag feat feat,bug     → tasks tagged feat AND (feat OR bug)`,
+	Annotations: map[string]string{
+		"kit/top-level-verb": "true",
+	},
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -58,6 +61,10 @@ var TagListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List all unique tags",
+	Long:    "List every unique tag value across all tasks in the active storage.",
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		s, err := getStorage()
 		if err != nil {

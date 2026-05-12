@@ -18,6 +18,14 @@ var labelCmd = &cobra.Command{
 var labelInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Auto-detect and initialize project labels",
+	Long: `Detect the project type and seed a suggested label set.
+
+Use --type to force a specific template (go-binary, react-frontend,
+python-mvc, generic).`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	Run: func(_ *cobra.Command, _ []string) {
 		wd, _ := os.Getwd() //nolint:errcheck // best-effort directory detection
 
@@ -43,6 +51,10 @@ var labelInitCmd = &cobra.Command{
 var labelListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List labels in the current project",
+	Long:  "Show every label defined for the current project's storage.",
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println("Project labels:")
 		// Logic to list labels from storage
@@ -52,6 +64,11 @@ var labelListCmd = &cobra.Command{
 var labelTemplatesCmd = &cobra.Command{
 	Use:   "templates",
 	Short: "List available label templates",
+	Long:  "List every built-in label template grouped by project type.",
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	Run: func(_ *cobra.Command, _ []string) {
 		pTypes := []labels.ProjectType{
 			labels.TypeGoBinary,

@@ -18,6 +18,11 @@ var helpLLMCmd = &cobra.Command{
 This command outputs a JSON schema that describes how to call TLC commands programmatically.
 
 Replaces the former "help llm" subcommand.`,
+	Annotations: map[string]string{
+		"kit/side-effect":    "read",
+		"kit/idempotent":     "yes",
+		"kit/top-level-verb": "true",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		spec := buildToolSpec()
 		output := renderToolSpec(spec, helpLLMFormat)

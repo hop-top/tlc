@@ -30,6 +30,10 @@ On Linux and Windows, registration is immediate.
 On macOS, tlc must be wrapped in a .app bundle for Launch Services to accept
 the handler. Use 'tlc uri snippet --platform macos' to get the Info.plist
 fragment instead.`,
+		Annotations: map[string]string{
+			"kit/side-effect": "write-local",
+			"kit/idempotent":  "yes",
+		},
 		RunE: runURIRegister,
 	}
 }
@@ -69,6 +73,10 @@ func newURISnippetCmd() *cobra.Command {
 		Long: `Print a platform-specific configuration snippet for registering the tlc://
 URI scheme when runtime registration is not possible (e.g. macOS .app bundles,
 installer scripts).`,
+		Annotations: map[string]string{
+			"kit/side-effect": "read",
+			"kit/idempotent":  "yes",
+		},
 		RunE: runURISnippet,
 	}
 	cmd.Flags().String("platform", "", "target platform: macos, linux, windows (default: current OS)")

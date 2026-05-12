@@ -30,6 +30,9 @@ func newAssigneeListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all available assignees",
 		Long:  "Display all assignees with their capabilities",
+		Annotations: map[string]string{
+			"kit/side-effect": "read",
+		},
 		RunE: func(_ *cobra.Command, _ []string) error {
 			// Get assignees directory from config or default
 			assigneesDir := assigneesDirFromConfig()
@@ -80,7 +83,11 @@ func newAssigneeShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <assignee-id>",
 		Short: "Show detailed information about an assignee",
+		Long:  "Display the full assignee definition including capabilities, delegation rules, and instructions.",
 		Args:  cobra.ExactArgs(1),
+		Annotations: map[string]string{
+			"kit/side-effect": "read",
+		},
 		RunE: func(_ *cobra.Command, args []string) error {
 			assigneeID := args[0]
 			assigneesDir := assigneesDirFromConfig()

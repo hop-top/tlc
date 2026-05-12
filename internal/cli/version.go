@@ -12,6 +12,11 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Long:  `Print detailed version information including build metadata.`,
+	Annotations: map[string]string{
+		"kit/side-effect":    "read",
+		"kit/idempotent":     "yes",
+		"kit/top-level-verb": "true",
+	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		short, _ := cmd.Flags().GetBool("short")   //nolint:errcheck // registered flag
 		jsonOut, _ := cmd.Flags().GetBool("json") //nolint:errcheck // registered flag

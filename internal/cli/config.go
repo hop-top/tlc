@@ -20,6 +20,14 @@ var ConfigCmd = &cobra.Command{
 var ConfigValidateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate configuration",
+	Long: `Validate the merged tlc configuration.
+
+Reads the active configuration through viper, applies struct validation,
+and reports any errors. Exits non-zero on failure.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(_ *cobra.Command, _ []string) error {
 		var cfg config.Config
 		if err := viper.Unmarshal(&cfg); err != nil {
@@ -36,6 +44,13 @@ var ConfigValidateCmd = &cobra.Command{
 var ConfigListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configuration",
+	Long: `List every resolved configuration key with its current value.
+
+Keys reflect the full precedence chain (cwd → project → user → system →
+defaults).`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	Run: func(_ *cobra.Command, _ []string) {
 		keys := viper.AllKeys()
 		sort.Strings(keys)
@@ -49,7 +64,13 @@ var ConfigListCmd = &cobra.Command{
 var ConfigGetCmd = &cobra.Command{
 	Use:   "get <key>",
 	Short: "Get config value",
-	Args:  cobra.ExactArgs(1),
+	Long: `Print the resolved value for a single configuration key.
+
+Unset keys exit non-zero with an error message.`,
+	Args: cobra.ExactArgs(1),
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	Run: func(_ *cobra.Command, args []string) {
 		key := args[0]
 		if !viper.IsSet(key) {
@@ -63,7 +84,15 @@ var ConfigGetCmd = &cobra.Command{
 var ConfigSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Set config value",
-	Args:  cobra.ExactArgs(2),
+	Long: `Set a configuration key to a value and persist it to disk.
+
+The target file is the highest-precedence existing config file; falls
+back to creating one when none exists.`,
+	Args: cobra.ExactArgs(2),
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(_ *cobra.Command, args []string) error {
 		key := args[0]
 		value := args[1]

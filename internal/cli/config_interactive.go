@@ -282,6 +282,10 @@ Use --key to filter keys by group name, section prefix, or substring.
 Without --key, a group menu is shown.
 
 Alias: tlc setup`,
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "yes",
+	},
 	RunE: runConfigInteractive,
 }
 
