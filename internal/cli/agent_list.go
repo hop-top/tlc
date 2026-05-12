@@ -34,6 +34,9 @@ Examples:
   tlc agent list --status succeeded
   tlc agent list --limit 20 --json
   tlc agent list --source config`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		switch agentListSource {
 		case "", "runs":

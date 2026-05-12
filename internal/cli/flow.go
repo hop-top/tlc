@@ -64,6 +64,10 @@ Usage:
   tlc flow run flow.yaml --dry-run
   tlc flow run tlc://hop-top/tlc/flow:example:1.0
   tlc flow run tests/fixtures/parallel-flow.yaml`,
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "no",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flowRef := args[0]
@@ -145,6 +149,10 @@ List all runs:
 Output formats:
   tlc flow status run:abc123 --format json
   tlc flow status --all --format table`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
@@ -189,6 +197,9 @@ var FlowListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all flow runs",
 	Long:  `List all flow execution runs with their status.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		s, err := getStorage()
 		if err != nil {
@@ -310,6 +321,10 @@ assignees based on capability matching.
 Example:
   tlc flow invoke examples/flows/brainstorming.yaml
   tlc flow invoke tlc://hop-top/tlc/flow:brainstorming:1.0`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "no",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flowRef := args[0]

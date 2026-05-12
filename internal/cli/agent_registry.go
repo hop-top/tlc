@@ -42,6 +42,10 @@ Examples:
   tlc agent register claude --binary /usr/local/bin/claude
   tlc agent register codex --image ghcr.io/hop-top/pod-codex:v1
   tlc agent register gemini --binary /opt/gemini --env API_KEY=xyz`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -82,6 +86,9 @@ var AgentShowCmd = &cobra.Command{
 	Short: "Show the registered config for an agent",
 	Long: `Show the merged (global + project) config for an agent registered
 in the agents.yaml config file.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -116,6 +123,10 @@ and .tlc/agents.yaml (project-local). Shows merged view.
 
 DEPRECATED: use 'tlc agent list --source config'. This alias will be
 removed in a future release.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
 			"warning: 'tlc agent registered' is deprecated; "+

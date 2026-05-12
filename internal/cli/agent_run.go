@@ -60,6 +60,10 @@ Examples:
   tlc agent run --agent claude --track my-feature
   tlc agent run --agent claude --task T-0042 --local
   tlc agent run --agent claude --task T-0042 --dry-run`,
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "no",
+	},
 	RunE: runAgentRun,
 }
 

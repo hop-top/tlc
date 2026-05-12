@@ -31,7 +31,11 @@ var ProjectExportCmd = &cobra.Command{
 	Use:   "export [file]",
 	Short: "Export project tasks and logs",
 	Long:  "Export all tasks and logs to a YAML or JSON file. Writes to stdout if no file is specified.",
-	Args:  cobra.MaximumNArgs(1),
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		s, err := getStorage()
@@ -102,7 +106,11 @@ var ProjectImportCmd = &cobra.Command{
 	Use:   "import <file>",
 	Short: "Import tasks and logs from an export file",
 	Long:  "Import tasks and logs from a YAML or JSON export. Skips existing task IDs unless --force is set.",
-	Args:  cobra.ExactArgs(1),
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -171,7 +179,11 @@ var ProjectImportCmd = &cobra.Command{
 var ProjectListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List all registered projects",
+	Long:    "List all projects registered in the global registry, including their database path, status, and space URI.",
 	Aliases: []string{"ls"},
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := context.Background()
 		s, err := getStorageRaw()
@@ -243,6 +255,10 @@ var ProjectPruneCmd = &cobra.Command{
 	Use:   "prune",
 	Short: "Remove stale project registrations",
 	Long:  "Delete registered projects whose database file no longer exists on disk.",
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := context.Background()
 		s, err := getStorageRaw()
