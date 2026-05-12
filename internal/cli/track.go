@@ -35,7 +35,17 @@ var TrackCmd = &cobra.Command{
 var trackCreateCmd = &cobra.Command{
 	Use:   "create [title]",
 	Short: "Create a new track",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a new track with the given title.
+
+Derives a slug from the title (or accepts --id) and mints a durable
+TypeID. Honours the stage gate (feature_freeze / maintenance / sunset
+/ archived) for the active project scope. Each invocation creates a
+fresh track, so the operation is not idempotent.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "no",
+	},
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		title := trimMatchingQuotes(args[0])
 

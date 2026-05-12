@@ -40,6 +40,10 @@ var TasksSyncCmd = &cobra.Command{
 
 DEPRECATED: use 'tlc task sync-projection'. This alias will be removed in a
 future release.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
 			"warning: 'tlc tasks sync' is deprecated; "+

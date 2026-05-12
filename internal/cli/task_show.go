@@ -24,7 +24,16 @@ type relatedTaskSummary struct {
 var TaskShowCmd = &cobra.Command{
 	Use:   "show <task-id>...",
 	Short: "Show task details",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Show full details for one or more tasks, including description,
+status, assignee, dependencies, scheduling, and audit log entries.
+
+Accepts task aliases (T-NNNN), durable TypeIDs, or cross-project URIs
+(tlc://<project>/<id>). With --logs or a non-table --format, includes
+the full log history sorted by configured direction.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {

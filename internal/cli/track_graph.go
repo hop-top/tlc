@@ -19,8 +19,18 @@ var (
 var trackGraphCmd = &cobra.Command{
 	Use:   "graph <id>",
 	Short: "Display dependency graph and execution strategy for a track",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTrackGraph,
+	Long: `Render the dependency graph and computed execution strategy for a
+track's linked tasks.
+
+Supports table (with tree + batch summary), json, yaml, and mermaid
+output formats. Use --batches-only to suppress the dependency tree,
+--critical-path to highlight the critical path.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
+	RunE: runTrackGraph,
 }
 
 func runTrackGraph(cmd *cobra.Command, args []string) error {
