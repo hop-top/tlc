@@ -40,7 +40,16 @@ var authCmd = &cobra.Command{
 var loginCmd = &cobra.Command{
 	Use:   "login <system>",
 	Short: "Authenticate with an external system",
-	Args:  cobra.ExactArgs(1),
+	Long: `Authenticate with an external system (github, jira, or linear).
+
+GitHub supports either a personal access token (--token) or OAuth.
+Jira requires --url, --email, and --token. Linear requires --api-key.
+Credentials are written to the configured auth store (keyring by default).`,
+	Args: cobra.ExactArgs(1),
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "yes",
+	},
 	Run: func(_ *cobra.Command, args []string) {
 		system := args[0]
 		store := authStore()
@@ -100,7 +109,15 @@ var loginCmd = &cobra.Command{
 var logoutCmd = &cobra.Command{
 	Use:   "logout <system>",
 	Short: "Remove stored credentials",
-	Args:  cobra.ExactArgs(1),
+	Long: `Remove stored credentials for an external system (github, jira, or linear).
+
+Deletes the credential entry from the configured auth store. Safe to
+re-run; missing entries surface a non-fatal error.`,
+	Args: cobra.ExactArgs(1),
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
 	Run: func(_ *cobra.Command, args []string) {
 		system := args[0]
 		store := authStore()
@@ -114,6 +131,14 @@ var logoutCmd = &cobra.Command{
 var authStatusCmd = &cobra.Command{
 	Use:   "status [system]",
 	Short: "Show authentication status",
+	Long: `Report whether credentials are stored for each external system.
+
+Without arguments, checks github, jira, and linear. Pass a system name
+to limit the check to that system.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	Run: func(_ *cobra.Command, args []string) {
 		store := authStore()
 		systems := []string{"github", "jira", "linear"}
