@@ -865,6 +865,11 @@ var doctorCmd = &cobra.Command{
 	Long:          "Run diagnostic checks on your TLC environment and optionally fix issues.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	Annotations: map[string]string{
+		"kit/side-effect":    "read",
+		"kit/idempotent":     "yes",
+		"kit/top-level-verb": "true",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		fix, _ := cmd.Flags().GetBool("fix") //nolint:errcheck // registered flag
 		return runDoctor(cmd, fix)
