@@ -38,6 +38,10 @@ resolved, a second approve|reject returns "already resolved".
 Examples:
   tlc flow approve run:abc123 --step send-email
   tlc flow approve run:abc123 --step send-email --by jad --note "lgtm"`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		runID := args[0]
@@ -67,6 +71,10 @@ audit log.
 
 Examples:
   tlc flow reject run:abc123 --step send-email --reason "wrong recipient"`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		runID := args[0]
@@ -100,6 +108,10 @@ the run as canceled. Already-resolved steps are left untouched.
 
 Example:
   tlc flow cancel run:abc123`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		runID := args[0]

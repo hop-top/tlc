@@ -24,6 +24,10 @@ No storage or database is opened. Exit 0 on valid, exit 1 on error.
 
 Example:
   tlc flow validate examples/flows/brainstorming.yaml`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := args[0]

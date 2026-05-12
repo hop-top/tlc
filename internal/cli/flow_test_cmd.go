@@ -45,6 +45,10 @@ Exit codes:
   1  Step failed or contract violated
   2  Cassette miss in replay mode
   3  Sandbox setup failure`,
+		Annotations: map[string]string{
+			"kit/side-effect": "interactive",
+			"kit/idempotent":  "yes",
+		},
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flowFile := args[0]
