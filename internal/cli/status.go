@@ -3,7 +3,7 @@
 // Implements the reserved `status` subcommand required by kit's shape
 // validator (kit/console/cli.checkReservedStatus). Surfaces a short
 // project-health summary covering the active project, the caller's
-// in-progress tasks, and the count of stale + overdue items.
+// in-progress tasks, and the count of overdue items.
 package cli
 
 import (

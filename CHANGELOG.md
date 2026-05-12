@@ -32,9 +32,11 @@
   rejects unannotated leaves). Boot now fails loud if any leaf is
   missing a required annotation — the new `TestStrictValidationPasses`
   regression test guards this contract in CI. (T-1389)
-- Destructive commands (`task delete`, `track delete`, `flow delete`,
-  `inbox prune`, `agent unregister`, etc. — 12 in total) now require
-  `--confirm=yes` from kit's persistent flag in non-TTY contexts. The
+- Destructive commands (`task delete`, `task unassign`, `task unclaim`,
+  `track abandon`, `track archive`, `track delete`, `agent cancel`,
+  `flow cancel`, `flow reject`, `project prune`, `alias remove`,
+  `auth logout` — 12 in total) now require `--confirm=yes` from kit's
+  persistent flag in non-TTY contexts. The
   pre-existing local flags (`--force`, `--yes`, `--no-prompt`) continue
   to work as bridges: when any local skip flag is true the bridge sets
   the inherited `--confirm` to `yes` before the kit gate runs. No

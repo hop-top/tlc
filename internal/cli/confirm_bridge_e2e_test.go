@@ -58,7 +58,12 @@ func TestConfirmGate_NonTTYRefuses(t *testing.T) {
 	// Seed init so storage paths exist (some commands open storage
 	// before the gate would fire; for those we still expect exit 5
 	// because the gate runs in PreRunE-equivalent slot before RunE).
-	_ = exec.Command(bin, "init").Run() // best-effort; not assertive
+	// Scope to the test tempdirs via Dir+Env so init writes into the
+	// hermetic sandbox, not the package cwd or host HOME.
+	initCmd := exec.Command(bin, "init")
+	initCmd.Dir = cwd
+	initCmd.Env = env
+	_ = initCmd.Run() // best-effort; not assertive
 
 	cases := []struct {
 		name string

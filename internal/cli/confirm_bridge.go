@@ -19,40 +19,14 @@
 // before, with zero deprecation noise. Operators who prefer the
 // kit-canonical surface can pass --confirm=yes directly.
 //
-// See docs/12fcc-confirm-policy.md for the full bridge table.
+// See docs/12fcc-conformance-split-plan.md (§ Phase 4) for the full
+// bridge table.
 
 package cli
 
 import (
 	"github.com/spf13/cobra"
 )
-
-// bridgeLocalConfirm wraps an existing PreRunE (may be nil) so that
-// when any of the named local bool flags resolves to true the
-// persistent --confirm flag is set to "yes" before kit's policy
-// gate fires.
-//
-// Flag lookup is leaf-first (per-command Flags) since every tlc
-// destructive command registers its local "skip" flag on its own
-// Flags() set, not on a persistent ancestor. The exception is
-// taskNoPrompt which is a PersistentFlag on TaskCmd — Flags().Lookup
-// on a child walks down to the inherited flag via cobra's flag
-// inheritance, so it resolves there too.
-//
-// localFlags is a list of flag NAMES, not pointers; the helper reads
-// them via cobra's flag store. This avoids stale pointer captures
-// in test_helpers.go which resets globals between subtests.
-func bridgeLocalConfirm(prev cobra.PositionalArgs, localFlags ...string) func(*cobra.Command, []string) error {
-	_ = prev // placeholder for future composition
-	return func(cmd *cobra.Command, _ []string) error {
-		for _, name := range localFlags {
-			if isFlagTrue(cmd, name) {
-				return setConfirmYes(cmd)
-			}
-		}
-		return nil
-	}
-}
 
 // isFlagTrue reports whether the named bool flag is registered on
 // cmd (or an inherited ancestor) AND parsed to true.
