@@ -139,6 +139,7 @@ func trackLifecycleCmd(
 		Long:  long,
 		Annotations: map[string]string{
 			"kit/side-effect": sideEffect,
+			"kit/idempotent":  "yes",
 		},
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
