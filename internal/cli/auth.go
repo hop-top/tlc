@@ -118,13 +118,14 @@ re-run; missing entries surface a non-fatal error.`,
 		"kit/side-effect": "destructive-local",
 		"kit/idempotent":  "yes",
 	},
-	Run: func(_ *cobra.Command, args []string) {
+	RunE: func(_ *cobra.Command, args []string) error {
 		system := args[0]
 		store := authStore()
 		if err := store.Delete(system, account); err != nil {
-			log.Fatal("Failed to logout", "system", system, "error", err)
+			return fmt.Errorf("failed to logout %s: %w", system, err)
 		}
 		fmt.Printf("✓ Logged out from %s\n", system)
+		return nil
 	},
 }
 

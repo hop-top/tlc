@@ -1,0 +1,103 @@
+// Package cli — confirm bridge.
+//
+// Kit 12fcc-leak auto-enforces a --confirm policy on every command
+// annotated kit/side-effect=destructive* (see kit/go/console/cli/
+// policy_runE.go). In a non-TTY context the kit gate refuses the
+// operation unless --confirm=yes is passed. Several tlc destructive
+// commands shipped with their own local "skip the prompt" flags
+// (--yes / --no-prompt / --force) before the kit gate existed.
+//
+// Strategy C (hybrid): keep the local flags as silent aliases for
+// --confirm=yes. A PreRunE on each affected command translates the
+// local boolean into a --confirm=yes setting before kit's RunE
+// wrapper runs the policy gate. The local flag's existing
+// downstream semantics (skipping the in-RunE huh/readConfirm prompt)
+// continue to work because the global --confirm is now also "yes".
+//
+// This keeps scripts using `tlc task delete --yes`, `tlc track
+// abandon --no-prompt`, `tlc project prune -y`, etc. working as
+// before, with zero deprecation noise. Operators who prefer the
+// kit-canonical surface can pass --confirm=yes directly.
+//
+// See docs/12fcc-confirm-policy.md for the full bridge table.
+
+package cli
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// bridgeLocalConfirm wraps an existing PreRunE (may be nil) so that
+// when any of the named local bool flags resolves to true the
+// persistent --confirm flag is set to "yes" before kit's policy
+// gate fires.
+//
+// Flag lookup is leaf-first (per-command Flags) since every tlc
+// destructive command registers its local "skip" flag on its own
+// Flags() set, not on a persistent ancestor. The exception is
+// taskNoPrompt which is a PersistentFlag on TaskCmd — Flags().Lookup
+// on a child walks down to the inherited flag via cobra's flag
+// inheritance, so it resolves there too.
+//
+// localFlags is a list of flag NAMES, not pointers; the helper reads
+// them via cobra's flag store. This avoids stale pointer captures
+// in test_helpers.go which resets globals between subtests.
+func bridgeLocalConfirm(prev cobra.PositionalArgs, localFlags ...string) func(*cobra.Command, []string) error {
+	_ = prev // placeholder for future composition
+	return func(cmd *cobra.Command, _ []string) error {
+		for _, name := range localFlags {
+			if isFlagTrue(cmd, name) {
+				return setConfirmYes(cmd)
+			}
+		}
+		return nil
+	}
+}
+
+// isFlagTrue reports whether the named bool flag is registered on
+// cmd (or an inherited ancestor) AND parsed to true.
+func isFlagTrue(cmd *cobra.Command, name string) bool {
+	f := cmd.Flag(name)
+	if f == nil {
+		return false
+	}
+	return f.Value.String() == "true"
+}
+
+// setConfirmYes walks up to the root and sets the persistent
+// --confirm flag to "yes". When the flag isn't registered (e.g.
+// kit policy globals were disabled) the call is a no-op.
+func setConfirmYes(cmd *cobra.Command) error {
+	for c := cmd; c != nil; c = c.Parent() {
+		if f := c.PersistentFlags().Lookup("confirm"); f != nil {
+			return f.Value.Set("yes")
+		}
+	}
+	return nil
+}
+
+// installConfirmBridge attaches a PreRunE to cmd that flips the
+// persistent --confirm to "yes" whenever any of the supplied local
+// flag NAMES is set to true. Preserves an existing PreRunE if any
+// — the bridge runs first, then the original.
+//
+// Idempotent: calling twice with the same flag list re-wires the
+// PreRunE but produces equivalent behaviour. Safe to call from
+// init() blocks.
+func installConfirmBridge(cmd *cobra.Command, localFlags ...string) {
+	prev := cmd.PreRunE
+	cmd.PreRunE = func(c *cobra.Command, args []string) error {
+		for _, name := range localFlags {
+			if isFlagTrue(c, name) {
+				if err := setConfirmYes(c); err != nil {
+					return err
+				}
+				break
+			}
+		}
+		if prev != nil {
+			return prev(c, args)
+		}
+		return nil
+	}
+}
