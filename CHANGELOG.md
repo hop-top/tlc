@@ -4,6 +4,16 @@
 
 ### Added
 
+- Root `tlc status` subcommand: read-only project + caller snapshot
+  (detected project, caller identity, in-progress/TODO task counts,
+  overdue items). Satisfies kit's `checkReservedStatus` shape rule
+  and gives users a short health view at the root. (T-1394)
+- Kit 12fcc command-surface annotations on every cobra leaf:
+  `kit/side-effect` (86 leaves), `kit/idempotent` (61),
+  `kit/top-level-verb` (8), plus `Long:` descriptions on 48 leaves
+  that previously had none. See
+  [`docs/12fcc-conformance-split-plan.md`](docs/12fcc-conformance-split-plan.md)
+  for the full contract. (T-1389 — umbrella)
 - `--note|-n` flag on `tlc task update` (when `--status` is set) and
   `tlc task delete` (T-1178). Note text is recorded on the
   STATUS_CHANGED / DELETED `task_logs` entry, mirroring the existing
@@ -17,6 +27,19 @@
 
 ### Changed
 
+- Bumped `hop.top/kit` to the 12fcc-leak branch tip (strict
+  command-surface validation: `Root.Validate()` fires at boot and
+  rejects unannotated leaves). Boot now fails loud if any leaf is
+  missing a required annotation — the new `TestStrictValidationPasses`
+  regression test guards this contract in CI. (T-1389)
+- Destructive commands (`task delete`, `track delete`, `flow delete`,
+  `inbox prune`, `agent unregister`, etc. — 12 in total) now require
+  `--confirm=yes` from kit's persistent flag in non-TTY contexts. The
+  pre-existing local flags (`--force`, `--yes`, `--no-prompt`) continue
+  to work as bridges: when any local skip flag is true the bridge sets
+  the inherited `--confirm` to `yes` before the kit gate runs. No
+  user-facing CLI change unless scripts run destructive commands
+  without any skip flag in a pipe. (T-1392)
 - Schema migration v15: `task_logs` rebuilt without
   `ON DELETE CASCADE` on `task_id` so transition notes — including
   delete reasons recorded via `--note` — survive task deletion.
