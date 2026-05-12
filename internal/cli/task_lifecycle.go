@@ -23,7 +23,17 @@ func taskDisplayID(t *core.Task) string {
 var TaskClaimCmd = &cobra.Command{
 	Use:   "claim <task-id|pattern>...",
 	Short: "Claim a task for work",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Claim one or more tasks for the current user.
+
+Transitions each matched task to the workflow's active status, assigns
+it to the caller, and auto-transitions a linked track from pending to
+active when applicable. Re-running claim with the same arguments
+converges (assignee + status already set), so the operation is idempotent.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {
@@ -96,7 +106,16 @@ var TaskClaimCmd = &cobra.Command{
 var TaskUnclaimCmd = &cobra.Command{
 	Use:   "unclaim <task-id|pattern>...",
 	Short: "Release a claimed task",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Release one or more tasks the caller previously claimed.
+
+Clears the assignee and transitions each task back to the workflow's
+initial status. Local-only side effect; re-running on already-released
+tasks converges.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {
@@ -159,7 +178,16 @@ var TaskUnclaimCmd = &cobra.Command{
 var TaskAssignCmd = &cobra.Command{
 	Use:   "assign <assignee> <task-id|pattern>...",
 	Short: "Assign tasks to someone",
-	Args:  cobra.MinimumNArgs(2),
+	Long: `Assign one or more tasks to the named assignee.
+
+Records a reassignment audit log entry if the task already had an
+assignee. Re-running with the same assignee converges to the same
+state, so the operation is idempotent.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		assignee := args[0]
 		taskArgs := args[1:]
@@ -227,7 +255,15 @@ var TaskAssignCmd = &cobra.Command{
 var TaskUnassignCmd = &cobra.Command{
 	Use:   "unassign <task-id|pattern>...",
 	Short: "Remove assignee from a task",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Clear the assignee on one or more tasks.
+
+Requires --note explaining the reason; the note is appended to the
+task audit log. Re-running on an already-unassigned task converges.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if taskUnassignNote == "" {
 			return errNoteRequired("tlc task unassign <task-id|pattern>...")
@@ -296,7 +332,16 @@ var TaskUnassignCmd = &cobra.Command{
 var TaskCompleteCmd = &cobra.Command{
 	Use:   "complete <task-id|pattern>...",
 	Short: "Mark a task as done",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Transition one or more tasks to the workflow completed status.
+
+Auto-assigns the caller when the task has no assignee. Use --no-verify
+to skip state-machine validation. Re-running on an already-completed
+task converges (no transition fires).`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {
@@ -361,7 +406,17 @@ var TaskCompleteCmd = &cobra.Command{
 var TaskReopenCmd = &cobra.Command{
 	Use:   "reopen <task-id|pattern>...",
 	Short: "Reopen a completed or skipped task",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Transition one or more terminal (DONE/SKIPPED) tasks back to the
+workflow's initial status.
+
+Requires --note explaining the reason. Fails on non-terminal tasks;
+use 'tlc task update --status --force' to force-transition mid-flight
+tasks instead.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if taskReopenNote == "" {
 			return errNoteRequired("tlc task reopen <task-id|pattern>...")

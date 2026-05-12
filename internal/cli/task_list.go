@@ -20,6 +20,15 @@ import (
 var TaskListCmd = &cobra.Command{
 	Use:   "list [query]",
 	Short: "List tasks with filters",
+	Long: `List tasks across the active project (or all projects with --all),
+filtered by status, assignee, tag, priority, track, due/overdue, and more.
+
+Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
+--archived is explicitly set. Supports temporal filters (--due-before,
+--due-after, --overdue, --no-due) and aps profile / squad resolution.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		query := core.Query{

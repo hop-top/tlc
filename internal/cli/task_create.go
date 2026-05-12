@@ -19,7 +19,17 @@ import (
 var TaskCreateCmd = &cobra.Command{
 	Use:   "create [title]",
 	Short: "Create new task",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Create a new task with the given title.
+
+Without a title argument or with --interactive, prompts for fields
+through an interactive form. Mints a durable TypeID and allocates a
+per-project monotonic sequence number for the human-facing alias.
+Each invocation creates a fresh task, so the operation is not idempotent.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "no",
+	},
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var title string
 		if len(args) > 0 {

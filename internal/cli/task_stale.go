@@ -21,6 +21,10 @@ var TaskStaleCmd = &cobra.Command{
 
 Tasks with no per-task timeout inherit the project default (task.stale.default_timeout).
 Use --run-hooks to fire hook commands for each stale task and record StaleFiredAt.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := context.Background()
 		s, err := getStorage()

@@ -19,6 +19,10 @@ var TaskSyncProjectionCmd = &cobra.Command{
 	Use:   "sync-projection",
 	Short: "Rebuild filesystem projection from database",
 	Long:  "Wipes .tlc/tasks/ and rebuilds all canonical files and symlinks from SQLite.",
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// The shared handler reads the package-level tasksSyncDryRun flag.
 		// Mirror our own flag onto it so both commands behave identically.

@@ -18,6 +18,15 @@ var (
 var TaskRemindCmd = &cobra.Command{
 	Use:   "remind",
 	Short: "Show upcoming and overdue task reminders",
+	Long: `Report tasks that are overdue, due today, or scheduled for the near
+future based on each task's RemindAt / DueAt fields.
+
+Read-only by default. Wall-clock buckets ("due today") are projected
+into the configured display timezone (ui.timezone) before bucketing.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {

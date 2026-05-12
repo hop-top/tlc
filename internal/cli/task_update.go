@@ -22,7 +22,16 @@ import (
 var TaskUpdateCmd = &cobra.Command{
 	Use:   "update <task-id|pattern>...",
 	Short: "Update task fields",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Update one or more task fields (title, description, status,
+assignee, effort, priority, tags, blocked-by, scheduling, eva, etc.).
+
+Use --amend together with --note to rewrite the most recent log
+entry instead of appending a new one. Status transitions are validated
+against the workflow state machine unless --force is set.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {
@@ -374,7 +383,16 @@ var TaskUpdateCmd = &cobra.Command{
 var TaskDeleteCmd = &cobra.Command{
 	Use:   "delete <task-id|pattern>...",
 	Short: "Delete a task",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Delete one or more tasks from the local store.
+
+Prompts for confirmation unless --yes or --no-prompt is set. Honours
+the synchronous policy gate (kit/runtime/policy pre_persisted topic)
+so configured note-required or block-on-status rules veto the delete
+before any row is removed.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+	},
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := getStorage()
 		if err != nil {
