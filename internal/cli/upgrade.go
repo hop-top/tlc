@@ -24,6 +24,9 @@ var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Check for and install updates",
 	Long:  `Check for a newer version of tlc and optionally install it.`,
+	Annotations: map[string]string{
+		"kit/top-level-verb": "true",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		auto, _ := cmd.Flags().GetBool("auto")   //nolint:errcheck // registered flag
 		quiet, _ := cmd.Flags().GetBool("quiet") //nolint:errcheck // registered flag
@@ -39,6 +42,10 @@ var upgradePreambleCmd = &cobra.Command{
 	Short: "Print the upgrade preamble fragment for skill files",
 	Long: `Print a markdown preamble fragment for embedding in TLC skill files.
 Agents read this to know how to self-upgrade tlc before executing tasks.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		auto, _ := cmd.Flags().GetBool("auto")      //nolint:errcheck // registered flag
 		never, _ := cmd.Flags().GetBool("never")    //nolint:errcheck // registered flag
