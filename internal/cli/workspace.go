@@ -28,7 +28,14 @@ var WorkspaceCmd = &cobra.Command{
 var WorkspaceListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured workspaces and their projects",
-	RunE:  runWorkspaceList,
+	Long: `List every configured workspace, its spaces, and the projects each space discovers.
+
+Default output is a human-readable tree. Pass --format=json or --format=yaml
+for machine-readable output.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+	},
+	RunE: runWorkspaceList,
 }
 
 // workspaceListData is the JSON-serializable representation of the output.

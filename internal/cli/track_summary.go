@@ -17,7 +17,15 @@ import (
 var trackSummaryCmd = &cobra.Command{
 	Use:   "summary",
 	Short: "Show project health and track overview",
-	RunE:  runTrackSummary,
+	Long: `Render an at-a-glance project health overview across all tracks,
+showing per-track progress, state flags, and last-update humanized time.
+
+Read-only; pure projection over the local track and task tables.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
+	RunE: runTrackSummary,
 }
 
 type summaryRow struct {

@@ -62,6 +62,11 @@ Examples:
   tlc log --all --limit 20 --offset 40
 `,
 	Args: cobra.MaximumNArgs(1),
+	Annotations: map[string]string{
+		"kit/side-effect":    "read",
+		"kit/idempotent":     "yes",
+		"kit/top-level-verb": "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// If task ID provided as argument, use it
 		if len(args) > 0 {

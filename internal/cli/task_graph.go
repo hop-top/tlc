@@ -25,6 +25,10 @@ Supports the same filters as 'task list': --status, --assigned-to, --tag, --prio
 Output formats:
   ascii   Text-based ASCII tree (default)
   dot     GraphViz DOT language (pipe to 'dot -Tsvg' or 'dot -Tpng')`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		query := core.Query{

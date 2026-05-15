@@ -14,6 +14,11 @@ var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Launch the interactive TUI",
 	Long:  "TLC TUI provides an interactive interface for task management and flow monitoring.",
+	Annotations: map[string]string{
+		"kit/side-effect":    "interactive",
+		"kit/idempotent":     "conditional",
+		"kit/top-level-verb": "true",
+	},
 	RunE: func(_ *cobra.Command, _ []string) error {
 		store, err := getStorage()
 		if err != nil {

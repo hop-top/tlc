@@ -246,6 +246,15 @@ Read `.xray` files when present in directories for cached context.
 3. DRY; design patterns; avoid cyclomatic complexity.
 4. Deterministic tests; explicit exit-code assertions for CLI.
 5. No sleep-based automation in tests or runtime.
+6. Every new cobra leaf MUST declare kit annotations or boot fails
+   via `Root.Validate()`. Minimum:
+   `Annotations: map[string]string{"kit/side-effect": "<read|write-local|write-shared|destructive-local|destructive-shared|interactive>", "kit/idempotent": "<yes|no|conditional>"}`,
+   plus a `Long:` description and (for depth-1 leaves) `kit/top-level-verb: "true"`.
+   Destructive leaves (`destructive-local`/`destructive-shared`) go
+   through `installConfirmBridge` in `confirm_bridge_init.go` to honour
+   `--confirm=yes` in non-TTY contexts. See
+   [`docs/12fcc-conformance-split-plan.md`](docs/12fcc-conformance-split-plan.md)
+   for the full contract; `TestStrictValidationPasses` guards it in CI.
 
 ## Error Philosophy
 

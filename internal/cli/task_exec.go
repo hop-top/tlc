@@ -69,6 +69,10 @@ Examples:
   tlc task exec T-0042 --with-pod ghcr.io/me/agent:dev
   tlc task exec T-0042 --ctxt 'engineering?tag=runtime'
   tlc task exec T-0042 --dry-run`,
+	Annotations: map[string]string{
+		"kit/side-effect": "interactive",
+		"kit/idempotent":  "no",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: runTaskExec,
 }

@@ -16,6 +16,11 @@ var workflowCmd = &cobra.Command{
 var workflowStatusesCmd = &cobra.Command{
 	Use:   "statuses",
 	Short: "Show all configured statuses",
+	Long:  "List every workflow status with its label, terminal flag, role, and TLS marker.",
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		wm := core.DefaultWorkflow()
 		out := cmd.OutOrStdout()
@@ -58,6 +63,11 @@ var workflowStatusesCmd = &cobra.Command{
 var workflowRulesCmd = &cobra.Command{
 	Use:   "rules",
 	Short: "Show state machine transition rules",
+	Long:  "Show, for each status, the set of statuses it can transition to.",
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		wm := core.DefaultWorkflow()
 		out := cmd.OutOrStdout()
@@ -103,7 +113,12 @@ var workflowRulesCmd = &cobra.Command{
 var workflowValidateCmd = &cobra.Command{
 	Use:   "validate <from> <to>",
 	Short: "Dry-run a status transition",
+	Long:  "Report whether the workflow state machine allows the given <from> → <to> transition.",
 	Args:  cobra.ExactArgs(2),
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		from := core.TaskStatus(strings.ToUpper(args[0]))
 		to := core.TaskStatus(strings.ToUpper(args[1]))

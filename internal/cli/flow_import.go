@@ -33,6 +33,10 @@ Examples:
   tlc flow import https://raw.githubusercontent.com/user/repo/main/pattern.md
   # With custom provider
   LLM_API_URL=https://openrouter.ai/api/v1/chat/completions LLM_API_KEY=sk-xxx tlc flow import <url>`,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "no",
+	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		url := args[0]

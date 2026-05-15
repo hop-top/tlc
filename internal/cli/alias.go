@@ -45,15 +45,31 @@ Examples:
 var aliasAddCmd = &cobra.Command{
 	Use:   "add <name> <expansion>",
 	Short: "Add or update an alias",
-	Args:  cobra.ExactArgs(2),
-	RunE:  runAliasAdd,
+	Long: `Add or update an alias mapping <name> to <expansion>.
+
+The alias is stored in the project alias file by default. Pass --global
+to store it in the user-wide alias file instead.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runAliasAdd,
+	Annotations: map[string]string{
+		"kit/side-effect": "write-local",
+		"kit/idempotent":  "yes",
+	},
 }
 
 var aliasListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all aliases",
+	Long: `List all aliases, grouped by scope.
+
+Global aliases are read from $XDG_CONFIG_HOME/tlc/aliases.yaml.
+Local aliases are read from <project-root>/.tlc/aliases.yaml when
+invoked inside a tlc project.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		return runAliasList(cmd)
+	},
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
 	},
 }
 
@@ -61,8 +77,16 @@ var aliasRemoveCmd = &cobra.Command{
 	Use:     "remove <name>",
 	Aliases: []string{"rm", "delete", "del"},
 	Short:   "Remove an alias",
-	Args:    cobra.ExactArgs(1),
-	RunE:    runAliasRemove,
+	Long: `Remove an existing alias by name.
+
+Without --global, removes from the project alias file when available,
+otherwise from the global alias file.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runAliasRemove,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
 }
 
 var aliasGlobal bool

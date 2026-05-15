@@ -28,8 +28,20 @@ var PromptCmd = &cobra.Command{
 var PromptTaskCmd = &cobra.Command{
 	Use:   "task <id>",
 	Short: "Render enriched task context for agent consumption",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTaskPrompt,
+	Long: `Render an enriched context dump for a task, including
+description, dependencies (blocked-by/blocking), track membership,
+and recent activity log. Output as markdown by default or JSON
+with --json. Designed to be piped into an agent prompt.
+
+Examples:
+  tlc prompt task T-0042
+  tlc prompt task T-0042 --json`,
+	Annotations: map[string]string{
+		"kit/side-effect": "read",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
+	RunE: runTaskPrompt,
 }
 
 func runTaskPrompt(cmd *cobra.Command, args []string) error {

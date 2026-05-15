@@ -13,6 +13,11 @@ var trackAbandonNoPrompt bool
 
 var trackArchiveCmd = trackLifecycleCmd(
 	"archive", "Archive a completed or abandoned track",
+	`Mark a completed or abandoned track as archived.
+
+Archived tracks are hidden from default listings but retained for
+history. Re-running on an already-archived track converges.`,
+	"destructive-local",
 	func(ctx context.Context, svc *core.TrackService, id string) error {
 		return svc.ArchiveTrack(ctx, id)
 	},
@@ -21,8 +26,18 @@ var trackArchiveCmd = trackLifecycleCmd(
 var trackAbandonCmd = &cobra.Command{
 	Use:   "abandon <id>",
 	Short: "Abandon a track and skip its non-terminal tasks",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTrackAbandon,
+	Long: `Abandon a track and skip every linked non-terminal task in a
+single operation.
+
+Prompts for confirmation when any non-terminal tasks would be skipped
+unless --no-prompt is set. The track transitions to the abandoned
+status and its tasks become SKIPPED.`,
+	Annotations: map[string]string{
+		"kit/side-effect": "destructive-local",
+		"kit/idempotent":  "yes",
+	},
+	Args: cobra.ExactArgs(1),
+	RunE: runTrackAbandon,
 }
 
 func init() {
@@ -98,6 +113,12 @@ func trackDisplayID(ctx context.Context, svc *core.TrackService, id string) stri
 
 var trackDeleteCmd = trackLifecycleCmd(
 	"delete", "Delete a track (fails if tasks are linked)",
+	`Delete a track from the local store.
+
+Fails when any task is still linked to the track; clear the links
+first or use 'tlc track abandon' to skip them. The deletion is local
+and irreversible.`,
+	"destructive-local",
 	func(ctx context.Context, svc *core.TrackService, id string) error {
 		return svc.DeleteTrack(ctx, id)
 	},
@@ -107,7 +128,7 @@ var trackDeleteCmd = trackLifecycleCmd(
 // TrackService, and delegates to action. The verb is used in both the Use line
 // and the confirmation message.
 func trackLifecycleCmd(
-	verb, short string,
+	verb, short, long, sideEffect string,
 	action func(ctx context.Context, svc *core.TrackService, id string) error,
 ) *cobra.Command {
 	// Capitalise first letter for the output message.
@@ -115,7 +136,12 @@ func trackLifecycleCmd(
 	return &cobra.Command{
 		Use:   verb + " <id>",
 		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Long:  long,
+		Annotations: map[string]string{
+			"kit/side-effect": sideEffect,
+			"kit/idempotent":  "yes",
+		},
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStorageRaw()
 			if err != nil {
