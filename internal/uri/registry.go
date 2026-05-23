@@ -8,7 +8,7 @@ import (
 
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
-	"hop.top/uri"
+	"hop.top/uri/scheme"
 )
 
 // TypesDirConfig holds configurable directory paths for URI type registration.
@@ -33,13 +33,13 @@ func (c *TypesDirConfig) assigneesDir() string {
 
 // RegisterTypes registers tlc-specific URI types with the registry.
 // dirs is optional; nil uses defaults.
-func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage, dirs ...*TypesDirConfig) error {
+func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*TypesDirConfig) error {
 	var dc *TypesDirConfig
 	if len(dirs) > 0 {
 		dc = dirs[0]
 	}
 	// Project completion
-	err := reg.Register(uri.TypeRegistration{
+	err := reg.Register(scheme.TypeRegistration{
 		Name: "project",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			projects, err := s.ListAllProjects(ctx)
@@ -60,7 +60,7 @@ func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage, dirs ...*TypesDi
 	}
 
 	// Task completion
-	err = reg.Register(uri.TypeRegistration{
+	err = reg.Register(scheme.TypeRegistration{
 		Name: "task",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			tasks, err := s.ListTasks(ctx, core.Query{AllProjects: true})
@@ -81,7 +81,7 @@ func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage, dirs ...*TypesDi
 	}
 
 	// Assignee completion
-	err = reg.Register(uri.TypeRegistration{
+	err = reg.Register(scheme.TypeRegistration{
 		Name: "assignee",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			loader := core.NewAssigneeLoader(dc.assigneesDir())
@@ -103,7 +103,7 @@ func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage, dirs ...*TypesDi
 	}
 
 	// Tag completion
-	err = reg.Register(uri.TypeRegistration{
+	err = reg.Register(scheme.TypeRegistration{
 		Name: "tag",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			tags, err := s.ListAllTags(ctx)
@@ -124,7 +124,7 @@ func RegisterTypes(reg *uri.Registry, s *storage.SQLiteStorage, dirs ...*TypesDi
 	}
 
 	// Flow completion
-	err = reg.Register(uri.TypeRegistration{
+	err = reg.Register(scheme.TypeRegistration{
 		Name: "flow",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			flowsDir := dc.flowsDir()

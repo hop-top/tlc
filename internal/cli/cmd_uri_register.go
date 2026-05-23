@@ -6,8 +6,8 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
-	"hop.top/hdl"
-	"hop.top/hdl/generate"
+	"hop.top/uri/handle"
+	"hop.top/uri/handle/generate"
 )
 
 func newURICmd() *cobra.Command {
@@ -39,8 +39,8 @@ fragment instead.`,
 }
 
 func runURIRegister(cmd *cobra.Command, _ []string) error {
-	if hdl.ErrUnsupported != nil {
-		return fmt.Errorf("URI registration not supported on this platform: %w", hdl.ErrUnsupported)
+	if handle.ErrUnsupported != nil {
+		return fmt.Errorf("URI registration not supported on this platform: %w", handle.ErrUnsupported)
 	}
 
 	// On macOS the runtime Register call needs a bundle ID. For an unbundled
@@ -58,7 +58,7 @@ func runURIRegister(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not determine binary path: %w", err)
 	}
 
-	if err := hdl.Register("tlc", exe); err != nil {
+	if err := handle.Register("tlc", exe); err != nil {
 		return fmt.Errorf("registration failed: %w", err)
 	}
 
@@ -103,7 +103,14 @@ func runURISnippet(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not determine binary path: %w", err)
 	}
 
-	snippet, err := generate.Snippet(platform, "tlc", exe)
+	spec := generate.HandlerSpec{
+		Vendor:   "hop-top",
+		App:      "tlc",
+		Language: generate.LanguageGo,
+		Scheme:   "tlc",
+		AppPath:  exe,
+	}
+	snippet, err := generate.Snippet(platform, spec)
 	if err != nil {
 		return err
 	}
