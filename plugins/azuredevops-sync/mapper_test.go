@@ -10,14 +10,14 @@ func TestMapWorkItemToTask(t *testing.T) {
 
 	baseFields := func(state string, priority float64) WorkItemFields {
 		return WorkItemFields{
-			"System.Title":                    "Test Item",
-			"System.Description":              "desc",
-			"System.State":                    state,
-			"System.CreatedDate":              "2026-01-01T00:00:00Z",
-			"System.ChangedDate":              "2026-01-02T00:00:00Z",
-			"System.IterationPath":            "Sprint 1",
-			"System.AreaPath":                 "Area",
-			"Microsoft.VSTS.Common.Priority":  priority,
+			"System.Title":                   "Test Item",
+			"System.Description":             "desc",
+			"System.State":                   state,
+			"System.CreatedDate":             "2026-01-01T00:00:00Z",
+			"System.ChangedDate":             "2026-01-02T00:00:00Z",
+			"System.IterationPath":           "Sprint 1",
+			"System.AreaPath":                "Area",
+			"Microsoft.VSTS.Common.Priority": priority,
 		}
 	}
 
@@ -49,8 +49,8 @@ func TestMapWorkItemToTask(t *testing.T) {
 				f["System.Tags"] = "status:blocked"
 				return f
 			}()},
-			wantStatus:  "TODO",
-			wantBlocked: "blocked via ADO tag",
+			wantStatus:   "TODO",
+			wantBlocked:  "blocked via ADO tag",
 			wantPriority: "P1",
 		},
 		{
@@ -210,10 +210,10 @@ func TestMapWorkItemToTask(t *testing.T) {
 
 func TestMapTaskToWorkItem(t *testing.T) {
 	tests := []struct {
-		name      string
-		task      *Task
-		wantOps   map[string]interface{} // path → value
-		wantTag   string                 // substring in System.Tags value
+		name    string
+		task    *Task
+		wantOps map[string]interface{} // path → value
+		wantTag string                 // substring in System.Tags value
 	}{
 		{
 			name: "Status TODO maps to state New",

@@ -139,7 +139,8 @@ func TestLog_TemporalFilters_E2E(t *testing.T) {
 
 		// 4d-ago → 1h-ago window: mid (-3d) + recent (-12h). Excludes
 		// old (-10d, before since) and fresh (-5m, after until).
-		logs, out, err := runLogJSON(t, taskID,
+		logs, out, err := runLogJSON(
+			t, taskID,
 			"--since", "4 days ago",
 			"--until", "1 hour ago",
 		)

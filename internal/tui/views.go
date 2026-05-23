@@ -73,7 +73,6 @@ func formatAssignee(assignee *string) string {
 	return "@" + *assignee
 }
 
-
 func (m Model) View() tea.View {
 	view := tea.NewView(m.viewString())
 	view.AltScreen = true
@@ -173,7 +172,8 @@ func (m Model) helpView() string {
 	items = append(items, "[j/k] navigate")
 	switch m.view {
 	case viewDashboard:
-		items = append(items,
+		items = append(
+			items,
 			"[n]ew", "[c/u] claim/unclaim", "[s] status",
 			"[/ ] search", "[f/a] filter tag/assignee",
 		)
@@ -186,7 +186,8 @@ func (m Model) helpView() string {
 	case viewFlows:
 		items = append(items, "[v] cycle view")
 	case viewDetail:
-		items = append(items,
+		items = append(
+			items,
 			"[c/u] claim/unclaim", "[s] status",
 			"[o] sort dir", "[esc] back",
 		)
@@ -260,7 +261,8 @@ func (m Model) detailView() string {
 	if len(m.taskLogs) > 0 {
 		fmt.Fprintf(&s, "\nLogs (%s):\n", strings.ToUpper(m.logSortDirection))
 		for _, l := range m.taskLogs {
-			fmt.Fprintf(&s, "  %s  %-15s (%s) %s\n",
+			fmt.Fprintf(
+				&s, "  %s  %-15s (%s) %s\n",
 				displaytime.DisplayTime(l.Timestamp, displaytime.LayoutDateTime),
 				l.Action,
 				l.By,
@@ -271,7 +273,6 @@ func (m Model) detailView() string {
 
 	return s.String()
 }
-
 
 func (m Model) kanbanView() string {
 	var s strings.Builder
@@ -299,7 +300,8 @@ func (m Model) kanbanView() string {
 		tasks := groups[status]
 
 		// Column header.
-		header := fmt.Sprintf("%s (%d)",
+		header := fmt.Sprintf(
+			"%s (%d)",
 			strings.ToUpper(string(status)), len(tasks),
 		)
 		headerStr := lipgloss.NewStyle().

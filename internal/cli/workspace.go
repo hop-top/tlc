@@ -40,10 +40,10 @@ for machine-readable output.`,
 
 // workspaceListData is the JSON-serializable representation of the output.
 type workspaceListData struct {
-	Name     string              `json:"name"`
-	WsmID    string              `json:"wsm_id,omitempty"`
-	Default  bool                `json:"default"`
-	Spaces   []spaceListData     `json:"spaces"`
+	Name    string          `json:"name"`
+	WsmID   string          `json:"wsm_id,omitempty"`
+	Default bool            `json:"default"`
+	Spaces  []spaceListData `json:"spaces"`
 }
 
 type spaceListData struct {
@@ -163,7 +163,8 @@ func printWorkspaceListTable(cmd *cobra.Command, data []workspaceListData) {
 
 			for _, p := range sp.Projects {
 				seen := DisplayTime(p.LastSeenAt, LayoutDate)
-				_, _ = fmt.Fprintf(w, "    %-*s  %-*s  %-8s %s\n",
+				_, _ = fmt.Fprintf(
+					w, "    %-*s  %-*s  %-8s %s\n",
 					maxID, p.ProjectID,
 					maxPath, p.DBPath,
 					p.Status,

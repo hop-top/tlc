@@ -183,7 +183,7 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		// Load stale config once; apply project default timeout + auto-fire hooks.
 		var taskCfg config.TaskConfig
 		_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
-		_ = taskCfg.Validate()                  //nolint:errcheck // best-effort validation
+		_ = taskCfg.Validate()                   //nolint:errcheck // best-effort validation
 
 		// Apply project default stale timeout to all tasks with nil StaleTimeout.
 		for _, t := range tasks {

@@ -607,7 +607,8 @@ func init() {
 // because task_logs.meta is a JSON column.
 func amendLatestLogNote(ctx context.Context, store interface {
 	core.LogRepository
-}, task *core.Task, newNote string, force bool) error {
+}, task *core.Task, newNote string, force bool,
+) error {
 	wm := core.DefaultWorkflow()
 	if wm.IsTerminal(task.Status) && !force {
 		return fmt.Errorf(

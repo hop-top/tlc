@@ -37,7 +37,7 @@ func runInboxProcess(cmd *cobra.Command, _ []string) error {
 	s, err := getStorage()
 	if err != nil {
 		return fmt.Errorf(
-			"inbox process: cannot open storage; "+
+			"inbox process: cannot open storage; " +
 				"run 'tlc init' first",
 		)
 	}
@@ -49,7 +49,8 @@ func runInboxProcess(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%d created, %d transitioned, %d failed\n",
+	fmt.Fprintf(
+		out, "%d created, %d transitioned, %d failed\n",
 		len(result.Created),
 		len(result.Transitioned),
 		len(result.Failed),
@@ -121,7 +122,8 @@ func autoProcessInbox(
 
 	total := len(result.Created) + len(result.Transitioned)
 	if total > 0 {
-		log.Debug("auto inbox processed",
+		log.Debug(
+			"auto inbox processed",
 			"created", len(result.Created),
 			"transitioned", len(result.Transitioned),
 			"failed", len(result.Failed),

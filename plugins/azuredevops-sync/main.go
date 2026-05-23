@@ -20,7 +20,7 @@ type Request struct {
 
 // SyncPullParams are the parameters for sync.pull.
 type SyncPullParams struct {
-	Repo       string `json:"repo"`        // ADO project name
+	Repo       string `json:"repo"` // ADO project name
 	LastSyncAt string `json:"last_sync_at,omitempty"`
 }
 

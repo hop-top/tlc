@@ -22,13 +22,14 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 		// node. To assert "non-removed section's comments survive", the
 		// kept-comment must sit above a kept section (here: git:), not
 		// above aliases: itself.
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"aliases:\n"+
-			"  tl: task list\n"+
-			"# git section comment\n"+
-			"git:\n"+
-			"  branch:\n"+
-			"    separator: /\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"aliases:\n"+
+				"  tl: task list\n"+
+				"# git section comment\n"+
+				"git:\n"+
+				"  branch:\n"+
+				"    separator: /\n",
 		)
 
 		primeViper(t, cfgPath)
@@ -68,14 +69,15 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 
 	t.Run("HappyPathMultipleKeys", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"aliases:\n"+
-			"  tl: task list\n"+
-			"  tn: task new\n"+
-			"  done: task done\n"+
-			"git:\n"+
-			"  branch:\n"+
-			"    separator: /\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"aliases:\n"+
+				"  tl: task list\n"+
+				"  tn: task new\n"+
+				"  done: task done\n"+
+				"git:\n"+
+				"  branch:\n"+
+				"    separator: /\n",
 		)
 
 		primeViper(t, cfgPath)
@@ -102,9 +104,10 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 
 	t.Run("DefensiveSkipOnDivergentValue", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"aliases:\n"+
-			"  tl: task list --status TODO\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"aliases:\n"+
+				"  tl: task list --status TODO\n",
 		)
 
 		// Pre-populate aliases.yaml with `tl` mapped to a DIFFERENT value
@@ -181,11 +184,12 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 
 	t.Run("QuotedValuesWithSpecialChars", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"aliases:\n"+
-			"  ll: \"task list --status TODO --tag 'high-prio'\"\n"+
-			"git:\n"+
-			"  message: \"chore: fix 'thing'\"\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"aliases:\n"+
+				"  ll: \"task list --status TODO --tag 'high-prio'\"\n"+
+				"git:\n"+
+				"  message: \"chore: fix 'thing'\"\n",
 		)
 
 		primeViper(t, cfgPath)
@@ -212,11 +216,12 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 
 	t.Run("EmptyAliasesKeyIsNoop", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"aliases: {}\n"+
-			"git:\n"+
-			"  branch:\n"+
-			"    separator: /\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"aliases: {}\n"+
+				"git:\n"+
+				"  branch:\n"+
+				"    separator: /\n",
 		)
 
 		primeViper(t, cfgPath)
@@ -242,11 +247,12 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 
 	t.Run("NoLegacyKeyIsNoop", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"git:\n"+
-			"  branch:\n"+
-			"    separator: /\n"+
-			"# trailing\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"git:\n"+
+				"  branch:\n"+
+				"    separator: /\n"+
+				"# trailing\n",
 		)
 
 		before := mustReadFile(t, cfgPath)
@@ -273,11 +279,12 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 	t.Run("FlatProjectLayout", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
 		cfgPath := filepath.Join(tmpDir, ".tlc.yaml")
-		writeFile(t, cfgPath, ""+
-			"aliases:\n"+
-			"  tl: task list\n"+
-			"git:\n"+
-			"  track: false\n",
+		writeFile(
+			t, cfgPath, ""+
+				"aliases:\n"+
+				"  tl: task list\n"+
+				"git:\n"+
+				"  track: false\n",
 		)
 
 		primeViper(t, cfgPath)
@@ -301,11 +308,12 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 			t.Fatal(err)
 		}
 		cfgPath := filepath.Join(tmpDir, ".hop", "tlc", "config.yaml")
-		writeFile(t, cfgPath, ""+
-			"aliases:\n"+
-			"  tl: task list\n"+
-			"output:\n"+
-			"  format: json\n",
+		writeFile(
+			t, cfgPath, ""+
+				"aliases:\n"+
+				"  tl: task list\n"+
+				"output:\n"+
+				"  format: json\n",
 		)
 
 		primeViper(t, cfgPath)
@@ -334,9 +342,10 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 
 		// User-global config carries the only legacy block.
 		userCfg := filepath.Join(tmpDir, "tlc", "config.yaml")
-		writeFile(t, userCfg, ""+
-			"aliases:\n"+
-			"  global-only: task list --mine\n",
+		writeFile(
+			t, userCfg, ""+
+				"aliases:\n"+
+				"  global-only: task list --mine\n",
 		)
 
 		// Project-local config exists but has no aliases:.
@@ -390,11 +399,12 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 		// XDG_CONFIG_HOME is already pointed at tmpDir by setupStripTest;
 		// create <tmpDir>/tlc/config.yaml as the user-level config.
 		userCfg := filepath.Join(tmpDir, "tlc", "config.yaml")
-		writeFile(t, userCfg, ""+
-			"aliases:\n"+
-			"  tl: task list\n"+
-			"output:\n"+
-			"  format: yaml\n",
+		writeFile(
+			t, userCfg, ""+
+				"aliases:\n"+
+				"  tl: task list\n"+
+				"output:\n"+
+				"  format: yaml\n",
 		)
 
 		primeViper(t, userCfg)
@@ -452,10 +462,11 @@ func TestMigrateLegacyAliasesStrip(t *testing.T) {
 	// keys until the next run.
 	t.Run("PartialMigrationOnConflict", func(t *testing.T) {
 		tmpDir := setupStripTest(t)
-		cfgPath := writeProjectConfig(t, tmpDir, ""+
-			"aliases:\n"+
-			"  conflict: value-from-source\n"+
-			"  fresh: task list --new\n",
+		cfgPath := writeProjectConfig(
+			t, tmpDir, ""+
+				"aliases:\n"+
+				"  conflict: value-from-source\n"+
+				"  fresh: task list --new\n",
 		)
 		// Pre-populate target with a divergent value for `conflict`.
 		aliasesPath := filepath.Join(tmpDir, ".tlc", "aliases.yaml")

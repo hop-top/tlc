@@ -166,7 +166,8 @@ func renderTrackShowDetail(
 		assignee = "@" + *t.AssignedTo
 	}
 
-	_, _ = fmt.Fprintf(w, "%s %s    %s %s    %s %s    %s %s\n",
+	_, _ = fmt.Fprintf(
+		w, "%s %s    %s %s    %s %s    %s %s\n",
 		labelStyle.Render("Type:"), t.Type,
 		lipgloss.NewStyle().Foreground(mutedColor).Render("Status:"),
 		string(t.Status),
@@ -179,7 +180,8 @@ func renderTrackShowDetail(
 	// Detail view: humanise CreatedAt/UpdatedAt ("2d ago"). The
 	// JSON/YAML projection in buildTrackShowOutput keeps absolute
 	// LayoutDate for tooling. T-1384.
-	_, _ = fmt.Fprintf(w, "%s %s    %s %s\n",
+	_, _ = fmt.Fprintf(
+		w, "%s %s    %s %s\n",
 		labelStyle.Render("Created:"), DisplayTimeRelative(t.CreatedAt),
 		lipgloss.NewStyle().Foreground(mutedColor).Render("Updated:"),
 		DisplayTimeRelative(t.UpdatedAt),
@@ -191,7 +193,8 @@ func renderTrackShowDetail(
 		if progress.TotalTasks > 0 {
 			pct = progress.CompletedTasks * 100 / progress.TotalTasks
 		}
-		_, _ = fmt.Fprintf(w, "\nProgress: %d/%d tasks (%d%%)\n",
+		_, _ = fmt.Fprintf(
+			w, "\nProgress: %d/%d tasks (%d%%)\n",
 			progress.CompletedTasks, progress.TotalTasks, pct,
 		)
 	} else {
@@ -212,7 +215,8 @@ func renderTrackShowDetail(
 			if label == "" {
 				label = fmt.Sprintf("Phase %d", phase.Phase)
 			}
-			_, _ = fmt.Fprintf(w, "\n%s %d \u2014 %-18s %d/%d%s\n",
+			_, _ = fmt.Fprintf(
+				w, "\n%s %d \u2014 %-18s %d/%d%s\n",
 				lipgloss.NewStyle().Bold(true).Render("Phase"),
 				phase.Phase, label,
 				phase.Completed, phase.Total, checkmark,

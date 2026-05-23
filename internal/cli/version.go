@@ -18,7 +18,7 @@ var versionCmd = &cobra.Command{
 		"kit/top-level-verb": "true",
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
-		short, _ := cmd.Flags().GetBool("short")   //nolint:errcheck // registered flag
+		short, _ := cmd.Flags().GetBool("short")  //nolint:errcheck // registered flag
 		jsonOut, _ := cmd.Flags().GetBool("json") //nolint:errcheck // registered flag
 
 		if short {

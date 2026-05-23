@@ -1,10 +1,11 @@
+//go:build shimbin
+
 // Package main is the passthrough-always shim for the flowtest sandbox.
 //
 // It is symlinked to tool names that should always run for real (node, ls,
 // cat, grep, etc.) regardless of TLC_FLOW_TEST_MODE. It finds the real
 // binary by scanning PATH beyond the sandbox bin/ dir and execs it directly.
 // It never reads or writes cassettes.
-//go:build shimbin
 package main
 
 import (

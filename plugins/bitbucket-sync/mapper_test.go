@@ -7,16 +7,16 @@ import (
 
 func TestMapBitbucketIssueToTask(t *testing.T) {
 	tests := []struct {
-		name           string
-		issue          *BitbucketIssue
-		components     []string
-		wantStatus     string
-		wantPriority   string
-		wantEffort     string
-		wantBlocked    string
-		wantTags       []string
-		wantMetaKey    string
-		wantMetaVal    string
+		name         string
+		issue        *BitbucketIssue
+		components   []string
+		wantStatus   string
+		wantPriority string
+		wantEffort   string
+		wantBlocked  string
+		wantTags     []string
+		wantMetaKey  string
+		wantMetaVal  string
 	}{
 		{
 			name:       "new state maps to TODO",

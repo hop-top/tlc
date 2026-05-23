@@ -65,7 +65,8 @@ func TestSQLiteStorage_MigrationV6_TracksTable(t *testing.T) {
 	}
 	for _, idx := range indexes {
 		var name string
-		err = s.db.QueryRowContext(ctx,
+		err = s.db.QueryRowContext(
+			ctx,
 			"SELECT name FROM sqlite_master WHERE type='index' AND name=?", idx,
 		).Scan(&name)
 		if err != nil {

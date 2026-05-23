@@ -139,7 +139,8 @@ func tlcConfigPathsResolver(cwd string) []kitcliconfig.ResolvedPath {
 	// If the detected mode is "hop" but a .tlc layout also exists, surface
 	// both so users can see the standalone fallback row.
 	if mode == config.ModeHop {
-		markers = append(markers,
+		markers = append(
+			markers,
 			filepath.Join(config.LocalConfigDir(config.ModeStandalone), "config.yaml"),
 			config.LocalConfigFile(config.ModeStandalone),
 		)

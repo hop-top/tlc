@@ -6,9 +6,9 @@ import (
 
 func TestNormalizeStatus(t *testing.T) {
 	tests := []struct {
-		input    string
-		want     string
-		wantOK   bool
+		input  string
+		want   string
+		wantOK bool
 	}{
 		// exact canonical
 		{"TODO", "TODO", true},
@@ -35,9 +35,9 @@ func TestNormalizeStatus(t *testing.T) {
 		{"in-progress", "IN_PROGRESS", true},
 		{"skip", "SKIPPED", true},
 		// fuzzy
-		{"comp", "DONE", true},   // comp → complete (alias) not matched, fuzzy hits skipped or done via lower
-		{"tod", "TODO", true},    // fuzzy prefix of "todo"
-		{"done", "DONE", true},   // exact via alias
+		{"comp", "DONE", true}, // comp → complete (alias) not matched, fuzzy hits skipped or done via lower
+		{"tod", "TODO", true},  // fuzzy prefix of "todo"
+		{"done", "DONE", true}, // exact via alias
 		// no match
 		{"xyz", "", false},
 		{"", "", false},
@@ -84,8 +84,8 @@ func TestNormalizePriority(t *testing.T) {
 		{"med", "P2", true},
 		{"low", "P3", true},
 		// fuzzy
-		{"crit", "P0", true},   // fuzzy: "crit" → "critical" alias not in canonical; but alias table doesn't cover fuzzy — let's see
-		{"hig", "P1", true},    // fuzzy over lowercased canonical ["p0","p1","p2","p3"]; "hig" won't match these directly
+		{"crit", "P0", true}, // fuzzy: "crit" → "critical" alias not in canonical; but alias table doesn't cover fuzzy — let's see
+		{"hig", "P1", true},  // fuzzy over lowercased canonical ["p0","p1","p2","p3"]; "hig" won't match these directly
 		// no match
 		{"xyz", "", false},
 		{"", "", false},

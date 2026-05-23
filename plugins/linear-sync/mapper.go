@@ -28,9 +28,9 @@ type Task struct {
 
 // MapLinearIssueToTask maps a Linear issue to a TLC task.
 func MapLinearIssueToTask(issue map[string]interface{}) *Task {
-	id := issue["id"].(string)             //nolint:errcheck // required field from API
+	id := issue["id"].(string)                 //nolint:errcheck // required field from API
 	identifier := issue["identifier"].(string) //nolint:errcheck // required field from API
-	title := issue["title"].(string)       //nolint:errcheck // required field from API
+	title := issue["title"].(string)           //nolint:errcheck // required field from API
 	description := ""
 	if d, ok := issue["description"].(string); ok {
 		description = d

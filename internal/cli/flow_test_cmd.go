@@ -222,19 +222,19 @@ func executeRun(
 
 	// Wire agent runner — dispatches adapter shim per step in record/replay mode.
 	adapters := map[string]flowtest.AgentAdapter{
-		"claude":   flowtest.NewClaudeAdapter(),
-		"gemini":   flowtest.NewGeminiAdapter(),
-		"fabric":   flowtest.NewFabricAdapter(),
-		"llm":      flowtest.NewLLMAdapter(),
-		"codex":     flowtest.NewCodexAdapter(),
-		"opencode":  flowtest.NewOpenCodeAdapter(),
-		"routellm":  flowtest.NewRouteLLMAdapter(),
-		"crewai":    flowtest.NewCrewAIAdapter(),
-		"langchain": flowtest.NewLangChainAdapter(),
+		"claude":        flowtest.NewClaudeAdapter(),
+		"gemini":        flowtest.NewGeminiAdapter(),
+		"fabric":        flowtest.NewFabricAdapter(),
+		"llm":           flowtest.NewLLMAdapter(),
+		"codex":         flowtest.NewCodexAdapter(),
+		"opencode":      flowtest.NewOpenCodeAdapter(),
+		"routellm":      flowtest.NewRouteLLMAdapter(),
+		"crewai":        flowtest.NewCrewAIAdapter(),
+		"langchain":     flowtest.NewLangChainAdapter(),
 		"openai-agents": flowtest.NewOpenAIAgentsAdapter(),
-		"autogen":        flowtest.NewAutoGenAdapter(),
-		"n8n":            flowtest.NewN8NAdapter(),
-		"bedrock":        flowtest.NewBedrockAdapter(),
+		"autogen":       flowtest.NewAutoGenAdapter(),
+		"n8n":           flowtest.NewN8NAdapter(),
+		"bedrock":       flowtest.NewBedrockAdapter(),
 	}
 	globalCfg, err := flowtest.LoadGlobalAdapterConfig()
 	if err != nil {

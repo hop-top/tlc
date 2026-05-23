@@ -624,7 +624,8 @@ func renderTaskDetail(w io.Writer, t *core.Task, logs []*core.LogEntry) {
 	if len(logs) > 0 {
 		_, _ = fmt.Fprintln(w, "\nLogs:")
 		for _, l := range logs {
-			_, _ = fmt.Fprintf(w, "  %s  %-15s (%s) %s\n",
+			_, _ = fmt.Fprintf(
+				w, "  %s  %-15s (%s) %s\n",
 				DisplayTime(l.Timestamp, LayoutDateTime),
 				l.Action,
 				l.By,

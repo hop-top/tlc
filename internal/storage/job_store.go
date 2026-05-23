@@ -17,7 +17,8 @@ func (s *SQLiteStorage) CreateJob(ctx context.Context, job *core.Job) error {
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		INSERT INTO jobs (id, queue, type, status, payload, created_at, created_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.Queue, string(job.Type), string(job.Status),
@@ -45,7 +46,8 @@ func (s *SQLiteStorage) UpdateJob(ctx context.Context, job *core.Job) error {
 		endedAt = &v
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		UPDATE jobs SET status = ?, result = ?, error = ?,
 			started_at = ?, ended_at = ?
 		WHERE id = ?`,

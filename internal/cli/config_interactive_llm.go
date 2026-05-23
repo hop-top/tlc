@@ -141,7 +141,8 @@ func handleMissingKey(
 	var choice string
 	opts := []huh.Option[string]{
 		huh.NewOption[string](
-			fmt.Sprintf("Set %s now", info.EnvVar), "env"),
+			fmt.Sprintf("Set %s now", info.EnvVar), "env",
+		),
 		huh.NewOption[string]("Enter API key", "key"),
 		huh.NewOption[string]("Skip (configure later)", "skip"),
 	}

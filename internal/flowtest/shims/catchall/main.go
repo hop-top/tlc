@@ -1,3 +1,5 @@
+//go:build shimbin
+
 // Package main is the catch-all shim for the flowtest sandbox.
 //
 // It is installed as tlc-shim-catchall and symlinked to any binary name not
@@ -9,7 +11,6 @@
 //     capture, write cassette, emit output.
 //   - replay: load cassette, emit stored output.
 //   - miss → stderr message, exit 2.
-//go:build shimbin
 package main
 
 import (

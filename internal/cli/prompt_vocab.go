@@ -63,14 +63,14 @@ var nounAliases = map[string]NounDomain{
 
 // modifierAliases maps raw modifier strings to ModifierFlag.
 var modifierAliases = map[string]ModifierFlag{
-	"active":    "status:active",
-	"wip":       "status:active",
-	"blocked":   "blocked",
-	"stuck":     "blocked",
-	"stale":     "stale",
-	"old":       "stale",
-	"my":        "mine",
-	"mine":      "mine",
+	"active":      "status:active",
+	"wip":         "status:active",
+	"blocked":     "blocked",
+	"stuck":       "blocked",
+	"stale":       "stale",
+	"old":         "stale",
+	"my":          "mine",
+	"mine":        "mine",
 	"done":        "status:done",
 	"completed":   "status:done",
 	"incomplete":  "status:active",

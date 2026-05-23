@@ -198,7 +198,8 @@ func bbCredentials() (string, string, error) {
 	password := os.Getenv("BITBUCKET_APP_PASSWORD")
 	if username == "" || password == "" {
 		return "", "", fmt.Errorf(
-			"BITBUCKET_USERNAME and BITBUCKET_APP_PASSWORD must be set")
+			"BITBUCKET_USERNAME and BITBUCKET_APP_PASSWORD must be set",
+		)
 	}
 	return username, password, nil
 }
@@ -233,7 +234,8 @@ func parseRepo(repoFull string) (string, string, error) {
 	parts := strings.Split(repoFull, "/")
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf(
-			"invalid repo format %q: expected owner/repo", repoFull)
+			"invalid repo format %q: expected owner/repo", repoFull,
+		)
 	}
 	return parts[0], parts[1], nil
 }
@@ -245,14 +247,17 @@ func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 	}
 
 	pageURL := fmt.Sprintf(
-		"%s/repositories/%s/%s/issues", bitbucketAPIBase, owner, repo)
+		"%s/repositories/%s/%s/issues", bitbucketAPIBase, owner, repo,
+	)
 	if lastSyncAt != "" {
 		if _, err := time.Parse(time.RFC3339, lastSyncAt); err != nil {
 			return nil, fmt.Errorf(
-				"invalid last_sync_at %q: must be RFC3339", lastSyncAt)
+				"invalid last_sync_at %q: must be RFC3339", lastSyncAt,
+			)
 		}
 		pageURL += "?q=" + url.QueryEscape(
-			fmt.Sprintf(`updated_on>"%s"`, lastSyncAt))
+			fmt.Sprintf(`updated_on>"%s"`, lastSyncAt),
+		)
 	}
 
 	var tasks []*Task
@@ -265,7 +270,8 @@ func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
 			return nil, fmt.Errorf(
-				"bitbucket API returned status %d", resp.StatusCode)
+				"bitbucket API returned status %d", resp.StatusCode,
+			)
 		}
 
 		var page BitbucketPaginated
@@ -315,7 +321,8 @@ func createBitbucketIssue(repoFull string, task *Task) error {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf(
 			"failed to create issue, status %d: %s",
-			resp.StatusCode, string(body))
+			resp.StatusCode, string(body),
+		)
 	}
 
 	var created BitbucketIssue
@@ -357,7 +364,8 @@ func updateBitbucketIssue(repoFull string, task *Task) error {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf(
 			"failed to update issue, status %d: %s",
-			resp.StatusCode, string(body))
+			resp.StatusCode, string(body),
+		)
 	}
 
 	return nil
@@ -406,7 +414,8 @@ func deleteBitbucketIssue(repoFull string, task *Task) error {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf(
 			"failed to close issue, status %d: %s",
-			resp.StatusCode, string(body))
+			resp.StatusCode, string(body),
+		)
 	}
 
 	return nil

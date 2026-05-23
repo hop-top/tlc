@@ -15,9 +15,9 @@ import (
 // rich filtering. Custom orchestration methods (Claim, Unclaim, etc.)
 // remain as wrappers using the underlying repo directly.
 type TaskService struct {
-	repo         Repository
-	logRepo      LogRepository
-	domainSvc    *domain.Service[Task]
+	repo          Repository
+	logRepo       LogRepository
+	domainSvc     *domain.Service[Task]
 	flowDomainSvc *domain.Service[FlowRun]
 }
 

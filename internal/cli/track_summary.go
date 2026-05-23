@@ -167,7 +167,8 @@ func renderSummaryTable(w io.Writer, rows []summaryRow) {
 	}
 
 	header := lipgloss.NewStyle().Bold(true)
-	_, _ = fmt.Fprintf(w, " %-20s %-10s %-14s %s\n",
+	_, _ = fmt.Fprintf(
+		w, " %-20s %-10s %-14s %s\n",
 		header.Render("ID"),
 		header.Render("Progress"),
 		header.Render("State"),
@@ -183,7 +184,8 @@ func renderSummaryTable(w io.Writer, rows []summaryRow) {
 		updated := humanize.Time(r.UpdatedAt)
 		pct := summaryProgressPct(r.Progress)
 
-		_, _ = fmt.Fprintf(w, " %-20s %-10s %-14s %s\n",
+		_, _ = fmt.Fprintf(
+			w, " %-20s %-10s %-14s %s\n",
 			r.ID,
 			fmt.Sprintf("%d%%", pct),
 			strings.Join(stateStrs, ","),

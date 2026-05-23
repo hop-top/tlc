@@ -147,7 +147,6 @@ func TestTaskDomainRepo_List(t *testing.T) {
 	}
 }
 
-
 func TestBindTaskColumnCount(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	pid := "test-proj"

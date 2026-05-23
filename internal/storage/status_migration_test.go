@@ -39,7 +39,8 @@ func seedOldStatusRows(t *testing.T, s *SQLiteStorage, rows map[string]string) {
 // "applied" marker).
 func clearStatusMigrationMarker(t *testing.T, s *SQLiteStorage) {
 	t.Helper()
-	_, err := s.db.ExecContext(context.Background(),
+	_, err := s.db.ExecContext(
+		context.Background(),
 		`DELETE FROM data_migrations WHERE name = ?`, dataMigrationStatusV1,
 	)
 	if err != nil {
@@ -170,7 +171,8 @@ func TestAutoMigrate_GoldenDB_OldLabels(t *testing.T) {
 	}
 	defer func() { _ = bdb.Close() }()
 	var n int
-	if err := bdb.QueryRowContext(context.Background(),
+	if err := bdb.QueryRowContext(
+		context.Background(),
 		`SELECT count(*) FROM tasks WHERE status IN ('TODO','IN_PROGRESS','DONE','SKIPPED')`,
 	).Scan(&n); err != nil {
 		t.Fatalf("query backup: %v", err)
@@ -364,7 +366,8 @@ func TestAutoMigrate_MarkerPersisted(t *testing.T) {
 	defer s.Close()
 
 	var name string
-	err = s.db.QueryRowContext(context.Background(),
+	err = s.db.QueryRowContext(
+		context.Background(),
 		`SELECT name FROM data_migrations WHERE name = ?`, dataMigrationStatusV1,
 	).Scan(&name)
 	if err != nil {

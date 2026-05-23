@@ -114,7 +114,8 @@ func TestRoundTrip_TrackHierarchy(t *testing.T) {
 	t3.Title = "Bench rotation throughput"
 	t3.TrackID = ptr(track.ID)
 
-	res := roundTrip(t,
+	res := roundTrip(
+		t,
 		[]*core.Task{t1, &t2, &t3},
 		[]*core.Track{track},
 		nil,
@@ -154,7 +155,8 @@ func TestRoundTrip_LogsWithFlag(t *testing.T) {
 		Action:    "CLAIMED",
 		Note:      "starting work",
 	}
-	res := roundTrip(t,
+	res := roundTrip(
+		t,
 		[]*core.Task{task}, nil, []*core.LogEntry{log},
 		vtodo.WithIncludeLogs(true),
 	)

@@ -20,9 +20,9 @@ type RunManifest struct {
 // Run describes one named test run for a flow.
 type Run struct {
 	Name         string
-	Dir          string   // path to run dir
-	RecordDir    string   // path to record/ subdir → xrr.NewFileCassette
-	ContractsDir string   // path to contracts/ subdir
+	Dir          string // path to run dir
+	RecordDir    string // path to record/ subdir → xrr.NewFileCassette
+	ContractsDir string // path to contracts/ subdir
 	ExpectedExit int
 	Passthrough  []string
 }
@@ -58,7 +58,8 @@ func DiscoverRuns(flowName, baseDir string, opts ...Option) ([]Run, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf(
-				"flowtest: fixtures dir not found for %q: %s", flowName, fixturesDir)
+				"flowtest: fixtures dir not found for %q: %s", flowName, fixturesDir,
+			)
 		}
 		return nil, fmt.Errorf("flowtest: DiscoverRuns %q: %w", fixturesDir, err)
 	}

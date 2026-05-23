@@ -230,8 +230,10 @@ func TestTaskUnassignRequiresNote(t *testing.T) {
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
-	cmd1.SetArgs([]string{"task", "create", "Task to unassign",
-		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS"})
+	cmd1.SetArgs([]string{
+		"task", "create", "Task to unassign",
+		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS",
+	})
 	if err := cmd1.Execute(); err != nil {
 		t.Fatalf("task create failed: %v", err)
 	}
@@ -262,9 +264,11 @@ func TestTaskUnassignAppendsNoteToDescription(t *testing.T) {
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
-	cmd1.SetArgs([]string{"task", "create", "Task to unassign",
+	cmd1.SetArgs([]string{
+		"task", "create", "Task to unassign",
 		"--description", "Original description",
-		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS"})
+		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS",
+	})
 	if err := cmd1.Execute(); err != nil {
 		t.Fatalf("task create failed: %v", err)
 	}
@@ -313,8 +317,10 @@ func TestTaskUnassign(t *testing.T) {
 	buf1 := new(bytes.Buffer)
 	cmd1.SetOut(buf1)
 	cmd1.SetErr(buf1)
-	cmd1.SetArgs([]string{"task", "create", "Task to unassign",
-		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS"})
+	cmd1.SetArgs([]string{
+		"task", "create", "Task to unassign",
+		"--assigned-to", testEngineer1, "--status", "IN_PROGRESS",
+	})
 	if err := cmd1.Execute(); err != nil {
 		t.Fatalf("task create failed: %v", err)
 	}
@@ -582,16 +588,16 @@ func TestTaskAssign_RegexPattern(t *testing.T) {
 
 // TestClaimComplete_TaskDuplicatedAcrossProjectBuckets is a regression test for
 // the bug where claim/complete silently updated the wrong row when the same task
-// existed in multiple project_id buckets ('' global + project-scoped sync rows).
+// existed in multiple project_id buckets (” global + project-scoped sync rows).
 //
 // Repro sequence:
-//  1. Task created outside project context → project_id=''
+//  1. Task created outside project context → project_id=”
 //  2. Sync duplicates it into a project-scoped row (project_id='proj-a')
 //  3. claim runs → GetTask without filter returns project-scoped row first (by rowid)
-//     → UpdateTask updates that row → '' row stays TODO
-//  4. complete reads '' row (still TODO) → "invalid transition from TODO to DONE"
+//     → UpdateTask updates that row → ” row stays TODO
+//  4. complete reads ” row (still TODO) → "invalid transition from TODO to DONE"
 //
-// Fix: GetTask (no-project path) now orders by CASE WHEN project_id='' THEN 0 ELSE 1
+// Fix: GetTask (no-project path) now orders by CASE WHEN project_id=” THEN 0 ELSE 1
 // so the global row is preferred, and UpdateTask uses WHERE project_id=? (not IS NULL).
 //
 // TypeID model adaptation: tasks.id is the durable PRIMARY KEY (a TypeID), so two

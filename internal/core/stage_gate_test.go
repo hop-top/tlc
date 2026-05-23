@@ -194,4 +194,3 @@ func TestGateTrackCreate_ReadError(t *testing.T) {
 		t.Errorf("error should include scope + cause, got %q", err)
 	}
 }
-

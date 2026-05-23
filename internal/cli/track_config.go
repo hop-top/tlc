@@ -109,7 +109,8 @@ func autoCreateTrack(
 		return "", fmt.Errorf("auto-create track failed: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(w,
+	_, _ = fmt.Fprintf(
+		w,
 		"Created track %s: %s (type: %s)\n",
 		track.ID, track.Title, track.Type,
 	)

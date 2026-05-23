@@ -19,7 +19,8 @@ func (s *SQLiteStorage) CreateAgentRun(
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		INSERT INTO agent_runs
 			(id, agent, target_type, target_id, job_id, container_id,
 			 status, exit_code, error, result_path, started_at, ended_at,
@@ -45,7 +46,8 @@ func (s *SQLiteStorage) UpdateAgentRun(
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		UPDATE agent_runs
 		SET status = ?, exit_code = ?, error = ?, result_path = ?,
 			ended_at = ?, container_id = ?

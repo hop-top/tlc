@@ -479,7 +479,6 @@ func TestTaskList_StaleFilter(t *testing.T) {
 	}
 }
 
-
 // TestTaskList_IDIntactBeyondSecondRow creates four tasks via the CLI (letting
 // storage auto-generate IDs) and verifies that every task ID appears intact
 // (including the leading "T") for all rows in the default table output.
@@ -638,8 +637,10 @@ func TestTaskListFilterByBlockedBy(t *testing.T) {
 	defer s.Close()
 
 	blocker := &core.Task{ID: "T-0001", Title: "Blocker", Status: core.StatusTodo}
-	blocked := &core.Task{ID: "T-0002", Title: "Blocked by T-0001", Status: core.StatusTodo,
-		Meta: map[string]interface{}{"blocked_by": []string{"T-0001"}}}
+	blocked := &core.Task{
+		ID: "T-0002", Title: "Blocked by T-0001", Status: core.StatusTodo,
+		Meta: map[string]interface{}{"blocked_by": []string{"T-0001"}},
+	}
 	free := &core.Task{ID: "T-0003", Title: "Free task", Status: core.StatusTodo}
 
 	s.CreateTask(ctx, blocker)

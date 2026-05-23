@@ -38,7 +38,8 @@ func TestMigrationV15_PreservesExistingLogsAcrossUpgrade(t *testing.T) {
 		if _, err := db.ExecContext(ctx, m.query); err != nil {
 			t.Fatalf("apply migration v%d: %v", m.version, err)
 		}
-		if _, err := db.ExecContext(ctx,
+		if _, err := db.ExecContext(
+			ctx,
 			"INSERT INTO schema_migrations (version) VALUES (?)", m.version,
 		); err != nil {
 			t.Fatalf("record migration v%d: %v", m.version, err)
@@ -84,7 +85,8 @@ func TestMigrationV15_PreservesExistingLogsAcrossUpgrade(t *testing.T) {
 
 	// Pre-existing log row must still be there after migration.
 	var n int
-	if err := db.QueryRowContext(ctx,
+	if err := db.QueryRowContext(
+		ctx,
 		`SELECT count(*) FROM task_logs WHERE task_id = 'task_01legacycascade000000000'`,
 	).Scan(&n); err != nil {
 		t.Fatalf("count logs post-migrate: %v", err)
@@ -94,13 +96,15 @@ func TestMigrationV15_PreservesExistingLogsAcrossUpgrade(t *testing.T) {
 	}
 
 	// Delete the parent task — log must survive.
-	if _, err := db.ExecContext(ctx,
+	if _, err := db.ExecContext(
+		ctx,
 		`DELETE FROM tasks WHERE id = 'task_01legacycascade000000000'`,
 	); err != nil {
 		t.Fatalf("delete task: %v", err)
 	}
 
-	if err := db.QueryRowContext(ctx,
+	if err := db.QueryRowContext(
+		ctx,
 		`SELECT count(*) FROM task_logs WHERE task_id = 'task_01legacycascade000000000'`,
 	).Scan(&n); err != nil {
 		t.Fatalf("count logs post-delete: %v", err)

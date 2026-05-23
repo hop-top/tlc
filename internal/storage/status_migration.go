@@ -91,7 +91,8 @@ func (s *SQLiteStorage) runStatusDataMigration() error {
 		return fmt.Errorf("status-migration: record marker (rewrite committed; backup at %s): %w", backupPath, err)
 	}
 
-	fmt.Fprintf(os.Stderr,
+	fmt.Fprintf(
+		os.Stderr,
 		"tlc: migrated %d task statuses (TODO->pending, IN_PROGRESS->doing, DONE->done, SKIPPED->skipped); backup at %s\n",
 		count, backupPath,
 	)
@@ -112,7 +113,8 @@ func (s *SQLiteStorage) ensureDataMigrationsTable(ctx context.Context) error {
 
 func (s *SQLiteStorage) dataMigrationApplied(ctx context.Context, name string) (bool, error) {
 	var got string
-	err := s.db.QueryRowContext(ctx,
+	err := s.db.QueryRowContext(
+		ctx,
 		`SELECT name FROM data_migrations WHERE name = ?`, name,
 	).Scan(&got)
 	if err == nil {
@@ -125,7 +127,8 @@ func (s *SQLiteStorage) dataMigrationApplied(ctx context.Context, name string) (
 }
 
 func (s *SQLiteStorage) recordDataMigration(ctx context.Context, name string) error {
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(
+		ctx,
 		`INSERT OR IGNORE INTO data_migrations (name, applied_at) VALUES (?, ?)`,
 		name, time.Now().UTC().Format(time.RFC3339),
 	); err != nil {
@@ -136,7 +139,8 @@ func (s *SQLiteStorage) recordDataMigration(ctx context.Context, name string) er
 
 func (s *SQLiteStorage) countOldStatusRows(ctx context.Context) (int, error) {
 	var n int
-	if err := s.db.QueryRowContext(ctx,
+	if err := s.db.QueryRowContext(
+		ctx,
 		`SELECT count(*) FROM tasks WHERE status IN ('TODO','IN_PROGRESS','DONE','SKIPPED')`,
 	).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count: %w", err)

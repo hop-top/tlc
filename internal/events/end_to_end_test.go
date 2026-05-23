@@ -24,8 +24,8 @@ import (
 // subscribers can audit/side-effect without blocking the state change.
 func TestStateMachine_FiresPrefixedTopics(t *testing.T) {
 	cases := []struct {
-		name     string
-		makeSM   func(pub *recordingPublisher) interface {
+		name   string
+		makeSM func(pub *recordingPublisher) interface {
 			Transition(ctx context.Context, from, to domain.State, force bool) error
 		}
 		from, to domain.State

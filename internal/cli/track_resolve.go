@@ -23,8 +23,8 @@ type trackNotFoundError struct {
 	msg string
 }
 
-func (e *trackNotFoundError) Error() string  { return e.msg }
-func (e *trackNotFoundError) Unwrap() error  { return ErrTrackNotFound }
+func (e *trackNotFoundError) Error() string { return e.msg }
+func (e *trackNotFoundError) Unwrap() error { return ErrTrackNotFound }
 func (e *trackNotFoundError) AsCLIError() *output.Error {
 	return output.NotFoundError(e.msg)
 }

@@ -9,8 +9,8 @@ import (
 	"fmt"
 
 	"charm.land/log/v2"
-	"hop.top/kit/go/runtime/bus"
 	"hop.top/kit/go/ai/ext"
+	"hop.top/kit/go/runtime/bus"
 )
 
 // Manager wraps ext.Manager with tlc-specific configuration and
@@ -44,7 +44,8 @@ func New(logger *log.Logger, b bus.Bus) *Manager {
 		// Subscribe the extension to all tlc lifecycle events.
 		b.SubscribeAsync("tlc.#", func(_ context.Context, ev bus.Event) {
 			if logger != nil {
-				logger.Debug("ext/hook: event dispatched",
+				logger.Debug(
+					"ext/hook: event dispatched",
 					"ext", e.Meta().Name,
 					"topic", string(ev.Topic),
 				)

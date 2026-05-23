@@ -127,11 +127,11 @@ var effortToLabel = map[string]string{
 // MapGiteaIssueToTask maps a Gitea issue (with optional dependencies) to a TLC task.
 func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
 	task := &Task{
-		ID:        recoverOrMintTaskID(issue.Body),
-		Title:     issue.Title,
+		ID:          recoverOrMintTaskID(issue.Body),
+		Title:       issue.Title,
 		Description: issue.Body,
-		CreatedAt: issue.CreatedAt,
-		UpdatedAt: issue.UpdatedAt,
+		CreatedAt:   issue.CreatedAt,
+		UpdatedAt:   issue.UpdatedAt,
 		Meta: map[string]interface{}{
 			"origin_system": "gitea",
 			"origin_id":     fmt.Sprintf("%d", issue.Index),

@@ -153,7 +153,7 @@ func validateTransition(t *TransitionIntent) error {
 	}
 	if strings.TrimSpace(t.Status) == "" {
 		return fmt.Errorf(
-			"inbox transition: status is required; "+
+			"inbox transition: status is required; " +
 				"add a non-empty status field",
 		)
 	}
@@ -173,7 +173,7 @@ func splitFrontmatter(data []byte) ([]byte, []byte, error) {
 	s := string(data)
 	if !strings.HasPrefix(s, "---") {
 		return nil, nil, fmt.Errorf(
-			"inbox create markdown: missing frontmatter; "+
+			"inbox create markdown: missing frontmatter; " +
 				"file must start with '---'",
 		)
 	}
@@ -189,7 +189,7 @@ func splitFrontmatter(data []byte) ([]byte, []byte, error) {
 	idx := strings.Index(rest, "\n---")
 	if idx < 0 {
 		return nil, nil, fmt.Errorf(
-			"inbox create markdown: unclosed frontmatter; "+
+			"inbox create markdown: unclosed frontmatter; " +
 				"add closing '---' delimiter",
 		)
 	}

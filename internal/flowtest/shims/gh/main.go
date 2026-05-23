@@ -1,9 +1,10 @@
+//go:build shimbin
+
 // Package main is the gh shim for tlc flow test.
 //
 // When tlc flow test runs, it prepends a sandbox bin/ to PATH. The real gh
 // binary is replaced by this shim. Depending on env vars injected by the
 // sandbox, the shim records, replays, or passes through every gh invocation.
-//go:build shimbin
 package main
 
 import (
@@ -18,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	execadapter "hop.top/xrr/adapters/exec"
 	xrr "hop.top/xrr"
+	execadapter "hop.top/xrr/adapters/exec"
 )
 
 func main() {
@@ -110,7 +111,7 @@ func readStdin() string {
 		return ""
 	}
 	// Data available if named pipe/regular file or size > 0.
-	if (info.Mode()&os.ModeCharDevice) != 0 {
+	if (info.Mode() & os.ModeCharDevice) != 0 {
 		return ""
 	}
 	data, err := io.ReadAll(os.Stdin)

@@ -19,10 +19,10 @@ import (
 
 func TestSplitProjectTask(t *testing.T) {
 	cases := []struct {
-		space     string
-		id        string
-		wantProj  string
-		wantTask  string
+		space    string
+		id       string
+		wantProj string
+		wantTask string
 	}{
 		// simple single-segment project
 		{"tlc", "T-0001", "tlc", "T-0001"},

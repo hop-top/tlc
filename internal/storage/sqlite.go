@@ -180,7 +180,8 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 			task.Seq = int64(seq)
 		}
 
-		_, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(
+			ctx, `
 			INSERT INTO tasks (id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			task.ID, task.Seq, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
@@ -403,7 +404,8 @@ func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID stri
 // the latter directly.
 func (s *SQLiteStorage) GetTaskBySeq(ctx context.Context, projectID string, seq int64) (*core.Task, error) {
 	var id string
-	err := s.db.QueryRowContext(ctx,
+	err := s.db.QueryRowContext(
+		ctx,
 		`SELECT id FROM tasks WHERE project_id = ? AND seq = ?`,
 		projectID, seq,
 	).Scan(&id)
@@ -462,7 +464,8 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 		if task.ProjectID != nil {
 			projectID = *task.ProjectID
 		}
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(
+			ctx, `
 			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?, track_id = ?, due_at = ?, remind_at = ?, rrule = ?, no_auto_remind = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
@@ -544,7 +547,8 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 		if task.ProjectID != nil {
 			projectID = *task.ProjectID
 		}
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(
+			ctx, `
 			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?, track_id = ?, due_at = ?, remind_at = ?, rrule = ?, no_auto_remind = ?
 			WHERE id = ? AND project_id = ?`,
 			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
@@ -575,7 +579,8 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 		// Add Log
 		logMetaJSON, _ := json.Marshal(entry.Meta)
 
-		_, err = tx.ExecContext(ctx, `
+		_, err = tx.ExecContext(
+			ctx, `
 			INSERT INTO task_logs (project_id, task_id, timestamp, by, action, note, meta)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			projectID, entry.TaskID, util.FormatStorageTime(entry.Timestamp), entry.By, entry.Action, entry.Note, string(logMetaJSON),
@@ -742,7 +747,6 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-
 	// Sorting
 	var orderParts []string
 	if query.StatusPriority != "" {
@@ -811,7 +815,8 @@ func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error 
 			}
 		}
 
-		_, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(
+			ctx, `
 			INSERT INTO task_logs (project_id, task_id, timestamp, by, action, note, meta)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			projectID, entry.TaskID, util.FormatStorageTime(entry.Timestamp), entry.By, entry.Action, entry.Note, string(metaJSON),
@@ -832,7 +837,8 @@ func (s *SQLiteStorage) UpdateLogNote(ctx context.Context, logID int64, note str
 		if err != nil {
 			return fmt.Errorf("failed to marshal log meta: %w", err)
 		}
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(
+			ctx, `
 			UPDATE task_logs SET note = ?, meta = ? WHERE id = ?`,
 			note, string(metaJSON), logID,
 		)
@@ -988,7 +994,8 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 
 	var count int64
 	err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(
+			ctx, `
 			UPDATE tasks 
 			SET archived = 1 
 			WHERE archived = 0 
@@ -1039,7 +1046,8 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 func (s *SQLiteStorage) CreateFlowRun(ctx context.Context, run *core.FlowRun) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		resultsJSON, _ := json.Marshal(run.Results)
-		_, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(
+			ctx, `
 			INSERT INTO flow_runs (id, flow_id, status, started_at, ended_at, results)
 			VALUES (?, ?, ?, ?, ?, ?)`,
 			run.ID, run.FlowID, run.Status, util.FormatStorageTime(run.StartedAt),
@@ -1089,7 +1097,8 @@ func (s *SQLiteStorage) UpdateFlowRun(ctx context.Context, run *core.FlowRun) er
 			endedAt = util.FormatStorageTime(*run.EndedAt)
 		}
 
-		_, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(
+			ctx, `
 			UPDATE flow_runs SET status = ?, ended_at = ?, results = ?
 			WHERE id = ?`,
 			run.Status, endedAt, string(resultsJSON), run.ID,
@@ -1252,13 +1261,15 @@ func allocSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error
 	}
 
 	var nextID int
-	if err := tx.QueryRowContext(ctx,
+	if err := tx.QueryRowContext(
+		ctx,
 		`SELECT next_id FROM task_sequences WHERE project_id = ?`, projectID,
 	).Scan(&nextID); err != nil {
 		return 0, fmt.Errorf("read sequence: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx,
+	if _, err := tx.ExecContext(
+		ctx,
 		`UPDATE task_sequences SET next_id = next_id + 1 WHERE project_id = ?`, projectID,
 	); err != nil {
 		return 0, fmt.Errorf("bump sequence: %w", err)
@@ -1340,7 +1351,8 @@ func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 func (s *SQLiteStorage) RegisterProject(ctx context.Context, projectID, dbPath, spaceURI, label string) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339)
-		_, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(
+			ctx, `
 			INSERT OR REPLACE INTO projects (project_id, db_path, space_uri, label, registered_at, last_seen_at, status)
 			VALUES (?, ?, ?, ?, ?, ?, 'active')`,
 			projectID, dbPath, spaceURI, label, now, now,
@@ -1353,7 +1365,8 @@ func (s *SQLiteStorage) RegisterProject(ctx context.Context, projectID, dbPath, 
 }
 
 func (s *SQLiteStorage) LookupProject(ctx context.Context, projectID string) (*core.RegisteredProject, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.db.QueryRowContext(
+		ctx,
 		"SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status FROM projects WHERE project_id = ?",
 		projectID,
 	)
@@ -1383,7 +1396,8 @@ func (s *SQLiteStorage) LookupProject(ctx context.Context, projectID string) (*c
 }
 
 func (s *SQLiteStorage) ListProjectsBySpace(ctx context.Context, spaceURI string) ([]core.RegisteredProject, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(
+		ctx,
 		"SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status FROM projects WHERE space_uri = ? AND status = 'active'",
 		spaceURI,
 	)
@@ -1396,7 +1410,8 @@ func (s *SQLiteStorage) ListProjectsBySpace(ctx context.Context, spaceURI string
 }
 
 func (s *SQLiteStorage) ListAllProjects(ctx context.Context) ([]core.RegisteredProject, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(
+		ctx,
 		"SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status FROM projects",
 	)
 	if err != nil {
@@ -1410,7 +1425,8 @@ func (s *SQLiteStorage) ListAllProjects(ctx context.Context) ([]core.RegisteredP
 func (s *SQLiteStorage) UpdateProjectPath(ctx context.Context, projectID, newDBPath string) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339)
-		_, err := tx.ExecContext(ctx,
+		_, err := tx.ExecContext(
+			ctx,
 			"UPDATE projects SET db_path = ?, last_seen_at = ? WHERE project_id = ?",
 			newDBPath, now, projectID,
 		)
@@ -1446,7 +1462,8 @@ func (s *SQLiteStorage) ResolveProjectByShortname(ctx context.Context, shortname
 	}
 
 	// 2. Suffix match: project_id ends with "/<shortname>"
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(
+		ctx,
 		`SELECT project_id, db_path, space_uri, label, registered_at, last_seen_at, status
 		 FROM projects
 		 WHERE project_id LIKE '%/' || ? AND status = 'active'`,
@@ -1482,7 +1499,8 @@ func (s *SQLiteStorage) ResolveProjectByShortname(ctx context.Context, shortname
 func (s *SQLiteStorage) TouchProject(ctx context.Context, projectID string) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339)
-		_, err := tx.ExecContext(ctx,
+		_, err := tx.ExecContext(
+			ctx,
 			"UPDATE projects SET last_seen_at = ? WHERE project_id = ?",
 			now, projectID,
 		)

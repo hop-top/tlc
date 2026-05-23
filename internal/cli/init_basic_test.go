@@ -234,18 +234,18 @@ func TestInitCmd(t *testing.T) {
 // TestInitCmd_InnerGitignore verifies .tlc/.gitignore contains tasks/ after init.
 func TestInitCmd_InnerGitignore(t *testing.T) {
 	tests := []struct {
-		name              string
-		setupGit          bool
-		existingInner     string // pre-existing .tlc/.gitignore content
-		args              []string
-		wantInInner       []string
-		wantNoDuplicates  bool
+		name             string
+		setupGit         bool
+		existingInner    string // pre-existing .tlc/.gitignore content
+		args             []string
+		wantInInner      []string
+		wantNoDuplicates bool
 	}{
 		{
-			name:         "creates .tlc/.gitignore with tasks/",
-			setupGit:     false,
-			args:         []string{"init"},
-			wantInInner:  []string{"tasks/"},
+			name:        "creates .tlc/.gitignore with tasks/",
+			setupGit:    false,
+			args:        []string{"init"},
+			wantInInner: []string{"tasks/"},
 		},
 		{
 			name:             "does not duplicate tasks/ if already present",

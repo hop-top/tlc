@@ -29,11 +29,11 @@ func TestTaskPrompt_MarkdownAllFields(t *testing.T) {
 
 	assignee := "jadb"
 	s.CreateTask(ctx, &core.Task{
-		ID:          "T-0038",
-		Title:       "Add token storage",
-		Status:      core.StatusDone,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        "T-0038",
+		Title:     "Add token storage",
+		Status:    core.StatusDone,
+		CreatedAt: now,
+		UpdatedAt: now,
 	})
 	s.CreateTask(ctx, &core.Task{
 		ID:          "T-0042",

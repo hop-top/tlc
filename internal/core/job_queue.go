@@ -29,17 +29,17 @@ const (
 
 // Job is an async agent execution job.
 type Job struct {
-	ID        string    `json:"id"`
-	Queue     string    `json:"queue"`
-	Type      JobType   `json:"type"`
-	Status    JobStatus `json:"status"`
-	Payload   string    `json:"payload"`
-	Result    string    `json:"result,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	Queue     string     `json:"queue"`
+	Type      JobType    `json:"type"`
+	Status    JobStatus  `json:"status"`
+	Payload   string     `json:"payload"`
+	Result    string     `json:"result,omitempty"`
+	Error     string     `json:"error,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	EndedAt   *time.Time `json:"ended_at,omitempty"`
-	CreatedBy string    `json:"created_by,omitempty"`
+	CreatedBy string     `json:"created_by,omitempty"`
 }
 
 // JobPayload is the serialized payload for an async agent job.
