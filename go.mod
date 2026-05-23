@@ -146,8 +146,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace hop.top/kit => /Users/jadb/.w/ideacrafterslabs/kit/hops/12fcc-leak
-
 replace hop.top/hdl => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
 
 // Local replace until vstar publishes a tag fetchable by `go get`.
