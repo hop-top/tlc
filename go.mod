@@ -145,8 +145,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace hop.top/hdl => /Users/jadb/.w/ideacrafterslabs/hdl/hops/main
-
 // Local replace until vstar publishes a tag fetchable by `go get`.
 // Pulled in to drop arran4/golang-ical (T-1230).
 replace github.com/hop-top/vstar/go => /Users/jadb/.w/ideacrafterslabs/vstar/hops/main/go
