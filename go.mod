@@ -32,7 +32,7 @@ require (
 	hop.top/hdl v0.0.1-alpha.1
 	hop.top/kit v0.3.2-patch.3
 	hop.top/uri v0.2.0-alpha.1
-	hop.top/xrr v0.1.0-alpha.3
+	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.48.2
 )
 
