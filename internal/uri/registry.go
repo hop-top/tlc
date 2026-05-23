@@ -2,6 +2,7 @@ package uri
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,15 +39,30 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 	if len(dirs) > 0 {
 		dc = dirs[0]
 	}
-	// Project completion
-	err := reg.Register(scheme.TypeRegistration{
+	registrations := []scheme.TypeRegistration{
+		projectCompletion(s),
+		taskCompletion(s),
+		assigneeCompletion(dc),
+		tagCompletion(s),
+		flowCompletion(dc),
+	}
+	for _, r := range registrations {
+		if err := reg.Register(r); err != nil {
+			return fmt.Errorf("register uri type %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func projectCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
+	return scheme.TypeRegistration{
 		Name: "project",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			projects, err := s.ListAllProjects(ctx)
 			if err != nil {
 				return nil, err
 			}
-			var ids []string
+			ids := make([]string, 0, len(projects))
 			for _, p := range projects {
 				if strings.HasPrefix(p.ProjectID, prefix) {
 					ids = append(ids, p.ProjectID)
@@ -54,20 +70,18 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 			}
 			return ids, nil
 		},
-	})
-	if err != nil {
-		return err
 	}
+}
 
-	// Task completion
-	err = reg.Register(scheme.TypeRegistration{
+func taskCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
+	return scheme.TypeRegistration{
 		Name: "task",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			tasks, err := s.ListTasks(ctx, core.Query{AllProjects: true})
 			if err != nil {
 				return nil, err
 			}
-			var ids []string
+			ids := make([]string, 0, len(tasks))
 			for _, t := range tasks {
 				if strings.HasPrefix(t.ID, prefix) {
 					ids = append(ids, t.ID)
@@ -75,21 +89,19 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 			}
 			return ids, nil
 		},
-	})
-	if err != nil {
-		return err
 	}
+}
 
-	// Assignee completion
-	err = reg.Register(scheme.TypeRegistration{
+func assigneeCompletion(dc *TypesDirConfig) scheme.TypeRegistration {
+	return scheme.TypeRegistration{
 		Name: "assignee",
-		Completer: func(ctx context.Context, prefix string) ([]string, error) {
+		Completer: func(_ context.Context, prefix string) ([]string, error) {
 			loader := core.NewAssigneeLoader(dc.assigneesDir())
 			assignees, err := loader.LoadAll()
 			if err != nil {
 				return nil, err
 			}
-			var slugs []string
+			slugs := make([]string, 0, len(assignees))
 			for _, a := range assignees {
 				if strings.HasPrefix(a.ID, prefix) {
 					slugs = append(slugs, a.ID)
@@ -97,20 +109,18 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 			}
 			return slugs, nil
 		},
-	})
-	if err != nil {
-		return err
 	}
+}
 
-	// Tag completion
-	err = reg.Register(scheme.TypeRegistration{
+func tagCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
+	return scheme.TypeRegistration{
 		Name: "tag",
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			tags, err := s.ListAllTags(ctx)
 			if err != nil {
 				return nil, err
 			}
-			var filtered []string
+			filtered := make([]string, 0, len(tags))
 			for _, t := range tags {
 				if strings.HasPrefix(t, prefix) {
 					filtered = append(filtered, t)
@@ -118,47 +128,51 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 			}
 			return filtered, nil
 		},
-	})
-	if err != nil {
-		return err
 	}
+}
 
-	// Flow completion
-	err = reg.Register(scheme.TypeRegistration{
+func flowCompletion(dc *TypesDirConfig) scheme.TypeRegistration {
+	return scheme.TypeRegistration{
 		Name: "flow",
-		Completer: func(ctx context.Context, prefix string) ([]string, error) {
+		Completer: func(_ context.Context, prefix string) ([]string, error) {
 			flowsDir := dc.flowsDir()
 			entries, err := os.ReadDir(flowsDir)
 			if err != nil {
 				return nil, err
 			}
-			var ids []string
+			ids := make([]string, 0, len(entries))
 			for _, entry := range entries {
-				if entry.IsDir() {
+				if !flowFileCandidate(entry) {
 					continue
 				}
-				if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
+				id, ok := parseFlowID(filepath.Join(flowsDir, entry.Name()))
+				if !ok || !strings.HasPrefix(id, prefix) {
 					continue
 				}
-				f, err := os.Open(filepath.Join(flowsDir, entry.Name()))
-				if err != nil {
-					continue
-				}
-				flow, err := core.ParseFlow(f, entry.Name())
-				_ = f.Close()
-				if err != nil {
-					continue
-				}
-				if strings.HasPrefix(flow.ID, prefix) {
-					ids = append(ids, flow.ID)
-				}
+				ids = append(ids, id)
 			}
 			return ids, nil
 		},
-	})
-	if err != nil {
-		return err
 	}
+}
 
-	return nil
+func flowFileCandidate(entry os.DirEntry) bool {
+	if entry.IsDir() {
+		return false
+	}
+	name := entry.Name()
+	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
+}
+
+func parseFlowID(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = f.Close() }()
+	flow, err := core.ParseFlow(f, filepath.Base(path))
+	if err != nil {
+		return "", false
+	}
+	return flow.ID, true
 }
