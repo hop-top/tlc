@@ -458,7 +458,15 @@ func initConfig() {
 		// Test-only seam: when set, treat it as a single bare path token.
 		rawConfigTokens = append(rawConfigTokens, cfgFile)
 	}
-	extraPaths, configOverrides, err := kitconfig.ParseConfigArgs(rawConfigTokens)
+	// Restore tlc's directory-resolution contract under kit v0.4: a bare
+	// directory token for -c resolves to <dir>/<LocalConfigDir>/config.yaml
+	// (mode-aware: .tlc/config.yaml standalone, .hop/tlc/config.yaml hop).
+	// Without WithProjectMarker, kit v0.4 hard-rejects directory args.
+	projectMarker := filepath.Join(config.LocalConfigDir(config.DetectMode()), "config.yaml")
+	extraPaths, configOverrides, err := kitconfig.ParseConfigArgs(
+		rawConfigTokens,
+		kitconfig.WithProjectMarker(projectMarker),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: invalid -c/--config: %s\n", err)
 		os.Exit(1)
