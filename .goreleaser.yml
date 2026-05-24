@@ -1,5 +1,76 @@
-# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
-includes:
-  - from_url:
-      url: charmbracelet/meta/main/goreleaser-lib.yaml
+project_name: tlc
+
+# Tags are shaped `tlc/v<version>` (release-please monorepo
+# convention). GoReleaser's `monorepo:` block strips this natively
+# but is Pro-only. The goreleaser-on-tag.yml reusable workflow in
+# hop-top/.github sidesteps this by synthesizing a local `v<bare>`
+# git tag at the same commit and setting GORELEASER_CURRENT_TAG to
+# it, so {{.Version}} and {{.Tag}} resolve normally in this file.
+#
+# The reusable workflow also disables GoReleaser's own release
+# publishing (release.disable: true below) and uploads the dist/*
+# artifacts to the real release-please-created release afterwards
+# via `gh release upload`. The release tag itself stays as
+# `tlc/v<version>` — only the value GoReleaser sees is rewritten.
+#
+# RELEASE_TAG env var holds the real prefixed tag and is used in
+# the Homebrew formula URL, where the asset path must match the
+# real GitHub Release tag.
+#
+# Reference: https://github.com/hop-top/.github/blob/main/docs/binaries/go.md
+
+builds:
+  - id: tlc
+    main: ./cmd/tlc
+    binary: tlc
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath, -buildvcs=false]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X hop.top/tlc/internal/cli.tlcVersion={{ .Version }}
+
+archives:
+  - id: tlc
+    ids: [tlc]
+    name_template: "tlc_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  # release-please already authors the changelog from Conventional
+  # Commits; don't duplicate it in the GitHub Release body.
+  disable: true
+
+release:
+  # The reusable goreleaser-on-tag.yml workflow uploads dist/* to
+  # the real release-please-created release via `gh release upload`
+  # after the build. GoReleaser OSS can't target a release with a
+  # different tag name than the current git tag (release.tag: is
+  # Pro-only), so we disable its own release publishing entirely.
+  disable: true
+
+brews:
+  - name: tlc
+    repository:
+      owner: hop-top
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/hop-top/tlc
+    description: "tlc — deterministic task management for terminal AI workflows."
+    license: MIT
+    # {{ .Env.RELEASE_TAG }} is the literal `tlc/v<version>` tag,
+    # which is the path segment GitHub Releases use for asset
+    # downloads. {{.Tag}} here would resolve to the synthesized
+    # bare tag — wrong for the URL.
+    url_template: "https://github.com/hop-top/tlc/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
+    install: |
+      bin.install "tlc"
+    test: |
+      system "#{bin}/tlc", "--version"
