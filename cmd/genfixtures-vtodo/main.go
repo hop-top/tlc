@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	vstar "github.com/hop-top/vstar/go"
+	vstar "hop.top/vstar"
 
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/vtodo"

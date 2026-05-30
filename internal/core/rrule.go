@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hop-top/vstar/go/rrule"
+	"hop.top/vstar/rrule"
 )
 
 // supportedFreq returns true if the given FREQ is in tlc's allow-list

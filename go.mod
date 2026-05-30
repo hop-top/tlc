@@ -14,7 +14,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/go-github/v69 v69.2.0
 	github.com/google/uuid v1.6.0
-	github.com/hop-top/vstar/go v0.0.0-00010101000000-000000000000
 	github.com/machinebox/graphql v0.2.2
 	github.com/mattn/go-isatty v0.0.21
 	github.com/robfig/cron/v3 v3.0.1
@@ -31,6 +30,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/kit v0.4.0-alpha.3
 	hop.top/uri v0.2.0-alpha.1
+	hop.top/vstar v0.0.0-20260526030101-766e6e3a0692
 	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.48.2
 )
@@ -147,7 +147,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-// Local replace until vstar publishes a tag fetchable by `go get`.
-// Pulled in to drop arran4/golang-ical (T-1230).
-replace github.com/hop-top/vstar/go => /Users/jadb/.w/ideacrafterslabs/vstar/hops/main/go

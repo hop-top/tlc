@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	vstar "github.com/hop-top/vstar/go"
 	"github.com/stretchr/testify/require"
+	vstar "hop.top/vstar"
 
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/vtodo"
