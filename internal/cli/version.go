@@ -17,13 +17,13 @@ var versionCmd = &cobra.Command{
 		"kit/idempotent":     "yes",
 		"kit/top-level-verb": "true",
 	},
-	Run: func(cmd *cobra.Command, _ []string) {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		short, _ := cmd.Flags().GetBool("short")  //nolint:errcheck // registered flag
 		jsonOut, _ := cmd.Flags().GetBool("json") //nolint:errcheck // registered flag
 
 		if short {
 			fmt.Fprintln(cmd.OutOrStdout(), tlcVersion)
-			return
+			return nil
 		}
 
 		if jsonOut {
@@ -35,10 +35,11 @@ var versionCmd = &cobra.Command{
 			}
 			data, _ := json.MarshalIndent(info, "", "  ") //nolint:errcheck // marshalling known-valid map
 			fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			return
+			return nil
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "tlc version %s\n", tlcVersion)
+		return nil
 	},
 }
 

@@ -51,13 +51,14 @@ defaults).`,
 	Annotations: map[string]string{
 		"kit/side-effect": "read",
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		keys := viper.AllKeys()
 		sort.Strings(keys)
 
 		for _, key := range keys {
 			fmt.Printf("%s: %v\n", key, viper.Get(key))
 		}
+		return nil
 	},
 }
 
@@ -71,13 +72,13 @@ Unset keys exit non-zero with an error message.`,
 	Annotations: map[string]string{
 		"kit/side-effect": "read",
 	},
-	Run: func(_ *cobra.Command, args []string) {
+	RunE: func(_ *cobra.Command, args []string) error {
 		key := args[0]
 		if !viper.IsSet(key) {
-			fmt.Printf("Error: key %s not set\n", key)
-			return
+			return fmt.Errorf("key %s not set", key)
 		}
 		fmt.Println(viper.Get(key))
+		return nil
 	},
 }
 
