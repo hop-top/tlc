@@ -141,7 +141,3 @@ output:
       print-linter-name: true
       print-issued-lines: true
       colors: true
-  sort-results: true
-  sort-order:
-    - linter
-    - file
