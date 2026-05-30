@@ -28,5 +28,5 @@ func killProcessGroup(cmd *exec.Cmd) {
 		return
 	}
 	// Negative pid targets the process group, per kill(2).
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) //nolint:errcheck // process may have already exited, which is the happy path
 }

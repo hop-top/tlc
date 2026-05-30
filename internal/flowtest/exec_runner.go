@@ -93,7 +93,7 @@ func (r *ExecAgentRunner) Run(ctx context.Context, step core.Step, _ string) (ma
 	// for `sh -c "sleep 5"` with TimeoutSec=1). Setting Setpgid puts the
 	// child in its own process group; on deadline we kill the whole group
 	// via negative pid (-pgid), reliably reaping descendants.
-	cmd := exec.Command(step.Exec.Argv[0], step.Exec.Argv[1:]...) //nolint:gosec // user-supplied argv is the contract
+	cmd := exec.Command(step.Exec.Argv[0], step.Exec.Argv[1:]...) //nolint:gosec,noctx // user-supplied argv is the contract; ctx managed via runCtx watcher goroutine + killProcessGroup, not via CommandContext (which kills only the direct child)
 	cmd.Dir = cwd
 	cmd.Env = env
 	setProcessGroup(cmd)
