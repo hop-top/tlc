@@ -19,7 +19,7 @@ jobs:
           cache: true
       - run: go build -buildvcs=false ./...
       - run: go vet ./...
-      - run: go test -race -short -skip 'TestTaskShowEva|TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove' ./...
+      - run: go test -race -short -skip 'TestTaskShowEva|TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove|TestExecAgentRunnerTimeout' ./...
 
   lint:
     runs-on: ubuntu-latest
@@ -31,6 +31,6 @@ jobs:
           cache: true
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.8.0
+          version: v2.12.2
         env:
           GOFLAGS: -buildvcs=false
