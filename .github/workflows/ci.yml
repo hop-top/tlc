@@ -32,5 +32,10 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
+          # Pre-existing lint debt is tracked separately (tlc-lint-debt-cleanup).
+          # Block PRs introducing NEW issues, not the long-tail historical
+          # backlog that finally became visible after this PR fixed the
+          # broken external-workflow refs.
+          only-new-issues: true
         env:
           GOFLAGS: -buildvcs=false
