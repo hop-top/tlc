@@ -676,5 +676,17 @@ func deletePromptInteractive(cmd *cobra.Command) bool {
 		return false
 	}
 
+	// huh/bubbletea opens /dev/tty directly rather than reading from
+	// os.Stdin (T-0072). On the macos-latest GitHub runner, stdin can
+	// satisfy ModeCharDevice while /dev/tty is unopenable
+	// ("device not configured"). Probe /dev/tty so callers reliably
+	// fall back to the --yes-required path instead of letting the huh
+	// dialog spew a confusing bubbletea trace to stderr.
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return false
+	}
+	_ = tty.Close()
+
 	return true
 }
