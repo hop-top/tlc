@@ -109,6 +109,7 @@ linters:
         linters:
           - gocyclo
           - gocognit
+          - goconst
       - path: cmd/tlc/main\.go
         linters:
           - wrapcheck
