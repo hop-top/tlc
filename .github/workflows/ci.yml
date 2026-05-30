@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for --new-from-rev=origin/main
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -33,9 +35,10 @@ jobs:
         with:
           version: v2.12.2
           # Pre-existing lint debt is tracked separately (tlc-lint-debt-cleanup).
-          # Block PRs introducing NEW issues, not the long-tail historical
-          # backlog that finally became visible after this PR fixed the
-          # broken external-workflow refs.
-          only-new-issues: true
+          # Use --new-from-rev (commit-based baseline) rather than the action's
+          # patch-based only-new-issues, which flags pre-existing issues on any
+          # line a refactor touched (e.g. the gofumpt-driven 125-file reformat
+          # in this PR made the action flag 11 pre-existing goconst hits).
+          args: --new-from-rev=origin/main
         env:
           GOFLAGS: -buildvcs=false
