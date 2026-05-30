@@ -330,6 +330,12 @@ func TestFindAllConfigsForMode_Hop(t *testing.T) {
 // TestInitConfig_DirectoryFlagResolvesToTLCConfigYAML verifies that passing a
 // directory to -c resolves to <dir>/.tlc/config.yaml.
 func TestInitConfig_DirectoryFlagResolvesToTLCConfigYAML(t *testing.T) {
+	// Pin standalone mode: DetectMode walks parent dirs and would otherwise
+	// pick up a stray .hop/ in any ancestor (real local dev setups, CI
+	// caches, etc.), flipping the project-marker to .hop/tlc/config.yaml
+	// and breaking the test's standalone-shape fixture.
+	t.Setenv("TLC_MODE", "standalone")
+
 	dir := t.TempDir()
 	tlcDir := filepath.Join(dir, ".tlc")
 	if err := os.MkdirAll(tlcDir, 0o755); err != nil {
