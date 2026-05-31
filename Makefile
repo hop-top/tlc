@@ -157,19 +157,17 @@ dev: fmt vet lint tidy test ## Run fmt, vet, lint, tidy, and test (pre-commit wo
 check: fmt-check vet lint tidy-check test ## Full pre-build gate (non-mutating: fmt-check, vet, lint, tidy-check, test)
 	@echo "$(COLOR_GREEN)✓ All checks passed$(COLOR_RESET)"
 
-# Pinned tool versions. Formatters drift between minor releases; pin so
-# CI and developer machines agree on whitespace.
+# Pinned tool versions. Formatters and linters drift between releases; pin so
+# CI and developer machines agree on rules + whitespace. Keep in sync with the
+# pins in .github/workflows/ci.yml.
+GOLANGCI_LINT_VERSION = v2.12.2
 GOFUMPT_VERSION = v0.10.0
 GOIMPORTS_VERSION = v0.44.0
 
 tools: ## Install development tools (golangci-lint, gofumpt, goimports, air)
 	@echo "$(COLOR_BLUE)Installing development tools...$(COLOR_RESET)"
-	@echo "$(COLOR_YELLOW)→ Installing golangci-lint...$(COLOR_RESET)"
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin latest; \
-	else \
-		echo "  $(COLOR_GREEN)✓ golangci-lint already installed$(COLOR_RESET)"; \
-	fi
+	@echo "$(COLOR_YELLOW)→ Installing golangci-lint $(GOLANGCI_LINT_VERSION)...$(COLOR_RESET)"
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 	@echo "$(COLOR_YELLOW)→ Installing gofumpt $(GOFUMPT_VERSION)...$(COLOR_RESET)"
 	@go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
 	@echo "$(COLOR_YELLOW)→ Installing goimports $(GOIMPORTS_VERSION)...$(COLOR_RESET)"

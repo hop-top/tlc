@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -666,8 +667,17 @@ func TestTaskDelete(t *testing.T) {
 		cmd.SetErr(buf)
 		cmd.SetArgs([]string{"task", "delete", "T-0001"})
 
-		if err := cmd.Execute(); err == nil {
-			t.Error("expected error or prompt for interactive delete, got nil")
+		// Assert the specific contract: when stdin/stdout aren't a usable
+		// TTY (no --yes flag, no interactive confirm possible), the delete
+		// must surface the actionable "re-run with --yes" error rather than
+		// crashing inside bubbletea (the pre-T-0072 behavior on macos CI).
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatal("expected error for interactive delete without --yes, got nil")
+		}
+		if !strings.Contains(err.Error(), "requires confirmation") ||
+			!strings.Contains(err.Error(), "--yes") {
+			t.Errorf("expected 'requires confirmation' + '--yes' guidance, got: %v", err)
 		}
 	})
 }

@@ -131,7 +131,9 @@ issues:
 
 run:
   timeout: 5m
-  go: "1.25"
+  # Omitted on purpose: golangci-lint auto-detects from go.mod (currently
+  # 1.26.1). Pinning here drifts from go.mod silently — see PR #136 where
+  # a stale "1.25" pin would have hidden go1.26-aware staticcheck rules.
   tests: true
   modules-download-mode: readonly
   allow-parallel-runners: true
