@@ -4,7 +4,7 @@
 - Author: jadb
 - Date: 2026-05-11
 - Supersedes: none
-- Related: `tlc-cli-spec-0.1.md`, `tlc-config-spec-0.1.md`,
+- Related: `tlc-config-spec-0.1.md`,
   `task-log-spec-0.1.md`, `stories/081-task-scheduling.md`
 
 ## 1. Purpose

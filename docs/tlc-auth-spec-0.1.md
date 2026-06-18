@@ -796,7 +796,6 @@ tlc log --action AUTH_LOGIN --action AUTH_LOGOUT
 
 ## References
 
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands
 - [tlc-config-spec-0.1.md](tlc-config-spec-0.1.md) — Configuration
 - [tlc-plugin-spec-0.1.md](tlc-plugin-spec-0.1.md) — Plugin system
 - [sync-architecture-0.1.md](sync-architecture-0.1.md) — Sync architecture

@@ -770,7 +770,6 @@ Detailed specifications can be found in the `docs/` directory:
 - [Task Flow Spec](docs/task-flow-spec-0.1.md)
 - [Task Log Spec](docs/task-log-spec-0.1.md)
 - [Sync Architecture](docs/sync-architecture-0.1.md)
-- [CLI Spec](docs/tlc-cli-spec-0.1.md)
 - [TUI Spec](docs/tlc-tui-spec-0.1.md)
 - [Config Spec](docs/tlc-config-spec-0.1.md)
 - [Config Discovery](docs/config-discovery.md)

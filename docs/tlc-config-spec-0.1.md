@@ -864,7 +864,7 @@ tlc task list | jq
 
 ## Configuration Commands
 
-See `tlc-cli-spec-0.1.md` for full command reference.
+See `tlc config --help` for the full command reference.
 
 ### Get Configuration
 
@@ -1152,7 +1152,6 @@ plugins:
 
 ## References
 
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands
 - [tlc-auth-spec-0.1.md](tlc-auth-spec-0.1.md) — Authentication (to be created)
 - [tlc-plugin-spec-0.1.md](tlc-plugin-spec-0.1.md) — Plugin system (to be created)
 - [sync-architecture-0.1.md](sync-architecture-0.1.md) — Sync architecture

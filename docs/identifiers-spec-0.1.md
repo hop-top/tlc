@@ -200,7 +200,7 @@ tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn02q
 tlc://project/T-0042  ← Resolved to task_01h455vb4pex5vsknk084sn02q before persistence
 ```
 
-For details, see [tlc-uri-spec-0.1.md](tlc-uri-spec-0.1.md).
+For URI parsing and resolution details, see the `poly-cite` reference.
 
 ---
 
@@ -268,6 +268,5 @@ This system represents a **fresh start** for the typeid-ids track. Existing task
 
 - [task-crud-spec-0.1.md](task-crud-spec-0.1.md) — Task entity model and mutations
 - [task-log-spec-0.1.md](task-log-spec-0.1.md) — Audit log and LogEntry schema
-- [tlc-uri-spec-0.1.md](tlc-uri-spec-0.1.md) — URI parsing and resolution
 - [sync-architecture-0.1.md](sync-architecture-0.1.md) — External system sync and Plugin integration
 - [TypeID spec](https://github.com/jetify-com/typeid) — Reference implementation

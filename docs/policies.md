@@ -192,7 +192,7 @@ Compile-time validation:
 |------|------|
 | 4 | Policy denied — `PolicyDeniedError` mapped to `output.CodeConflict`, exit 4 |
 
-See [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md#exit-codes) for the
+See [exit-codes.md](exit-codes.md) for the
 full table.
 
 The policy denial is distinguishable from local validation
@@ -228,8 +228,6 @@ Error: policy "<name>" denied: <message>
 
 ## See also
 
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI reference,
-  including `--note` flag plumbing and the exit-code table
 - [task-log-spec-0.1.md](task-log-spec-0.1.md) — log schema, where
   the delete note lands
 - kit ADR-0008 — engine design, full vocabulary, alternatives

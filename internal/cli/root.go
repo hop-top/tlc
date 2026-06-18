@@ -431,7 +431,7 @@ func initConfig() {
 
 	// Enable AutomaticEnv early so TLC_-prefixed env vars feed every
 	// viper.Get call below, including TLC_CONFIG (documented in
-	// docs/tlc-cli-spec-0.1.md and tlc-config-spec-0.1.md). Without
+	// docs/tlc-config-spec-0.1.md). Without
 	// this, env-driven config-path selection silently no-ops because
 	// the GetStringSlice("config") read below would happen before env
 	// reflection was configured.
