@@ -4,24 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/term"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
-
-// isTerminal reports whether w is connected to a terminal.
-func isTerminal(w io.Writer) bool {
-	if f, ok := w.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd()))
-	}
-	return false
-}
 
 // getConfigTrackTypes returns the allowed track types from config,
 // or nil to use core.DefaultTrackTypes.
@@ -69,7 +59,7 @@ func autoCreateTrack(
 	}
 
 	if !taskNoPrompt {
-		if !isTerminal(w) {
+		if !writerInteractive(w) {
 			return "", fmt.Errorf(
 				"track %q does not exist; "+
 					"use --no-prompt to auto-create in non-interactive mode",

@@ -680,6 +680,13 @@ func getPluginPath(system string) string {
 }
 
 func resolveConflictInteractive(conflict *sync.Conflict) (*core.Task, bool) {
+	// Without a usable terminal, huh would crash opening /dev/tty. Fall back to
+	// the same Remote-Wins default the form uses on error.
+	if !ttyAvailable() {
+		fmt.Printf("Conflict for %s in non-interactive mode; defaulting to Remote Wins\n", conflict.TaskID)
+		return conflict.RemoteTask, true
+	}
+
 	var choice string
 	form := huh.NewForm(
 		huh.NewGroup(
