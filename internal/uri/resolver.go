@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"hop.top/cite/scheme"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 	"hop.top/tlc/internal/uriutil"
-	"hop.top/uri/scheme"
 )
 
 // Resolver handles resolution of TLC resource URIs.
@@ -229,7 +229,7 @@ func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow
 }
 
 // splitTaskInput decomposes a task ref into the same shape the legacy
-// hop.top/uri.Parse used to return (Scheme, Namespace, ID). It tolerates
+// hop.top/cite.Parse used to return (Scheme, Namespace, ID). It tolerates
 // bare task IDs and shorthand "ns/.../id" forms that scheme.Parse (which
 // requires scheme + non-empty namespace) rejects.
 func splitTaskInput(input string) (*scheme.URI, error) {

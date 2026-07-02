@@ -6,7 +6,7 @@ package uriutil
 import "strings"
 
 // SplitProjectTask derives (projectID, taskID) from the Space
-// and ID fields returned by hop.top/uri.Parse.
+// and ID fields returned by hop.top/cite.Parse.
 //
 // The task ID is always the last slash-delimited segment of the
 // combined "space/id" path. Everything before it is the project

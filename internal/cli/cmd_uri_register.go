@@ -6,8 +6,8 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
-	"hop.top/uri/handle"
-	"hop.top/uri/handle/generate"
+	"hop.top/cite/handle"
+	"hop.top/cite/handle/generate"
 )
 
 func newURICmd() *cobra.Command {
