@@ -21,6 +21,7 @@
     <a href="https://github.com/hop-top/tlc/releases"><img src="https://img.shields.io/github/release/hop-top/tlc.svg" alt="Release"/></a>
     <a href="https://pkg.go.dev/hop.top/tlc?tab=doc"><img src="https://pkg.go.dev/badge/hop.top/tlc.svg" alt="GoDoc"/></a>
     <a href="https://github.com/hop-top/tlc/actions"><img src="https://github.com/hop-top/tlc/actions/workflows/ci.yml/badge.svg" alt="Build Status"/></a>
+    <a href="https://github.com/hop-top/tlc/actions/workflows/12fcc.yml"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hop-top/tlc/main/.12fc.json" alt="12-factor AI-CLI conformance"/></a>
     <a href="https://github.com/hop-top/tlc/stargazers"><img src="https://img.shields.io/github/stars/hop-top/tlc?style=social" alt="GitHub stars"/></a>
     <a href="https://github.com/hop-top/tlc/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hop-top/tlc" alt="License"/></a>
 </p>

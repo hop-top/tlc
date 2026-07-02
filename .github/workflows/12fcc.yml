@@ -1,0 +1,32 @@
+name: 12fcc
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write          # commit-badge on push to main
+  pull-requests: write     # sticky PR comment
+  security-events: write   # SARIF upload to code-scanning
+
+jobs:
+  conformance:
+    name: 12-factor AI-CLI conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # full history so --diff=auto resolves base
+
+      # Pinned to @main until spec-12fc cuts its first tag (v0.1 alpha in
+      # flight). Switch to @v1 once the stable tag is published.
+      - uses: hop-top/spec-12fc@main
+        with:
+          command: all
+          paths: cmd/,internal/
+          fail-on: 2,3,5
+          upload-sarif: true
+          pr-comment: true
+          commit-badge: ${{ github.event_name == 'push' }}
