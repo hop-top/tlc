@@ -1,8 +1,14 @@
 name: release-please
 
+# Manual-only until the release-bot App secrets resolve in this repo.
+# tlc is private and the org is on the Free plan, so org-level secrets
+# (RELEASE_BOT_APP_ID / RELEASE_BOT_PRIVATE_KEY) return empty in this
+# repo's workflows — the App-token step fails with "not supplied: app-id".
+# Public siblings (aps/wsm) are unaffected. Re-enable the `push` trigger
+# once the repo is public OR the secrets are set at repo level. Releases
+# are gated on kit stabilising off alpha regardless, so no auto-cut is
+# expected yet.
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 permissions:
