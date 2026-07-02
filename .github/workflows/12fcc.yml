@@ -6,15 +6,25 @@ on:
   push:
     branches: [main]
 
+# Least privilege by default. contents:write is granted only to the
+# push-triggered badge-commit job below, never to PR runs of the
+# third-party action.
 permissions:
-  contents: write          # commit-badge on push to main
-  pull-requests: write     # sticky PR comment
-  security-events: write   # SARIF upload to code-scanning
+  contents: read
 
 jobs:
+  # PR runs: annotate + comment, no repo write. Scoped to cmd/ (the
+  # command-surface tree). internal/ is excluded: it holds runtime config
+  # (e.g. internal/config/policies_*.yaml) that verify-stories would
+  # mis-parse as story docs. tlc's strict command-surface contract is
+  # separately enforced in-repo via TestStrictValidationPasses.
   conformance:
     name: 12-factor AI-CLI conformance
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write     # sticky PR comment
+      security-events: write   # SARIF upload to code-scanning
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,8 +36,31 @@ jobs:
       - uses: hop-top/spec-12fc@e2a8341875639f4f8b74c28d3107defe15802ab7 # main @ 2026-07-02
         with:
           command: all
-          paths: cmd/,internal/
+          paths: cmd/
           fail-on: 2,3,5
           upload-sarif: true
           pr-comment: true
-          commit-badge: ${{ github.event_name == 'push' }}
+          commit-badge: false
+
+  # Push-to-main: same check, plus commit the refreshed badge. This is the
+  # only job granted contents:write.
+  conformance-badge:
+    name: 12-factor AI-CLI conformance (badge)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # commit-badge on push to main
+      security-events: write   # SARIF upload to code-scanning
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: hop-top/spec-12fc@e2a8341875639f4f8b74c28d3107defe15802ab7 # main @ 2026-07-02
+        with:
+          command: all
+          paths: cmd/
+          fail-on: 2,3,5
+          upload-sarif: true
+          pr-comment: false
+          commit-badge: true
