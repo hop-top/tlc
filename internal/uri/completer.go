@@ -1,8 +1,8 @@
 package uri
 
 import (
+	"hop.top/cite/scheme"
 	"hop.top/tlc/internal/storage"
-	"hop.top/uri/scheme"
 )
 
 // GetRegistry returns a registry with tlc types registered.

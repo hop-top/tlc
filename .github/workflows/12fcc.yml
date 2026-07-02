@@ -1,0 +1,69 @@
+name: 12fcc
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least privilege by default. contents:write is granted only to the
+# push-triggered badge-commit job below, never to PR runs of the
+# third-party action.
+permissions:
+  contents: read
+
+jobs:
+  # PR runs: annotate + comment, no repo write. Scoped to cmd/ (the
+  # command-surface tree). internal/ is excluded: it holds runtime config
+  # (e.g. internal/config/policies_*.yaml) that verify-stories would
+  # mis-parse as story docs. tlc's strict command-surface contract is
+  # separately enforced in-repo via TestStrictValidationPasses.
+  conformance:
+    name: 12-factor AI-CLI conformance
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read           # checkout (private repo)
+      pull-requests: write     # sticky PR comment
+      security-events: write   # SARIF upload to code-scanning
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # full history so --diff=auto resolves base
+
+      # Pinned to a full commit SHA (supply-chain hardening) rather than a
+      # mutable ref. spec-12fc has no tag yet (v0.1 alpha in flight); this is
+      # main as of 2026-07-02. Re-pin to the @v1 tag SHA once published.
+      - uses: hop-top/spec-12fc@fbd05973d8c0ec1acd9b20994d3db9bbfc3ac141 # main @ 2026-07-02 (verify-no-leak diff-paths fix)
+        with:
+          command: all
+          paths: cmd/
+          diff: ""            # scan paths, not PR diff; --diff+--paths are mutually exclusive
+          fail-on: 2,3,5
+          upload-sarif: true
+          pr-comment: true
+          commit-badge: false
+
+  # Push-to-main: same check, plus commit the refreshed badge. This is the
+  # only job granted contents:write.
+  conformance-badge:
+    name: 12-factor AI-CLI conformance (badge)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # commit-badge on push to main
+      security-events: write   # SARIF upload to code-scanning
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: hop-top/spec-12fc@fbd05973d8c0ec1acd9b20994d3db9bbfc3ac141 # main @ 2026-07-02 (verify-no-leak diff-paths fix)
+        with:
+          command: all
+          paths: cmd/
+          diff: ""            # scan paths, not PR diff; --diff+--paths are mutually exclusive
+          fail-on: 2,3,5
+          upload-sarif: true
+          pr-comment: false
+          commit-badge: true

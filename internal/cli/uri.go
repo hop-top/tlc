@@ -2,13 +2,13 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	"hop.top/uri/scheme"
+	"hop.top/cite/scheme"
 
 	"hop.top/tlc/internal/storage"
 	"hop.top/tlc/internal/uri"
 )
 
-// cobraCompleter adapts a hop.top/uri/scheme Registry to cobra ValidArgsFunction.
+// cobraCompleter adapts a hop.top/cite/scheme Registry to cobra ValidArgsFunction.
 type cobraCompleter struct {
 	reg *scheme.Registry
 }

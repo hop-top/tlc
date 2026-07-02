@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"hop.top/cite/scheme"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
-	"hop.top/uri/scheme"
 )
 
 // TypesDirConfig holds configurable directory paths for URI type registration.
