@@ -34,7 +34,7 @@ jobs:
       # Pinned to a full commit SHA (supply-chain hardening) rather than a
       # mutable ref. spec-12fc has no tag yet (v0.1 alpha in flight); this is
       # main as of 2026-07-02. Re-pin to the @v1 tag SHA once published.
-      - uses: hop-top/spec-12fc@e2a8341875639f4f8b74c28d3107defe15802ab7 # main @ 2026-07-02
+      - uses: hop-top/spec-12fc@fbd05973d8c0ec1acd9b20994d3db9bbfc3ac141 # main @ 2026-07-02 (verify-no-leak diff-paths fix)
         with:
           command: all
           paths: cmd/
@@ -58,7 +58,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: hop-top/spec-12fc@e2a8341875639f4f8b74c28d3107defe15802ab7 # main @ 2026-07-02
+      - uses: hop-top/spec-12fc@fbd05973d8c0ec1acd9b20994d3db9bbfc3ac141 # main @ 2026-07-02 (verify-no-leak diff-paths fix)
         with:
           command: all
           paths: cmd/
