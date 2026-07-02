@@ -23,6 +23,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
+      contents: read           # checkout (private repo)
       pull-requests: write     # sticky PR comment
       security-events: write   # SARIF upload to code-scanning
     steps:
