@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/auth"
@@ -22,14 +21,15 @@ var (
 // authStore resolves the credential store backend from viper. Delegates
 // to auth.NewDefaultStore so cli, extensions, and future plugins share
 // the same backend selector — see auth.NewDefaultStore for resolution
-// rules.
-func authStore() auth.Store {
+// rules. Returns an error envelope so callers thread failures through
+// cobra RunE rather than terminating via log.Fatal.
+func authStore() (auth.Store, error) {
 	store, err := auth.NewDefaultStore("tlc", viper.GetViper())
 	if err != nil {
-		log.Fatal("Failed to open credential store",
-			"backend", viper.GetString(auth.AuthBackendKey), "error", err)
+		return nil, fmt.Errorf("failed to open credential store (backend=%s): %w",
+			viper.GetString(auth.AuthBackendKey), err)
 	}
-	return store
+	return store, nil
 }
 
 var authCmd = &cobra.Command{
@@ -50,9 +50,12 @@ Credentials are written to the configured auth store (keyring by default).`,
 		"kit/side-effect": "interactive",
 		"kit/idempotent":  "yes",
 	},
-	Run: func(_ *cobra.Command, args []string) {
+	RunE: func(_ *cobra.Command, args []string) error {
 		system := args[0]
-		store := authStore()
+		store, err := authStore()
+		if err != nil {
+			return err
+		}
 
 		ctx := context.Background()
 
@@ -62,7 +65,7 @@ Credentials are written to the configured auth store (keyring by default).`,
 			if token != "" {
 				cred, err := authenticator.LoginWithPAT(ctx, token, account)
 				if err != nil {
-					log.Fatal("Failed to login with GitHub PAT", "error", err)
+					return fmt.Errorf("failed to login with GitHub PAT: %w", err)
 				}
 				fmt.Printf("✓ Authenticated as %s\n", cred.Account)
 			} else {
@@ -73,7 +76,7 @@ Credentials are written to the configured auth store (keyring by default).`,
 				)
 				cred, err := authenticator.LoginWithOAuth(ctx, config)
 				if err != nil {
-					log.Fatal("Failed to login with GitHub OAuth", "error", err)
+					return fmt.Errorf("failed to login with GitHub OAuth: %w", err)
 				}
 				fmt.Printf("✓ Authenticated as %s\n", cred.Account)
 			}
@@ -81,28 +84,29 @@ Credentials are written to the configured auth store (keyring by default).`,
 		case "jira":
 			authenticator := auth.NewJiraAuthenticator(store)
 			if jiraURL == "" || jiraEmail == "" || token == "" {
-				log.Fatal("Missing required flags for Jira login: --url, --email, --token")
+				return fmt.Errorf("missing required flags for Jira login: --url, --email, --token")
 			}
 			cred, err := authenticator.LoginWithAPIToken(jiraURL, jiraEmail, token, account)
 			if err != nil {
-				log.Fatal("Failed to login with Jira API token", "error", err)
+				return fmt.Errorf("failed to login with Jira API token: %w", err)
 			}
 			fmt.Printf("✓ Authenticated as %s\n", cred.Account)
 
 		case "linear":
 			authenticator := auth.NewLinearAuthenticator(store)
 			if linearKey == "" {
-				log.Fatal("Missing required flag for Linear login: --api-key")
+				return fmt.Errorf("missing required flag for Linear login: --api-key")
 			}
 			cred, err := authenticator.LoginWithAPIKey(ctx, linearKey, account)
 			if err != nil {
-				log.Fatal("Failed to login with Linear API key", "error", err)
+				return fmt.Errorf("failed to login with Linear API key: %w", err)
 			}
 			fmt.Printf("✓ Authenticated as %s\n", cred.Account)
 
 		default:
-			log.Fatal("Unsupported system", "system", system)
+			return fmt.Errorf("unsupported system: %s", system)
 		}
+		return nil
 	},
 }
 
@@ -120,7 +124,10 @@ re-run; missing entries surface a non-fatal error.`,
 	},
 	RunE: func(_ *cobra.Command, args []string) error {
 		system := args[0]
-		store := authStore()
+		store, err := authStore()
+		if err != nil {
+			return err
+		}
 		if err := store.Delete(system, account); err != nil {
 			return fmt.Errorf("failed to logout %s: %w", system, err)
 		}
@@ -140,8 +147,11 @@ to limit the check to that system.`,
 		"kit/side-effect": "read",
 		"kit/idempotent":  "yes",
 	},
-	Run: func(_ *cobra.Command, args []string) {
-		store := authStore()
+	RunE: func(_ *cobra.Command, args []string) error {
+		store, err := authStore()
+		if err != nil {
+			return err
+		}
 		systems := []string{"github", "jira", "linear"}
 		if len(args) > 0 {
 			systems = []string{args[0]}
@@ -155,6 +165,7 @@ to limit the check to that system.`,
 			}
 			fmt.Printf("%s: ✓ Authenticated as %s\n", sys, cred.Account)
 		}
+		return nil
 	},
 }
 

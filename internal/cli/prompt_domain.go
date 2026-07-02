@@ -71,10 +71,10 @@ func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 				out = append(out, "--state", "blocked")
 			case "stale":
 				out = append(out, "--state", "stale")
-			// "mine" is not supported on track — skip
+				// "mine" is not supported on track — skip
 			}
 		}
-	// Flow and Project domains: no modifier flags
+		// Flow and Project domains: no modifier flags
 	}
 	return out
 }
@@ -439,4 +439,3 @@ func fuzzyRecoverFromRaw(text string, orig PromptTokens) PromptTokens {
 		Rest:      rest,
 	}
 }
-

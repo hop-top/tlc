@@ -91,7 +91,8 @@ func runSchedulerWithSeeded(
 
 // All predecessors SUCCEEDED → descendant runs.
 func TestRunSequential_DependsOn_AllSucceeded(t *testing.T) {
-	ran, err := runSchedulerWithSeeded(t,
+	ran, err := runSchedulerWithSeeded(
+		t,
 		map[string]StepStatus{
 			"p1": StepStatusSucceeded,
 			"p2": StepStatusSucceeded,
@@ -108,7 +109,8 @@ func TestRunSequential_DependsOn_AllSucceeded(t *testing.T) {
 
 // One SKIPPED + one SUCCEEDED → descendant runs.
 func TestRunSequential_DependsOn_MixedSkippedSucceeded(t *testing.T) {
-	ran, err := runSchedulerWithSeeded(t,
+	ran, err := runSchedulerWithSeeded(
+		t,
 		map[string]StepStatus{
 			"p1": StepStatusSucceeded,
 			"p2": StepStatusSkipped,
@@ -125,7 +127,8 @@ func TestRunSequential_DependsOn_MixedSkippedSucceeded(t *testing.T) {
 
 // All predecessors SKIPPED → descendant runs.
 func TestRunSequential_DependsOn_AllSkipped(t *testing.T) {
-	ran, err := runSchedulerWithSeeded(t,
+	ran, err := runSchedulerWithSeeded(
+		t,
 		map[string]StepStatus{
 			"p1": StepStatusSkipped,
 			"p2": StepStatusSkipped,
@@ -145,7 +148,8 @@ func TestRunSequential_DependsOn_AllSkipped(t *testing.T) {
 // in flow.Steps) or a deadlock (if the FAILED status is opaque). Both
 // outcomes satisfy "FAILED blocks descendants".
 func TestRunSequential_DependsOn_PredecessorFailed(t *testing.T) {
-	ran, err := runSchedulerWithSeeded(t,
+	ran, err := runSchedulerWithSeeded(
+		t,
 		map[string]StepStatus{
 			"p1": StepStatusSucceeded,
 			"p2": StepStatusFailed,
@@ -162,7 +166,8 @@ func TestRunSequential_DependsOn_PredecessorFailed(t *testing.T) {
 
 // Mixed FAILED + SKIPPED → FAILED wins; descendant does not run.
 func TestRunSequential_DependsOn_MixedFailedSkipped(t *testing.T) {
-	ran, err := runSchedulerWithSeeded(t,
+	ran, err := runSchedulerWithSeeded(
+		t,
 		map[string]StepStatus{
 			"p1": StepStatusSkipped,
 			"p2": StepStatusFailed,
@@ -183,7 +188,8 @@ func TestRunSequential_DependsOn_MixedFailedSkipped(t *testing.T) {
 // step is ready to fire and not all are done, the scheduler reports a
 // deadlock. Descendant must not run.
 func TestRunSequential_DependsOn_PredecessorPending(t *testing.T) {
-	ran, err := runSchedulerWithSeeded(t,
+	ran, err := runSchedulerWithSeeded(
+		t,
 		map[string]StepStatus{
 			"p1": StepStatusSucceeded,
 			"p2": StepStatusPending,

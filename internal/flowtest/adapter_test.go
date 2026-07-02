@@ -428,7 +428,6 @@ func TestNoOpAdapterProbeReturnsEmpty(t *testing.T) {
 	}
 }
 
-
 // --- fabricAdapter ---
 
 func TestFabricAdapterBuildArgsBasic(t *testing.T) {

@@ -149,6 +149,7 @@ func (r *testRepo) CreateTask(_ context.Context, _ *Task) error { return nil }
 func (r *testRepo) GetTask(_ context.Context, id string) (*Task, error) {
 	return r.tasks[id], nil
 }
+
 func (r *testRepo) GetTaskBySeq(_ context.Context, projectID string, seq int64) (*Task, error) {
 	for _, t := range r.tasks {
 		var pid string
@@ -161,16 +162,17 @@ func (r *testRepo) GetTaskBySeq(_ context.Context, projectID string, seq int64) 
 	}
 	return nil, nil
 }
-func (r *testRepo) UpdateTask(_ context.Context, _ *Task) error                 { return nil }
+func (r *testRepo) UpdateTask(_ context.Context, _ *Task) error { return nil }
 func (r *testRepo) UpdateTaskWithLog(_ context.Context, _ *Task, _ *LogEntry) error {
 	return nil
 }
-func (r *testRepo) ListTasks(_ context.Context, _ Query) ([]*Task, error) { return nil, nil }
+func (r *testRepo) ListTasks(_ context.Context, _ Query) ([]*Task, error)  { return nil, nil }
 func (r *testRepo) DeleteTask(_ context.Context, _ string) error           { return nil }
 func (r *testRepo) GetTasksNeedingPush(_ context.Context) ([]*Task, error) { return nil, nil }
 func (r *testRepo) FindTaskByOrigin(_ context.Context, _, _ string) (*Task, error) {
 	return nil, nil
 }
+
 func (r *testRepo) ArchiveTasks(_ context.Context, _ time.Duration) (int64, error) {
 	return 0, nil
 }
@@ -178,13 +180,14 @@ func (r *testRepo) CreateFlowRun(_ context.Context, _ *FlowRun) error { return n
 func (r *testRepo) GetFlowRun(_ context.Context, _ string) (*FlowRun, error) {
 	return nil, nil
 }
-func (r *testRepo) UpdateFlowRun(_ context.Context, _ *FlowRun) error            { return nil }
-func (r *testRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, error)  { return nil, nil }
+func (r *testRepo) UpdateFlowRun(_ context.Context, _ *FlowRun) error           { return nil }
+func (r *testRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, error) { return nil, nil }
 
 func (r *testRepo) CreateTrack(_ context.Context, _ *Track) error { return nil }
 func (r *testRepo) GetTrack(_ context.Context, id string) (*Track, error) {
 	return r.tracks[id], nil
 }
+
 func (r *testRepo) GetTrackBySlug(_ context.Context, projectID, slug string) (*Track, error) {
 	for _, t := range r.tracks {
 		var pid string
@@ -197,8 +200,8 @@ func (r *testRepo) GetTrackBySlug(_ context.Context, projectID, slug string) (*T
 	}
 	return nil, nil
 }
-func (r *testRepo) UpdateTrack(_ context.Context, _ *Track) error           { return nil }
-func (r *testRepo) DeleteTrack(_ context.Context, _ string) error           { return nil }
+func (r *testRepo) UpdateTrack(_ context.Context, _ *Track) error { return nil }
+func (r *testRepo) DeleteTrack(_ context.Context, _ string) error { return nil }
 func (r *testRepo) ListTracks(_ context.Context, _ TrackQuery) ([]*Track, error) {
 	return nil, nil
 }

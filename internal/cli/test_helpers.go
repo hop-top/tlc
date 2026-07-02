@@ -17,7 +17,6 @@ import (
 	"hop.top/tlc/internal/storage"
 )
 
-
 const (
 	testEngineer1 = "engineer-1"
 	testEngineer2 = "engineer-2"
@@ -346,9 +345,7 @@ func seedTrack(t *testing.T, ctx context.Context, repo core.TrackRepository, tas
 	return track.ID
 }
 
-var (
-	testMu sync.Mutex
-)
+var testMu sync.Mutex
 
 // withTestLock prevents parallel CLI tests from clobbering global state
 func withTestLock(fn func()) {
@@ -610,9 +607,9 @@ func newTestCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-essential output")
 
 	_ = viper.BindPFlag("output.format", cmd.PersistentFlags().Lookup("format"))   //nolint:errcheck // test setup
-	_ = viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color")) //nolint:errcheck // test setup
+	_ = viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color"))  //nolint:errcheck // test setup
 	_ = viper.BindPFlag("output.verbose", cmd.PersistentFlags().Lookup("verbose")) //nolint:errcheck // test setup
-	_ = viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))    //nolint:errcheck // test setup
+	_ = viper.BindPFlag("output.quiet", cmd.PersistentFlags().Lookup("quiet"))     //nolint:errcheck // test setup
 
 	return cmd
 }

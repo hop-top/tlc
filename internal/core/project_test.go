@@ -1,8 +1,8 @@
 package core
 
 import (
-	"os"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"

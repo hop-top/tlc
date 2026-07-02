@@ -660,12 +660,14 @@ func TestIngestTODOWith_T1234_NoWarningsOnReIngest(t *testing.T) {
 		t.Fatalf(
 			"importFromProjection printed UNIQUE-constraint warnings on "+
 				"re-ingest of already-existing task IDs (T-1234 "+
-				"regression). Output:\n%s", output)
+				"regression). Output:\n%s", output,
+		)
 	}
 	if strings.Contains(output, "UNIQUE constraint failed") {
 		t.Fatalf(
 			"importFromProjection leaked a UNIQUE-constraint message on "+
-				"re-ingest. Output:\n%s", output)
+				"re-ingest. Output:\n%s", output,
+		)
 	}
 }
 

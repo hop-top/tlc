@@ -498,7 +498,8 @@ func (e *FlowExecutor) executeHumanStep(ctx context.Context, run *FlowRun, step 
 		return nil, fmt.Errorf(
 			"flow human step %q: no approval store configured; "+
 				"human steps require WithApprovalStore on the executor",
-			step.ID)
+			step.ID,
+		)
 	}
 
 	if err := e.approvals.Open(ctx, run.ID, step.ID, step.Title); err != nil {
@@ -567,11 +568,13 @@ func (e *FlowExecutor) executeExecStep(ctx context.Context, step Step) (map[stri
 			"flow exec step %q: no agent runner registered; "+
 				"register an agent in agents.yaml (tlc agent register --help) "+
 				"and pass --agent <name> to tlc flow run",
-			step.ID)
+			step.ID,
+		)
 	}
 	if !e.agentRunner.CanHandle(step) {
 		return nil, fmt.Errorf(
-			"flow exec step %q: registered runner cannot handle exec steps", step.ID)
+			"flow exec step %q: registered runner cannot handle exec steps", step.ID,
+		)
 	}
 	return e.agentRunner.Run(ctx, step, "")
 }

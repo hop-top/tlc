@@ -88,11 +88,11 @@ type WorkItemRelation struct {
 
 // WorkItem represents an Azure DevOps work item from the REST API.
 type WorkItem struct {
-	ID        int                  `json:"id"`
-	Rev       int                  `json:"rev"`
-	Fields    WorkItemFields       `json:"fields"`
-	Relations []WorkItemRelation   `json:"relations,omitempty"`
-	URL       string               `json:"url"`
+	ID        int                `json:"id"`
+	Rev       int                `json:"rev"`
+	Fields    WorkItemFields     `json:"fields"`
+	Relations []WorkItemRelation `json:"relations,omitempty"`
+	URL       string             `json:"url"`
 }
 
 // adoPriorityToTLC maps ADO's native priority (1-4) to TLC priority strings.

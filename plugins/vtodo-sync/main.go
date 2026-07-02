@@ -286,8 +286,10 @@ func resolveFileSource(source string) (string, *rpcErr) {
 	}
 	u, err := url.Parse(source)
 	if err != nil {
-		return "", &rpcErr{code: -32602,
-			msg: fmt.Sprintf("invalid source URI %q: %v", source, err)}
+		return "", &rpcErr{
+			code: -32602,
+			msg:  fmt.Sprintf("invalid source URI %q: %v", source, err),
+		}
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "file":
@@ -296,16 +298,22 @@ func resolveFileSource(source string) (string, *rpcErr) {
 			path = u.Opaque
 		}
 		if path == "" {
-			return "", &rpcErr{code: -32602,
-				msg: fmt.Sprintf("source %q has no path; expected file:///abs/path/cal.ics", source)}
+			return "", &rpcErr{
+				code: -32602,
+				msg:  fmt.Sprintf("source %q has no path; expected file:///abs/path/cal.ics", source),
+			}
 		}
 		return path, nil
 	case "":
-		return "", &rpcErr{code: -32602,
-			msg: fmt.Sprintf("source %q missing scheme; expected file:///abs/path/cal.ics", source)}
+		return "", &rpcErr{
+			code: -32602,
+			msg:  fmt.Sprintf("source %q missing scheme; expected file:///abs/path/cal.ics", source),
+		}
 	default:
-		return "", &rpcErr{code: -32600,
-			msg: "CalDAV mode not yet implemented; use file:// for now"}
+		return "", &rpcErr{
+			code: -32600,
+			msg:  "CalDAV mode not yet implemented; use file:// for now",
+		}
 	}
 }
 

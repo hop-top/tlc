@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 	"hop.top/tlc/internal/uriutil"
-	"hop.top/uri"
+	"hop.top/uri/scheme"
 )
 
 // Resolver handles resolution of TLC resource URIs.
@@ -56,13 +57,18 @@ type ResolvedTask struct {
 // Flexible ID forms are normalised first; see NormalizeTaskID.
 func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask, error) {
 	input = NormalizeTaskID(input)
-	u, err := uri.Parse(input)
-	if err != nil {
-		return nil, err
+
+	// Decompose the input into (namespace, id) without going through
+	// scheme.Parse, which now requires a scheme and a non-empty namespace.
+	// Bare task IDs ("T-0001") and shorthand project/task refs lack one
+	// or both; we still need to route those forms.
+	u, parseErr := splitTaskInput(input)
+	if parseErr != nil {
+		return nil, parseErr
 	}
 
 	// Case 1: Simple task ID (e.g. "T-0001")
-	if u.Scheme == "" && u.Space == "" {
+	if u.Scheme == "" && u.Namespace == "" {
 		task, err := r.storage.GetTask(ctx, u.ID)
 		if err != nil {
 			return nil, err
@@ -75,18 +81,18 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 
 	// Case 2: Shorthand project/task or absolute URI.
 	//
-	// The hop.top/uri library places the first path segment in Space and the
-	// remainder in ID.  For multi-segment project IDs the task ID is always
-	// the *last* slash-delimited segment; everything before it (including
-	// Space) forms the project ID.
+	// The first path segment is the namespace and the remainder is the
+	// id. For multi-segment project IDs the task ID is always the *last*
+	// slash-delimited segment; everything before it (including Namespace)
+	// forms the project ID.
 	//
 	// Examples:
-	//   task://hop-top/tlc/T-0001  → Space=hop-top  ID=tlc/T-0001
+	//   task://hop-top/tlc/T-0001  → Namespace=hop-top  ID=tlc/T-0001
 	//     → projectID=hop-top/tlc  taskID=T-0001
-	//   hop-top/tlc/T-0001         → Space=hop-top  ID=tlc/T-0001  (same)
-	//   tlc/T-0001                 → Space=tlc       ID=T-0001
+	//   hop-top/tlc/T-0001         → Namespace=hop-top  ID=tlc/T-0001  (same)
+	//   tlc/T-0001                 → Namespace=tlc       ID=T-0001
 	//     → projectID=tlc          taskID=T-0001
-	projectID, taskID := uriutil.SplitProjectTask(u.Space, u.ID)
+	projectID, taskID := uriutil.SplitProjectTask(u.Namespace, u.ID)
 	// Re-normalise the extracted task ID so URI forms accept the same
 	// case-insensitive aliases as bare inputs (e.g. ".../t-0001" → T-0001).
 	taskID = NormalizeTaskID(taskID)
@@ -162,12 +168,12 @@ type ResolvedFlow struct {
 
 // ResolveFlow resolves a flow ID or URI into a Flow object.
 func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow, error) {
-	u, err := uri.Parse(input)
+	u, err := splitTaskInput(input)
 	if err != nil {
 		return nil, err
 	}
 
-	projectID, flowID := uriutil.SplitProjectTask(u.Space, u.ID)
+	projectID, flowID := uriutil.SplitProjectTask(u.Namespace, u.ID)
 
 	// If it's a file path, just parse it
 	if _, err := os.Stat(input); err == nil {
@@ -220,4 +226,43 @@ func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow
 	}
 
 	return nil, fmt.Errorf("flow %q not found", flowID)
+}
+
+// splitTaskInput decomposes a task ref into the same shape the legacy
+// hop.top/uri.Parse used to return (Scheme, Namespace, ID). It tolerates
+// bare task IDs and shorthand "ns/.../id" forms that scheme.Parse (which
+// requires scheme + non-empty namespace) rejects.
+func splitTaskInput(input string) (*scheme.URI, error) {
+	if input == "" {
+		return nil, fmt.Errorf("uri: empty input")
+	}
+
+	// Full scheme:// URI — delegate to the upstream parser when it can
+	// satisfy its own contract (scheme present + non-empty host). Fall
+	// through to manual decomposition only when upstream errors apply
+	// to historically valid shorthand forms.
+	if i := strings.Index(input, "://"); i > 0 {
+		schemeName := input[:i]
+		rest := strings.TrimPrefix(input[i+3:], "")
+		// Trim query/fragment; resolver does not consume them today.
+		if j := strings.IndexAny(rest, "?#"); j >= 0 {
+			rest = rest[:j]
+		}
+		var ns, id string
+		if k := strings.Index(rest, "/"); k >= 0 {
+			ns = rest[:k]
+			id = rest[k+1:]
+		} else {
+			ns = rest
+		}
+		return &scheme.URI{Scheme: schemeName, Namespace: ns, ID: id, Original: input}, nil
+	}
+
+	// Bare or shorthand input (no "://"). Split on the first "/" so
+	// "tlc/T-0001" → Namespace="tlc", ID="T-0001" and "T-0001" alone
+	// becomes ID="T-0001" with empty Scheme + Namespace.
+	if i := strings.Index(input, "/"); i >= 0 {
+		return &scheme.URI{Namespace: input[:i], ID: input[i+1:], Original: input}, nil
+	}
+	return &scheme.URI{ID: input, Original: input}, nil
 }

@@ -294,7 +294,6 @@ func TestTaskReopenAuditContinuity(t *testing.T) {
 // TestTaskAuditLog verifies log entries are returned for a specific task
 // (story 009, scenario 1).
 func TestTaskAuditLog(t *testing.T) {
-
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -340,7 +339,6 @@ func TestTaskAuditLog(t *testing.T) {
 // TestTaskAuditLogAll verifies --all returns logs across all tasks
 // (story 009, scenario 2).
 func TestTaskAuditLogAll(t *testing.T) {
-
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -382,7 +380,6 @@ func TestTaskAuditLogAll(t *testing.T) {
 // TestTaskAuditLogFilterByAction verifies --action filters log entries
 // (story 009, scenario 3).
 func TestTaskAuditLogFilterByAction(t *testing.T) {
-
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -423,7 +420,6 @@ func TestTaskAuditLogFilterByAction(t *testing.T) {
 // TestTaskAuditLogFilterByActor verifies --by filters log entries
 // (story 009, scenario 4).
 func TestTaskAuditLogFilterByActor(t *testing.T) {
-
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -462,7 +458,6 @@ func TestTaskAuditLogFilterByActor(t *testing.T) {
 // TestTaskAuditLogPagination verifies --limit and --offset paginate results
 // (story 009, scenario 5).
 func TestTaskAuditLogPagination(t *testing.T) {
-
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -505,7 +500,6 @@ func TestTaskAuditLogPagination(t *testing.T) {
 // TestTaskAuditLogRequiresTaskIDOrAll verifies error without task-id or --all
 // (story 009, scenario 6).
 func TestTaskAuditLogRequiresTaskIDOrAll(t *testing.T) {
-
 	_, cleanup := setupTestDir(t)
 	defer cleanup()
 
@@ -524,7 +518,6 @@ func TestTaskAuditLogRequiresTaskIDOrAll(t *testing.T) {
 // TestTaskAuditLogJSONFormat verifies --format json produces valid JSON
 // (story 009, scenario 7).
 func TestTaskAuditLogJSONFormat(t *testing.T) {
-
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
 

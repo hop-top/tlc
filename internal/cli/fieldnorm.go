@@ -38,10 +38,10 @@ var priorityAliases = map[string]string{
 	"p2": "P2",
 	"p3": "P3",
 	// numeric shorthands
-	"0":        "P0",
-	"1":        "P1",
-	"2":        "P2",
-	"3":        "P3",
+	"0": "P0",
+	"1": "P1",
+	"2": "P2",
+	"3": "P3",
 	// descriptive aliases
 	"critical": "P0",
 	"high":     "P1",

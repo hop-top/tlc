@@ -1,8 +1,9 @@
+//go:build shimbin
+
 // Package main is the docker shim for the flowtest sandbox.
 //
 // It intercepts docker invocations and records/replays them via xrr cassettes,
 // allowing flow tests to run without a real Docker daemon.
-//go:build shimbin
 package main
 
 import (
@@ -120,7 +121,8 @@ func runReplay(cassetteDir string) error {
 	c := xrr.NewFileCassette(cassetteDir)
 	s := xrr.NewSession(xrr.ModeReplay, c)
 
-	raw, err := s.Record(context.Background(), execadapter.NewAdapter(), req,
+	raw, err := s.Record(
+		context.Background(), execadapter.NewAdapter(), req,
 		func() (xrr.Response, error) {
 			return nil, xrr.ErrCassetteMiss
 		},

@@ -61,7 +61,8 @@ func TestApplyAgentOverrides_AllKnownKeys(t *testing.T) {
 		Image: "old:latest",
 		Env:   map[string]string{"KEEP": "yes", "DROP": "later"},
 	}
-	err := applyAgentOverrides(cfg,
+	err := applyAgentOverrides(
+		cfg,
 		[]string{"image=new:dev", "env.MODEL=opus", "default_timeout=10m"},
 		[]string{"binary=/usr/local/bin/claude", "env.DROP="},
 	)
@@ -90,7 +91,8 @@ func TestApplyAgentOverrides_AllKnownKeys(t *testing.T) {
 
 func TestApplyAgentOverrides_ExplicitWinsOverInline(t *testing.T) {
 	cfg := &core.AgentConfig{}
-	err := applyAgentOverrides(cfg,
+	err := applyAgentOverrides(
+		cfg,
 		[]string{"image=inline"},
 		[]string{"image=explicit"},
 	)

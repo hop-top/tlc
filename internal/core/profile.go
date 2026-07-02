@@ -32,17 +32,18 @@ var (
 // NewProfileResolver creates a resolver by querying aps profiles.
 // Falls back gracefully if aps is not available.
 func NewProfileResolver() *ProfileResolver {
+	if _, err := exec.LookPath("aps"); err != nil {
+		return &ProfileResolver{profiles: make(map[string]string)}
+	}
 	return newProfileResolverWith(defaultRunner)
 }
 
 // newProfileResolverWith creates a resolver using the given command runner.
+// Trusts the injected runner — callers needing the on-PATH check must use
+// NewProfileResolver instead.
 func newProfileResolverWith(run commandRunner) *ProfileResolver {
 	r := &ProfileResolver{
 		profiles: make(map[string]string),
-	}
-
-	if _, err := exec.LookPath("aps"); err != nil {
-		return r
 	}
 
 	out, err := run("aps", "profile", "list")
@@ -116,14 +117,15 @@ func GetGlobalResolver() *ProfileResolver {
 
 // ResolveSquadMembers returns the profile IDs of all members in an aps squad.
 func ResolveSquadMembers(squadID string) ([]string, error) {
-	return resolveSquadMembersWith(squadID, defaultRunner)
-}
-
-// resolveSquadMembersWith is the testable core.
-func resolveSquadMembersWith(squadID string, run commandRunner) ([]string, error) {
 	if _, err := exec.LookPath("aps"); err != nil {
 		return nil, fmt.Errorf("aps not found: %w", err)
 	}
+	return resolveSquadMembersWith(squadID, defaultRunner)
+}
+
+// resolveSquadMembersWith is the testable core. Trusts the injected runner —
+// callers needing the on-PATH check must use ResolveSquadMembers instead.
+func resolveSquadMembersWith(squadID string, run commandRunner) ([]string, error) {
 	out, err := run("aps", "squad", "show", squadID)
 	if err != nil {
 		return nil, fmt.Errorf("aps squad show %s: %w", squadID, err)

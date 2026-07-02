@@ -85,9 +85,18 @@ func (r *ExecAgentRunner) Run(ctx context.Context, step core.Step, _ string) (ma
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(runCtx, step.Exec.Argv[0], step.Exec.Argv[1:]...) //nolint:gosec // user-supplied argv is the contract
+	// Use exec.Command (not CommandContext) so we control the kill strategy.
+	// exec.CommandContext sends SIGKILL only to the direct child on context
+	// deadline; if the child is a shell, its grandchildren survive and keep
+	// the stdout/stderr pipes open, so cmd.Wait blocks past the timeout
+	// (observed as a CI -race flake: "5.003s elapsed" against a 4s budget
+	// for `sh -c "sleep 5"` with TimeoutSec=1). Setting Setpgid puts the
+	// child in its own process group; on deadline we kill the whole group
+	// via negative pid (-pgid), reliably reaping descendants.
+	cmd := exec.Command(step.Exec.Argv[0], step.Exec.Argv[1:]...) //nolint:gosec,noctx // user-supplied argv is the contract; ctx managed via runCtx watcher goroutine + killProcessGroup, not via CommandContext (which kills only the direct child)
 	cmd.Dir = cwd
 	cmd.Env = env
+	setProcessGroup(cmd)
 
 	stdoutBuf := &cappedBuffer{limit: maxBytes}
 	stderrBuf := &cappedBuffer{limit: maxBytes}
@@ -95,7 +104,26 @@ func (r *ExecAgentRunner) Run(ctx context.Context, step core.Step, _ string) (ma
 	cmd.Stderr = stderrBuf
 
 	t0 := time.Now()
-	runErr := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("exec runner: step %q: %w", step.ID, err)
+	}
+
+	// Watcher goroutine: if the deadline trips before Wait returns, kill the
+	// whole process group. Closed `done` signals the watcher to exit cleanly
+	// on normal completion.
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-runCtx.Done():
+			if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+				killProcessGroup(cmd)
+			}
+		case <-done:
+		}
+	}()
+
+	runErr := cmd.Wait()
+	close(done)
 	elapsed := time.Since(t0)
 
 	// Timeout always fails, regardless of allow_nonzero_exit.

@@ -142,12 +142,18 @@ func TestSQLiteStorage_TrackListFilters(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	tracks := []*core.Track{
-		{ID: "t1", Slug: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
-			CreatedAt: now, UpdatedAt: now},
-		{ID: "t2", Slug: "t2", Title: "T2", Type: "bug", Status: core.TrackStatusActive,
-			CreatedAt: now, UpdatedAt: now},
-		{ID: "t3", Slug: "t3", Title: "T3", Type: "feature", Status: core.TrackStatusCompleted,
-			CreatedAt: now, UpdatedAt: now},
+		{
+			ID: "t1", Slug: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
+			CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			ID: "t2", Slug: "t2", Title: "T2", Type: "bug", Status: core.TrackStatusActive,
+			CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			ID: "t3", Slug: "t3", Title: "T3", Type: "feature", Status: core.TrackStatusCompleted,
+			CreatedAt: now, UpdatedAt: now,
+		},
 	}
 	for _, tr := range tracks {
 		if err := s.CreateTrack(ctx, tr); err != nil {
@@ -203,10 +209,14 @@ func TestSQLiteStorage_TrackListByProjectID(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	pid := "proj-a"
 	tracks := []*core.Track{
-		{ID: "t1", Slug: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
-			CreatedAt: now, UpdatedAt: now, ProjectID: &pid},
-		{ID: "t2", Slug: "t2", Title: "T2", Type: "feature", Status: core.TrackStatusPending,
-			CreatedAt: now, UpdatedAt: now},
+		{
+			ID: "t1", Slug: "t1", Title: "T1", Type: "feature", Status: core.TrackStatusPending,
+			CreatedAt: now, UpdatedAt: now, ProjectID: &pid,
+		},
+		{
+			ID: "t2", Slug: "t2", Title: "T2", Type: "feature", Status: core.TrackStatusPending,
+			CreatedAt: now, UpdatedAt: now,
+		},
 	}
 	for _, tr := range tracks {
 		if err := s.CreateTrack(ctx, tr); err != nil {

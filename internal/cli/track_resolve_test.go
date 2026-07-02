@@ -8,13 +8,16 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-func createTrack(t *testing.T, ctx context.Context, s interface{ CreateTrack(context.Context, *core.Track) error }, id, title, typ string, status core.TrackStatus) {
+func createTrack(t *testing.T, ctx context.Context, s interface {
+	CreateTrack(context.Context, *core.Track) error
+}, id, title string, status core.TrackStatus,
+) {
 	t.Helper()
 	now := time.Now().UTC()
 	// Use the supplied id as Slug too so the (project_id, slug) UNIQUE
 	// constraint is satisfied across multiple inserts in the same test.
 	if err := s.CreateTrack(ctx, &core.Track{
-		ID: id, Slug: id, Title: title, Type: typ, Status: status,
+		ID: id, Slug: id, Title: title, Type: "feature", Status: status,
 		CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("create track %s: %v", id, err)
@@ -36,7 +39,7 @@ func TestResolveTrackID_Exact(t *testing.T) {
 	}
 	defer s.Close()
 
-	createTrack(t, ctx, s, "inbox-protocol", "Inbox", "feature", core.TrackStatusActive)
+	createTrack(t, ctx, s, "inbox-protocol", "Inbox", core.TrackStatusActive)
 
 	got, err := resolveTrackID(ctx, s, "inbox-protocol")
 	if err != nil {
@@ -56,8 +59,8 @@ func TestResolveTrackID_Prefix(t *testing.T) {
 	}
 	defer s.Close()
 
-	createTrack(t, ctx, s, "inbox-protocol", "Inbox", "feature", core.TrackStatusActive)
-	createTrack(t, ctx, s, "filesystem-projection", "FS", "feature", core.TrackStatusCompleted)
+	createTrack(t, ctx, s, "inbox-protocol", "Inbox", core.TrackStatusActive)
+	createTrack(t, ctx, s, "filesystem-projection", "FS", core.TrackStatusCompleted)
 
 	got, err := resolveTrackID(ctx, s, "inbox")
 	if err != nil {
@@ -77,7 +80,7 @@ func TestResolveTrackID_Fuzzy(t *testing.T) {
 	}
 	defer s.Close()
 
-	createTrack(t, ctx, s, "task-prompt-nl-interface", "NL", "feature", core.TrackStatusPending)
+	createTrack(t, ctx, s, "task-prompt-nl-interface", "NL", core.TrackStatusPending)
 
 	got, err := resolveTrackID(ctx, s, "task-prompt-nl-inter")
 	if err != nil {
@@ -97,8 +100,8 @@ func TestResolveTrackID_AmbiguousPrefix(t *testing.T) {
 	}
 	defer s.Close()
 
-	createTrack(t, ctx, s, "feat-alpha", "Alpha", "feature", core.TrackStatusActive)
-	createTrack(t, ctx, s, "feat-beta", "Beta", "feature", core.TrackStatusActive)
+	createTrack(t, ctx, s, "feat-alpha", "Alpha", core.TrackStatusActive)
+	createTrack(t, ctx, s, "feat-beta", "Beta", core.TrackStatusActive)
 
 	_, err = resolveTrackID(ctx, s, "feat")
 	if err == nil {
@@ -115,7 +118,7 @@ func TestResolveTrackID_NotFound(t *testing.T) {
 	}
 	defer s.Close()
 
-	createTrack(t, ctx, s, "inbox-protocol", "Inbox", "feature", core.TrackStatusActive)
+	createTrack(t, ctx, s, "inbox-protocol", "Inbox", core.TrackStatusActive)
 
 	_, err = resolveTrackID(ctx, s, "zzz-nonexistent")
 	if err == nil {

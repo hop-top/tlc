@@ -13,8 +13,8 @@ type stubAdapter struct {
 	schemes []string
 }
 
-func (a *stubAdapter) Name() string           { return a.name }
-func (a *stubAdapter) Schemes() []string      { return a.schemes }
+func (a *stubAdapter) Name() string      { return a.name }
+func (a *stubAdapter) Schemes() []string { return a.schemes }
 func (a *stubAdapter) Discover(config.SpaceConfig) ([]core.RegisteredProject, error) {
 	return nil, nil
 }

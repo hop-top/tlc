@@ -19,9 +19,9 @@ func TestConfirmBridgeSetsConfirmYes(t *testing.T) {
 	installConfirmBridge(leaf, "yes", "no-prompt")
 
 	cases := []struct {
-		name     string
-		args     []string
-		wantYes  bool
+		name    string
+		args    []string
+		wantYes bool
 	}{
 		{"baseline no flag", []string{"delete"}, false},
 		{"local --yes flips", []string{"delete", "--yes"}, true},

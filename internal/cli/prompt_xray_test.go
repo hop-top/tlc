@@ -14,7 +14,7 @@ func TestFindXrayCache_ReturnsContent(t *testing.T) {
 	_ = os.Chdir(tmp)
 
 	content := "# Project Map\n- src/\n- go.mod\n"
-	if err := os.WriteFile(".xray_root.md", []byte(content), 0644); err != nil {
+	if err := os.WriteFile(".xray_root.md", []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -30,8 +30,8 @@ func TestFindXrayCache_PicksFirstAlphabetically(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(orig) })
 	_ = os.Chdir(tmp)
 
-	_ = os.WriteFile(".xray_a_root.md", []byte("first"), 0644)
-	_ = os.WriteFile(".xray_b_chunk.md", []byte("second"), 0644)
+	_ = os.WriteFile(".xray_a_root.md", []byte("first"), 0o644)
+	_ = os.WriteFile(".xray_b_chunk.md", []byte("second"), 0o644)
 
 	got := findXrayCache()
 	if got != "first" {
@@ -70,7 +70,7 @@ func TestLoadXrayContext_CachedFile(t *testing.T) {
 	_ = os.Chdir(tmp)
 
 	content := "# Root chunk\nfiles listed here\n"
-	_ = os.WriteFile(".xray_root.md", []byte(content), 0644)
+	_ = os.WriteFile(".xray_root.md", []byte(content), 0o644)
 
 	got := loadXrayContext()
 	if got != content {
@@ -102,7 +102,7 @@ func TestLoadXrayContext_TruncatesToMaxBytes(t *testing.T) {
 
 	// Create content larger than xrayMaxBytes (4096).
 	big := strings.Repeat("x", xrayMaxBytes+500)
-	_ = os.WriteFile(".xray_root.md", []byte(big), 0644)
+	_ = os.WriteFile(".xray_root.md", []byte(big), 0o644)
 
 	got := loadXrayContext()
 	if len(got) != xrayMaxBytes {
@@ -139,7 +139,7 @@ func TestFindXrayCache_UnreadableFile(t *testing.T) {
 	_ = os.Chdir(tmp)
 
 	path := filepath.Join(tmp, ".xray_root.md")
-	_ = os.WriteFile(path, []byte("content"), 0000)
+	_ = os.WriteFile(path, []byte("content"), 0o000)
 
 	got := findXrayCache()
 	if got != "" {

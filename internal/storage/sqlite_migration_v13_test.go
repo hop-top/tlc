@@ -123,7 +123,8 @@ func TestMigrationV15_TaskLogsNoCascade(t *testing.T) {
 	}
 
 	// Delete task — log row must survive (no cascade post-v15).
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(
+		ctx,
 		`DELETE FROM tasks WHERE id = 'task_01h455vb4pex5vsknk084sn02q'`,
 	); err != nil {
 		t.Fatalf("delete task: %v", err)
@@ -131,7 +132,8 @@ func TestMigrationV15_TaskLogsNoCascade(t *testing.T) {
 
 	var n int
 	var note string
-	if err := s.db.QueryRowContext(ctx,
+	if err := s.db.QueryRowContext(
+		ctx,
 		`SELECT count(*) FROM task_logs WHERE task_id = 'task_01h455vb4pex5vsknk084sn02q'`,
 	).Scan(&n); err != nil {
 		t.Fatalf("count logs: %v", err)
@@ -140,7 +142,8 @@ func TestMigrationV15_TaskLogsNoCascade(t *testing.T) {
 		t.Fatalf("after task delete, log rows = %d; want 1 (cascade dropped)", n)
 	}
 
-	if err := s.db.QueryRowContext(ctx,
+	if err := s.db.QueryRowContext(
+		ctx,
 		`SELECT note FROM task_logs WHERE task_id = 'task_01h455vb4pex5vsknk084sn02q'`,
 	).Scan(&note); err != nil {
 		t.Fatalf("read note: %v", err)

@@ -21,7 +21,7 @@ import (
 // when run from a project-scoped directory (project.id set in .tlc/config.yaml).
 //
 // Root cause: ExtractTasksFromFlow / flow executor creates tasks without setting
-// task.ProjectID, so the task is stored with project_id=''. AddLog then queries
+// task.ProjectID, so the task is stored with project_id=”. AddLog then queries
 // tasks filtered by DetectProject().ProjectID (e.g. "test/project") — finding
 // no row — and returns sql.ErrNoRows.
 func TestFlowInvoke_ProjectScoped_CreatesTasksWithoutError(t *testing.T) {

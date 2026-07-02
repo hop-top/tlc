@@ -77,7 +77,8 @@ func TestNextFireFromRRule_WeeklyByDay(t *testing.T) {
 	// Sun (skip), Mon (match) → 2026-05-04 12:00 UTC.
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC) // Friday
 	next, ok, err := core.NextFireFromRRule(
-		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, now)
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, now,
+	)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC), next)
@@ -92,7 +93,8 @@ func TestNextFireFromRRule_WeeklyByDayCoversAllListedDays(t *testing.T) {
 
 	// 1st call: Mon 2026-05-04
 	t1, ok1, err1 := core.NextFireFromRRule(
-		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, now)
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, now,
+	)
 	assert.NoError(t, err1)
 	assert.True(t, ok1)
 	assert.Equal(t, time.Monday, t1.Weekday())
@@ -100,14 +102,16 @@ func TestNextFireFromRRule_WeeklyByDayCoversAllListedDays(t *testing.T) {
 	// 2nd call: from Monday, next is Wednesday. Anchor stays at `now`
 	// (DTSTART), cursor advances per call.
 	t2, ok2, err2 := core.NextFireFromRRule(
-		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, t1)
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, t1,
+	)
 	assert.NoError(t, err2)
 	assert.True(t, ok2)
 	assert.Equal(t, time.Wednesday, t2.Weekday())
 
 	// 3rd call: from Wednesday, next is Friday.
 	t3, ok3, err3 := core.NextFireFromRRule(
-		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, t2)
+		"FREQ=WEEKLY;BYDAY=MO,WE,FR", now, t2,
+	)
 	assert.NoError(t, err3)
 	assert.True(t, ok3)
 	assert.Equal(t, time.Friday, t3.Weekday())
@@ -118,7 +122,8 @@ func TestNextFireFromRRule_DailyByDay(t *testing.T) {
 	// next = Sat (skip), Sun (skip), Mon (match).
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC) // Friday
 	next, ok, err := core.NextFireFromRRule(
-		"FREQ=DAILY;BYDAY=MO,WE,FR", now, now)
+		"FREQ=DAILY;BYDAY=MO,WE,FR", now, now,
+	)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	expected := now.AddDate(0, 0, 3) // Monday
@@ -133,7 +138,8 @@ func TestNextFireFromRRule_MonthlyByMonthDay(t *testing.T) {
 	// Reference 2026-05-15 → next FREQ=MONTHLY;BYMONTHDAY=1 is 2026-06-01.
 	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
 	next, ok, err := core.NextFireFromRRule(
-		"FREQ=MONTHLY;BYMONTHDAY=1", now, now)
+		"FREQ=MONTHLY;BYMONTHDAY=1", now, now,
+	)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC), next)
@@ -144,7 +150,8 @@ func TestNextFireFromRRule_MonthlyByMonthDay(t *testing.T) {
 func TestNextFireFromRRule_MonthlyByMonthDayLastDay(t *testing.T) {
 	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
 	next, ok, err := core.NextFireFromRRule(
-		"FREQ=MONTHLY;BYMONTHDAY=-1", now, now)
+		"FREQ=MONTHLY;BYMONTHDAY=-1", now, now,
+	)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC), next)

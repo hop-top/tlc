@@ -57,7 +57,8 @@ func (ti *taskItem) Render(width int) string {
 		syncIcon = ti.styles.Warning.Render(" ↑")
 	}
 
-	return fmt.Sprintf("%s %s %s %s%s%s%s",
+	return fmt.Sprintf(
+		"%s %s %s %s%s%s%s",
 		cursor, displayAlias(ti.task), status, title,
 		syncIcon, ti.styles.Muted.Render(assignee), tags,
 	)
@@ -98,7 +99,8 @@ func (fi *flowRunItem) Render(_ int) string {
 	// Table cell: humanise StartedAt ("3m ago"). T-1384.
 	startedAt := displaytime.DisplayTimeRelative(fi.run.StartedAt)
 
-	line := fmt.Sprintf("%s %s %s %s (%s)",
+	line := fmt.Sprintf(
+		"%s %s %s %s (%s)",
 		cursor, fi.run.ID, fi.run.FlowID, statusStr, startedAt,
 	)
 

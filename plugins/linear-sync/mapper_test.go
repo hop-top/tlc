@@ -64,13 +64,13 @@ func isTaskTypeID(s string) bool {
 
 func baseIssue() map[string]interface{} {
 	return map[string]interface{}{
-		"id":         "issue-uuid-1",
-		"identifier": "ENG-42",
-		"title":      "Fix login bug",
+		"id":          "issue-uuid-1",
+		"identifier":  "ENG-42",
+		"title":       "Fix login bug",
 		"description": "Users can't login",
-		"url":        "https://linear.app/team/issue/ENG-42",
-		"createdAt":  "2025-01-15T10:00:00Z",
-		"updatedAt":  "2025-01-16T12:00:00Z",
+		"url":         "https://linear.app/team/issue/ENG-42",
+		"createdAt":   "2025-01-15T10:00:00Z",
+		"updatedAt":   "2025-01-16T12:00:00Z",
 		"state": map[string]interface{}{
 			"name": "In Progress",
 		},

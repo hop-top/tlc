@@ -57,17 +57,17 @@ func makeStepWithConfig(id, agent string, cfg map[string]any) core.Step {
 // builtins returns a registry with all standard adapters.
 func builtins() map[string]AgentAdapter {
 	return map[string]AgentAdapter{
-		"claude":   NewClaudeAdapter(),
-		"gemini":   NewGeminiAdapter(),
-		"fabric":   NewFabricAdapter(),
-		"llm":      NewLLMAdapter(),
-		"codex":    NewCodexAdapter(),
-		"opencode":  NewOpenCodeAdapter(),
-		"crewai":      NewCrewAIAdapter(),
-		"langchain":   NewLangChainAdapter(),
-		"google-adk":  NewGoogleADKAdapter(),
-		"n8n":         NewN8NAdapter(),
-		"bedrock":     NewBedrockAdapter(),
+		"claude":     NewClaudeAdapter(),
+		"gemini":     NewGeminiAdapter(),
+		"fabric":     NewFabricAdapter(),
+		"llm":        NewLLMAdapter(),
+		"codex":      NewCodexAdapter(),
+		"opencode":   NewOpenCodeAdapter(),
+		"crewai":     NewCrewAIAdapter(),
+		"langchain":  NewLangChainAdapter(),
+		"google-adk": NewGoogleADKAdapter(),
+		"n8n":        NewN8NAdapter(),
+		"bedrock":    NewBedrockAdapter(),
 	}
 }
 

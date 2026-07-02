@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"hop.top/kit/go/core/xdg"
 	"hop.top/kit/go/core/upgrade"
 	"hop.top/kit/go/core/upgrade/skill"
+	"hop.top/kit/go/core/xdg"
 )
 
 const tlcGitHubRepo = "hop-top/tlc"
@@ -47,8 +47,8 @@ Agents read this to know how to self-upgrade tlc before executing tasks.`,
 		"kit/idempotent":  "yes",
 	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		auto, _ := cmd.Flags().GetBool("auto")      //nolint:errcheck // registered flag
-		never, _ := cmd.Flags().GetBool("never")    //nolint:errcheck // registered flag
+		auto, _ := cmd.Flags().GetBool("auto")       //nolint:errcheck // registered flag
+		never, _ := cmd.Flags().GetBool("never")     //nolint:errcheck // registered flag
 		install, _ := cmd.Flags().GetBool("install") //nolint:errcheck // registered flag
 
 		level := skill.SnoozeOnce

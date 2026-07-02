@@ -11,7 +11,7 @@ import (
 // It unmarshals from either a plain string ("claude") or a struct
 // ({name: gemini, config: {dir: /custom}}).
 type AgentRef struct {
-	Name   string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Name   string         `json:"name,omitempty" yaml:"name,omitempty"`
 	Config map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
 }
 

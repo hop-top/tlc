@@ -114,7 +114,8 @@ func writePlanMD(w io.Writer, track *core.Track, configDir, trackDir string) {
 	// In hop mode this is ".hop/tlc"; in standalone mode ".tlc".
 	relBase := configDirRelToCwd(configDir)
 	dirName := trackScaffoldDirName(track)
-	content := fmt.Sprintf(`---
+	content := fmt.Sprintf(
+		`---
 title: %q
 tracks:
   - %s

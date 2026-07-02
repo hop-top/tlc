@@ -11,7 +11,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 	"hop.top/tlc/internal/uriutil"
-	"hop.top/uri"
 )
 
 // PlanFrontmatter represents the YAML frontmatter of a plan document.
@@ -172,25 +171,55 @@ func parseBlockedByRef(raw interface{}) (BlockedByRef, error) {
 	}
 }
 
-// parseTLCURIRef parses a "tlc://..." URI into a BlockedByRef. It
-// uses hop.top/uri.Parse for structural decomposition.
+// splitTLCURI decomposes a "tlc://..." URI into (namespace, id) without
+// going through scheme.Parse, which rejects empty-namespace URIs. The
+// historical contract accepts "tlc:///T-NNNN" as a local task ref.
+//
+// Returns ok=false only when the input does not start with "tlc://".
+// Empty namespace and empty id are both permitted at this layer; callers
+// validate task ID shape after splitting.
+func splitTLCURI(s string) (namespace, id string, ok bool) {
+	const prefix = "tlc://"
+	if !strings.HasPrefix(s, prefix) {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(s, prefix)
+	// Trim query/fragment; plan refs do not use them.
+	if i := strings.IndexAny(rest, "?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	if rest == "" {
+		return "", "", true
+	}
+	// First segment is namespace; remainder (joined) is id.
+	if i := strings.Index(rest, "/"); i >= 0 {
+		return rest[:i], rest[i+1:], true
+	}
+	// Single segment with no trailing slash → treat as namespace, id empty.
+	return rest, "", true
+}
+
+// parseTLCURIRef parses a "tlc://..." URI into a BlockedByRef.
 //
 // Accepted forms:
 //   - tlc://org/project/T-NNNN → CrossProject{org/project, T-NNNN}
 //   - tlc:///T-NNNN            → TaskID (local bare ref)
 func parseTLCURIRef(s string) (BlockedByRef, error) {
-	u, err := uri.Parse(s)
-	if err != nil {
+	// scheme.Parse requires a non-empty namespace, so parse the URI
+	// components manually here to preserve the historical contract
+	// that "tlc:///T-NNNN" (empty namespace, local task ref) is valid
+	// and that "tlc://incomplete" surfaces the friendlier "missing or
+	// invalid task ID" message rather than a low-level parser error.
+	namespace, id, ok := splitTLCURI(s)
+	if !ok {
 		return BlockedByRef{}, fmt.Errorf(
-			"blocked-by entry %q: invalid tlc URI; %w", s, err,
+			"blocked-by entry %q: invalid tlc URI; "+
+				"expected tlc://<org>/<project>/<T-NNNN> or tlc:///T-NNNN",
+			s,
 		)
 	}
 
-	// Extract project and task from parsed URI. The uri library
-	// places the host in Space and the path (minus leading /) in
-	// ID. For "tlc://org/project/T-NNNN": Space=org, ID=project/T-NNNN.
-	// For "tlc:///T-NNNN": Space="", ID=T-NNNN.
-	projectID, taskID := uriutil.SplitProjectTask(u.Space, u.ID)
+	projectID, taskID := uriutil.SplitProjectTask(namespace, id)
 
 	if taskID == "" || !taskIDPattern.MatchString(taskID) {
 		return BlockedByRef{}, fmt.Errorf(
@@ -212,7 +241,6 @@ func parseTLCURIRef(s string) (BlockedByRef, error) {
 		},
 	}, nil
 }
-
 
 // UnmarshalYAML implements yaml.Unmarshaler so BlockedByRef can be
 // decoded from either a scalar int or a scalar string inside a

@@ -167,7 +167,6 @@ func confirmBatch(cmd *cobra.Command, tasks []*uri.ResolvedTask, pattern string)
 				Value(&confirmed),
 		),
 	).WithOutput(cmd.OutOrStdout()).Run()
-
 	if err != nil {
 		return err
 	}

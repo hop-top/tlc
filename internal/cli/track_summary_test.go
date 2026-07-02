@@ -120,12 +120,12 @@ func TestTrackSummary_Overcommitted(t *testing.T) {
 		for _, tr := range []*core.Track{
 			{
 				ID: "trk-1", Title: "T1", Type: "feature",
-				Status: core.TrackStatusActive,
+				Status:    core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			},
 			{
 				ID: "trk-2", Title: "T2", Type: "feature",
-				Status: core.TrackStatusActive,
+				Status:    core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			},
 		} {

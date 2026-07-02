@@ -43,11 +43,11 @@ func (e *ErrTrustRequired) Error() string {
 // supports ${VAR} env-var expansion; project-local values are literal
 // (security: prevents secret exfiltration via committed config).
 type AgentRegistry struct {
-	mu              sync.RWMutex
-	global          map[string]*AgentConfig
-	project         map[string]*AgentConfig
-	trusted         map[string]bool // path -> user approved
-	projectCfgPath  string          // actual loaded project config path
+	mu             sync.RWMutex
+	global         map[string]*AgentConfig
+	project        map[string]*AgentConfig
+	trusted        map[string]bool // path -> user approved
+	projectCfgPath string          // actual loaded project config path
 }
 
 // NewAgentRegistry returns an empty registry.

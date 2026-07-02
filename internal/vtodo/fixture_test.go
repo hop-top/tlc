@@ -41,7 +41,8 @@ func TestFixture_SingleTask(t *testing.T) {
 	require.Equal(t, core.PriorityP1, got.Priority)
 	require.Equal(t, core.EffortM, got.Effort)
 	require.Equal(t, []string{"security", "auth"}, got.Tags)
-	require.Equal(t,
+	require.Equal(
+		t,
 		"tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn02q",
 		got.Reference,
 	)

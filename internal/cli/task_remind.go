@@ -11,9 +11,7 @@ import (
 	"hop.top/tlc/internal/displaytime"
 )
 
-var (
-	taskRemindCheck bool
-)
+var taskRemindCheck bool
 
 var TaskRemindCmd = &cobra.Command{
 	Use:   "remind",
@@ -83,7 +81,8 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 		if taskRemindCheck {
 			if len(overdue) > 0 {
 				for _, t := range overdue {
-					fmt.Fprintf(os.Stderr,
+					fmt.Fprintf(
+						os.Stderr,
 						"OVERDUE: %s %s (due %s)\n",
 						t.ID, t.Title,
 						DisplayTimePtrRelative(t.DueAt),
@@ -101,7 +100,8 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 		if len(overdue) > 0 {
 			fmt.Fprintln(w, "OVERDUE:")
 			for _, t := range overdue {
-				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
+				fmt.Fprintf(
+					w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
 					DisplayTimePtrRelative(t.DueAt),
 				)
@@ -112,7 +112,8 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 		if len(dueToday) > 0 {
 			fmt.Fprintln(w, "DUE TODAY:")
 			for _, t := range dueToday {
-				fmt.Fprintf(w, "  %s  %-40s  due %s\n",
+				fmt.Fprintf(
+					w, "  %s  %-40s  due %s\n",
 					t.ID, t.Title,
 					DisplayTimePtrRelative(t.DueAt),
 				)
@@ -129,7 +130,8 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 				} else if nr := t.NextReminder(); nr != nil {
 					label = "next " + DisplayTimeRelative(*nr)
 				}
-				fmt.Fprintf(w, "  %s  %-40s  %s\n",
+				fmt.Fprintf(
+					w, "  %s  %-40s  %s\n",
 					t.ID, t.Title, label,
 				)
 			}
@@ -140,7 +142,8 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 		if len(nudges) > 0 {
 			fmt.Fprintln(w, "AGE NUDGES:")
 			for _, n := range nudges {
-				fmt.Fprintf(w, "  %s  %-30s  %s (%s idle)\n",
+				fmt.Fprintf(
+					w, "  %s  %-30s  %s (%s idle)\n",
 					n.TaskID, n.Status, n.Action,
 					n.Age.Truncate(time.Hour),
 				)

@@ -26,7 +26,7 @@ python-mvc, generic).`,
 		"kit/side-effect": "write-local",
 		"kit/idempotent":  "yes",
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		wd, _ := os.Getwd() //nolint:errcheck // best-effort directory detection
 
 		var pType labels.ProjectType
@@ -45,6 +45,7 @@ python-mvc, generic).`,
 		}
 
 		fmt.Println("\n✓ Labels initialized locally")
+		return nil
 	},
 }
 
@@ -55,9 +56,10 @@ var labelListCmd = &cobra.Command{
 	Annotations: map[string]string{
 		"kit/side-effect": "read",
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		fmt.Println("Project labels:")
 		// Logic to list labels from storage
+		return nil
 	},
 }
 
@@ -69,7 +71,7 @@ var labelTemplatesCmd = &cobra.Command{
 		"kit/side-effect": "read",
 		"kit/idempotent":  "yes",
 	},
-	Run: func(_ *cobra.Command, _ []string) {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		pTypes := []labels.ProjectType{
 			labels.TypeGoBinary,
 			labels.TypeReactFrontend,
@@ -84,6 +86,7 @@ var labelTemplatesCmd = &cobra.Command{
 			}
 			fmt.Println()
 		}
+		return nil
 	},
 }
 

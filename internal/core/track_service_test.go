@@ -112,6 +112,7 @@ func (r *stubTaskRepo) GetTaskBySeq(_ context.Context, _ string, _ int64) (*Task
 func (r *stubTaskRepo) GetTask(_ context.Context, _ string) (*Task, error) {
 	return nil, nil
 }
+
 func (r *stubTaskRepo) UpdateTask(_ context.Context, task *Task) error {
 	for i, t := range r.tasks {
 		if t.ID == task.ID {
@@ -122,6 +123,7 @@ func (r *stubTaskRepo) UpdateTask(_ context.Context, task *Task) error {
 	}
 	return fmt.Errorf("task %q not found", task.ID)
 }
+
 func (r *stubTaskRepo) UpdateTaskWithLog(_ context.Context, task *Task, _ *LogEntry) error {
 	for i, t := range r.tasks {
 		if t.ID == task.ID {
@@ -136,9 +138,11 @@ func (r *stubTaskRepo) DeleteTask(_ context.Context, _ string) error { return ni
 func (r *stubTaskRepo) GetTasksNeedingPush(_ context.Context) ([]*Task, error) {
 	return nil, nil
 }
+
 func (r *stubTaskRepo) FindTaskByOrigin(_ context.Context, _, _ string) (*Task, error) {
 	return nil, nil
 }
+
 func (r *stubTaskRepo) ArchiveTasks(_ context.Context, _ time.Duration) (int64, error) {
 	return 0, nil
 }

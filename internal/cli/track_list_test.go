@@ -134,14 +134,22 @@ func TestTrackList_DefaultFilterExcludesTerminal(t *testing.T) {
 
 		svc := core.NewTrackService(s, s)
 		for _, tr := range []*core.Track{
-			{ID: "tr-pending", Title: "Pending", Type: "feature",
-				Status: core.TrackStatusPending},
-			{ID: "tr-active", Title: "Active", Type: "feature",
-				Status: core.TrackStatusActive},
-			{ID: "tr-completed", Title: "Completed", Type: "feature",
-				Status: core.TrackStatusCompleted},
-			{ID: "tr-abandoned", Title: "Abandoned", Type: "feature",
-				Status: core.TrackStatusAbandoned},
+			{
+				ID: "tr-pending", Title: "Pending", Type: "feature",
+				Status: core.TrackStatusPending,
+			},
+			{
+				ID: "tr-active", Title: "Active", Type: "feature",
+				Status: core.TrackStatusActive,
+			},
+			{
+				ID: "tr-completed", Title: "Completed", Type: "feature",
+				Status: core.TrackStatusCompleted,
+			},
+			{
+				ID: "tr-abandoned", Title: "Abandoned", Type: "feature",
+				Status: core.TrackStatusAbandoned,
+			},
 		} {
 			if err := svc.CreateTrack(ctx, tr); err != nil {
 				t.Fatalf("create track: %v", err)
@@ -367,10 +375,14 @@ func TestTrackList_AllProjects(t *testing.T) {
 		projA := "hop-top/tlc"
 		projB := "hop-top/aps"
 		for _, tr := range []*core.Track{
-			{ID: "track-a", Title: "Track A", Type: "feature",
-				Status: core.TrackStatusActive, ProjectID: &projA},
-			{ID: "track-b", Title: "Track B", Type: "bug",
-				Status: core.TrackStatusActive, ProjectID: &projB},
+			{
+				ID: "track-a", Title: "Track A", Type: "feature",
+				Status: core.TrackStatusActive, ProjectID: &projA,
+			},
+			{
+				ID: "track-b", Title: "Track B", Type: "bug",
+				Status: core.TrackStatusActive, ProjectID: &projB,
+			},
 		} {
 			if err := svc.CreateTrack(ctx, tr); err != nil {
 				t.Fatalf("create track: %v", err)

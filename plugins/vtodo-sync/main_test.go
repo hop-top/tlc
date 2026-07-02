@@ -309,5 +309,3 @@ func newRequest(t *testing.T, id int, method string, params interface{}) Request
 		ID:      id,
 	}
 }
-
-

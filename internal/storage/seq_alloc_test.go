@@ -85,7 +85,7 @@ func TestCreateTask_ConcurrentAllocationsAreUnique(t *testing.T) {
 	}
 
 	seen := make(map[int64]bool, n)
-	var minSeq, maxSeq int64 = 1<<62, 0
+	var minSeq, maxSeq int64 = 1 << 62, 0
 	for _, s := range seqs {
 		if seen[s] {
 			t.Fatalf("duplicate seq assigned: %d (slice: %v)", s, seqs)

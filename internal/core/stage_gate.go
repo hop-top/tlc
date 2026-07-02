@@ -108,13 +108,13 @@ func GateTrackCreate(scope, trackType string) error {
 		return &StageGateError{
 			Scope: scope, Stage: st.Stage, Op: "track.create", Kind: "track",
 			TrackType: trackType,
-			Message: "scope is in sunset; no new entities allowed (updates/deletes ok)",
+			Message:   "scope is in sunset; no new entities allowed (updates/deletes ok)",
 		}
 	case stage.StageArchived:
 		return &StageGateError{
 			Scope: scope, Stage: st.Stage, Op: "track.create", Kind: "track",
 			TrackType: trackType,
-			Message: "scope is archived; all mutations blocked",
+			Message:   "scope is archived; all mutations blocked",
 		}
 	default:
 		// Unknown Stage value — treat as deny so a forward-compatible
@@ -124,7 +124,7 @@ func GateTrackCreate(scope, trackType string) error {
 		return &StageGateError{
 			Scope: scope, Stage: st.Stage, Op: "track.create", Kind: "track",
 			TrackType: trackType,
-			Message: "unrecognized stage; refusing track create defensively",
+			Message:   "unrecognized stage; refusing track create defensively",
 		}
 	}
 }
@@ -180,19 +180,19 @@ func GateTaskCreate(scope, trackType string) error {
 		return &StageGateError{
 			Scope: scope, Stage: st.Stage, Op: "task.create", Kind: "task",
 			TrackType: trackType,
-			Message: "scope is in sunset; no new entities allowed (updates/deletes ok)",
+			Message:   "scope is in sunset; no new entities allowed (updates/deletes ok)",
 		}
 	case stage.StageArchived:
 		return &StageGateError{
 			Scope: scope, Stage: st.Stage, Op: "task.create", Kind: "task",
 			TrackType: trackType,
-			Message: "scope is archived; all mutations blocked",
+			Message:   "scope is archived; all mutations blocked",
 		}
 	default:
 		return &StageGateError{
 			Scope: scope, Stage: st.Stage, Op: "task.create", Kind: "task",
 			TrackType: trackType,
-			Message: "unrecognized stage; refusing task create defensively",
+			Message:   "unrecognized stage; refusing task create defensively",
 		}
 	}
 }

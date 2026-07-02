@@ -41,12 +41,12 @@ type TrackHealthConfig struct {
 
 // TrackConfig holds track-related configuration.
 type TrackConfig struct {
-	Dir            string           `yaml:"dir,omitempty"`
-	StaleThreshold time.Duration    `yaml:"stale_threshold"`
+	Dir            string            `yaml:"dir,omitempty"`
+	StaleThreshold time.Duration     `yaml:"stale_threshold"`
 	Health         TrackHealthConfig `yaml:"health"`
-	PlanExtractor  string           `yaml:"plan_extractor,omitempty"`
-	Types          []string         `yaml:"types,omitempty"`
-	DefaultType    string           `yaml:"default_type,omitempty"`
+	PlanExtractor  string            `yaml:"plan_extractor,omitempty"`
+	Types          []string          `yaml:"types,omitempty"`
+	DefaultType    string            `yaml:"default_type,omitempty"`
 }
 
 // TracksDir returns the configured tracks directory or the default "tracks".

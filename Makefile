@@ -86,9 +86,9 @@ lint-fix: ## Run golangci-lint with auto-fix
 	@golangci-lint run --config .golangci.yml --fix
 	@echo "$(COLOR_GREEN)✓ Linting and fixes applied$(COLOR_RESET)"
 
-fmt: ## Format all Go files
+fmt: ## Format all Go files (gofumpt + goimports; gofumpt is a strict gofmt superset)
 	@echo "$(COLOR_BLUE)Formatting Go files...$(COLOR_RESET)"
-	@gofmt -s -w $(GO_FILES)
+	@gofumpt -w $(GO_FILES)
 	@goimports -w $(GO_FILES)
 	@echo "$(COLOR_GREEN)✓ Formatting complete$(COLOR_RESET)"
 
@@ -104,7 +104,7 @@ tidy: ## Tidy and verify go modules
 
 fmt-check: ## Check formatting (non-mutating; fails if files need formatting)
 	@echo "$(COLOR_BLUE)Checking Go file formatting...$(COLOR_RESET)"
-	@bad=$$(gofmt -l $(GO_FILES)); if [ -n "$$bad" ]; then echo "$$bad"; echo "$(COLOR_YELLOW)⚠ Run 'make fmt' to fix$(COLOR_RESET)"; exit 1; fi
+	@bad=$$(gofumpt -l $(GO_FILES)); if [ -n "$$bad" ]; then echo "$$bad"; echo "$(COLOR_YELLOW)⚠ Run 'make fmt' to fix$(COLOR_RESET)"; exit 1; fi
 	@bad=$$(goimports -l $(GO_FILES)); if [ -n "$$bad" ]; then echo "$$bad"; echo "$(COLOR_YELLOW)⚠ Run 'make fmt' to fix$(COLOR_RESET)"; exit 1; fi
 	@echo "$(COLOR_GREEN)✓ Formatting check passed$(COLOR_RESET)"
 
@@ -157,14 +157,21 @@ dev: fmt vet lint tidy test ## Run fmt, vet, lint, tidy, and test (pre-commit wo
 check: fmt-check vet lint tidy-check test ## Full pre-build gate (non-mutating: fmt-check, vet, lint, tidy-check, test)
 	@echo "$(COLOR_GREEN)✓ All checks passed$(COLOR_RESET)"
 
-tools: ## Install development tools (golangci-lint, air)
+# Pinned tool versions. Formatters and linters drift between releases; pin so
+# CI and developer machines agree on rules + whitespace. Keep in sync with the
+# pins in .github/workflows/ci.yml.
+GOLANGCI_LINT_VERSION = v2.12.2
+GOFUMPT_VERSION = v0.10.0
+GOIMPORTS_VERSION = v0.44.0
+
+tools: ## Install development tools (golangci-lint, gofumpt, goimports, air)
 	@echo "$(COLOR_BLUE)Installing development tools...$(COLOR_RESET)"
-	@echo "$(COLOR_YELLOW)→ Installing golangci-lint...$(COLOR_RESET)"
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin latest; \
-	else \
-		echo "  $(COLOR_GREEN)✓ golangci-lint already installed$(COLOR_RESET)"; \
-	fi
+	@echo "$(COLOR_YELLOW)→ Installing golangci-lint $(GOLANGCI_LINT_VERSION)...$(COLOR_RESET)"
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
+	@echo "$(COLOR_YELLOW)→ Installing gofumpt $(GOFUMPT_VERSION)...$(COLOR_RESET)"
+	@go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	@echo "$(COLOR_YELLOW)→ Installing goimports $(GOIMPORTS_VERSION)...$(COLOR_RESET)"
+	@go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
 	@echo "$(COLOR_YELLOW)→ Installing air...$(COLOR_RESET)"
 	@if ! command -v air >/dev/null 2>&1; then \
 		go install github.com/air-verse/air@latest; \

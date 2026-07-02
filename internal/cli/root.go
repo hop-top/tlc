@@ -14,21 +14,21 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"hop.top/kit/go/runtime/bus"
+	"hop.top/kit/go/ai/ext/dispatch"
 	kitcli "hop.top/kit/go/console/cli"
-	kitconfig "hop.top/kit/go/core/config"
+	kitlog "hop.top/kit/go/console/log"
 	"hop.top/kit/go/console/output"
+	kitconfig "hop.top/kit/go/core/config"
+	"hop.top/kit/go/core/upgrade"
+	"hop.top/kit/go/runtime/bus"
 	"hop.top/kit/go/runtime/domain"
 	"hop.top/kit/go/runtime/policy"
-	"hop.top/kit/go/ai/ext/dispatch"
-	kitlog "hop.top/kit/go/console/log"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/events"
 	"hop.top/tlc/internal/extensions"
 	"hop.top/tlc/internal/storage"
 	"hop.top/tlc/internal/uri"
-	"hop.top/kit/go/core/upgrade"
 )
 
 const backendSQLite = "sqlite"
@@ -458,7 +458,15 @@ func initConfig() {
 		// Test-only seam: when set, treat it as a single bare path token.
 		rawConfigTokens = append(rawConfigTokens, cfgFile)
 	}
-	extraPaths, configOverrides, err := kitconfig.ParseConfigArgs(rawConfigTokens)
+	// Restore tlc's directory-resolution contract under kit v0.4: a bare
+	// directory token for -c resolves to <dir>/<LocalConfigDir>/config.yaml
+	// (mode-aware: .tlc/config.yaml standalone, .hop/tlc/config.yaml hop).
+	// Without WithProjectMarker, kit v0.4 hard-rejects directory args.
+	projectMarker := filepath.Join(config.LocalConfigDir(config.DetectMode()), "config.yaml")
+	extraPaths, configOverrides, err := kitconfig.ParseConfigArgs(
+		rawConfigTokens,
+		kitconfig.WithProjectMarker(projectMarker),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: invalid -c/--config: %s\n", err)
 		os.Exit(1)

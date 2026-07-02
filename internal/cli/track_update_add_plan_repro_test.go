@@ -109,7 +109,8 @@ func TestTrackUpdateAddPlan_HonorsTargetTrackID(t *testing.T) {
 				wantTrackID := map[string]string{
 					"alpha": alphaID, "beta": betaID, "gamma": gammaID,
 				}[tc.target]
-				assertOnlyTrackHasPlan(t, planPath, wantTrackID,
+				assertOnlyTrackHasPlan(
+					t, planPath, wantTrackID,
 					alphaID, betaID, gammaID,
 				)
 			})

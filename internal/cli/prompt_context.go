@@ -77,12 +77,12 @@ func runTaskPrompt(cmd *cobra.Command, args []string) error {
 
 // promptContext holds the enriched context for a task prompt.
 type promptContext struct {
-	Task         *core.Task          `json:"task"`
-	Description  string              `json:"description"`
-	BlockedBy    []promptDep         `json:"blocked_by,omitempty"`
-	Blocking     []promptDep         `json:"blocking,omitempty"`
-	Track        *promptTrack        `json:"track,omitempty"`
-	RecentLogs   []promptLogEntry    `json:"recent_activity,omitempty"`
+	Task        *core.Task       `json:"task"`
+	Description string           `json:"description"`
+	BlockedBy   []promptDep      `json:"blocked_by,omitempty"`
+	Blocking    []promptDep      `json:"blocking,omitempty"`
+	Track       *promptTrack     `json:"track,omitempty"`
+	RecentLogs  []promptLogEntry `json:"recent_activity,omitempty"`
 }
 
 // promptDep is a dependency summary for the prompt output.

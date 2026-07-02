@@ -32,22 +32,22 @@ func TestTrackHealth_E2E_SummaryStatusCounts(t *testing.T) {
 		tracks := []*core.Track{
 			{
 				ID: "trk-a", Title: "A", Type: "feature",
-				Status: core.TrackStatusActive,
+				Status:    core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			},
 			{
 				ID: "trk-b", Title: "B", Type: "bug",
-				Status: core.TrackStatusPending,
+				Status:    core.TrackStatusPending,
 				CreatedAt: now, UpdatedAt: now,
 			},
 			{
 				ID: "trk-c", Title: "C", Type: "feature",
-				Status: core.TrackStatusCompleted,
+				Status:    core.TrackStatusCompleted,
 				CreatedAt: now, UpdatedAt: now,
 			},
 			{
 				ID: "trk-d", Title: "D", Type: "refactor",
-				Status: core.TrackStatusAbandoned,
+				Status:    core.TrackStatusAbandoned,
 				CreatedAt: now, UpdatedAt: now,
 			},
 		}
@@ -100,7 +100,7 @@ func TestTrackHealth_E2E_OvercommitWarning(t *testing.T) {
 		} {
 			seedTrack(t, ctx, s, s, &core.Track{
 				ID: id, Title: id, Type: "feature",
-				Status: core.TrackStatusActive,
+				Status:    core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			})
 		}
@@ -146,7 +146,7 @@ func TestTrackHealth_E2E_NoWarningUnderThreshold(t *testing.T) {
 		for _, id := range []string{"ok-1", "ok-2"} {
 			seedTrack(t, ctx, s, s, &core.Track{
 				ID: id, Title: id, Type: "feature",
-				Status: core.TrackStatusActive,
+				Status:    core.TrackStatusActive,
 				CreatedAt: now, UpdatedAt: now,
 			})
 		}

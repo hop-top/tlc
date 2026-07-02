@@ -74,7 +74,8 @@ func promptKey(kh keyHint, current string, w io.Writer) (string, error) {
 func promptEnum(kh keyHint, current string, w io.Writer) (string, error) {
 	opts := make([]huh.Option[string], 0, len(kh.Enum)+1)
 	opts = append(opts, huh.NewOption[string](
-		fmt.Sprintf("Keep current (%s)", current), ""))
+		fmt.Sprintf("Keep current (%s)", current), "",
+	))
 	for _, e := range kh.Enum {
 		label := e
 		if e == current {
@@ -175,7 +176,8 @@ func promptInput(kh keyHint, current string, w io.Writer) (string, error) {
 func promptSuggestions(kh keyHint, current string, w io.Writer) (string, error) {
 	opts := make([]huh.Option[string], 0, len(kh.Suggestions)+2)
 	opts = append(opts, huh.NewOption[string](
-		fmt.Sprintf("Keep current (%s)", current), ""))
+		fmt.Sprintf("Keep current (%s)", current), "",
+	))
 	for _, s := range kh.Suggestions {
 		opts = append(opts, huh.NewOption[string](s.Label, s.Value))
 	}
@@ -308,7 +310,8 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 			!isatty.IsCygwinTerminal(f.Fd()) {
 			return fmt.Errorf(
 				"interactive mode requires a terminal; " +
-					"use 'tlc config set <key> <value>' instead")
+					"use 'tlc config set <key> <value>' instead",
+			)
 		}
 	}
 
@@ -328,7 +331,8 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf(
 				"no config keys match %q; "+
 					"run 'tlc config list' to see all keys",
-				keyFilter)
+				keyFilter,
+			)
 		}
 	} else {
 		var err error
@@ -361,14 +365,16 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := config.PrepareViperForWrite(
-		viper.GetViper()); err != nil {
+		viper.GetViper(),
+	); err != nil {
 		return fmt.Errorf("cannot write config: %w", err)
 	}
 	if err := viper.WriteConfig(); err != nil {
 		if err := viper.SafeWriteConfig(); err != nil {
 			return fmt.Errorf(
 				"cannot write config: %s; check file permissions",
-				viper.ConfigFileUsed())
+				viper.ConfigFileUsed(),
+			)
 		}
 	}
 

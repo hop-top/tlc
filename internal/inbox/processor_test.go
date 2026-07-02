@@ -141,7 +141,8 @@ func TestCreateFailure_InvalidJSON(t *testing.T) {
 	proc, _, _, inboxDir := newTestEnv(t)
 	ctx := context.Background()
 
-	writeFile(t,
+	writeFile(
+		t,
 		filepath.Join(inboxDir, "create"),
 		"bad.json",
 		[]byte(`{not valid json`),
@@ -192,7 +193,8 @@ func TestTransitionFlow(t *testing.T) {
 		"by":     "bot",
 		"note":   "auto transition",
 	})
-	writeFile(t,
+	writeFile(
+		t,
 		filepath.Join(inboxDir, "transition"),
 		"move.json",
 		payload,
@@ -254,7 +256,8 @@ func TestTransitionFailure_InvalidStatus(t *testing.T) {
 		"status": "TODO",
 		"by":     "bot",
 	})
-	writeFile(t,
+	writeFile(
+		t,
 		filepath.Join(inboxDir, "transition"),
 		"bad-transition.json",
 		payload,
@@ -299,10 +302,12 @@ func TestOrdering_CreatesBeforeTransitions(t *testing.T) {
 	p2, _ := json.Marshal(map[string]string{
 		"title": "First task",
 	})
-	writeFile(t,
+	writeFile(
+		t,
 		filepath.Join(inboxDir, "create"), "b.json", p1,
 	)
-	writeFile(t,
+	writeFile(
+		t,
 		filepath.Join(inboxDir, "create"), "a.json", p2,
 	)
 
@@ -313,7 +318,8 @@ func TestOrdering_CreatesBeforeTransitions(t *testing.T) {
 		"status": "IN_PROGRESS",
 		"by":     "bot",
 	})
-	writeFile(t,
+	writeFile(
+		t,
 		filepath.Join(inboxDir, "transition"), "t.json", tr,
 	)
 

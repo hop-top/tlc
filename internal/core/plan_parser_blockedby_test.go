@@ -156,9 +156,9 @@ func TestParseBlockedByRef_CrossProject(t *testing.T) {
 
 func TestParseBlockedByRef_CrossProject_Invalid(t *testing.T) {
 	invalids := []string{
-		"hop-top/c12n#",     // missing task ID
-		"tlc://",            // incomplete URI
-		"tlc:///",           // no task ID
+		"hop-top/c12n#",                 // missing task ID
+		"tlc://",                        // incomplete URI
+		"tlc:///",                       // no task ID
 		"tlc://hop-top/c12n/not-a-task", // bad task ID format
 	}
 	for _, s := range invalids {

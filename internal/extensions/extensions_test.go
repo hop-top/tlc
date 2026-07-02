@@ -19,8 +19,8 @@ func (s *stubExt) Meta() ext.Metadata {
 	return ext.Metadata{Name: s.name, Version: "0.1.0", Description: "stub"}
 }
 func (s *stubExt) Capabilities() ext.Capability { return s.caps }
-func (s *stubExt) Init(_ context.Context) error  { s.inited = true; return s.initErr }
-func (s *stubExt) Close() error                  { s.closed = true; return nil }
+func (s *stubExt) Init(_ context.Context) error { s.inited = true; return s.initErr }
+func (s *stubExt) Close() error                 { s.closed = true; return nil }
 
 func TestNew(t *testing.T) {
 	m := New(nil, nil)

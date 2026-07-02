@@ -25,12 +25,12 @@ type syncExtBase struct {
 	svc   string
 }
 
-func (s *syncExtBase) Meta() ext.Metadata        { return s.meta }
+func (s *syncExtBase) Meta() ext.Metadata           { return s.meta }
 func (s *syncExtBase) Capabilities() ext.Capability { return s.caps }
-func (s *syncExtBase) Init(_ context.Context) error  { return nil }
-func (s *syncExtBase) Close() error                  { return nil }
-func (s *syncExtBase) ServiceName() string           { return s.svc }
-func (s *syncExtBase) Store() auth.Store             { return s.store }
+func (s *syncExtBase) Init(_ context.Context) error { return nil }
+func (s *syncExtBase) Close() error                 { return nil }
+func (s *syncExtBase) ServiceName() string          { return s.svc }
+func (s *syncExtBase) Store() auth.Store            { return s.store }
 
 // defaultCaps is the capability set shared by all built-in sync extensions.
 // CapHook is included as a stub — the bus is not wired until Track C.

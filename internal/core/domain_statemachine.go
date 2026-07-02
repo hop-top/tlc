@@ -64,7 +64,8 @@ func NewTaskStateMachineFromWorkflow(
 		}
 		rules[domain.State(from)] = targets
 	}
-	return domain.NewStateMachine(rules, pub,
+	return domain.NewStateMachine(
+		rules, pub,
 		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixTask)}, opts...)...,
 	)
 }
@@ -81,7 +82,8 @@ func NewTrackStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *d
 		domain.State(TrackStatusAbandoned): {domain.State(TrackStatusArchived)},
 		// archived: terminal — no outgoing transitions
 	}
-	return domain.NewStateMachine(rules, pub,
+	return domain.NewStateMachine(
+		rules, pub,
 		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixTrack)}, opts...)...,
 	)
 }
@@ -91,7 +93,7 @@ func NewTrackStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *d
 // paused->running/canceled. Succeeded/failed/canceled are terminal.
 func NewFlowStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *domain.StateMachine {
 	rules := map[domain.State][]domain.State{
-		domain.State(FlowStatusQueued):  {domain.State(FlowStatusRunning)},
+		domain.State(FlowStatusQueued): {domain.State(FlowStatusRunning)},
 		domain.State(FlowStatusRunning): {
 			domain.State(FlowStatusSucceeded),
 			domain.State(FlowStatusFailed),
@@ -104,7 +106,8 @@ func NewFlowStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *do
 		},
 		// succeeded, failed, canceled: terminal — no outgoing transitions
 	}
-	return domain.NewStateMachine(rules, pub,
+	return domain.NewStateMachine(
+		rules, pub,
 		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixFlow)}, opts...)...,
 	)
 }

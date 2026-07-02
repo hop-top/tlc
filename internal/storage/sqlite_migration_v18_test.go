@@ -39,7 +39,8 @@ func TestMigrationV18_TracksDueAt(t *testing.T) {
 
 	// Index exists.
 	var name string
-	err = s.db.QueryRowContext(ctx,
+	err = s.db.QueryRowContext(
+		ctx,
 		"SELECT name FROM sqlite_master WHERE type='index' AND name=?",
 		"idx_tracks_due_at",
 	).Scan(&name)

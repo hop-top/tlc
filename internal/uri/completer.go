@@ -2,13 +2,13 @@ package uri
 
 import (
 	"hop.top/tlc/internal/storage"
-	"hop.top/uri"
+	"hop.top/uri/scheme"
 )
 
 // GetRegistry returns a registry with tlc types registered.
 // dirs is optional; nil uses default directories.
-func GetRegistry(s *storage.SQLiteStorage, dirs ...*TypesDirConfig) (*uri.Registry, error) {
-	reg := uri.NewRegistry()
+func GetRegistry(s *storage.SQLiteStorage, dirs ...*TypesDirConfig) (*scheme.Registry, error) {
+	reg := scheme.NewRegistry()
 	if err := RegisterTypes(reg, s, dirs...); err != nil {
 		return nil, err
 	}

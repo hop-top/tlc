@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	vstar "github.com/hop-top/vstar/go"
+	vstar "hop.top/vstar"
 
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/vtodo"
@@ -80,7 +80,8 @@ func TestBuildVCalendar_TaskFields(t *testing.T) {
 	require.Contains(t, out, "RRULE:FREQ=DAILY;INTERVAL=2")
 	// CATEGORIES emitted as separate properties in this lib version; both
 	// orderings count.
-	require.True(t,
+	require.True(
+		t,
 		strings.Contains(out, "CATEGORIES:security") &&
 			strings.Contains(out, "CATEGORIES:auth"),
 		"missing CATEGORIES entries in:\n%s", out,
@@ -213,7 +214,8 @@ func TestBuildVCalendar_DependsOn(t *testing.T) {
 	}
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
-	require.Contains(t, mustSerialize(t, cal),
+	require.Contains(
+		t, mustSerialize(t, cal),
 		"RELATED-TO;RELTYPE=DEPENDS-ON:task_01h455vb4pex5vsknk084sn0az@tlc.local",
 	)
 }
@@ -244,7 +246,8 @@ func TestBuildVCalendar_LogsGated(t *testing.T) {
 		require.Contains(t, out, "BEGIN:VJOURNAL")
 		require.Contains(t, out, "X-TLC-LOG-ACTION:CLAIMED")
 		require.Contains(t, out, "X-TLC-LOG-BY:alice")
-		require.Contains(t, out,
+		require.Contains(
+			t, out,
 			"RELATED-TO;RELTYPE=PARENT:task_01h455vb4pex5vsknk084sn02q@tlc.local",
 		)
 	})
@@ -260,7 +263,8 @@ func TestBuildVCalendar_CustomDomainAndProductID(t *testing.T) {
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
 	require.Contains(t, out, "PRODID:-//example//cal//EN")
-	require.Contains(t, out,
+	require.Contains(
+		t, out,
 		"UID:task_01h455vb4pex5vsknk084sn02q@calendar.example.com",
 	)
 }

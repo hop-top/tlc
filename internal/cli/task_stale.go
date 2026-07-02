@@ -48,7 +48,7 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 		// Load stale config; apply project default_timeout to tasks with nil StaleTimeout.
 		var taskCfg config.TaskConfig
 		_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
-		_ = taskCfg.Validate()                  //nolint:errcheck // best-effort validation
+		_ = taskCfg.Validate()                   //nolint:errcheck // best-effort validation
 
 		stale := make([]*core.Task, 0, len(tasks))
 		for _, t := range tasks {

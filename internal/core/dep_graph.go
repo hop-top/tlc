@@ -8,7 +8,7 @@ import (
 // DepGraph represents a directed acyclic graph of task dependencies
 // built from blocked-by relationships.
 type DepGraph struct {
-	tasks   map[string]*Task   // task ID → task
+	tasks   map[string]*Task    // task ID → task
 	adj     map[string][]string // task ID → list of dependents (tasks blocked by this)
 	reverse map[string][]string // task ID → list of dependencies (tasks this is blocked by)
 	ids     []string            // all task IDs in deterministic order

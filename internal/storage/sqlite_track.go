@@ -34,7 +34,8 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 			dueAtSQL = sql.NullString{String: track.DueAt.UTC().Format(time.RFC3339), Valid: true}
 		}
 
-		_, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(
+			ctx, `
 			INSERT INTO tracks (id, slug, title, type, status, assigned_to,
 				created_at, updated_at, project_id, meta, plan_mapping, due_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -131,7 +132,8 @@ func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) erro
 			dueAtSQL = sql.NullString{String: track.DueAt.UTC().Format(time.RFC3339), Valid: true}
 		}
 
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(
+			ctx, `
 			UPDATE tracks
 			SET title = ?, type = ?, status = ?, assigned_to = ?,
 				updated_at = ?, project_id = ?, meta = ?, plan_mapping = ?,
@@ -166,7 +168,8 @@ func (s *SQLiteStorage) DeleteTrack(ctx context.Context, id string) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		// Check for linked tasks referencing this track.
 		var count int
-		err := tx.QueryRowContext(ctx,
+		err := tx.QueryRowContext(
+			ctx,
 			"SELECT COUNT(*) FROM tasks WHERE track_id = ?", id,
 		).Scan(&count)
 		if err != nil {
@@ -182,7 +185,8 @@ func (s *SQLiteStorage) DeleteTrack(ctx context.Context, id string) error {
 
 		proj := core.DetectProject()
 		if proj != nil && proj.InProject && proj.ProjectID != "" {
-			res, err := tx.ExecContext(ctx,
+			res, err := tx.ExecContext(
+				ctx,
 				"DELETE FROM tracks WHERE id = ? AND project_id = ?", id, proj.ProjectID,
 			)
 			if err != nil {
@@ -201,7 +205,8 @@ func (s *SQLiteStorage) DeleteTrack(ctx context.Context, id string) error {
 			return nil
 		}
 
-		res, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(
+			ctx,
 			"DELETE FROM tracks WHERE id = ?", id,
 		)
 		if err != nil {

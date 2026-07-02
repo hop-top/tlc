@@ -284,10 +284,10 @@ func TestUpdateTaskWithLog_GlobalTask(t *testing.T) {
 }
 
 // TestUpdateTask_GlobalTask verifies UpdateTask (used by saveTaskWithLog) persists
-// changes for tasks with project_id='' under an active project context.
+// changes for tasks with project_id=” under an active project context.
 //
 // Regression: when claim runs in project context X, GetTask returns the project-X
-// row. That row's UpdateTask call should succeed even if a project_id='' row also
+// row. That row's UpdateTask call should succeed even if a project_id=” row also
 // exists for the same task ID.
 func TestUpdateTask_GlobalTask(t *testing.T) {
 	resetProjectDetection()
@@ -351,4 +351,3 @@ func TestUpdateTask_GlobalTask(t *testing.T) {
 		t.Errorf("expected global row status TODO (unaffected), got %s", global.Status)
 	}
 }
-

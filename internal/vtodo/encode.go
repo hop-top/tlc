@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	vstar "github.com/hop-top/vstar/go"
-	"github.com/hop-top/vstar/go/codec/rfc5545"
+	vstar "hop.top/vstar"
+	"hop.top/vstar/codec/rfc5545"
 
 	"hop.top/tlc/internal/core"
 )

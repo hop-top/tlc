@@ -78,10 +78,10 @@ func TestSaveTaskWithLog_LocalCommitsBeforeSyncPush(t *testing.T) {
 	task.Status = core.TaskStatus("DONE")
 	task.Description = "initial body\n\n---\nCOMPLETED (IN_PROGRESS → DONE)"
 	logEntry := &core.LogEntry{
-		TaskID:  task.ID,
-		Action:  "DONE",
-		By:      "tester",
-		Note:    "Status changed from IN_PROGRESS to DONE: test",
+		TaskID: task.ID,
+		Action: "DONE",
+		By:     "tester",
+		Note:   "Status changed from IN_PROGRESS to DONE: test",
 	}
 
 	pushAttempted := false

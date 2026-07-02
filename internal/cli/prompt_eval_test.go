@@ -290,13 +290,15 @@ func evalMatch(r evalResult, tc evalCase, cmd ResolvedCommand) evalResult {
 	// Check stage expectation.
 	if tc.wantStge != "either" && r.Stage != tc.wantStge {
 		issues = append(issues, fmt.Sprintf(
-			"resolved by %s, wanted %s", r.Stage, tc.wantStge))
+			"resolved by %s, wanted %s", r.Stage, tc.wantStge,
+		))
 	}
 
 	// Check command.
 	if cmd.Cmd != tc.wantCmd {
 		issues = append(issues, fmt.Sprintf(
-			"cmd=%q, want %q", cmd.Cmd, tc.wantCmd))
+			"cmd=%q, want %q", cmd.Cmd, tc.wantCmd,
+		))
 	}
 
 	// Check args (subset match).
@@ -310,14 +312,16 @@ func evalMatch(r evalResult, tc evalCase, cmd ResolvedCommand) evalResult {
 		}
 		if !found {
 			issues = append(issues, fmt.Sprintf(
-				"missing arg %q in %v", wantArg, cmd.Args))
+				"missing arg %q in %v", wantArg, cmd.Args,
+			))
 		}
 	}
 
 	// Check confidence.
 	if cmd.Confidence < tc.minConf {
 		issues = append(issues, fmt.Sprintf(
-			"confidence=%.2f < min %.2f", cmd.Confidence, tc.minConf))
+			"confidence=%.2f < min %.2f", cmd.Confidence, tc.minConf,
+		))
 	}
 
 	if len(issues) > 0 {

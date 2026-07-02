@@ -147,7 +147,8 @@ func runTagFilter(cmd *cobra.Command, args []string) error {
 
 	// Default: show IN_PROGRESS + TODO unless --all-statuses.
 	if !tagFilterAllStatuses {
-		query.Filters = append(query.Filters,
+		query.Filters = append(
+			query.Filters,
 			core.FieldFilter{Field: "status", Value: "IN_PROGRESS"},
 			core.FieldFilter{Field: "status", Value: "TODO"},
 		)

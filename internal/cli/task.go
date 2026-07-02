@@ -112,10 +112,10 @@ var (
 	taskUpdateRRule        string
 	taskUpdateNoAutoRemind bool
 
-	taskEva              []string
-	taskUpdateAddEva     []string
-	taskUpdateRemoveEva  []string
-	taskUpdateClearEva   bool
+	taskEva             []string
+	taskUpdateAddEva    []string
+	taskUpdateRemoveEva []string
+	taskUpdateClearEva  bool
 )
 
 // appendNote appends a note to the task's description, separated by a newline.
@@ -139,9 +139,11 @@ type auditLogData struct {
 	Note      string
 }
 
-const defaultAuditTemplate = "{{.Timestamp}} · @{{.Author}} · {{.Action}} {{.Details}}{{if .Note}}\n{{.Note}}{{end}}"
-const defaultTimestampFormat = "2006-01-02 15:04"
-const defaultAuditSeparator = "---"
+const (
+	defaultAuditTemplate   = "{{.Timestamp}} · @{{.Author}} · {{.Action}} {{.Details}}{{if .Note}}\n{{.Note}}{{end}}"
+	defaultTimestampFormat = "2006-01-02 15:04"
+	defaultAuditSeparator  = "---"
+)
 
 // appendAuditLog appends a structured audit log entry to the task description.
 // The first entry is always preceded by "---" (description/audit boundary).
@@ -211,7 +213,8 @@ func appendAuditLog(task *core.Task, author, action, details, note string, ts ti
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
 	core.Repository
 	core.LogRepository
-}) error {
+},
+) error {
 	// Step 1: atomic local commit — task row + audit log entry in one tx.
 	// This is the source of truth; nothing downstream may invalidate it.
 	if err := s.UpdateTaskWithLog(ctx, task, log); err != nil {

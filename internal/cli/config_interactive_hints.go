@@ -23,8 +23,8 @@ type postValidateFunc func(value string, w io.Writer) (string, error)
 type keyHint struct {
 	Key          string
 	Description  string
-	Enum         []string        // nil = free text
-	Suggestions  []suggestion    // shown as huh.Select options + "Custom..."
+	Enum         []string         // nil = free text
+	Suggestions  []suggestion     // shown as huh.Select options + "Custom..."
 	PostValidate postValidateFunc // optional; runs after value selected
 	IsBool       bool
 	IsDuration   bool
