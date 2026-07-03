@@ -322,3 +322,65 @@ func TestSQLiteStorage_TrackNilMeta(t *testing.T) {
 	}
 	// Meta should be nil or empty map — either is fine.
 }
+
+// TestSQLiteStorage_ListTasksByTrackIncludesArchived guards the linked-task
+// accounting path: a task that has been auto-archived (all DONE tasks age out
+// via ArchiveTasks) must still be discoverable by a track_id filter when the
+// query opts into archived rows. Without IncludeArchived the SQL appends
+// `archived = 0`, which silently hides every completed-and-aged linked task —
+// leaving the owning track reading "0 linked" and stuck at pending.
+func TestSQLiteStorage_ListTasksByTrackIncludesArchived(t *testing.T) {
+	s := newTrackTestStorage(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	track := &core.Track{
+		ID: "arch-track", Slug: "arch-track", Title: "Arch", Type: "fix",
+		Status: core.TrackStatusPending, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.CreateTrack(ctx, track); err != nil {
+		t.Fatalf("CreateTrack failed: %v", err)
+	}
+
+	task := &core.Task{
+		ID: "T-0500", Title: "Done + archived linked task",
+		Status: core.StatusDone, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask failed: %v", err)
+	}
+
+	// Link to the track and mark archived, mirroring what ArchiveTasks does to
+	// aged-out DONE tasks.
+	if _, err := s.db.ExecContext(ctx,
+		"UPDATE tasks SET track_id = ?, archived = 1 WHERE id = ?",
+		"arch-track", "T-0500"); err != nil {
+		t.Fatalf("failed to link+archive task: %v", err)
+	}
+
+	trackFilter := core.Query{
+		Filters: []core.FieldFilter{
+			{Field: "track_id", Operator: core.OpEq, Value: "arch-track"},
+		},
+		AllProjects: true,
+	}
+
+	// Default (archived hidden): the archived linked task is invisible.
+	hidden, err := s.ListTasks(ctx, trackFilter)
+	if err != nil {
+		t.Fatalf("ListTasks (default) failed: %v", err)
+	}
+	if len(hidden) != 0 {
+		t.Fatalf("expected 0 tasks without IncludeArchived, got %d", len(hidden))
+	}
+
+	// Accounting path: with IncludeArchived the archived linked task is found.
+	trackFilter.IncludeArchived = true
+	found, err := s.ListTasks(ctx, trackFilter)
+	if err != nil {
+		t.Fatalf("ListTasks (IncludeArchived) failed: %v", err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("expected 1 archived linked task with IncludeArchived, got %d", len(found))
+	}
+}

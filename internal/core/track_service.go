@@ -374,6 +374,13 @@ func (s *TrackService) linkedTasks(ctx context.Context, track *Track) ([]*Task, 
 			{Field: "project_id", Operator: OpEq, Value: projectID},
 		},
 		AllProjects: true,
+		// Linked-task accounting must see the full set a track owns. Archival
+		// is a list-hygiene concern (aged-out DONE tasks hidden from default
+		// views), not an unlink. Omitting this made ListTasks append
+		// `archived = 0`, so a track whose tasks had all completed and aged
+		// past the archive window read as "0 linked" — breaking progress,
+		// terminal-state checks, and the pending→active guard.
+		IncludeArchived: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list linked tasks: %w", err)
