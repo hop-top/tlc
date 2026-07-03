@@ -37,12 +37,11 @@ func shouldTrackTLC(cmd *cobra.Command) (bool, error) {
 		return false, nil
 	}
 
-	// Skip prompt if stdin is not a terminal, or if /dev/tty is unopenable
-	// (huh/bubbletea grab it directly and would crash otherwise).
-	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
-		return false, nil
-	}
-	if !ttyAvailable() {
+	// Skip prompt unless attached to a usable interactive terminal — stdin and
+	// stdout both character devices AND /dev/tty openable (huh/bubbletea grab
+	// it directly and would crash otherwise). Use the shared gate so cmd's
+	// in/out overrides are honored consistently with every other huh dialog.
+	if !interactiveAvailable(cmd) {
 		return false, nil
 	}
 

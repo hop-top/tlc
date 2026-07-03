@@ -8,26 +8,9 @@ import (
 )
 
 // ttyAvailable reports whether an interactive terminal device is actually
-// openable.
-//
-// huh/bubbletea open /dev/tty directly rather than reading from os.Stdin.
-// On the macos-latest GitHub runner, stdin/stdout can satisfy
-// os.ModeCharDevice while /dev/tty is unopenable ("device not configured").
-// A plain isatty / ModeCharDevice check therefore passes even though the
-// dialog will crash the moment huh tries to grab the controlling terminal.
-//
-// Probing /dev/tty directly is the only reliable gate: if we cannot open it
-// read-write, no huh dialog can, so callers must fall back to their
-// non-interactive path (e.g. require --yes / --no-prompt) instead of letting
-// bubbletea spew a confusing trace to stderr.
-func ttyAvailable() bool {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return false
-	}
-	_ = tty.Close()
-	return true
-}
+// usable. Its implementation is OS-specific (see tty_unix.go / tty_windows.go):
+// on Unix it probes /dev/tty directly, on Windows it checks the console via
+// isatty. It is the terminal-openability half of the interactive gate.
 
 // charDevice reports whether f is a character device (interactive stream).
 func charDevice(f *os.File) bool {
@@ -62,4 +45,13 @@ func writerInteractive(w io.Writer) bool {
 		return false
 	}
 	return ttyAvailable()
+}
+
+// stdioInteractive applies the same gate as interactiveAvailable against the
+// process stdio (os.Stdin/os.Stdout). Used by call sites that don't hold the
+// cobra command — both stdin and stdout must be character devices AND the
+// terminal must be openable, so a huh dialog can't run when stdout is piped
+// to a file (which would corrupt the redirected output).
+func stdioInteractive() bool {
+	return charDevice(os.Stdin) && charDevice(os.Stdout) && ttyAvailable()
 }

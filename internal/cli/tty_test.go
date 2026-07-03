@@ -46,6 +46,15 @@ func TestWriterInteractiveNonTTY(t *testing.T) {
 	}
 }
 
+// TestStdioInteractiveNonTTY verifies the process-stdio variant gates off
+// under `go test`, where os.Stdin/os.Stdout are not character devices. This
+// guards the sync conflict-resolution fallback path.
+func TestStdioInteractiveNonTTY(t *testing.T) {
+	if stdioInteractive() {
+		t.Fatal("stdioInteractive must be false when process stdio is not a terminal")
+	}
+}
+
 // TestCharDevicePipe verifies charDevice rejects a pipe.
 func TestCharDevicePipe(t *testing.T) {
 	r, w, err := os.Pipe()

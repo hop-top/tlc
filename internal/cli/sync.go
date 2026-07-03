@@ -680,9 +680,10 @@ func getPluginPath(system string) string {
 }
 
 func resolveConflictInteractive(conflict *sync.Conflict) (*core.Task, bool) {
-	// Without a usable terminal, huh would crash opening /dev/tty. Fall back to
-	// the same Remote-Wins default the form uses on error.
-	if !ttyAvailable() {
+	// Without a usable interactive terminal — stdin/stdout both character
+	// devices AND /dev/tty openable — huh would crash or corrupt redirected
+	// output. Fall back to the same Remote-Wins default the form uses on error.
+	if !stdioInteractive() {
 		fmt.Printf("Conflict for %s in non-interactive mode; defaulting to Remote Wins\n", conflict.TaskID)
 		return conflict.RemoteTask, true
 	}
