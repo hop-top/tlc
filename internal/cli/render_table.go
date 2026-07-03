@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 	"sync"
 
@@ -57,6 +58,22 @@ func activeTableStyle() (output.TableStyle, bool) {
 // only on TTY writers; non-TTY writers (pipes, files, bytes.Buffer)
 // keep emitting plain tabwriter output.
 func renderStyledList[T any](w io.Writer, format string, rows []T, emphasis map[int]output.EmphasisKind) error {
+	return renderStyledListCols(w, format, rows, emphasis, nil)
+}
+
+// renderStyledListCols renders rows with an explicit table-header
+// allow-list. cols entries are table:"" header strings (e.g. "ID",
+// "Title"). When cols is empty, it is identical to renderStyledList
+// (styled + emphasis). When cols is non-empty, it renders via kit's
+// cols-aware plain formatter: exact column selection, no row emphasis.
+//
+// Column projection is only meaningful for the table format; for
+// json/yaml/csv the cols path is skipped and the standard path runs
+// (structured formats emit full records).
+//
+// cols are forwarded verbatim to kit — they are matched case-sensitively
+// against table:"" headers. Unknown headers produce an error.
+func renderStyledListCols[T any](w io.Writer, format string, rows []T, emphasis map[int]output.EmphasisKind, cols []string) error {
 	if format == "" {
 		format = output.Table
 	}
@@ -64,6 +81,16 @@ func renderStyledList[T any](w io.Writer, format string, rows []T, emphasis map[
 		rows = []T{}
 	}
 
+	// Non-empty column selection: use kit's cols-aware plain formatter.
+	if len(cols) > 0 && format == output.Table {
+		f, ok := output.Default.Lookup(format)
+		if !ok {
+			return fmt.Errorf("unknown output format %q", format)
+		}
+		return f.Render(w, rows, nil, cols) //nolint:wrapcheck // kit typed errors surface verbatim
+	}
+
+	// Default path: styled + emphasis, unchanged from pre-refactor behavior.
 	style, hasStyle := activeTableStyle()
 	if !hasStyle && len(emphasis) == 0 {
 		return output.Render(w, format, rows) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
