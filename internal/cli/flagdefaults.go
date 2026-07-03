@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -59,4 +63,58 @@ func resolveFlagDefaultKey(cmd *cobra.Command, flag string) (key string, ok bool
 	}
 
 	return "", false
+}
+
+// applyConfigDefaults seeds unset flags on cmd from config, using the
+// resolution ladder. For every flag the user did NOT set on the CLI
+// (!cmd.Flags().Changed(name)) that resolves to a set config key, it sets
+// the flag's value from config. Returns the set of flag names sourced from
+// config so callers can treat them like explicitly-provided flags. Does
+// NOT flip pflag's Changed bit.
+func applyConfigDefaults(cmd *cobra.Command) (fromConfig map[string]bool, err error) {
+	fromConfig = make(map[string]bool)
+
+	var applyErr error
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if applyErr != nil {
+			return
+		}
+		if cmd.Flags().Changed(flag.Name) {
+			return
+		}
+		key, ok := resolveFlagDefaultKey(cmd, flag.Name)
+		if !ok {
+			return
+		}
+		switch flag.Value.Type() {
+		case "stringSlice":
+			if sv, ok := flag.Value.(pflag.SliceValue); ok {
+				if e := sv.Replace(viper.GetStringSlice(key)); e != nil {
+					applyErr = e
+					return
+				}
+			}
+		case "bool":
+			if e := flag.Value.Set(strconv.FormatBool(viper.GetBool(key))); e != nil {
+				applyErr = e
+				return
+			}
+		case "int", "int64":
+			if e := flag.Value.Set(fmt.Sprint(viper.GetInt(key))); e != nil {
+				applyErr = e
+				return
+			}
+		default:
+			if e := flag.Value.Set(viper.GetString(key)); e != nil {
+				applyErr = e
+				return
+			}
+		}
+		fromConfig[flag.Name] = true
+	})
+
+	if applyErr != nil {
+		return nil, applyErr
+	}
+	return fromConfig, nil
 }

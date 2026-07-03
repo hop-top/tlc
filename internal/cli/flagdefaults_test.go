@@ -126,6 +126,109 @@ func TestResolveFlagDefaultKey_Precedence(t *testing.T) {
 	}
 }
 
+func buildTaskListCmd() (root, task, list *cobra.Command) {
+	root = &cobra.Command{Use: "root"}
+	task = &cobra.Command{Use: "task"}
+	list = &cobra.Command{Use: "list"}
+	root.AddCommand(task)
+	task.AddCommand(list)
+	list.Flags().StringSlice("columns", nil, "columns")
+	list.Flags().Bool("archived", false, "archived")
+	list.Flags().Int("limit", 0, "limit")
+	return root, task, list
+}
+
+func TestApplyConfigDefaults_SeedsUnsetFlags(t *testing.T) {
+	viper.Reset()
+	viper.Set("task.list.columns", []string{"id", "title"})
+	viper.Set("task.list.limit", 50)
+
+	_, _, list := buildTaskListCmd()
+
+	fromConfig, err := applyConfigDefaults(list)
+	if err != nil {
+		t.Fatalf("applyConfigDefaults() error = %v", err)
+	}
+
+	cols, err := list.Flags().GetStringSlice("columns")
+	if err != nil {
+		t.Fatalf("GetStringSlice: %v", err)
+	}
+	if len(cols) != 2 || cols[0] != "id" || cols[1] != "title" {
+		t.Errorf("columns = %v, want [id title]", cols)
+	}
+
+	lim, err := list.Flags().GetInt("limit")
+	if err != nil {
+		t.Fatalf("GetInt: %v", err)
+	}
+	if lim != 50 {
+		t.Errorf("limit = %d, want 50", lim)
+	}
+
+	arch, err := list.Flags().GetBool("archived")
+	if err != nil {
+		t.Fatalf("GetBool: %v", err)
+	}
+	if arch {
+		t.Errorf("archived = true, want false (not set in config)")
+	}
+
+	if !fromConfig["columns"] {
+		t.Errorf("fromConfig[columns] = false, want true")
+	}
+	if !fromConfig["limit"] {
+		t.Errorf("fromConfig[limit] = false, want true")
+	}
+	if fromConfig["archived"] {
+		t.Errorf("fromConfig[archived] = true, want false (not set in config)")
+	}
+}
+
+func TestApplyConfigDefaults_PreservesChangedFalse(t *testing.T) {
+	viper.Reset()
+	viper.Set("task.list.columns", []string{"id", "title"})
+
+	_, _, list := buildTaskListCmd()
+
+	if _, err := applyConfigDefaults(list); err != nil {
+		t.Fatalf("applyConfigDefaults() error = %v", err)
+	}
+
+	if list.Flags().Changed("columns") {
+		t.Errorf("Changed(columns) = true, want false (config must not flip Changed bit)")
+	}
+}
+
+func TestApplyConfigDefaults_CLIWins(t *testing.T) {
+	viper.Reset()
+	viper.Set("task.list.columns", []string{"id", "title"})
+
+	_, _, list := buildTaskListCmd()
+
+	// Simulate explicit user flag (sets Changed=true)
+	if err := list.Flags().Set("columns", "explicit"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	fromConfig, err := applyConfigDefaults(list)
+	if err != nil {
+		t.Fatalf("applyConfigDefaults() error = %v", err)
+	}
+
+	cols, err := list.Flags().GetStringSlice("columns")
+	if err != nil {
+		t.Fatalf("GetStringSlice: %v", err)
+	}
+	if len(cols) != 1 || cols[0] != "explicit" {
+		t.Errorf("columns = %v, want [explicit]", cols)
+	}
+
+	if fromConfig["columns"] {
+		t.Errorf("fromConfig[columns] = true, want false (CLI wins, config must not record it)")
+	}
+}
+
 func TestResolveFlagDefaultKey_Miss(t *testing.T) {
 	viper.Reset()
 
