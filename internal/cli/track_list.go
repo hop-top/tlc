@@ -39,6 +39,12 @@ and --state (single state flag); both can be combined.`,
 
 func runTrackList(cmd *cobra.Command, _ []string) error {
 	ctx := context.Background()
+
+	fromConfig, err := applyConfigDefaults(cmd)
+	if err != nil {
+		return err
+	}
+
 	s, err := getStorage()
 	if err != nil {
 		return err
@@ -62,7 +68,8 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		query.Type = trackListType
 	}
 
-	if len(trackListStatus) > 0 {
+	statusProvided := len(trackListStatus) > 0 || fromConfig["status"]
+	if statusProvided {
 		for _, st := range trackListStatus {
 			ts := core.TrackStatus(strings.ToLower(st))
 			if !core.ValidTrackStatus(ts) {
@@ -144,7 +151,8 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		}
 		return output.Render(cmd.OutOrStdout(), format, out)
 	default:
-		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects)
+		cols := effectiveTrackColumns(cmd, statusProvided, trackListAllProjects)
+		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects, cols)
 	}
 	return nil
 }
@@ -217,7 +225,92 @@ type trackRowData struct {
 	Progress core.TrackProgress
 }
 
-func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
+// effectiveTrackColumns resolves the table header list for `track list`
+// from the config ladder, injects the project column when --all-projects is
+// set, prunes the status column when filtering by status, and warns on
+// unknown keys.
+//
+// Returns nil when no customization is active (default columns, no pruning,
+// no project injection) so the caller uses the styled TTY path unchanged.
+// Returns a non-nil slice when columns differ from the natural default.
+func effectiveTrackColumns(cmd *cobra.Command, statusProvided, showProject bool) []string {
+	customized := false
+	keys := trackListDefaultColumns
+
+	// config override via ladder (tracks.list.columns -> defaults.list.columns
+	// -> defaults.columns)
+	if key, ok := resolveFlagDefaultKey(cmd, "columns"); ok {
+		if v := viper.GetStringSlice(key); len(v) > 0 {
+			keys = v
+			customized = true
+		}
+	}
+	// explicit --cols / --columns (kit persistent flag, viper key "cols")
+	if c := viper.GetStringSlice("cols"); len(c) > 0 {
+		keys = c
+		customized = true
+	}
+
+	// lowercase-normalize
+	norm := make([]string, len(keys))
+	for i, k := range keys {
+		norm[i] = strings.ToLower(strings.TrimSpace(k))
+	}
+	keys = norm
+
+	// inject project after id when --all-projects and not already present
+	if showProject && !containsKey(keys, "project") {
+		keys = injectAfter(keys, "id", "project")
+		customized = true
+	}
+
+	// prune status column when filtering by status (explicit or config)
+	if statusProvided {
+		keys = dropKey(keys, "status")
+		customized = true
+	}
+
+	// No customization: return nil so the styled TTY path activates.
+	if !customized {
+		return nil
+	}
+
+	headers, unknown := resolveColumnHeaders(keys, trackColumnHeaders)
+	for _, u := range unknown {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown column %q (skipped)\n", u)
+	}
+	return headers
+}
+
+// containsKey reports whether k appears in keys.
+func containsKey(keys []string, k string) bool {
+	for _, x := range keys {
+		if x == k {
+			return true
+		}
+	}
+	return false
+}
+
+// injectAfter returns a new slice with ins inserted immediately after the
+// first occurrence of anchor. When anchor is absent, ins is prepended.
+func injectAfter(keys []string, anchor, ins string) []string {
+	out := make([]string, 0, len(keys)+1)
+	inserted := false
+	for _, k := range keys {
+		out = append(out, k)
+		if k == anchor && !inserted {
+			out = append(out, ins)
+			inserted = true
+		}
+	}
+	if !inserted {
+		out = append([]string{ins}, keys...)
+	}
+	return out
+}
+
+func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool, cols []string) {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(w, "No tracks found")
 		return
@@ -261,7 +354,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 				Assignee: trackAssignee(r.Track),
 			}
 		}
-		_ = renderStyledList(w, formatTable, out, emphasis) //nolint:errcheck // best-effort output
+		_ = renderStyledListCols(w, formatTable, out, emphasis, cols) //nolint:errcheck // best-effort output
 		return
 	}
 
@@ -277,7 +370,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 			Assignee: trackAssignee(r.Track),
 		}
 	}
-	_ = renderStyledList(w, formatTable, out, emphasis) //nolint:errcheck // best-effort output
+	_ = renderStyledListCols(w, formatTable, out, emphasis, cols) //nolint:errcheck // best-effort output
 }
 
 func trackProject(t *core.Track) string {

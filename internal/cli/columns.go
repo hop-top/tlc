@@ -25,6 +25,27 @@ var taskListDefaultColumns = []string{
 	"id", "title", "status", "assigned", "due", "stale", "blocked",
 }
 
+// trackColumnHeaders maps a lowercase column key to the table:"" header
+// string used by the trackTableRow / trackTableRowWithProject structs.
+var trackColumnHeaders = map[string]string{
+	"id":       "ID",
+	"project":  "Project",
+	"title":    "Title",
+	"type":     "Type",
+	"status":   "Status",
+	"state":    "State",
+	"progress": "Progress",
+	"assignee": "Assignee",
+}
+
+// trackListDefaultColumns is the built-in default column order for
+// `tlc track list` (matches the columns visible today).
+// "project" is in the registry but NOT here — it is injected only when
+// --all-projects is set.
+var trackListDefaultColumns = []string{
+	"id", "title", "type", "status", "state", "progress", "assignee",
+}
+
 // resolveColumnHeaders maps a lowercase-normalized key list to table
 // header strings via registry, case-insensitively. Unknown keys are
 // skipped and returned in `unknown` (caller decides how to warn).
