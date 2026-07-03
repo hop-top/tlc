@@ -1150,6 +1150,92 @@ plugins:
 
 ---
 
+## Per-command defaults
+
+Any `* list` command flag can be pre-set via config, so you can
+change the default behaviour without repeating CLI flags every run.
+
+### Resolution ladder
+
+For every flag on a `list` command, the runtime resolves the effective
+value in this order (first match wins; explicit CLI flags always take
+priority over all config layers):
+
+1. Explicit CLI flag (`--columns`, `--status`, `--limit`, `--sort-by`, …)
+2. `<domain>.list.<flag>` — domain-scoped default (e.g. `task.list.columns`)
+3. `defaults.list.<flag>` — cross-command fallback
+4. Built-in default (compiled-in value)
+
+The `track` command maps to the `tracks` config namespace
+(not `track`). So `tracks.list.columns` controls `tlc track list --columns`.
+
+### Typed schema
+
+```go
+type ListDefaults struct {
+    Columns []string `yaml:"columns,omitempty"`
+    Status  []string `yaml:"status,omitempty"`
+    Limit   int      `yaml:"limit,omitempty"`
+    SortBy  string   `yaml:"sort-by,omitempty"`
+}
+```
+
+All fields are optional. Absence means "use the built-in default".
+
+### Column vocabulary
+
+**task list** — available keys:
+
+| Key        | Description                        |
+|------------|------------------------------------|
+| `id`       | Task ID                            |
+| `title`    | Task title                         |
+| `status`   | Task status                        |
+| `priority` | Priority label                     |
+| `assigned` | Assigned-to handle                 |
+| `track`    | Track ID the task belongs to       |
+| `effort`   | Effort estimate                    |
+| `due`      | Due date                           |
+| `stale`    | Staleness indicator                |
+| `blocked`  | Blocked indicator                  |
+
+**track list** — available keys:
+
+| Key        | Description                        |
+|------------|------------------------------------|
+| `id`       | Track ID                           |
+| `project`  | Project the track belongs to       |
+| `title`    | Track title                        |
+| `type`     | Track type                         |
+| `status`   | Track status                       |
+| `state`    | Track state                        |
+| `progress` | Progress percentage                |
+| `assignee` | Assigned-to handle                 |
+
+### Status-column pruning
+
+When `--status` is provided (explicitly or via config), the `status`
+column is automatically dropped from the rendered table — it adds no
+information when every row has the same value.
+
+### Example
+
+```yaml
+task:
+  list:
+    columns: [id, title, status, assigned, due]
+    status: [TODO]
+    limit: 50
+tracks:
+  list:
+    columns: [id, title, type, status, progress]
+defaults:
+  list:
+    columns: [id, title, status]   # fallback for any `* list`
+```
+
+---
+
 ## References
 
 - [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands

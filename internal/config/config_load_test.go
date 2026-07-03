@@ -6,7 +6,122 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
+
+func TestListDefaults_RoundTrip(t *testing.T) {
+	input := `
+version: "0.1"
+task:
+  list:
+    columns: [id, title]
+    status: [TODO]
+tracks:
+  list:
+    columns: [id, progress]
+defaults:
+  list:
+    columns: [id, title, status]
+`
+
+	var cfg Config
+	if err := yaml.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Task.List assertions
+	if cfg.Task.List == nil {
+		t.Fatal("cfg.Task.List is nil")
+	}
+	if want := []string{"id", "title"}; !slicesEqual(cfg.Task.List.Columns, want) {
+		t.Errorf("Task.List.Columns = %v, want %v", cfg.Task.List.Columns, want)
+	}
+	if want := []string{"TODO"}; !slicesEqual(cfg.Task.List.Status, want) {
+		t.Errorf("Task.List.Status = %v, want %v", cfg.Task.List.Status, want)
+	}
+
+	// Tracks.List assertions
+	if cfg.Tracks.List == nil {
+		t.Fatal("cfg.Tracks.List is nil")
+	}
+	if want := []string{"id", "progress"}; !slicesEqual(cfg.Tracks.List.Columns, want) {
+		t.Errorf("Tracks.List.Columns = %v, want %v", cfg.Tracks.List.Columns, want)
+	}
+
+	// Defaults.List assertions
+	if cfg.Defaults == nil {
+		t.Fatal("cfg.Defaults is nil")
+	}
+	if cfg.Defaults.List == nil {
+		t.Fatal("cfg.Defaults.List is nil")
+	}
+	if want := []string{"id", "title", "status"}; !slicesEqual(cfg.Defaults.List.Columns, want) {
+		t.Errorf("Defaults.List.Columns = %v, want %v", cfg.Defaults.List.Columns, want)
+	}
+
+	// Round-trip: marshal back and re-unmarshal
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var cfg2 Config
+	if err := yaml.Unmarshal(out, &cfg2); err != nil {
+		t.Fatalf("re-unmarshal: %v", err)
+	}
+	if cfg2.Task.List == nil || !slicesEqual(cfg2.Task.List.Columns, []string{"id", "title"}) {
+		t.Errorf("round-trip Task.List.Columns = %v, want [id title]", cfg2.Task.List)
+	}
+	if cfg2.Tracks.List == nil || !slicesEqual(cfg2.Tracks.List.Columns, []string{"id", "progress"}) {
+		t.Errorf("round-trip Tracks.List.Columns = %v, want [id progress]", cfg2.Tracks.List)
+	}
+	if cfg2.Defaults == nil || cfg2.Defaults.List == nil || !slicesEqual(cfg2.Defaults.List.Columns, []string{"id", "title", "status"}) {
+		t.Errorf("round-trip Defaults.List.Columns = %v, want [id title status]", cfg2.Defaults)
+	}
+
+	// Validate: empty-fields config must not emit list: {} or defaults: {} blocks
+	empty := Config{}
+	emptyOut, err := yaml.Marshal(&empty)
+	if err != nil {
+		t.Fatalf("marshal empty: %v", err)
+	}
+	emptyStr := string(emptyOut)
+	if contains(emptyStr, "list:") {
+		t.Errorf("empty Config marshaled with 'list:' block: %s", emptyStr)
+	}
+	if contains(emptyStr, "defaults:") {
+		t.Errorf("empty Config marshaled with 'defaults:' block: %s", emptyStr)
+	}
+
+	// cfg.Validate() on this config must return nil
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() returned unexpected error: %v", err)
+	}
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
+}
+
+func containsStr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
 
 func TestLoadConfig_Merging(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "tlc-test-*")
