@@ -441,50 +441,35 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	}
 	rows := make([]narrowRow, len(tasks))
 	for i, t := range tasks {
-		assignee := "-"
-		if t.AssignedTo != nil {
-			assignee = *t.AssignedTo
-		}
-		dueCol := "-"
-		if t.DueAt != nil {
-			if t.IsOverdue() {
-				dueCol = "! " + DisplayTimePtrRelative(t.DueAt)
-			} else {
-				dueCol = DisplayTimePtrRelative(t.DueAt)
-			}
-		}
-		staleCol := "-"
-		if t.IsStale() {
-			if s := t.StaleSince(); s != nil {
-				staleCol = "! " + formatDuration(*s)
-			}
-		}
-		blockedCol := "-"
-		if t.IsBlocked() {
-			blockedCol = *t.BlockedReason
-		}
+		c := computeTaskCells(t)
 		rows[i] = narrowRow{
-			ID:       formatTaskAlias(t),
-			Title:    t.Title,
-			Status:   formatStatusPlain(t.Status),
-			Assigned: assignee,
-			Due:      dueCol,
-			Stale:    staleCol,
-			Blocked:  blockedCol,
+			ID:       c.id,
+			Title:    c.title,
+			Status:   c.status,
+			Assigned: c.assigned,
+			Due:      c.due,
+			Stale:    c.stale,
+			Blocked:  c.blocked,
 		}
 	}
 	_ = renderStyledList(w, formatTable, rows, emphasis) //nolint:errcheck // best-effort output
 }
 
-// buildWideRow populates a taskTableRow with all available fields.
-func buildWideRow(t *core.Task) taskTableRow {
+// taskCells holds the computed display strings for all table columns.
+type taskCells struct {
+	id, title, status, assigned, due, stale, blocked string
+	priority, track, effort                           string
+}
+
+// computeTaskCells derives every display cell for a task in one place,
+// eliminating duplicated cell-derivation logic across row builders.
+func computeTaskCells(t *core.Task) taskCells {
 	assignee := "-"
 	if t.AssignedTo != nil {
 		assignee = *t.AssignedTo
 	}
-	// Table column: humanise DueAt relative to now ("in 3d",
-	// "2h ago"). JSON/YAML output paths stay on RFC3339 via
-	// the structured marshaller. Spec §6, T-1384.
+	// Table column: humanise DueAt relative to now ("in 3d", "2h ago").
+	// JSON/YAML output paths stay on RFC3339 via the structured marshaller.
 	dueCol := "-"
 	if t.DueAt != nil {
 		if t.IsOverdue() {
@@ -515,17 +500,34 @@ func buildWideRow(t *core.Task) taskTableRow {
 	if t.Effort != "" {
 		effortCol = string(t.Effort)
 	}
+	return taskCells{
+		id:       formatTaskAlias(t),
+		title:    t.Title,
+		status:   formatStatusPlain(t.Status),
+		assigned: assignee,
+		due:      dueCol,
+		stale:    staleCol,
+		blocked:  blockedCol,
+		priority: priorityCol,
+		track:    trackCol,
+		effort:   effortCol,
+	}
+}
+
+// buildWideRow populates a taskTableRow with all available fields.
+func buildWideRow(t *core.Task) taskTableRow {
+	c := computeTaskCells(t)
 	return taskTableRow{
-		ID:       formatTaskAlias(t),
-		Title:    t.Title,
-		Status:   formatStatusPlain(t.Status),
-		Priority: priorityCol,
-		Assigned: assignee,
-		Track:    trackCol,
-		Effort:   effortCol,
-		Due:      dueCol,
-		Stale:    staleCol,
-		Blocked:  blockedCol,
+		ID:       c.id,
+		Title:    c.title,
+		Status:   c.status,
+		Priority: c.priority,
+		Assigned: c.assigned,
+		Track:    c.track,
+		Effort:   c.effort,
+		Due:      c.due,
+		Stale:    c.stale,
+		Blocked:  c.blocked,
 	}
 }
 
