@@ -156,6 +156,16 @@ func confirmBatch(cmd *cobra.Command, tasks []*uri.ResolvedTask, pattern string)
 		ids[i] = t.Task.ID
 	}
 
+	// Without a usable terminal, huh would crash opening /dev/tty. Require an
+	// explicit --no-prompt instead of prompting.
+	if !interactiveAvailable(cmd) {
+		return fmt.Errorf(
+			"%d tasks matched %q: %s; "+
+				"pass --no-prompt to proceed without confirmation",
+			len(tasks), pattern, strings.Join(ids, ", "),
+		)
+	}
+
 	msg := fmt.Sprintf("%d tasks matched %q: %s\nProceed?",
 		len(tasks), pattern, strings.Join(ids, ", "))
 

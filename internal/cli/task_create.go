@@ -37,6 +37,12 @@ Each invocation creates a fresh task, so the operation is not idempotent.`,
 		}
 
 		if taskInteractive || title == "" {
+			if !interactiveAvailable(cmd) {
+				return fmt.Errorf(
+					"interactive task creation requires a terminal; " +
+						"pass a title and flags instead",
+				)
+			}
 			return createTaskInteractive(title)
 		}
 

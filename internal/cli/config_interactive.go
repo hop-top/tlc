@@ -3,13 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"charm.land/huh/v2"
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
@@ -305,14 +303,11 @@ func runConfigInteractive(cmd *cobra.Command, args []string) error {
 	in := cmd.InOrStdin()
 	out := cmd.OutOrStdout()
 
-	if f, ok := in.(*os.File); ok {
-		if !isatty.IsTerminal(f.Fd()) &&
-			!isatty.IsCygwinTerminal(f.Fd()) {
-			return fmt.Errorf(
-				"interactive mode requires a terminal; " +
-					"use 'tlc config set <key> <value>' instead",
-			)
-		}
+	if !interactiveAvailable(cmd) {
+		return fmt.Errorf(
+			"interactive mode requires a terminal; " +
+				"use 'tlc config set <key> <value>' instead",
+		)
 	}
 
 	noColor := viper.GetBool("no-color")

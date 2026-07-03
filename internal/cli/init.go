@@ -37,8 +37,11 @@ func shouldTrackTLC(cmd *cobra.Command) (bool, error) {
 		return false, nil
 	}
 
-	// Skip prompt if stdin is not a terminal
-	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+	// Skip prompt unless attached to a usable interactive terminal — stdin and
+	// stdout both character devices AND /dev/tty openable (huh/bubbletea grab
+	// it directly and would crash otherwise). Use the shared gate so cmd's
+	// in/out overrides are honored consistently with every other huh dialog.
+	if !interactiveAvailable(cmd) {
 		return false, nil
 	}
 
@@ -196,6 +199,12 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 					// Strategy explicitly set via flag — just save it, don't prompt now
 					log.Warn("Sharing existing project (prompt strategy set for future use)", "project_id", detectedID, "task_count", len(existingTasks))
 				} else {
+					if !interactiveAvailable(cmd) {
+						// No usable terminal: default to sharing (recommended)
+						// rather than crashing in huh opening /dev/tty.
+						log.Warn("Sharing existing project (non-interactive)", "project_id", detectedID, "task_count", len(existingTasks))
+						break
+					}
 					choice, err := promptDuplicateIDStrategy(detectedID, len(existingTasks))
 					if err != nil {
 						return fmt.Errorf("failed to prompt for duplicate strategy: %w", err)
