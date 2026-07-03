@@ -148,66 +148,10 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, statusPr
 	return nil
 }
 
-// effectiveTaskColumns resolves the table header list for `task list`
-// from the ladder, prunes the status column when filtering by status,
-// and warns on unknown keys.
-//
-// Returns nil when no customization is active (default columns, no pruning)
-// so the caller can use the styled TTY path (box-drawing, row emphasis).
-// Returns a non-nil slice only when columns differ from the natural default,
-// which switches to the plain column-aware formatter.
+// effectiveTaskColumns resolves the table header list for `task list`.
+// See resolveEffectiveColumns for the full ladder and pruning logic.
 func effectiveTaskColumns(cmd *cobra.Command, statusProvided bool) []string {
-	customized := false
-	keys := taskListDefaultColumns
-
-	// config override via ladder (task.list.columns -> defaults.list.columns
-	// -> defaults.columns)
-	if key, ok := resolveFlagDefaultKey(cmd, "columns"); ok {
-		if v := viper.GetStringSlice(key); len(v) > 0 {
-			keys = v
-			customized = true
-		}
-	}
-	// explicit --cols / --columns (kit persistent flag, viper key "cols")
-	if c := viper.GetStringSlice("cols"); len(c) > 0 {
-		keys = c
-		customized = true
-	}
-
-	// lowercase-normalize
-	norm := make([]string, len(keys))
-	for i, k := range keys {
-		norm[i] = strings.ToLower(strings.TrimSpace(k))
-	}
-	keys = norm
-
-	// prune status column when filtering by status (explicit or config)
-	if statusProvided {
-		keys = dropKey(keys, "status")
-		customized = true
-	}
-
-	// No customization: return nil so the styled TTY path activates.
-	if !customized {
-		return nil
-	}
-
-	headers, unknown := resolveColumnHeaders(keys, taskColumnHeaders)
-	for _, u := range unknown {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown column %q (skipped)\n", u)
-	}
-	return headers
-}
-
-// dropKey returns a new slice with all occurrences of drop removed.
-func dropKey(keys []string, drop string) []string {
-	out := keys[:0:0]
-	for _, k := range keys {
-		if k != drop {
-			out = append(out, k)
-		}
-	}
-	return out
+	return resolveEffectiveColumns(cmd, taskListDefaultColumns, taskColumnHeaders, statusProvided, nil)
 }
 
 // writeVtodo serialises the supplied tasks/tracks (and optionally logs)

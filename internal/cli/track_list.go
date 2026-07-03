@@ -225,89 +225,16 @@ type trackRowData struct {
 	Progress core.TrackProgress
 }
 
-// effectiveTrackColumns resolves the table header list for `track list`
-// from the config ladder, injects the project column when --all-projects is
-// set, prunes the status column when filtering by status, and warns on
-// unknown keys.
-//
-// Returns nil when no customization is active (default columns, no pruning,
-// no project injection) so the caller uses the styled TTY path unchanged.
-// Returns a non-nil slice when columns differ from the natural default.
+// effectiveTrackColumns resolves the table header list for `track list`.
+// See resolveEffectiveColumns for the full ladder and pruning logic.
 func effectiveTrackColumns(cmd *cobra.Command, statusProvided, showProject bool) []string {
-	customized := false
-	keys := trackListDefaultColumns
-
-	// config override via ladder (tracks.list.columns -> defaults.list.columns
-	// -> defaults.columns)
-	if key, ok := resolveFlagDefaultKey(cmd, "columns"); ok {
-		if v := viper.GetStringSlice(key); len(v) > 0 {
-			keys = v
-			customized = true
-		}
-	}
-	// explicit --cols / --columns (kit persistent flag, viper key "cols")
-	if c := viper.GetStringSlice("cols"); len(c) > 0 {
-		keys = c
-		customized = true
-	}
-
-	// lowercase-normalize
-	norm := make([]string, len(keys))
-	for i, k := range keys {
-		norm[i] = strings.ToLower(strings.TrimSpace(k))
-	}
-	keys = norm
-
-	// inject project after id when --all-projects and not already present
-	if showProject && !containsKey(keys, "project") {
-		keys = injectAfter(keys, "id", "project")
-		customized = true
-	}
-
-	// prune status column when filtering by status (explicit or config)
-	if statusProvided {
-		keys = dropKey(keys, "status")
-		customized = true
-	}
-
-	// No customization: return nil so the styled TTY path activates.
-	if !customized {
-		return nil
-	}
-
-	headers, unknown := resolveColumnHeaders(keys, trackColumnHeaders)
-	for _, u := range unknown {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown column %q (skipped)\n", u)
-	}
-	return headers
-}
-
-// containsKey reports whether k appears in keys.
-func containsKey(keys []string, k string) bool {
-	for _, x := range keys {
-		if x == k {
-			return true
-		}
-	}
-	return false
-}
-
-// injectAfter returns a new slice with ins inserted immediately after the
-// first occurrence of anchor. When anchor is absent, ins is prepended.
-func injectAfter(keys []string, anchor, ins string) []string {
-	out := make([]string, 0, len(keys)+1)
-	inserted := false
-	for _, k := range keys {
-		out = append(out, k)
-		if k == anchor && !inserted {
-			out = append(out, ins)
-			inserted = true
-		}
-	}
-	if !inserted {
-		out = append([]string{ins}, keys...)
-	}
-	return out
+	return resolveEffectiveColumns(cmd, trackListDefaultColumns, trackColumnHeaders, statusProvided,
+		func(keys []string) ([]string, bool) {
+			if showProject && !containsKey(keys, "project") {
+				return injectAfter(keys, "id", "project"), true
+			}
+			return keys, false
+		})
 }
 
 func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool, cols []string) {

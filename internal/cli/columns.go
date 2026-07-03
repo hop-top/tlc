@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // taskColumnHeaders maps a lowercase column key to the table:"" header
@@ -59,4 +63,101 @@ func resolveColumnHeaders(keys []string, registry map[string]string) (headers []
 		}
 	}
 	return headers, unknown
+}
+
+// resolveEffectiveColumns resolves the table header list for a `list`
+// command from the config ladder (<domain>.list.columns ->
+// defaults.list.columns -> defaults.columns), then the --cols flag
+// (viper key "cols"), lowercase-normalizing throughout. `transform`, if
+// non-nil, mutates the key list after normalization (used for track's
+// --all-projects project-column injection). When statusProvided, the
+// "status" column is pruned. Returns nil when nothing customized the
+// default set (so the caller keeps the styled TTY path); otherwise returns
+// resolved table headers, warning on unknown keys to cmd stderr.
+func resolveEffectiveColumns(
+	cmd *cobra.Command,
+	defaults []string,
+	registry map[string]string,
+	statusProvided bool,
+	transform func(keys []string) (out []string, customized bool),
+) []string {
+	customized := false
+	keys := defaults
+
+	if key, ok := resolveFlagDefaultKey(cmd, "columns"); ok {
+		if v := viper.GetStringSlice(key); len(v) > 0 {
+			keys = v
+			customized = true
+		}
+	}
+	if c := viper.GetStringSlice("cols"); len(c) > 0 {
+		keys = c
+		customized = true
+	}
+
+	norm := make([]string, len(keys))
+	for i, k := range keys {
+		norm[i] = strings.ToLower(strings.TrimSpace(k))
+	}
+	keys = norm
+
+	if transform != nil {
+		var tCustomized bool
+		keys, tCustomized = transform(keys)
+		customized = customized || tCustomized
+	}
+
+	if statusProvided {
+		keys = dropKey(keys, "status")
+		customized = true
+	}
+
+	if !customized {
+		return nil
+	}
+
+	headers, unknown := resolveColumnHeaders(keys, registry)
+	for _, u := range unknown {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown column %q (skipped)\n", u)
+	}
+	return headers
+}
+
+// dropKey returns a new slice with all occurrences of drop removed.
+func dropKey(keys []string, drop string) []string {
+	out := keys[:0:0]
+	for _, k := range keys {
+		if k != drop {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// containsKey reports whether k appears in keys.
+func containsKey(keys []string, k string) bool {
+	for _, x := range keys {
+		if x == k {
+			return true
+		}
+	}
+	return false
+}
+
+// injectAfter returns a new slice with ins inserted immediately after the
+// first occurrence of anchor. When anchor is absent, ins is prepended.
+func injectAfter(keys []string, anchor, ins string) []string {
+	out := make([]string, 0, len(keys)+1)
+	inserted := false
+	for _, k := range keys {
+		out = append(out, k)
+		if k == anchor && !inserted {
+			out = append(out, ins)
+			inserted = true
+		}
+	}
+	if !inserted {
+		out = append([]string{ins}, out...)
+	}
+	return out
 }
