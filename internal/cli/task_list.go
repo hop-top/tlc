@@ -31,6 +31,12 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
+
+		fromConfig, err := applyConfigDefaults(cmd)
+		if err != nil {
+			return err
+		}
+
 		query := core.Query{
 			Limit:           taskListLimit,
 			Offset:          taskListOffset,
@@ -71,7 +77,8 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		}
 
 		statusFlags := taskListStatus
-		defaultStatusFilter := !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived")
+		statusProvided := cmd.Flags().Changed("status") || fromConfig["status"]
+		defaultStatusFilter := !statusProvided && !cmd.Flags().Changed("archived") && !fromConfig["archived"]
 		if defaultStatusFilter {
 			statusFlags = []string{"IN_PROGRESS", "TODO"}
 			query.StatusPriority = string(core.StatusInProgress)
@@ -240,7 +247,7 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		if taskListCounters {
 			format = formatCounters
 		}
-		return formatTasks(cmd, tasks, format)
+		return formatTasks(cmd, tasks, format, statusProvided)
 	},
 }
 
@@ -337,7 +344,7 @@ func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string)
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
-		return formatTasks(cmd, tasks, format)
+		return formatTasks(cmd, tasks, format, false)
 	case "tls":
 		for _, t := range tasks {
 			label := ""

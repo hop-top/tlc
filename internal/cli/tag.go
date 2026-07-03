@@ -206,7 +206,7 @@ func runTagFilter(cmd *cobra.Command, args []string) error {
 		tasks = filterTasksByTagGroups(all, groups)
 	}
 
-	return formatTasks(cmd, tasks, "")
+	return formatTasks(cmd, tasks, "", false)
 }
 
 // filterTasksByTagGroups returns tasks satisfying all OR-groups (AND of ORs).

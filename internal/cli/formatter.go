@@ -126,7 +126,7 @@ func isShowTypeIDOutput() bool {
 	return false
 }
 
-func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) error {
+func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, statusProvided bool) error {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
@@ -142,9 +142,72 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string) error {
 	case formatVtodo:
 		return writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default: // table
-		renderTable(out, tasks)
+		cols := effectiveTaskColumns(cmd, statusProvided)
+		renderTable(out, tasks, cols)
 	}
 	return nil
+}
+
+// effectiveTaskColumns resolves the table header list for `task list`
+// from the ladder, prunes the status column when filtering by status,
+// and warns on unknown keys.
+//
+// Returns nil when no customization is active (default columns, no pruning)
+// so the caller can use the styled TTY path (box-drawing, row emphasis).
+// Returns a non-nil slice only when columns differ from the natural default,
+// which switches to the plain column-aware formatter.
+func effectiveTaskColumns(cmd *cobra.Command, statusProvided bool) []string {
+	customized := false
+	keys := taskListDefaultColumns
+
+	// config override via ladder (task.list.columns -> defaults.list.columns
+	// -> defaults.columns)
+	if key, ok := resolveFlagDefaultKey(cmd, "columns"); ok {
+		if v := viper.GetStringSlice(key); len(v) > 0 {
+			keys = v
+			customized = true
+		}
+	}
+	// explicit --cols / --columns (kit persistent flag, viper key "cols")
+	if c := viper.GetStringSlice("cols"); len(c) > 0 {
+		keys = c
+		customized = true
+	}
+
+	// lowercase-normalize
+	norm := make([]string, len(keys))
+	for i, k := range keys {
+		norm[i] = strings.ToLower(strings.TrimSpace(k))
+	}
+	keys = norm
+
+	// prune status column when filtering by status (explicit or config)
+	if statusProvided {
+		keys = dropKey(keys, "status")
+		customized = true
+	}
+
+	// No customization: return nil so the styled TTY path activates.
+	if !customized {
+		return nil
+	}
+
+	headers, unknown := resolveColumnHeaders(keys, taskColumnHeaders)
+	for _, u := range unknown {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown column %q (skipped)\n", u)
+	}
+	return headers
+}
+
+// dropKey returns a new slice with all occurrences of drop removed.
+func dropKey(keys []string, drop string) []string {
+	out := keys[:0:0]
+	for _, k := range keys {
+		if k != drop {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // writeVtodo serialises the supplied tasks/tracks (and optionally logs)
@@ -311,59 +374,23 @@ func formatDuration(d time.Duration) string {
 }
 
 // taskTableRow is the row schema for `tlc task list` table output.
+// The struct holds all possible columns; effectiveTaskColumns selects
+// which headers are rendered so the default view stays identical to
+// the pre-widening layout.
 type taskTableRow struct {
 	ID       string `table:"ID"`
 	Title    string `table:"Title"`
 	Status   string `table:"Status"`
+	Priority string `table:"Priority"`
 	Assigned string `table:"Assigned"`
+	Track    string `table:"Track"`
+	Effort   string `table:"Effort"`
 	Due      string `table:"Due"`
 	Stale    string `table:"Stale"`
 	Blocked  string `table:"Blocked"`
 }
 
-func renderTable(w io.Writer, tasks []*core.Task) {
-	rows := make([]taskTableRow, len(tasks))
-	for i, t := range tasks {
-		assignee := "-"
-		if t.AssignedTo != nil {
-			assignee = *t.AssignedTo
-		}
-
-		// Table column: humanise DueAt relative to now ("in 3d",
-		// "2h ago"). JSON/YAML output paths stay on RFC3339 via
-		// the structured marshaller. Spec §6, T-1384.
-		dueCol := "-"
-		if t.DueAt != nil {
-			if t.IsOverdue() {
-				dueCol = "! " + DisplayTimePtrRelative(t.DueAt)
-			} else {
-				dueCol = DisplayTimePtrRelative(t.DueAt)
-			}
-		}
-
-		staleCol := "-"
-		if t.IsStale() {
-			if s := t.StaleSince(); s != nil {
-				staleCol = "! " + formatDuration(*s)
-			}
-		}
-
-		blockedCol := "-"
-		if t.IsBlocked() {
-			blockedCol = *t.BlockedReason
-		}
-
-		rows[i] = taskTableRow{
-			ID:       formatTaskAlias(t),
-			Title:    t.Title,
-			Status:   formatStatusPlain(t.Status),
-			Assigned: assignee,
-			Due:      dueCol,
-			Stale:    staleCol,
-			Blocked:  blockedCol,
-		}
-	}
-
+func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	// Color is a pure function of status + state:
 	//   DONE / SKIPPED → none (terminal, always)
 	//   IN_PROGRESS    → primary (green)
@@ -376,7 +403,6 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 			blockerIDs[dep] = true
 		}
 	}
-
 	emphasis := make(map[int]output.EmphasisKind)
 	for i, t := range tasks {
 		switch {
@@ -391,7 +417,116 @@ func renderTable(w io.Writer, tasks []*core.Task) {
 		}
 	}
 
+	// When column customization is active (cols non-nil), build wide rows and
+	// use the cols-aware plain formatter so only the requested headers render.
+	// When cols is nil (default view), build narrow rows and use the styled
+	// path so TTY gets box-drawing + row emphasis unchanged from before.
+	if cols != nil {
+		rows := make([]taskTableRow, len(tasks))
+		for i, t := range tasks {
+			rows[i] = buildWideRow(t)
+		}
+		_ = renderStyledListCols(w, formatTable, rows, emphasis, cols) //nolint:errcheck // best-effort output
+		return
+	}
+
+	type narrowRow struct {
+		ID       string `table:"ID"`
+		Title    string `table:"Title"`
+		Status   string `table:"Status"`
+		Assigned string `table:"Assigned"`
+		Due      string `table:"Due"`
+		Stale    string `table:"Stale"`
+		Blocked  string `table:"Blocked"`
+	}
+	rows := make([]narrowRow, len(tasks))
+	for i, t := range tasks {
+		assignee := "-"
+		if t.AssignedTo != nil {
+			assignee = *t.AssignedTo
+		}
+		dueCol := "-"
+		if t.DueAt != nil {
+			if t.IsOverdue() {
+				dueCol = "! " + DisplayTimePtrRelative(t.DueAt)
+			} else {
+				dueCol = DisplayTimePtrRelative(t.DueAt)
+			}
+		}
+		staleCol := "-"
+		if t.IsStale() {
+			if s := t.StaleSince(); s != nil {
+				staleCol = "! " + formatDuration(*s)
+			}
+		}
+		blockedCol := "-"
+		if t.IsBlocked() {
+			blockedCol = *t.BlockedReason
+		}
+		rows[i] = narrowRow{
+			ID:       formatTaskAlias(t),
+			Title:    t.Title,
+			Status:   formatStatusPlain(t.Status),
+			Assigned: assignee,
+			Due:      dueCol,
+			Stale:    staleCol,
+			Blocked:  blockedCol,
+		}
+	}
 	_ = renderStyledList(w, formatTable, rows, emphasis) //nolint:errcheck // best-effort output
+}
+
+// buildWideRow populates a taskTableRow with all available fields.
+func buildWideRow(t *core.Task) taskTableRow {
+	assignee := "-"
+	if t.AssignedTo != nil {
+		assignee = *t.AssignedTo
+	}
+	// Table column: humanise DueAt relative to now ("in 3d",
+	// "2h ago"). JSON/YAML output paths stay on RFC3339 via
+	// the structured marshaller. Spec §6, T-1384.
+	dueCol := "-"
+	if t.DueAt != nil {
+		if t.IsOverdue() {
+			dueCol = "! " + DisplayTimePtrRelative(t.DueAt)
+		} else {
+			dueCol = DisplayTimePtrRelative(t.DueAt)
+		}
+	}
+	staleCol := "-"
+	if t.IsStale() {
+		if s := t.StaleSince(); s != nil {
+			staleCol = "! " + formatDuration(*s)
+		}
+	}
+	blockedCol := "-"
+	if t.IsBlocked() {
+		blockedCol = *t.BlockedReason
+	}
+	priorityCol := "-"
+	if t.Priority != "" {
+		priorityCol = string(t.Priority)
+	}
+	trackCol := "-"
+	if t.TrackID != nil && *t.TrackID != "" {
+		trackCol = *t.TrackID
+	}
+	effortCol := "-"
+	if t.Effort != "" {
+		effortCol = string(t.Effort)
+	}
+	return taskTableRow{
+		ID:       formatTaskAlias(t),
+		Title:    t.Title,
+		Status:   formatStatusPlain(t.Status),
+		Priority: priorityCol,
+		Assigned: assignee,
+		Track:    trackCol,
+		Effort:   effortCol,
+		Due:      dueCol,
+		Stale:    staleCol,
+		Blocked:  blockedCol,
+	}
 }
 
 // workspaceTaskRow is the row schema for the workspace tasks table
