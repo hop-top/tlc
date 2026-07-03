@@ -33,7 +33,9 @@ for f in "${targets[@]}"; do
   # the rule.
   stripped=$(sed -E 's/(^|[[:space:]])#.*$//' "$f")
   # Match --tier=2 / --tier=3 / --tier 2 / --tier 3, with optional quoting.
-  if printf '%s\n' "$stripped" | grep -E -n -- "--tier[= ]['\"]?[23]"; then
+  # The trailing (not-a-digit|end) guard prevents false positives on values
+  # like --tier=23 (not a real tier, but must not trip the guard).
+  if printf '%s\n' "$stripped" | grep -E -n -- "--tier[= ]['\"]?[23]([^0-9]|$)"; then
     echo "  in: $f" >&2
     bad=1
   fi
