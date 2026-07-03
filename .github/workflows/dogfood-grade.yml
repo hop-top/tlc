@@ -1,0 +1,131 @@
+# dogfood-grade — cassette capture + cross-repo grade dispatch (Mode C).
+#
+# The strict command-surface + story gates run in `12fcc.yml` (the
+# spec-12fc action: verify-stories + verify-no-leak). This workflow
+# covers the seven factors those gates cannot: F3 (stream discipline),
+# F4 (error contracts), F5 (previewability), F6 (idempotency), F7 (state
+# transparency), F8 (safe delegation), F11 (exit-code semantics). Those
+# require behavioural grading of recorded command runs, not static
+# inspection.
+#
+# On a PR (or push to main) touching the command surface, this workflow:
+#   1. Builds the tlc binary.
+#   2. Captures cassettes of representative commands via xrr.
+#   3. Uploads the cassettes as a CI artifact.
+#   4. Dispatches a `grade-pr` event to the private grader repo. The
+#      grader picks up the artifact, grades Tier 1, and posts a status
+#      check back to this commit.
+#
+# Private-content firewall (Mode C). The scenario rubric lives in a
+# private repo and is invoked there, not here. This public runner never
+# holds scenario assertions in memory. Cassettes carry only recorded
+# stdout/stderr/exit — no rubric.
+#
+# The cross-repo dispatch is gated behind `DOGFOOD_DISPATCH_TOKEN`. Until
+# the private grader repo exists and the token is configured, the dispatch
+# step no-ops and the job exits cleanly. Build, tier-1 lockdown, the
+# cassette-capture stub, and the (empty) artifact upload always run — they
+# are cheap and hold nothing private. Dispatch lights up automatically once
+# the secret lands.
+name: dogfood-grade
+
+on:
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'internal/cli/**'
+      - '.github/workflows/dogfood-grade.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/**'
+      - 'internal/cli/**'
+
+permissions:
+  contents: read
+
+jobs:
+  capture-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Raw `go build` (buildvcs disabled for worktree compatibility) matches
+      # ci.yml's convention. `make build` is not used here: it also builds
+      # plugins + shims, which cassette capture doesn't need.
+      - name: build tlc
+        run: |
+          set -euo pipefail
+          GOFLAGS=-buildvcs=false go build -o /tmp/tlc ./cmd/tlc
+          # xrr install once the go cmd ships a capture binary:
+          #   go install hop.top/xrr/cmd/xrr@latest
+
+      # Tier-1 lockdown: the private grader hard-codes --tier=1; this is
+      # the public-side guard that nothing here ever asks for a higher
+      # tier (which would leak assertion-level traces). Runs regardless
+      # of dispatch wiring so the rule holds even while gated off.
+      - name: tier-1 lockdown (lint this workflow)
+        run: bash scripts/verify-tier1.sh .github/workflows/dogfood-grade.yml
+
+      # ── Cassette capture (Mode C step 1) ────────────────────────────
+      # Replace this stub with real xrr captures once the toolspec +
+      # per-command scenarios land in the private grader repo. Capture
+      # only read-only / dry-run command runs so cassettes are hermetic:
+      #
+      #   xrr capture --out /tmp/cassettes/tlc.config.show/ -- \
+      #     /tmp/tlc config show --format=json
+      #   xrr capture --out /tmp/cassettes/tlc.task.list/ -- \
+      #     /tmp/tlc task list --format=json
+      #   xrr capture --out /tmp/cassettes/tlc.doctor/ -- \
+      #     /tmp/tlc doctor --format=json
+      #
+      # Cassette directory names MUST match the scenario_id in the
+      # private repo's scenarios/tlc/<scenario_id>.yaml so grade-on-
+      # dispatch can pair them.
+      - name: capture cassettes (stub)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cassettes
+          echo "stub" > /tmp/cassettes/.placeholder
+          ls -la /tmp/cassettes/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-cassettes-${{ github.event.pull_request.number || github.sha }}
+          path: /tmp/cassettes/
+          retention-days: 7
+
+      # ── Cross-repo dispatch (Mode C step 2) ─────────────────────────
+      # Only fires if the dispatch token is configured AND we're on a
+      # trusted ref (same-repo PR, or push to main). Fork PRs are never
+      # exposed to the token; they grade at merge-time only.
+      #
+      # GitHub-supplied context is shape-validated by GitHub before
+      # reaching us, but we still funnel through env vars per the
+      # workflow-injection hardening convention.
+      - name: dispatch to private grader
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ secrets.DOGFOOD_DISPATCH_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+          COMMIT_SHA: ${{ github.sha }}
+          ARTIFACT_NAME: dogfood-cassettes-${{ github.event.pull_request.number || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "DOGFOOD_DISPATCH_TOKEN unset — skipping dispatch (Mode C wiring not yet live)"
+            exit 0
+          fi
+          gh api -X POST \
+            repos/hop-top/scenarios-kit/dispatches \
+            -f event_type=grade-pr \
+            -f "client_payload[pr_number]=${PR_NUMBER}" \
+            -f "client_payload[commit_sha]=${COMMIT_SHA}" \
+            -f "client_payload[artifact_name]=${ARTIFACT_NAME}" \
+            -f 'client_payload[source]=hop-top/tlc'
