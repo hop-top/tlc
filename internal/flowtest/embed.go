@@ -11,6 +11,14 @@ import (
 //go:embed shims/bin/*
 var shimsFS embed.FS
 
+// Helper shim binary names. Helper shims are symlink targets, not tool
+// names, so they carry the tlc-shim- prefix to stay out of the tool
+// namespace inside the sandbox bin/ dir.
+const (
+	shimPassthroughName = "tlc-shim-passthrough"
+	shimCatchallName    = "tlc-shim-catchall"
+)
+
 // passthroughAlways are tools that always exec the real binary without cassettes.
 // Symlinked to tlc-shim-passthrough (if present) or tlc-shim-catchall.
 var passthroughAlways = []string{
@@ -41,15 +49,9 @@ func (s *Sandbox) ExtractShims() error {
 		}
 	}
 
-	// Determine the passthrough-always target binary.
-	// Prefer tlc-shim-passthrough (dedicated passthrough); fall back to
-	// tlc-shim-catchall (which also handles passthrough via env override).
-	passthroughBin := filepath.Join(s.BinDir, "tlc-shim-passthrough")
-	if _, err := os.Stat(passthroughBin); os.IsNotExist(err) {
-		passthroughBin = filepath.Join(s.BinDir, "tlc-shim-catchall")
-	}
-	if _, err := os.Stat(passthroughBin); os.IsNotExist(err) {
-		// Neither binary embedded yet — skip passthrough symlinks.
+	passthroughBin := resolvePassthroughBin(s.BinDir)
+	if passthroughBin == "" {
+		// Neither helper binary embedded yet — skip passthrough symlinks.
 		return nil
 	}
 
@@ -63,4 +65,18 @@ func (s *Sandbox) ExtractShims() error {
 	}
 
 	return nil
+}
+
+// resolvePassthroughBin returns the passthrough-always symlink target in
+// binDir. Prefers the dedicated passthrough shim; falls back to the catchall
+// (which also handles passthrough via env override). Empty when neither
+// helper binary exists.
+func resolvePassthroughBin(binDir string) string {
+	for _, name := range []string{shimPassthroughName, shimCatchallName} {
+		p := filepath.Join(binDir, name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
