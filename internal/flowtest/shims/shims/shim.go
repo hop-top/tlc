@@ -68,32 +68,15 @@ func run(name string) error {
 		return err
 	}
 
-	switch r := resp.(type) {
-	case *execadapter.Response:
-		fmt.Fprint(os.Stdout, r.Stdout)
-		fmt.Fprint(os.Stderr, r.Stderr)
-		os.Exit(r.ExitCode)
-	case *xrr.RawResponse:
-		// Replay path: emit stored output and exit with stored code.
-		if v, ok := r.Payload["stdout"]; ok {
-			fmt.Fprint(os.Stdout, v)
-		}
-		if v, ok := r.Payload["stderr"]; ok {
-			fmt.Fprint(os.Stderr, v)
-		}
-		code := 0
-		if v, ok := r.Payload["exit_code"]; ok {
-			switch n := v.(type) {
-			case int:
-				code = n
-			case float64:
-				code = int(n)
-			}
-		}
-		os.Exit(code)
-	default:
-		return fmt.Errorf("unexpected response type %T", resp)
+	// Replay sessions return *xrr.RawResponse; record/passthrough return
+	// the typed exec response. DecodeExecResponse normalizes both.
+	r, err := DecodeExecResponse(resp)
+	if err != nil {
+		return err
 	}
+	fmt.Fprint(os.Stdout, r.Stdout)
+	fmt.Fprint(os.Stderr, r.Stderr)
+	os.Exit(r.ExitCode)
 
 	return nil
 }

@@ -26,6 +26,8 @@ import (
 	execadapter "hop.top/xrr/adapters/exec"
 
 	xrr "hop.top/xrr"
+
+	"hop.top/tlc/internal/flowtest/shims/shims"
 )
 
 func main() {
@@ -68,9 +70,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	execResp, ok := resp.(*execadapter.Response)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "tlc-flow-test: %s: unexpected response type %T\n", self, resp)
+	// Replay sessions return *xrr.RawResponse; record/passthrough return
+	// the typed exec response. DecodeExecResponse normalizes both.
+	execResp, err := shims.DecodeExecResponse(resp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tlc-flow-test: %s: %v\n", self, err)
 		os.Exit(1)
 	}
 
