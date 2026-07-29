@@ -123,9 +123,10 @@ var commandGroups = map[string]string{
 	"tui":   "interact",
 	"agent": "interact",
 
-	// INSTANCE — node-bound concerns (auth, URI handlers).
-	"auth": "instance",
-	"uri":  "instance",
+	// INSTANCE — node-bound concerns (auth, URI handlers, HTTP server).
+	"auth":  "instance",
+	"uri":   "instance",
+	"serve": "instance",
 
 	// MANAGEMENT — meta/tooling, hidden by default.
 	"config":     "management",
