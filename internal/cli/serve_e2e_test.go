@@ -211,6 +211,130 @@ func TestServe_E2E_TaskUpdateStatusTransition(t *testing.T) {
 	})
 }
 
+// TestServe_E2E_TaskUpdateExtendedFields exercises the fields that
+// PATCH /tasks/{id} gained once handleTaskUpdate started sharing
+// applyTaskFieldChanges with the CLI's `task update`: due/remind-at/
+// rrule, track (with auto-create disabled over HTTP), and blocked-by
+// add/remove. These were previously CLI-only.
+func TestServe_E2E_TaskUpdateExtendedFields(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		blocker := &core.Task{ID: core.NewTaskID(), Title: "Blocker", Status: core.StatusTodo}
+		if err := s.CreateTask(ctx, blocker); err != nil {
+			t.Fatalf("CreateTask blocker: %v", err)
+		}
+		task := &core.Task{ID: core.NewTaskID(), Title: "Schedulable", Status: core.StatusTodo}
+		if err := s.CreateTask(ctx, task); err != nil {
+			t.Fatalf("CreateTask: %v", err)
+		}
+
+		router, _ := newTestServeRouter(t)
+
+		// POST /tracks so track_id resolves to something real; the HTTP
+		// update route does not auto-create tracks (unlike the CLI).
+		trackRec := doServeRequest(t, router, "POST", "/tracks", trackCreateRequest{
+			Slug:  "serve-update-track",
+			Title: "Serve Update Track",
+			Type:  "feature",
+		})
+		if trackRec.Code != http.StatusCreated {
+			t.Fatalf("POST /tracks: expected 201, got %d: %s", trackRec.Code, trackRec.Body.String())
+		}
+		var track core.Track
+		if err := json.Unmarshal(trackRec.Body.Bytes(), &track); err != nil {
+			t.Fatalf("unmarshal created track: %v", err)
+		}
+
+		due := "2099-01-01"
+		remindAt := "2099-01-01"
+		rrule := "FREQ=DAILY"
+		rec := doServeRequest(t, router, "PATCH", "/tasks/"+task.ID, taskUpdateRequest{
+			Due:          &due,
+			RemindAt:     &remindAt,
+			RRule:        &rrule,
+			Track:        &track.ID,
+			AddBlockedBy: []string{blocker.ID},
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PATCH /tasks/{id} extended fields: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var updated core.Task
+		if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+			t.Fatalf("unmarshal updated task: %v", err)
+		}
+		if updated.DueAt == nil {
+			t.Error("expected DueAt to be set")
+		}
+		if updated.RemindAt == nil {
+			t.Error("expected RemindAt to be set")
+		}
+		if updated.RRule != rrule {
+			t.Errorf("expected rrule %q, got %q", rrule, updated.RRule)
+		}
+		if updated.TrackID == nil || *updated.TrackID != track.ID {
+			t.Errorf("expected track_id %q, got %v", track.ID, updated.TrackID)
+		}
+		blockedBy := updated.BlockedBy()
+		found := false
+		for _, b := range blockedBy {
+			if b == blocker.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected blocked_by to contain %q, got %v", blocker.ID, blockedBy)
+		}
+
+		// Unlinking the track ("-") and clearing rrule/due/remind-at via
+		// "-" mirrors the CLI's clear-sentinel convention exactly.
+		dash := "-"
+		rec = doServeRequest(t, router, "PATCH", "/tasks/"+task.ID, taskUpdateRequest{
+			Due:      &dash,
+			RemindAt: &dash,
+			RRule:    &dash,
+			Track:    &dash,
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PATCH /tasks/{id} clear extended fields: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var cleared core.Task
+		if err := json.Unmarshal(rec.Body.Bytes(), &cleared); err != nil {
+			t.Fatalf("unmarshal cleared task: %v", err)
+		}
+		if cleared.DueAt != nil {
+			t.Error("expected DueAt cleared")
+		}
+		if cleared.RemindAt != nil {
+			t.Error("expected RemindAt cleared")
+		}
+		if cleared.RRule != "" {
+			t.Errorf("expected rrule cleared, got %q", cleared.RRule)
+		}
+		if cleared.TrackID != nil {
+			t.Errorf("expected track unlinked, got %v", cleared.TrackID)
+		}
+
+		// An unresolvable track_id is a 422 over HTTP (no CLI-style
+		// auto-create), the deliberate HTTP-vs-CLI behavior difference
+		// noted on TaskFieldChanges.AutoCreateTrack.
+		bogusTrack := "does-not-exist"
+		rec = doServeRequest(t, router, "PATCH", "/tasks/"+task.ID, taskUpdateRequest{
+			Track: &bogusTrack,
+		})
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("expected 422 for unresolvable track_id, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestServe_E2E_TaskClaimAndComplete(t *testing.T) {
 	withTestLock(func() {
 		ctx, cleanup := setupTestDir(t)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"hop.top/kit/go/runtime/bus"
+	"hop.top/kit/go/runtime/domain"
 	"hop.top/kit/go/transport/api"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -271,20 +272,48 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 	}
 }
 
-// taskUpdateRequest is the JSON body accepted by PATCH /tasks/{id}.
-// Only fields present (non-nil pointers) are applied — mirrors the
-// CLI's cmd.Flags().Changed() gating in task_update.go so an omitted
-// field never clobbers existing data.
+// taskUpdateRequest is the JSON body accepted by PATCH /tasks/{id}. Only
+// fields present (non-nil pointers) are applied — mirrors the CLI's
+// cmd.Flags().Changed() gating in task_update.go, now shared via
+// applyTaskFieldChanges, so an omitted field never clobbers existing data.
+//
+// Route/verb choice: kit's generic api.ResourceRouter (hop.top/kit/go/
+// transport/api/resource.go) documents PUT {prefix}/{id} → full-resource
+// replace as its default REST convention for arbitrary entities. Tasks are
+// deliberately kept on PATCH with partial-update semantics instead: a task
+// has a dozen-plus independent optional fields (title, status, effort,
+// priority, tags, due/remind-at/rrule, track, blocked-by, timeout, ...),
+// and requiring a client to resend the entire resource on every edit (as
+// true PUT replace would) risks silently clobbering fields the client
+// never intended to touch — a functional regression, not an alignment
+// win. PATCH with "apply only present fields" is the semantically correct
+// verb here per RFC 5789, and it is what the CLI's own field-changed
+// tracking already implements; the HTTP route just mirrors that model
+// instead of forcing kit's generic-entity default onto a domain it
+// doesn't fit. See applyTaskFieldChanges for the shared implementation.
 type taskUpdateRequest struct {
-	Title       *string   `json:"title,omitempty"`
-	Description *string   `json:"description,omitempty"`
-	Status      *string   `json:"status,omitempty"`
-	AssignedTo  *string   `json:"assigned_to,omitempty"`
-	Effort      *string   `json:"effort,omitempty"`
-	Priority    *string   `json:"priority,omitempty"`
-	Tags        *[]string `json:"tags,omitempty"`
-	Note        string    `json:"note,omitempty"`
-	Force       bool      `json:"force,omitempty"`
+	Title           *string   `json:"title,omitempty"`
+	Description     *string   `json:"description,omitempty"`
+	Status          *string   `json:"status,omitempty"`
+	AssignedTo      *string   `json:"assigned_to,omitempty"`
+	Effort          *string   `json:"effort,omitempty"`
+	Priority        *string   `json:"priority,omitempty"`
+	Tags            *[]string `json:"tags,omitempty"`
+	AddTags         []string  `json:"add_tags,omitempty"`
+	RemoveTags      []string  `json:"remove_tags,omitempty"`
+	ClearBlockedBy  bool      `json:"clear_blocked_by,omitempty"`
+	AddBlockedBy    []string  `json:"add_blocked_by,omitempty"`
+	RemoveBlockedBy []string  `json:"remove_blocked_by,omitempty"`
+	BlockedReason   *string   `json:"blocked_reason,omitempty"`
+	Unblock         bool      `json:"unblock,omitempty"`
+	Timeout         *string   `json:"timeout,omitempty"`
+	Track           *string   `json:"track_id,omitempty"`
+	Due             *string   `json:"due,omitempty"`
+	RemindAt        *string   `json:"remind_at,omitempty"`
+	RRule           *string   `json:"rrule,omitempty"`
+	NoAutoRemind    *bool     `json:"no_auto_remind,omitempty"`
+	Note            string    `json:"note,omitempty"`
+	Force           bool      `json:"force,omitempty"`
 }
 
 func handleTaskUpdate(deps *serveDeps) http.HandlerFunc {
@@ -308,76 +337,73 @@ func handleTaskUpdate(deps *serveDeps) http.HandlerFunc {
 			return
 		}
 
-		var logEntry *core.LogEntry
-		user := core.GetCurrentUser()
-
-		if req.Title != nil {
-			task.Title = *req.Title
-		}
-		if req.Description != nil {
-			task.Description = *req.Description
-		}
-		if req.AssignedTo != nil {
-			if *req.AssignedTo == "" {
-				task.AssignedTo = nil
-			} else {
-				task.AssignedTo = req.AssignedTo
-			}
-		}
-		if req.Effort != nil {
-			normalized, ok := NormalizeEffort(*req.Effort)
-			if !ok {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_effort", "invalid effort %q", *req.Effort)
-				return
-			}
-			task.Effort = core.Effort(normalized)
-		}
-		if req.Priority != nil {
-			normalized, ok := NormalizePriority(*req.Priority)
-			if !ok {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_priority", "invalid priority %q", *req.Priority)
-				return
-			}
-			task.Priority = core.Priority(normalized)
+		changes := TaskFieldChanges{
+			Title:           req.Title,
+			Description:     req.Description,
+			AssignedTo:      req.AssignedTo,
+			Status:          req.Status,
+			StatusNote:      req.Note,
+			StatusForce:     req.Force,
+			Effort:          req.Effort,
+			Priority:        req.Priority,
+			AddTags:         req.AddTags,
+			RemoveTags:      req.RemoveTags,
+			ClearBlockedBy:  req.ClearBlockedBy,
+			AddBlockedBy:    req.AddBlockedBy,
+			RemoveBlockedBy: req.RemoveBlockedBy,
+			BlockedReason:   req.BlockedReason,
+			Unblock:         req.Unblock,
+			Timeout:         req.Timeout,
+			Track:           req.Track,
+			Due:             req.Due,
+			RemindAt:        req.RemindAt,
+			RRule:           req.RRule,
+			NoAutoRemind:    req.NoAutoRemind,
+			// No AutoCreateTrack: the HTTP API treats an unresolvable
+			// --track-equivalent as an error (422) rather than silently
+			// creating a track, since a stray typo in a track_id over
+			// HTTP shouldn't spawn new tracks the way CLI ergonomics
+			// intentionally allow for interactive use.
 		}
 		if req.Tags != nil {
-			task.Tags = *req.Tags
+			// Bulk tags replace: apply as add-all/remove-none against the
+			// current set so the shared set-diff logic in
+			// applyTaskFieldChanges still owns the actual mutation.
+			changes.AddTags = append(append([]string{}, *req.Tags...), changes.AddTags...)
+			changes.RemoveTags = append(append([]string{}, task.Tags...), changes.RemoveTags...)
 		}
 
-		if req.Status != nil {
-			normalized, ok := NormalizeStatus(*req.Status)
-			if !ok {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q", *req.Status)
-				return
-			}
-			wm := core.DefaultWorkflow()
-			note := req.Note
-			if note == "" {
-				note = "Updated via serve API"
-			}
-			entry, transErr := task.TransitionWithWorkflow(core.TaskStatus(normalized), user, note, wm, req.Force)
-			if transErr != nil {
-				writeAPIError(w, http.StatusConflict, "invalid_transition", "%v", transErr)
-				return
-			}
-			logEntry = entry
-		} else {
-			task.UpdatedAt = time.Now().UTC()
-			logEntry = &core.LogEntry{
-				TaskID:    task.ID,
-				Timestamp: task.UpdatedAt,
-				By:        user,
-				Action:    "UPDATED",
-				Note:      req.Note,
-			}
-		}
-
-		if err := deps.storage.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to update task: %v", err)
+		if _, err := applyTaskFieldChanges(ctx, deps.storage, res.Storage, task, changes); err != nil {
+			writeTaskFieldChangeError(w, err)
 			return
 		}
 
 		api.JSON(w, http.StatusOK, task)
+	}
+}
+
+// writeTaskFieldChangeError maps an applyTaskFieldChanges error to the
+// same HTTP status codes the previous inline implementation used:
+// validation/normalization failures are 422, workflow transition
+// conflicts are 409, an unresolvable track is 422, everything else (e.g.
+// a storage write failure) is 500. applyTaskFieldChanges wraps its
+// error returns with kit's domain sentinels (domain.ErrValidation,
+// domain.ErrInvalidTransition) or tlc's own ErrTrackNotFound specifically
+// so this classification can use errors.Is instead of matching on
+// message text. This mirrors the existing writeAPIError convention used
+// throughout this file rather than introducing api.MapError, since the
+// underlying function is shared with the CLI, which has no concept of
+// HTTP status codes.
+func writeTaskFieldChangeError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrInvalidTransition):
+		writeAPIError(w, http.StatusConflict, "invalid_transition", "%v", err)
+	case errors.Is(err, ErrTrackNotFound):
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_track", "%v", err)
+	case errors.Is(err, domain.ErrValidation):
+		writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
+	default:
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "%v", err)
 	}
 }
 
