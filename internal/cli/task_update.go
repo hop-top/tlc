@@ -10,12 +10,12 @@ import (
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 	"hop.top/kit/go/console/output"
-	"hop.top/kit/go/core/util"
 	"hop.top/kit/go/runtime/bus"
 	"hop.top/kit/go/runtime/domain"
 	"hop.top/kit/go/runtime/policy"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 var TaskUpdateCmd = &cobra.Command{
@@ -84,7 +84,6 @@ against the workflow state machine unless --force is set.`,
 			return nil
 		}
 
-		now := time.Now().UTC()
 		var errs []string
 
 		for _, res := range resolved {
@@ -93,265 +92,70 @@ against the workflow state machine unless --force is set.`,
 				defer func() { _ = res.Storage.Close() }()
 			}
 
-			changed := false
-
+			changes := TaskFieldChanges{
+				ClearBlockedBy: taskUpdateClearBlockedBy,
+				ClearEva:       taskUpdateClearEva,
+				AddEva:         taskUpdateAddEva,
+				RemoveEva:      taskUpdateRemoveEva,
+				AddBlockedBy:   taskUpdateAddBlockedBy,
+				AddTags:        taskUpdateAddTags,
+				RemoveTags:     taskUpdateRemoveTags,
+				Unblock:        cmd.Flags().Changed("unblock") && taskUpdateUnblock,
+				AutoCreateTrack: func(ctx context.Context, s *storage.SQLiteStorage, input string) (string, error) {
+					return maybeAutoCreateTrack(ctx, cmd, s, input)
+				},
+			}
 			if cmd.Flags().Changed("title") {
-				task.Title = taskUpdateTitle
-				changed = true
+				changes.Title = &taskUpdateTitle
 			}
 			if cmd.Flags().Changed("description") {
-				task.Description = unescapeMarkdown(taskUpdateDescription)
-				changed = true
+				changes.Description = &taskUpdateDescription
 			}
 			if cmd.Flags().Changed("assigned-to") {
-				if taskUpdateAssignedTo == "null" || taskUpdateAssignedTo == "-" {
-					task.AssignedTo = nil
-				} else {
-					task.AssignedTo = &taskUpdateAssignedTo
-				}
-				changed = true
+				changes.AssignedTo = &taskUpdateAssignedTo
 			}
-
 			if cmd.Flags().Changed("status") {
-				normalized, ok := NormalizeStatus(taskUpdateStatus)
-				if !ok {
-					errs = append(errs, fmt.Sprintf("%s: unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", formatTaskAlias(task), taskUpdateStatus))
-					continue
-				}
-				nextStatus := core.TaskStatus(normalized)
-				wm := core.DefaultWorkflow()
-				transitionNote := taskUpdateNote
-				if transitionNote == "" {
-					transitionNote = "Manual update"
-				}
-				log, err := task.TransitionWithWorkflow(
-					nextStatus, core.GetCurrentUser(), transitionNote, wm, taskUpdateForce,
-				)
-				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: failed to transition: %v", formatTaskAlias(task), err))
-					continue
-				}
-				if err := res.Storage.AddLog(ctx, log); err != nil {
-					fmt.Printf("Warning: failed to write log for %s: %v\n", formatTaskAlias(task), err)
-				}
-				changed = true
+				changes.Status = &taskUpdateStatus
+				changes.StatusNote = taskUpdateNote
+				changes.StatusForce = taskUpdateForce
 			}
-
 			if cmd.Flags().Changed("effort") {
-				// "" and "-" clear the field, matching the existing
-				// pattern for --due, --remind-at, --rrule, --assigned-to.
-				if taskUpdateEffort == "" || taskUpdateEffort == "-" {
-					task.Effort = ""
-				} else {
-					normalized, ok := NormalizeEffort(taskUpdateEffort)
-					if !ok {
-						return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", taskUpdateEffort)
-					}
-					task.Effort = core.Effort(normalized)
-				}
-				changed = true
+				changes.Effort = &taskUpdateEffort
 			}
-
 			if cmd.Flags().Changed("priority") {
-				// "" and "-" clear the field, matching the existing
-				// pattern for --due, --remind-at, --rrule, --assigned-to.
-				if taskUpdatePriority == "" || taskUpdatePriority == "-" {
-					task.Priority = ""
-				} else {
-					normalized, ok := NormalizePriority(taskUpdatePriority)
-					if !ok {
-						return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", taskUpdatePriority)
-					}
-					task.Priority = core.Priority(normalized)
-				}
-				changed = true
+				changes.Priority = &taskUpdatePriority
 			}
-
-			if taskUpdateClearBlockedBy {
-				task.SetBlockedBy(nil)
-				changed = true
-			}
-
-			if taskUpdateClearEva {
-				task.SetEva(nil)
-				changed = true
-			}
-
-			if len(taskUpdateAddEva) > 0 {
-				task.AddEva(taskUpdateAddEva)
-				changed = true
-			}
-
-			if len(taskUpdateRemoveEva) > 0 {
-				task.RemoveEva(taskUpdateRemoveEva)
-				changed = true
-			}
-
-			if len(taskUpdateAddBlockedBy) > 0 {
-				validated, err := validateBlockedByRefs(ctx, s, res.Storage, taskUpdateAddBlockedBy)
-				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
-					continue
-				}
-				task.AddBlockedBy(validated)
-				changed = true
-			}
-
 			if len(taskUpdateRemoveBlockedBy) > 0 {
-				// Translate display aliases and bare seq into typeid
-				// form before set-diff so users can remove blockers by
-				// the same ID they see in `task show`. parseTaskRefForCLI
-				// returns the input unchanged for cross-project refs
-				// and on resolution failure, so the translation is
-				// safe; empty/whitespace inputs are skipped to keep
-				// intent explicit.
-				translated := make([]string, 0, len(taskUpdateRemoveBlockedBy))
-				for _, raw := range taskUpdateRemoveBlockedBy {
-					if strings.TrimSpace(raw) == "" {
-						continue
-					}
-					ref, _ := parseTaskRefForCLI(ctx, res.Storage, raw)
-					translated = append(translated, ref)
-				}
-				task.RemoveBlockedBy(translated)
-				changed = true
+				changes.RemoveBlockedBy = taskUpdateRemoveBlockedBy
 			}
-
-			if len(taskUpdateAddTags) > 0 || len(taskUpdateRemoveTags) > 0 {
-				tagMap := make(map[string]bool)
-				for _, t := range task.Tags {
-					tagMap[t] = true
-				}
-				for _, t := range taskUpdateAddTags {
-					tagMap[t] = true
-				}
-				for _, t := range taskUpdateRemoveTags {
-					delete(tagMap, t)
-				}
-				newTags := []string{}
-				for t := range tagMap {
-					newTags = append(newTags, t)
-				}
-				task.Tags = newTags
-				changed = true
-			}
-
 			if cmd.Flags().Changed("blocked") {
-				task.BlockedReason = &taskUpdateBlocked
-				changed = true
-			}
-			if cmd.Flags().Changed("unblock") && taskUpdateUnblock {
-				task.BlockedReason = nil
-				changed = true
+				changes.BlockedReason = &taskUpdateBlocked
 			}
 			if cmd.Flags().Changed("timeout") {
-				d, err := time.ParseDuration(taskUpdateTimeout)
-				if err != nil {
-					return fmt.Errorf("invalid --timeout %q: %w", taskUpdateTimeout, err)
-				}
-				task.StaleTimeout = &d
-				changed = true
+				changes.Timeout = &taskUpdateTimeout
 			}
-
 			if cmd.Flags().Changed("track") {
-				if taskUpdateTrack == "-" || taskUpdateTrack == "" {
-					task.TrackID = nil
-				} else {
-					resolved, trackErr := resolveTrackID(ctx, res.Storage, taskUpdateTrack)
-					if trackErr != nil && errors.Is(trackErr, ErrTrackNotFound) {
-						created, createErr := maybeAutoCreateTrack(
-							ctx, cmd, res.Storage, taskUpdateTrack,
-						)
-						if createErr != nil {
-							errs = append(errs, fmt.Sprintf(
-								"%s: %v", formatTaskAlias(task), createErr,
-							))
-							continue
-						}
-						resolved = created
-					} else if trackErr != nil {
-						errs = append(errs, fmt.Sprintf(
-							"%s: %v", formatTaskAlias(task), trackErr,
-						))
-						continue
-					}
-					task.TrackID = &resolved
-				}
-				changed = true
+				changes.Track = &taskUpdateTrack
 			}
-
 			if cmd.Flags().Changed("due") {
-				if taskUpdateDue == "-" || taskUpdateDue == "" {
-					task.DueAt = nil
-				} else {
-					t, err := util.ParseUntil(taskUpdateDue)
-					if err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --due: %v", formatTaskAlias(task), err))
-						continue
-					}
-					task.DueAt = &t
-				}
-				changed = true
+				changes.Due = &taskUpdateDue
 			}
 			if cmd.Flags().Changed("remind-at") {
-				if taskUpdateRemindAt == "-" || taskUpdateRemindAt == "" {
-					task.RemindAt = nil
-				} else {
-					t, err := util.ParseUntil(taskUpdateRemindAt)
-					if err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --remind-at: %v", formatTaskAlias(task), err))
-						continue
-					}
-					task.RemindAt = &t
-				}
-				changed = true
+				changes.RemindAt = &taskUpdateRemindAt
 			}
 			if cmd.Flags().Changed("rrule") {
-				if taskUpdateRRule == "-" || taskUpdateRRule == "" {
-					task.RRule = ""
-				} else {
-					if err := core.ValidateRRule(taskUpdateRRule); err != nil {
-						errs = append(errs, fmt.Sprintf("%s: invalid --rrule: %v", formatTaskAlias(task), err))
-						continue
-					}
-					task.RRule = taskUpdateRRule
-				}
-				changed = true
+				changes.RRule = &taskUpdateRRule
 			}
 			if cmd.Flags().Changed("no-auto-remind") {
-				task.NoAutoRemind = taskUpdateNoAutoRemind
-				changed = true
+				changes.NoAutoRemind = &taskUpdateNoAutoRemind
 			}
 
-			if !changed {
-				continue
-			}
-
-			task.StaleFiredAt = nil // reset stale crossing state on any change
-			var assignedTo string
-			if task.AssignedTo != nil {
-				assignedTo = *task.AssignedTo
-			}
-			valCfg := getValidationConfig()
-			if err := valCfg.ValidateTaskOp(config.ValidationOpUpdate, config.TaskFields{
-				Title:       task.Title,
-				Description: task.Description,
-				Status:      string(task.Status),
-				AssignedTo:  assignedTo,
-				Effort:      string(task.Effort),
-				Priority:    string(task.Priority),
-				Tags:        task.Tags,
-				Reference:   task.Reference,
-			}); err != nil {
+			changed, err := applyTaskFieldChanges(ctx, s, res.Storage, task, changes)
+			if err != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
-
-			task.UpdatedAt = now
-
-			// Local DB is the source of truth; commit it first.
-			if err := res.Storage.UpdateTask(ctx, task); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: failed to update: %v", formatTaskAlias(task), err))
+			if !changed {
 				continue
 			}
 
