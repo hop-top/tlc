@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -56,7 +57,7 @@ func handleTrackList(deps *serveDeps) http.HandlerFunc {
 
 		tracksList, err := deps.storage.ListTracks(ctx, q)
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to list tracks: %v", err)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to list tracks: %v", err)
 			return
 		}
 		api.JSON(w, http.StatusOK, trackListResponse{Tracks: tracksList, Total: len(tracksList)})
@@ -70,21 +71,34 @@ func handleTrackShow(deps *serveDeps) http.HandlerFunc {
 
 		resolvedID, err := resolveTrackID(ctx, deps.storage, id)
 		if err != nil {
-			writeAPIError(w, http.StatusNotFound, "not_found", "track %q not found", id)
+			writeTrackResolveError(w, id, err)
 			return
 		}
 
 		track, err := deps.storage.GetTrack(ctx, resolvedID)
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to get track: %v", err)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to get track: %v", err)
 			return
 		}
 		if track == nil {
-			writeAPIError(w, http.StatusNotFound, "not_found", "track %q not found", id)
+			writeAPIErrorf(w, http.StatusNotFound, "not_found", "track %q not found", id)
 			return
 		}
 		api.JSON(w, http.StatusOK, track)
 	}
+}
+
+// writeTrackResolveError maps a resolveTrackID failure to the right HTTP
+// status, mirroring writeResolveError's task-side convention:
+// genuinely-not-found (ErrTrackNotFound) is 404, everything else
+// (ambiguous prefix/fuzzy matches, empty input) is 422 since the input
+// itself was invalid or under-specified rather than a lookup miss.
+func writeTrackResolveError(w http.ResponseWriter, id string, err error) {
+	if errors.Is(err, ErrTrackNotFound) {
+		writeAPIErrorf(w, http.StatusNotFound, "not_found", "track %q not found", id)
+		return
+	}
+	writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_track", "%v", err)
 }
 
 // trackCreateRequest is the JSON body accepted by POST /tracks.
@@ -99,15 +113,15 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 		ctx := r.Context()
 		var req trackCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeAPIError(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
+			writeAPIErrorf(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
 			return
 		}
 		if req.Slug == "" {
-			writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "slug is required")
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "slug is required")
 			return
 		}
 		if err := core.ValidateTrackSlug(req.Slug); err != nil {
-			writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
 			return
 		}
 
@@ -126,11 +140,11 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 
 		svc := core.NewTrackService(deps.storage, deps.storage)
 		if err := svc.CreateTrack(ctx, track); err != nil {
-			writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
 			return
 		}
 
-		publishTaskEvent(ctx, deps.publisher, events.TopicTrackCreated, events.TrackCreatedPayload{
+		publishDomainEvent(ctx, deps.publisher, events.TopicTrackCreated, events.TrackCreatedPayload{
 			TrackID: track.ID,
 			Title:   track.Title,
 			Type:    track.Type,

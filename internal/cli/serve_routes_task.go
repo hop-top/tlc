@@ -41,9 +41,12 @@ func registerTaskRoutes(router *api.Router, deps *serveDeps) {
 	tasks.Handle("POST", "/{id}/complete", handleTaskComplete(deps))
 }
 
-// taskListResponse wraps task list results with a total count so
-// clients can distinguish "empty page" from "no more results" without
-// a separate count endpoint.
+// taskListResponse wraps task list results. Total is the count of
+// items returned in this page (i.e. len(Tasks)), not a global total
+// across all pages — there is no CountTasks-equivalent query in
+// internal/storage, so a client cannot use Total to compute remaining
+// pages; it only distinguishes "this page has items" from "this page
+// is empty".
 type taskListResponse struct {
 	Tasks []*core.Task `json:"tasks"`
 	Total int          `json:"total"`
@@ -68,7 +71,7 @@ func handleTaskList(deps *serveDeps) http.HandlerFunc {
 		if v := query.Get("status"); v != "" {
 			normalized, ok := NormalizeStatus(v)
 			if !ok {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", v)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", v)
 				return
 			}
 			q.Filters = append(q.Filters, core.FieldFilter{Field: "status", Value: normalized})
@@ -88,7 +91,7 @@ func handleTaskList(deps *serveDeps) http.HandlerFunc {
 
 		tasks, err := deps.storage.ListTasks(ctx, q)
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to list tasks: %v", err)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to list tasks: %v", err)
 			return
 		}
 		api.JSON(w, http.StatusOK, taskListResponse{Tasks: tasks, Total: len(tasks)})
@@ -134,12 +137,12 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		ctx := r.Context()
 		var req taskCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeAPIError(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
+			writeAPIErrorf(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
 			return
 		}
 
 		if req.Title == "" {
-			writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "title is required")
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "title is required")
 			return
 		}
 
@@ -149,14 +152,14 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		}
 		normalizedStatus, ok := NormalizeStatus(status)
 		if !ok {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q", status)
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q", status)
 			return
 		}
 		effort := req.Effort
 		if effort != "" {
 			normalized, ok := NormalizeEffort(effort)
 			if !ok {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_effort", "invalid effort %q: must be one of XS, S, M, L, XL", effort)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_effort", "invalid effort %q: must be one of XS, S, M, L, XL", effort)
 				return
 			}
 			effort = normalized
@@ -165,7 +168,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		if priority != "" {
 			normalized, ok := NormalizePriority(priority)
 			if !ok {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_priority", "invalid priority %q: must be one of P0, P1, P2, P3", priority)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_priority", "invalid priority %q: must be one of P0, P1, P2, P3", priority)
 				return
 			}
 			priority = normalized
@@ -183,7 +186,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 			Tags:        req.Tags,
 			Reference:   req.Reference,
 		}); err != nil {
-			writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
 			return
 		}
 
@@ -191,7 +194,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		if blockedBy := core.NormalizeBlockedBy(req.BlockedBy); len(blockedBy) > 0 {
 			validated, err := validateBlockedByRefs(ctx, deps.storage, deps.storage, blockedBy)
 			if err != nil {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_blocked_by", "%v", err)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_blocked_by", "%v", err)
 				return
 			}
 			meta["blocked_by"] = validated
@@ -226,18 +229,18 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		if req.TrackID != "" {
 			resolved, trackErr := resolveTrackID(ctx, deps.storage, req.TrackID)
 			if trackErr != nil {
-				writeAPIError(w, http.StatusUnprocessableEntity, "invalid_track", "%v", trackErr)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_track", "%v", trackErr)
 				return
 			}
 			task.TrackID = &resolved
-			if tr, _ := deps.storage.GetTrack(ctx, resolved); tr != nil {
+			if tr, getErr := deps.storage.GetTrack(ctx, resolved); getErr == nil && tr != nil {
 				parentTrackType = tr.Type
 			}
 		}
 
 		if task.ProjectID != nil && *task.ProjectID != "" {
 			if err := core.GateTaskCreate(*task.ProjectID, parentTrackType); err != nil {
-				writeAPIError(w, http.StatusConflict, "stage_gate", "%v", err)
+				writeAPIErrorf(w, http.StatusConflict, "stage_gate", "%v", err)
 				return
 			}
 		}
@@ -247,7 +250,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		}
 
 		if err := deps.storage.CreateTask(ctx, task); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to create task: %v", err)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to create task: %v", err)
 			return
 		}
 
@@ -260,7 +263,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		}
 		_ = deps.storage.AddLog(ctx, logEntry) //nolint:errcheck // best-effort audit log, mirrors saveTask
 
-		publishTaskEvent(r.Context(), deps.publisher, events.TopicTaskCreated, events.TaskCreatedPayload{
+		publishDomainEvent(r.Context(), deps.publisher, events.TopicTaskCreated, events.TaskCreatedPayload{
 			TaskID:     task.ID,
 			Title:      task.Title,
 			TrackID:    derefStr(task.TrackID),
@@ -333,7 +336,7 @@ func handleTaskUpdate(deps *serveDeps) http.HandlerFunc {
 
 		var req taskUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeAPIError(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
+			writeAPIErrorf(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
 			return
 		}
 
@@ -397,13 +400,13 @@ func handleTaskUpdate(deps *serveDeps) http.HandlerFunc {
 func writeTaskFieldChangeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidTransition):
-		writeAPIError(w, http.StatusConflict, "invalid_transition", "%v", err)
+		writeAPIErrorf(w, http.StatusConflict, "invalid_transition", "%v", err)
 	case errors.Is(err, ErrTrackNotFound):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_track", "%v", err)
+		writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_track", "%v", err)
 	case errors.Is(err, domain.ErrValidation):
-		writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
+		writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
 	default:
-		writeAPIError(w, http.StatusInternalServerError, "internal_error", "%v", err)
+		writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "%v", err)
 	}
 }
 
@@ -428,17 +431,17 @@ func handleTaskClaim(deps *serveDeps) http.HandlerFunc {
 		wm := core.DefaultWorkflow()
 		activeStatus, wmErr := wm.StatusForRole("active")
 		if wmErr != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "workflow has no active status: %v", wmErr)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "workflow has no active status: %v", wmErr)
 			return
 		}
 		logEntry, transErr := task.TransitionWithWorkflow(activeStatus, user, "Claimed via serve API", wm, false)
 		if transErr != nil {
-			writeAPIError(w, http.StatusConflict, "invalid_transition", "%v", transErr)
+			writeAPIErrorf(w, http.StatusConflict, "invalid_transition", "%v", transErr)
 			return
 		}
 
 		if err := deps.storage.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to claim task: %v", err)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to claim task: %v", err)
 			return
 		}
 
@@ -447,7 +450,7 @@ func handleTaskClaim(deps *serveDeps) http.HandlerFunc {
 			_ = svc.AutoTransitionOnTaskClaim(ctx, *task.TrackID) //nolint:errcheck // best-effort, mirrors CLI claim
 		}
 
-		publishTaskEvent(ctx, deps.publisher, events.TopicTaskClaimed, events.TaskClaimedPayload{
+		publishDomainEvent(ctx, deps.publisher, events.TopicTaskClaimed, events.TaskClaimedPayload{
 			TaskID:    task.ID,
 			ClaimedBy: user,
 			TrackID:   derefStr(task.TrackID),
@@ -481,17 +484,17 @@ func handleTaskComplete(deps *serveDeps) http.HandlerFunc {
 		wm := core.DefaultWorkflow()
 		completedStatus, wmErr := wm.StatusForRole("completed")
 		if wmErr != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "workflow has no completed status: %v", wmErr)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "workflow has no completed status: %v", wmErr)
 			return
 		}
 		logEntry, transErr := task.TransitionWithWorkflow(completedStatus, user, "Completed via serve API", wm, false)
 		if transErr != nil {
-			writeAPIError(w, http.StatusConflict, "invalid_transition", "%v", transErr)
+			writeAPIErrorf(w, http.StatusConflict, "invalid_transition", "%v", transErr)
 			return
 		}
 
 		if err := deps.storage.UpdateTaskWithLog(ctx, task, logEntry); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to complete task: %v", err)
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to complete task: %v", err)
 			return
 		}
 
@@ -499,7 +502,7 @@ func handleTaskComplete(deps *serveDeps) http.HandlerFunc {
 		if !startedAt.IsZero() {
 			durationSec = int64(task.UpdatedAt.Sub(startedAt).Seconds())
 		}
-		publishTaskEvent(ctx, deps.publisher, events.TopicTaskCompleted, events.TaskCompletedPayload{
+		publishDomainEvent(ctx, deps.publisher, events.TopicTaskCompleted, events.TaskCompletedPayload{
 			TaskID:      task.ID,
 			CompletedBy: user,
 			TrackID:     derefStr(task.TrackID),
@@ -518,7 +521,11 @@ func resolveTaskForServe(ctx context.Context, s *storage.SQLiteStorage, id strin
 	if err != nil {
 		return nil, err
 	}
-	return uri.NewResolver(s).ResolveTask(ctx, canonical)
+	res, err := uri.NewResolver(s).ResolveTask(ctx, canonical)
+	if err != nil {
+		return nil, fmt.Errorf("resolve task: %w", err)
+	}
+	return res, nil
 }
 
 // writeResolveError maps a task-resolution failure to the right HTTP
@@ -526,13 +533,13 @@ func resolveTaskForServe(ctx context.Context, s *storage.SQLiteStorage, id strin
 func writeResolveError(w http.ResponseWriter, id string, err error) {
 	var notFound *uri.ErrTaskNotFound
 	if errors.As(err, &notFound) {
-		writeAPIError(w, http.StatusNotFound, "not_found", "task %q not found", id)
+		writeAPIErrorf(w, http.StatusNotFound, "not_found", "task %q not found", id)
 		return
 	}
-	writeAPIError(w, http.StatusBadRequest, "bad_request", "%v", err)
+	writeAPIErrorf(w, http.StatusBadRequest, "bad_request", "%v", err)
 }
 
-func writeAPIError(w http.ResponseWriter, status int, code, format string, args ...any) {
+func writeAPIErrorf(w http.ResponseWriter, status int, code, format string, args ...any) {
 	api.Error(w, status, &api.APIError{
 		Status:  status,
 		Code:    code,
@@ -540,11 +547,11 @@ func writeAPIError(w http.ResponseWriter, status int, code, format string, args 
 	})
 }
 
-// publishTaskEvent publishes a domain lifecycle event under tlc's own
-// topic namespace. No-op when the publisher is unavailable (e.g. bus
-// not initialised), matching the nil-safety convention already used by
-// events.DomainOptions.
-func publishTaskEvent(ctx context.Context, pub api.EventPublisher, topic bus.Topic, payload any) {
+// publishDomainEvent publishes a domain lifecycle event (task or track)
+// under tlc's own topic namespace. No-op when the publisher is
+// unavailable (e.g. bus not initialized), matching the nil-safety
+// convention already used by events.DomainOptions.
+func publishDomainEvent(ctx context.Context, pub api.EventPublisher, topic bus.Topic, payload any) {
 	if pub == nil {
 		return
 	}
