@@ -187,6 +187,23 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Serve(ln) }()
 
+	return awaitServeShutdown(ctx, srv, errCh)
+}
+
+// awaitServeShutdown races the server's terminal error (from srv.Serve,
+// delivered on errCh) against ctx being canceled (SIGINT/SIGTERM, or the
+// /shutdown handler's cancel()). Extracted from runServe so the race
+// itself — including the http.ErrServerClosed-swallowing branch — is
+// unit-testable without a real net.Listener.
+//
+//   - errCh fires first: srv.Serve exited on its own (e.g. a listener
+//     error). http.ErrServerClosed is expected/benign (it's the sentinel
+//     Serve returns after a concurrent Shutdown call) and is swallowed;
+//     any other error propagates.
+//   - ctx.Done() fires first: an external shutdown was requested, so we
+//     call srv.Shutdown with a bounded grace period to drain in-flight
+//     requests.
+func awaitServeShutdown(ctx context.Context, srv *http.Server, errCh <-chan error) error {
 	select {
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {

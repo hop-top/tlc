@@ -10,9 +10,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 
 	"hop.top/kit/go/transport/api"
 	"hop.top/tlc/internal/core"
@@ -37,6 +40,65 @@ func newTestServeRouter(t *testing.T) *api.Router {
 	return router
 }
 
+// testAuthToken is the fixed bearer token used by newTestServeRouterWithAuth,
+// standing in for the randomly-minted token runServe generates via
+// secret.Mint. Fixed here so tests can assert the exact success/failure
+// paths without needing to read the token back out of a startup line.
+const testAuthToken = "test-serve-token"
+
+// newTestServeRouterWithAuth builds the same router shape runServe wires
+// in production: task/track routes, requireAuth(token) in the middleware
+// chain, and the /health and /shutdown endpoints. This lets auth-gating
+// and the health/shutdown handlers be exercised via httptest without
+// binding a real net.Listener or going through the cobra command path.
+//
+// cancelCh receives a signal when /shutdown succeeds (mirroring runServe's
+// `go cancel()`), so callers can assert the handler triggered a shutdown
+// without standing up a real context.CancelFunc-driven server loop.
+func newTestServeRouterWithAuth(t *testing.T) (router *api.Router, canceled <-chan struct{}) {
+	t.Helper()
+	s, err := getStorageRaw()
+	if err != nil {
+		t.Fatalf("getStorageRaw: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	done := make(chan struct{}, 1)
+	token := testAuthToken
+
+	router = api.NewRouter(api.WithMiddleware(requireAuth(token)))
+	deps := &serveDeps{storage: s}
+	registerTaskRoutes(router, deps)
+	registerTrackRoutes(router, deps)
+
+	startedAt := time.Now()
+	router.Handle("GET", "/health", func(w http.ResponseWriter, _ *http.Request) {
+		api.JSON(w, http.StatusOK, map[string]any{
+			"status":         "ok",
+			"pid":            os.Getpid(),
+			"uptime_seconds": int(time.Since(startedAt).Seconds()),
+		})
+	})
+	router.Handle("POST", "/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			api.Error(w, http.StatusUnauthorized, &api.APIError{
+				Status: http.StatusUnauthorized, Code: "unauthorized", Message: "invalid token",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+	})
+
+	return router, done
+}
+
 func doServeRequest(t *testing.T, router *api.Router, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var reqBody *bytes.Buffer
@@ -51,6 +113,31 @@ func doServeRequest(t *testing.T, router *api.Router, method, path string, body 
 	}
 	req := httptest.NewRequestWithContext(context.Background(), method, path, reqBody)
 	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+// doServeRequestWithToken is doServeRequest plus an optional bearer token
+// (empty string omits the Authorization header entirely), for exercising
+// requireAuth's accept/reject paths.
+func doServeRequestWithToken(t *testing.T, router *api.Router, method, path, token string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var reqBody *bytes.Buffer
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal request body: %v", err)
+		}
+		reqBody = bytes.NewBuffer(b)
+	} else {
+		reqBody = bytes.NewBuffer(nil)
+	}
+	req := httptest.NewRequestWithContext(context.Background(), method, path, reqBody)
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
@@ -470,6 +557,242 @@ func TestServe_E2E_TrackCreateInvalidSlug(t *testing.T) {
 		})
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Errorf("expected 422 for invalid slug, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestServe_E2E_HealthEndpoint asserts GET /health's response shape:
+// 200 with status/pid/uptime_seconds keys, matching the handler runServe
+// registers directly (see runServe's inline /health handler in serve.go).
+func TestServe_E2E_HealthEndpoint(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router, _ := newTestServeRouterWithAuth(t)
+
+		rec := doServeRequest(t, router, "GET", "/health", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /health: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("unmarshal health body: %v", err)
+		}
+		status, ok := body["status"].(string)
+		if !ok || status != "ok" {
+			t.Errorf("expected status \"ok\", got %v", body["status"])
+		}
+		pid, ok := body["pid"].(float64)
+		if !ok || pid <= 0 {
+			t.Errorf("expected pid > 0, got %v", body["pid"])
+		}
+		uptime, ok := body["uptime_seconds"].(float64)
+		if !ok || uptime < 0 {
+			t.Errorf("expected uptime_seconds >= 0, got %v", body["uptime_seconds"])
+		}
+	})
+}
+
+// TestServe_E2E_AuthRequiredForWrites confirms requireAuth rejects a
+// protected (non-GET/HEAD) route with 401 when no bearer token is
+// supplied and auth is enabled.
+func TestServe_E2E_AuthRequiredForWrites(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router, _ := newTestServeRouterWithAuth(t)
+
+		rec := doServeRequestWithToken(t, router, "POST", "/tasks", "", taskCreateRequest{Title: "No token"})
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("POST /tasks without token: expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestServe_E2E_AuthBypassedForReads confirms requireAuth's documented
+// GET/HEAD bypass (see requireAuth's doc comment in serve.go: "accepts
+// the supplied bearer token for non-GET/HEAD requests") — GET routes
+// succeed with no token even when auth is enabled.
+func TestServe_E2E_AuthBypassedForReads(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router, _ := newTestServeRouterWithAuth(t)
+
+		rec := doServeRequestWithToken(t, router, "GET", "/tasks", "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /tasks without token: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		rec = doServeRequestWithToken(t, router, "GET", "/health", "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /health without token: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestServe_E2E_AuthCorrectTokenSucceeds confirms the correct bearer
+// token is accepted on a protected route.
+func TestServe_E2E_AuthCorrectTokenSucceeds(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router, _ := newTestServeRouterWithAuth(t)
+
+		rec := doServeRequestWithToken(t, router, "POST", "/tasks", testAuthToken, taskCreateRequest{Title: "Authed create"})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("POST /tasks with correct token: expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestServe_E2E_ShutdownRequiresAuth covers POST /shutdown's own inline
+// auth gate (serve.go's /shutdown handler checks the Authorization
+// header directly rather than going through requireAuth, since /shutdown
+// is itself the "control plane" route — see runServe): missing or wrong
+// token is rejected with 401, and the shutdown signal never fires.
+func TestServe_E2E_ShutdownRequiresAuth(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router, canceled := newTestServeRouterWithAuth(t)
+
+		rec := doServeRequestWithToken(t, router, "POST", "/shutdown", "", nil)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("POST /shutdown without token: expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		rec = doServeRequestWithToken(t, router, "POST", "/shutdown", "wrong-token", nil)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("POST /shutdown with wrong token: expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		select {
+		case <-canceled:
+			t.Fatal("shutdown signal fired despite unauthorized requests")
+		default:
+		}
+	})
+}
+
+// TestServe_E2E_ShutdownWithCorrectToken covers the success path: the
+// correct bearer token returns 204 and triggers the shutdown signal
+// (mirroring runServe's `go cancel()` after writing the response).
+func TestServe_E2E_ShutdownWithCorrectToken(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router, canceled := newTestServeRouterWithAuth(t)
+
+		rec := doServeRequestWithToken(t, router, "POST", "/shutdown", testAuthToken, nil)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("POST /shutdown with correct token: expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		select {
+		case <-canceled:
+		case <-time.After(time.Second):
+			t.Fatal("expected shutdown signal after successful /shutdown")
+		}
+	})
+}
+
+// TestServe_AwaitShutdown_ServerErrorPropagates covers awaitServeShutdown's
+// errCh-fires-first branch for a genuine (non-ErrServerClosed) error: it
+// must propagate rather than being swallowed.
+func TestServe_AwaitShutdown_ServerErrorPropagates(t *testing.T) {
+	srv := &http.Server{}
+	errCh := make(chan error, 1)
+	wantErr := errors.New("boom: listener died")
+	errCh <- wantErr
+
+	err := awaitServeShutdown(context.Background(), srv, errCh)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected wrapped/equal %v, got %v", wantErr, err)
+	}
+}
+
+// TestServe_AwaitShutdown_ErrServerClosedSwallowed covers awaitServeShutdown's
+// errCh-fires-first branch for the expected http.ErrServerClosed sentinel
+// (the signal srv.Serve returns after a concurrent Shutdown call): it must
+// be swallowed, returning nil rather than propagating as a real error.
+func TestServe_AwaitShutdown_ErrServerClosedSwallowed(t *testing.T) {
+	srv := &http.Server{}
+	errCh := make(chan error, 1)
+	errCh <- http.ErrServerClosed
+
+	err := awaitServeShutdown(context.Background(), srv, errCh)
+	if err != nil {
+		t.Fatalf("expected nil (ErrServerClosed swallowed), got %v", err)
+	}
+}
+
+// TestServe_AwaitShutdown_CtxDoneShutsDownServer covers awaitServeShutdown's
+// ctx.Done()-fires-first branch: with no listener ever bound, srv.Shutdown
+// is still safe to call and returns nil (nothing to drain), so
+// awaitServeShutdown returns nil.
+func TestServe_AwaitShutdown_CtxDoneShutsDownServer(t *testing.T) {
+	srv := &http.Server{}
+	errCh := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := awaitServeShutdown(ctx, srv, errCh)
+	if err != nil {
+		t.Fatalf("expected nil after clean shutdown, got %v", err)
+	}
+}
+
+// TestServe_E2E_TrackShowInvalidID covers the 422 side of the
+// 404-vs-422 track-resolve distinction: resolveTrackID returns a plain
+// (non-ErrTrackNotFound) error — routed to 422 by writeTrackResolveError
+// — whenever the input is well-formed slug-shaped text that resolves to
+// more than one candidate (ambiguous prefix match), as opposed to a
+// well-formed input with zero matches (404, covered below).
+func TestServe_E2E_TrackShowInvalidID(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+
+		createTrack(t, ctx, s, "feat-alpha", "Alpha", core.TrackStatusActive)
+		createTrack(t, ctx, s, "feat-beta", "Beta", core.TrackStatusActive)
+
+		router := newTestServeRouter(t)
+
+		rec := doServeRequest(t, router, "GET", "/tracks/feat", nil)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("GET /tracks/feat (ambiguous prefix): expected 422, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestServe_E2E_TrackShowNotFound covers the 404 side of the
+// 404-vs-422 distinction: a well-formed-but-nonexistent slug (no
+// tracks at all, so resolveTrackID's zero-candidates path returns the
+// typed ErrTrackNotFound) resolves to 404 via writeTrackResolveError.
+func TestServe_E2E_TrackShowNotFound(t *testing.T) {
+	withTestLock(func() {
+		_, cleanup := setupTestDir(t)
+		defer cleanup()
+
+		router := newTestServeRouter(t)
+
+		rec := doServeRequest(t, router, "GET", "/tracks/zzz-nonexistent", nil)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET /tracks/zzz-nonexistent: expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 }
