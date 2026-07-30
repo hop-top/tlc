@@ -94,6 +94,30 @@ type TaskFieldChanges struct {
 	AutoCreateTrack func(ctx context.Context, s *storage.SQLiteStorage, input string) (string, error)
 }
 
+// resolveOrCreateTrackID resolves a non-empty, non-clear-sentinel track
+// reference to its canonical track ID. If ref doesn't resolve to an
+// existing track (ErrTrackNotFound) and autoCreate is non-nil, it
+// creates a track named ref and returns that instead of failing —
+// matching --track's CLI ergonomics. With autoCreate nil (e.g. the
+// strict HTTP API), an unresolvable ref surfaces ErrTrackNotFound
+// directly. Any other resolution error is returned unchanged.
+func resolveOrCreateTrackID(
+	ctx context.Context, taskStorage *storage.SQLiteStorage, ref string,
+	autoCreate func(ctx context.Context, s *storage.SQLiteStorage, input string) (string, error),
+) (string, error) {
+	resolvedID, err := resolveTrackID(ctx, taskStorage, ref)
+	if err == nil {
+		return resolvedID, nil
+	}
+	if !errors.Is(err, ErrTrackNotFound) {
+		return "", err
+	}
+	if autoCreate == nil {
+		return "", err
+	}
+	return autoCreate(ctx, taskStorage, ref)
+}
+
 // applyTaskFieldChanges mutates task in place per the given changes,
 // running the same validation/normalization path TaskUpdateCmd's RunE used
 // to run inline, so the CLI and the HTTP API can never drift apart on task
@@ -219,7 +243,13 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 			if strings.TrimSpace(raw) == "" {
 				continue
 			}
-			ref, _ := parseTaskRefForCLI(ctx, taskStorage, raw)
+			ref, refErr := parseTaskRefForCLI(ctx, taskStorage, raw)
+			if refErr != nil {
+				// parseTaskRefForCLI returns the input unchanged on
+				// resolution failure (see comment above), so fall back
+				// to the raw value rather than dropping it.
+				ref = raw
+			}
 			translated = append(translated, ref)
 		}
 		task.RemoveBlockedBy(translated)
@@ -266,18 +296,9 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		if *changes.Track == "-" || *changes.Track == "" {
 			task.TrackID = nil
 		} else {
-			resolvedID, trackErr := resolveTrackID(ctx, taskStorage, *changes.Track)
-			if trackErr != nil && errors.Is(trackErr, ErrTrackNotFound) {
-				if changes.AutoCreateTrack == nil {
-					return changed, trackErr
-				}
-				created, createErr := changes.AutoCreateTrack(ctx, taskStorage, *changes.Track)
-				if createErr != nil {
-					return changed, createErr
-				}
-				resolvedID = created
-			} else if trackErr != nil {
-				return changed, trackErr
+			resolvedID, err := resolveOrCreateTrackID(ctx, taskStorage, *changes.Track, changes.AutoCreateTrack)
+			if err != nil {
+				return changed, err
 			}
 			task.TrackID = &resolvedID
 		}
