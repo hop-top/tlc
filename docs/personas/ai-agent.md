@@ -16,6 +16,9 @@ An AI agent or autonomous system that integrates with TLC via CLI commands, MCP 
 - [020 - Flow Execution](../stories/020-flow-execution.md) (agent orchestrates flow steps)
 - [040 - MCP Integration & Tool Use](../stories/040-mcp-integration-tool-use.md) (planned)
 - [042 - CLI Command Integration](../stories/042-cli-command-integration.md) (planned)
+- [090 - HTTP API Server Lifecycle](../stories/090-http-api-server-lifecycle.md)
+- [091 - HTTP API Task Operations](../stories/091-http-api-task-operations.md)
+- [092 - HTTP API Track Operations](../stories/092-http-api-track-operations.md)
 
 ## Related Stories
 

@@ -58,6 +58,14 @@ Authoring convention: see [Story → e2e test linkage](../conventions/stories.md
 - [073 - Project Health & Plan Linkage](073-project-health-plan-linkage.md)
   — Health metrics, plan extraction
 
+#### HTTP API (090-099)
+- [090 - HTTP API Server Lifecycle](090-http-api-server-lifecycle.md)
+  — Health check, startup/shutdown, auth-gated shutdown
+- [091 - HTTP API Task Operations](091-http-api-task-operations.md)
+  — List/create/show/update/claim/complete over HTTP
+- [092 - HTTP API Track Operations](092-http-api-track-operations.md)
+  — List/create/show over HTTP, 404-vs-422 resolve distinction
+
 #### Specialized Topics
 - [user-stories-taskflow-0.1.md](user-stories-taskflow-0.1.md)
   — Flow execution semantics and edge cases
@@ -90,6 +98,9 @@ Authoring convention: see [Story → e2e test linkage](../conventions/stories.md
 - [070 - Track Creation & Lifecycle](070-track-creation-lifecycle.md)
 - [071 - Track Listing & Detail](071-track-listing-detail.md)
 - [072 - Task-Track Integration](072-task-track-integration.md)
+- [090 - HTTP API Server Lifecycle](090-http-api-server-lifecycle.md)
+- [091 - HTTP API Task Operations](091-http-api-task-operations.md)
+- [092 - HTTP API Track Operations](092-http-api-track-operations.md)
 
 #### [Team Lead](../personas/team-lead.md)
 - [002 - Task Listing](002-task-listing.md) (filtering and reporting)
