@@ -21,8 +21,8 @@ import (
 // newTestServeRouter builds an api.Router with tlc's task/track routes
 // registered against a fresh test storage instance, with no auth
 // middleware and no bus (publisher is nil, matching a process where the
-// bus hasn't been initialised — publishTaskEvent no-ops in that case).
-func newTestServeRouter(t *testing.T) (*api.Router, *serveDeps) {
+// bus hasn't been initialized — publishDomainEvent no-ops in that case).
+func newTestServeRouter(t *testing.T) *api.Router {
 	t.Helper()
 	s, err := getStorageRaw()
 	if err != nil {
@@ -34,7 +34,7 @@ func newTestServeRouter(t *testing.T) (*api.Router, *serveDeps) {
 	router := api.NewRouter()
 	registerTaskRoutes(router, deps)
 	registerTrackRoutes(router, deps)
-	return router, deps
+	return router
 }
 
 func doServeRequest(t *testing.T, router *api.Router, method, path string, body any) *httptest.ResponseRecorder {
@@ -49,7 +49,7 @@ func doServeRequest(t *testing.T, router *api.Router, method, path string, body 
 	} else {
 		reqBody = bytes.NewBuffer(nil)
 	}
-	req := httptest.NewRequest(method, path, reqBody)
+	req := httptest.NewRequestWithContext(context.Background(), method, path, reqBody)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -61,7 +61,7 @@ func TestServe_E2E_TaskCreateAndShow(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "POST", "/tasks", taskCreateRequest{
 			Title:       "Serve-created task",
@@ -105,7 +105,7 @@ func TestServe_E2E_TaskCreateValidationError(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "POST", "/tasks", taskCreateRequest{
 			Title: "",
@@ -121,7 +121,7 @@ func TestServe_E2E_TaskShowNotFound(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "GET", "/tasks/T-9999", nil)
 		if rec.Code != http.StatusNotFound {
@@ -149,7 +149,7 @@ func TestServe_E2E_TaskList(t *testing.T) {
 			}
 		}
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 		rec := doServeRequest(t, router, "GET", "/tasks?status=TODO", nil)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("GET /tasks: expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -181,7 +181,7 @@ func TestServe_E2E_TaskUpdateStatusTransition(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		newStatus := "IN_PROGRESS"
 		rec := doServeRequest(t, router, "PATCH", "/tasks/"+task.ID, taskUpdateRequest{
@@ -236,7 +236,7 @@ func TestServe_E2E_TaskUpdateExtendedFields(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		// POST /tracks so track_id resolves to something real; the HTTP
 		// update route does not auto-create tracks (unlike the CLI).
@@ -351,7 +351,7 @@ func TestServe_E2E_TaskClaimAndComplete(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "POST", "/tasks/"+task.ID+"/claim", nil)
 		if rec.Code != http.StatusOK {
@@ -401,7 +401,7 @@ func TestServe_E2E_TaskCreateWithInvalidBlockedBy(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "POST", "/tasks", taskCreateRequest{
 			Title:     "Blocked",
@@ -418,7 +418,7 @@ func TestServe_E2E_TrackCreateListShow(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "POST", "/tracks", trackCreateRequest{
 			Slug:  "serve-track",
@@ -463,7 +463,7 @@ func TestServe_E2E_TrackCreateInvalidSlug(t *testing.T) {
 		_, cleanup := setupTestDir(t)
 		defer cleanup()
 
-		router, _ := newTestServeRouter(t)
+		router := newTestServeRouter(t)
 
 		rec := doServeRequest(t, router, "POST", "/tracks", trackCreateRequest{
 			Slug: "AB", // too short / uppercase — fails ValidateTrackSlug
