@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,6 +28,13 @@ import (
 // internal/events/topics.go — this prefix only covers the generic
 // "an HTTP request started/ended" events emitted by api.WithEventPublisher.
 const serveTopicPrefix = "tlc.api.request"
+
+// serveReadHeaderTimeout bounds how long the server waits to read
+// request headers, closing off slowloris-style connections that trickle
+// headers in indefinitely. Matches the ReadHeaderTimeout convention
+// already used by internal/auth's OAuth callback servers (see
+// internal/auth/github_oauth.go and internal/auth/jira_oauth.go).
+const serveReadHeaderTimeout = 10 * time.Second
 
 var (
 	servePort   int
@@ -132,7 +140,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 
 	startedAt := time.Now()
 	router.Handle("GET", "/health", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		api.JSON(w, http.StatusOK, map[string]any{
 			"status":         "ok",
 			"pid":            os.Getpid(),
 			"uptime_seconds": int(time.Since(startedAt).Seconds()),
@@ -152,11 +160,15 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		go cancel()
 	})
 
-	ln, err := net.Listen("tcp", ":"+strconv.Itoa(servePort))
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", ":"+strconv.Itoa(servePort))
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	addr := ln.Addr().(*net.TCPAddr)
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return fmt.Errorf("listen: unexpected listener address type %T", ln.Addr())
+	}
 
 	startup := map[string]any{
 		"port": addr.Port,
@@ -165,20 +177,29 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	if authToken != "" {
 		startup["token"] = authToken
 	}
-	startupJSON, _ := json.Marshal(startup)
+	startupJSON, err := json.Marshal(startup)
+	if err != nil {
+		return fmt.Errorf("marshal startup line: %w", err)
+	}
 	fmt.Fprintln(cmd.OutOrStdout(), string(startupJSON))
 
-	srv := &http.Server{Handler: router}
+	srv := &http.Server{Handler: router, ReadHeaderTimeout: serveReadHeaderTimeout}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Serve(ln) }()
 
 	select {
 	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return err
 	case <-ctx.Done():
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutCancel()
-		return srv.Shutdown(shutCtx)
+		if err := srv.Shutdown(shutCtx); err != nil {
+			return fmt.Errorf("shutdown: %w", err)
+		}
+		return nil
 	}
 }
 
