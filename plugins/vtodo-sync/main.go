@@ -57,7 +57,7 @@ func (p *SyncPullParams) UnmarshalJSON(b []byte) error {
 		Repo string `json:"repo,omitempty"`
 	}
 	if err := json.Unmarshal(b, &aux); err != nil {
-		return err
+		return err //nolint:wrapcheck // Unmarshaler contract; json decorates with type + offset
 	}
 	*p = SyncPullParams(aux.raw)
 	if p.Source == "" {
@@ -79,7 +79,7 @@ func (p *SyncPushParams) UnmarshalJSON(b []byte) error {
 		Repo string `json:"repo,omitempty"`
 	}
 	if err := json.Unmarshal(b, &aux); err != nil {
-		return err
+		return err //nolint:wrapcheck // Unmarshaler contract; json decorates with type + offset
 	}
 	*p = SyncPushParams(aux.raw)
 	if p.Source == "" {
@@ -100,7 +100,7 @@ func (p *SyncDeleteParams) UnmarshalJSON(b []byte) error {
 		Repo string `json:"repo,omitempty"`
 	}
 	if err := json.Unmarshal(b, &aux); err != nil {
-		return err
+		return err //nolint:wrapcheck // Unmarshaler contract; json decorates with type + offset
 	}
 	*p = SyncDeleteParams(aux.raw)
 	if p.Source == "" {
@@ -326,7 +326,7 @@ func readTasksFromFile(path string) ([]Task, error) {
 		if os.IsNotExist(err) {
 			return []Task{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -375,9 +375,12 @@ func replaceTasksFile(path string, tasks []Task) error {
 	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(body), 0o644); err != nil {
-		return err
+		return fmt.Errorf("write %s: %w", tmp, err)
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename %s into place: %w", tmp, err)
+	}
+	return nil
 }
 
 // mergeTasksByID returns existing entries with any matching incoming
