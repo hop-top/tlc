@@ -67,7 +67,7 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 		}
 
 		format := viper.GetString("output.format")
-		if err := formatTasks(cmd, stale, format); err != nil {
+		if err := formatTasks(cmd, stale, format, false); err != nil {
 			return err
 		}
 

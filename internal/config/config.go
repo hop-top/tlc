@@ -33,6 +33,24 @@ type SpaceConfig struct {
 	Options map[string]string `yaml:"options,omitempty"`
 }
 
+// ListDefaults holds per-command default flag values for `list` commands
+// (task list, track list). All fields optional; absence means "use the
+// built-in default". Consumed by the runtime via viper keys
+// <domain>.list.<field> and defaults.list.<field>.
+type ListDefaults struct {
+	Columns []string `yaml:"columns,omitempty"`
+	Status  []string `yaml:"status,omitempty"`
+	Limit   int      `yaml:"limit,omitempty"`
+	SortBy  string   `yaml:"sort-by,omitempty"`
+}
+
+// DefaultsConfig holds cross-command fallback defaults (the `defaults`
+// config namespace). `list` applies to any `* list` command not overridden
+// by its own domain (task.list.* / tracks.list.*).
+type DefaultsConfig struct {
+	List *ListDefaults `yaml:"list,omitempty"`
+}
+
 // TrackHealthConfig holds thresholds for project-level health checks.
 type TrackHealthConfig struct {
 	MaxActive          int `yaml:"max_active"`
@@ -47,6 +65,7 @@ type TrackConfig struct {
 	PlanExtractor  string            `yaml:"plan_extractor,omitempty"`
 	Types          []string          `yaml:"types,omitempty"`
 	DefaultType    string            `yaml:"default_type,omitempty"`
+	List           *ListDefaults     `yaml:"list,omitempty"`
 }
 
 // TracksDir returns the configured tracks directory or the default "tracks".
@@ -159,6 +178,7 @@ type Config struct {
 	Output     OutputConfig      `yaml:"output"`
 	Task       TaskConfig        `yaml:"task"`
 	Tracks     TrackConfig       `yaml:"tracks"`
+	Defaults   *DefaultsConfig   `yaml:"defaults,omitempty"`
 	Flow       FlowConfig        `yaml:"flow,omitempty"`
 	Git        GitConfig         `yaml:"git"`
 	Sync       SyncConfig        `yaml:"sync"`
@@ -391,6 +411,7 @@ type TaskConfig struct {
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
 	Scheduling       SchedulingConfig            `yaml:"scheduling,omitempty"`
+	List             *ListDefaults               `yaml:"list,omitempty"`
 }
 
 // ProjectionDirectory returns the configured projection directory or "tasks".

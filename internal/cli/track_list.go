@@ -39,6 +39,12 @@ and --state (single state flag); both can be combined.`,
 
 func runTrackList(cmd *cobra.Command, _ []string) error {
 	ctx := context.Background()
+
+	fromConfig, err := applyConfigDefaults(cmd)
+	if err != nil {
+		return err
+	}
+
 	s, err := getStorage()
 	if err != nil {
 		return err
@@ -62,7 +68,8 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		query.Type = trackListType
 	}
 
-	if len(trackListStatus) > 0 {
+	statusProvided := len(trackListStatus) > 0 || fromConfig["status"]
+	if statusProvided {
 		for _, st := range trackListStatus {
 			ts := core.TrackStatus(strings.ToLower(st))
 			if !core.ValidTrackStatus(ts) {
@@ -144,7 +151,8 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		}
 		return output.Render(cmd.OutOrStdout(), format, out)
 	default:
-		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects)
+		cols := effectiveTrackColumns(cmd, statusProvided, trackListAllProjects)
+		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects, cols)
 	}
 	return nil
 }
@@ -217,7 +225,19 @@ type trackRowData struct {
 	Progress core.TrackProgress
 }
 
-func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
+// effectiveTrackColumns resolves the table header list for `track list`.
+// See resolveEffectiveColumns for the full ladder and pruning logic.
+func effectiveTrackColumns(cmd *cobra.Command, statusProvided, showProject bool) []string {
+	return resolveEffectiveColumns(cmd, trackListDefaultColumns, trackColumnHeaders, statusProvided,
+		func(keys []string) ([]string, bool) {
+			if showProject && !containsKey(keys, "project") {
+				return injectAfter(keys, "id", "project"), true
+			}
+			return keys, false
+		})
+}
+
+func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool, cols []string) {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(w, "No tracks found")
 		return
@@ -261,7 +281,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 				Assignee: trackAssignee(r.Track),
 			}
 		}
-		_ = renderStyledList(w, formatTable, out, emphasis) //nolint:errcheck // best-effort output
+		_ = renderStyledListCols(w, formatTable, out, emphasis, cols) //nolint:errcheck // best-effort output
 		return
 	}
 
@@ -277,7 +297,7 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool) {
 			Assignee: trackAssignee(r.Track),
 		}
 	}
-	_ = renderStyledList(w, formatTable, out, emphasis) //nolint:errcheck // best-effort output
+	_ = renderStyledListCols(w, formatTable, out, emphasis, cols) //nolint:errcheck // best-effort output
 }
 
 func trackProject(t *core.Track) string {

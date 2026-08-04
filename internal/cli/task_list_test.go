@@ -750,3 +750,152 @@ func TestTaskListTableHumanisesDue(t *testing.T) {
 			wantAbsentPast, output)
 	}
 }
+
+// TestTaskList_DefaultColumnsIncludeStatus verifies the default table output
+// includes the Status, ID, and Title header columns.
+func TestTaskList_DefaultColumnsIncludeStatus(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Todo task", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "InProgress task", Status: core.StatusInProgress})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list failed: %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("output: %q", output)
+	if !strings.Contains(output, "Status") {
+		t.Errorf("expected 'Status' column header in default list output; got:\n%s", output)
+	}
+	if !strings.Contains(output, "ID") {
+		t.Errorf("expected 'ID' column header in default list output; got:\n%s", output)
+	}
+	if !strings.Contains(output, "Title") {
+		t.Errorf("expected 'Title' column header in default list output; got:\n%s", output)
+	}
+}
+
+// TestTaskList_StatusFlagPrunesStatusColumn verifies that --status prunes
+// the Status column and that only matching tasks appear.
+func TestTaskList_StatusFlagPrunesStatusColumn(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Todo task", Status: core.StatusTodo})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "InProgress task", Status: core.StatusInProgress})
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	cmd.SetArgs([]string{"task", "list", "--status", "TODO"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list --status TODO failed: %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("output: %q", output)
+	if strings.Contains(output, "Status") {
+		t.Errorf("expected Status column to be pruned when --status is set; got:\n%s", output)
+	}
+	if !strings.Contains(output, "Todo task") {
+		t.Errorf("expected 'Todo task' in output; got:\n%s", output)
+	}
+	if strings.Contains(output, "InProgress task") {
+		t.Errorf("did not expect 'InProgress task' in --status TODO output; got:\n%s", output)
+	}
+}
+
+// TestTaskList_ConfigColumnsOverride verifies that task.list.columns in
+// config overrides the default column set.
+func TestTaskList_ConfigColumnsOverride(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "Column override task", Status: core.StatusTodo})
+
+	viper.Set("task.list.columns", []string{"id", "title"})
+	t.Cleanup(func() { viper.Set("task.list.columns", nil) })
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with config columns failed: %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("output: %q", output)
+	if !strings.Contains(output, "ID") {
+		t.Errorf("expected 'ID' header in output; got:\n%s", output)
+	}
+	if !strings.Contains(output, "Title") {
+		t.Errorf("expected 'Title' header in output; got:\n%s", output)
+	}
+	if strings.Contains(output, "Status") {
+		t.Errorf("did not expect 'Status' header when columns=[id,title]; got:\n%s", output)
+	}
+	if strings.Contains(output, "Due") {
+		t.Errorf("did not expect 'Due' header when columns=[id,title]; got:\n%s", output)
+	}
+}
+
+// TestTaskList_ConfigStatusFiltersAndPrunes verifies that task.list.status in
+// config acts like --status: filters tasks AND prunes the Status column.
+func TestTaskList_ConfigStatusFiltersAndPrunes(t *testing.T) {
+	ctx, cleanup := setupTestDir(t)
+	defer cleanup()
+	s, _ := getStorageRaw()
+	defer s.Close()
+
+	s.CreateTask(ctx, &core.Task{ID: "T-0001", Title: "InProgress task", Status: core.StatusInProgress})
+	s.CreateTask(ctx, &core.Task{ID: "T-0002", Title: "Todo task", Status: core.StatusTodo})
+
+	viper.Set("task.list.status", []string{"IN_PROGRESS"})
+	t.Cleanup(func() { viper.Set("task.list.status", nil) })
+
+	cmd := newTestCmd()
+	cmd.AddCommand(TaskCmd)
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"task", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task list with config status failed: %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("output: %q", output)
+	if !strings.Contains(output, "InProgress task") {
+		t.Errorf("expected 'InProgress task' in output when config status=IN_PROGRESS; got:\n%s", output)
+	}
+	if strings.Contains(output, "Todo task") {
+		t.Errorf("did not expect 'Todo task' when config status=IN_PROGRESS; got:\n%s", output)
+	}
+	if strings.Contains(output, "Status") {
+		t.Errorf("expected Status column to be pruned when config status is set; got:\n%s", output)
+	}
+}

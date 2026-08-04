@@ -302,7 +302,7 @@ func TestRenderTable_NoTypeIDLeak(t *testing.T) {
 		{ID: "task_01kqwymh2qeh7a9nqrr5gv8ywx", Seq: 1314, Title: "another"},
 	}
 	var buf bytes.Buffer
-	renderTable(&buf, tasks)
+	renderTable(&buf, tasks, nil)
 	out := buf.String()
 	if strings.Contains(out, "task_01") {
 		t.Errorf("default task list must not leak typeid; got:\n%s", out)
