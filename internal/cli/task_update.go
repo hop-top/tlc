@@ -9,6 +9,7 @@ import (
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"hop.top/kit/go/console/output"
 	"hop.top/kit/go/runtime/bus"
 	"hop.top/kit/go/runtime/domain"
@@ -148,6 +149,10 @@ against the workflow state machine unless --force is set.`,
 			}
 			if cmd.Flags().Changed("no-auto-remind") {
 				changes.NoAutoRemind = &taskUpdateNoAutoRemind
+			}
+			if cmd.Flags().Changed("note") {
+				changes.Note = taskUpdateNote
+				changes.NoteFields = editedFieldNames(cmd)
 			}
 
 			changed, err := applyTaskFieldChanges(ctx, s, res.Storage, task, changes)
@@ -394,11 +399,31 @@ func init() {
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRemindAt, "remind-at", "", "One-shot reminder time")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateRRule, "rrule", "", "Recurring reminder RRULE (use '-' to clear)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
-	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded on status transition; required with --amend)")
+	TaskUpdateCmd.Flags().StringVarP(&taskUpdateNote, "note", "n", "", "Update note (recorded against the update; required with --amend)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateAmend, "amend", false, "Rewrite the most recent log entry's note in place instead of appending; pair with --note. Terminal tasks (DONE/SKIPPED) require --force.")
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 	TaskDeleteCmd.Flags().StringVarP(&taskDeleteNote, "note", "n", "", "Delete note (recorded against the transition log)")
+}
+
+// editedFieldNames returns the names of the non-status fields this
+// invocation actually changed, for the `fields` key in an UPDATED log
+// row's meta. "status" is excluded because the transition row already
+// records it, and note/amend/force are inputs rather than edited fields.
+func editedFieldNames(cmd *cobra.Command) []string {
+	skip := map[string]bool{
+		"status": true, "note": true, "amend": true, "force": true,
+		"yes": true, "no-prompt": true,
+	}
+	var fields []string
+	// Visit only walks flags the user actually set.
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if skip[f.Name] {
+			return
+		}
+		fields = append(fields, f.Name)
+	})
+	return fields
 }
 
 // amendLatestLogNote rewrites the note of the most recent log entry for

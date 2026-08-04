@@ -117,6 +117,8 @@ tlc task unclaim T-0046                              # IN_PROGRESS → TODO
 tlc task complete T-0046                             # IN_PROGRESS → DONE
 tlc task complete T-0046 --no-verify                 # bypass state machine (NOT --force)
 tlc task update   T-0046 --status IN_PROGRESS --note "reason"  # records on STATUS_CHANGED
+tlc task update   T-0046 --priority P0 --note "reason"         # records on UPDATED
+tlc task update   T-0046 --note "<sha> linkage"                # note alone; records on UPDATED
 tlc task update   T-0046 --status IN_PROGRESS --force          # force any transition
 tlc task reopen   T-0046 --note "reason"             # DONE/SKIPPED → TODO (--note required)
 tlc task delete   T-0046 --yes --note "reason"       # --note required by default policy
