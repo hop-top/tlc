@@ -402,7 +402,7 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 // taskCells holds the computed display strings for all table columns.
 type taskCells struct {
 	id, title, status, assigned, due, stale, blocked string
-	priority, track, effort                           string
+	priority, track, effort                          string
 }
 
 // computeTaskCells derives every display cell for a task in one place,
@@ -412,7 +412,7 @@ func computeTaskCells(t *core.Task) taskCells {
 	if t.AssignedTo != nil {
 		assignee = *t.AssignedTo
 	}
-	// Table column: humanise DueAt relative to now ("in 3d", "2h ago").
+	// Table column: humanize DueAt relative to now ("in 3d", "2h ago").
 	// JSON/YAML output paths stay on RFC3339 via the structured marshaller.
 	dueCol := "-"
 	if t.DueAt != nil {

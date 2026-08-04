@@ -29,13 +29,13 @@ func TestConfigDomain(t *testing.T) {
 
 func TestResolveFlagDefaultKey_Precedence(t *testing.T) {
 	tests := []struct {
-		name     string
-		setup    func()
-		parent   string
-		leaf     string
-		flag     string
-		expKey   string
-		expOk    bool
+		name   string
+		setup  func()
+		parent string
+		leaf   string
+		flag   string
+		expKey string
+		expOk  bool
 	}{
 		{
 			name: "defaults.verb.flag precedence",
@@ -126,16 +126,16 @@ func TestResolveFlagDefaultKey_Precedence(t *testing.T) {
 	}
 }
 
-func buildTaskListCmd() (root, task, list *cobra.Command) {
-	root = &cobra.Command{Use: "root"}
-	task = &cobra.Command{Use: "task"}
-	list = &cobra.Command{Use: "list"}
+func buildTaskListCmd() *cobra.Command {
+	root := &cobra.Command{Use: "root"}
+	task := &cobra.Command{Use: "task"}
+	list := &cobra.Command{Use: "list"}
 	root.AddCommand(task)
 	task.AddCommand(list)
 	list.Flags().StringSlice("columns", nil, "columns")
 	list.Flags().Bool("archived", false, "archived")
 	list.Flags().Int("limit", 0, "limit")
-	return root, task, list
+	return list
 }
 
 func TestApplyConfigDefaults_SeedsUnsetFlags(t *testing.T) {
@@ -143,7 +143,7 @@ func TestApplyConfigDefaults_SeedsUnsetFlags(t *testing.T) {
 	viper.Set("task.list.columns", []string{"id", "title"})
 	viper.Set("task.list.limit", 50)
 
-	_, _, list := buildTaskListCmd()
+	list := buildTaskListCmd()
 
 	fromConfig, err := applyConfigDefaults(list)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestApplyConfigDefaults_PreservesChangedFalse(t *testing.T) {
 	viper.Reset()
 	viper.Set("task.list.columns", []string{"id", "title"})
 
-	_, _, list := buildTaskListCmd()
+	list := buildTaskListCmd()
 
 	if _, err := applyConfigDefaults(list); err != nil {
 		t.Fatalf("applyConfigDefaults() error = %v", err)
@@ -204,7 +204,7 @@ func TestApplyConfigDefaults_CLIWins(t *testing.T) {
 	viper.Reset()
 	viper.Set("task.list.columns", []string{"id", "title"})
 
-	_, _, list := buildTaskListCmd()
+	list := buildTaskListCmd()
 
 	// Simulate explicit user flag (sets Changed=true)
 	if err := list.Flags().Set("columns", "explicit"); err != nil {

@@ -9,8 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestListDefaults_RoundTrip(t *testing.T) {
-	input := `
+const listDefaultsRoundTripYAML = `
 version: "0.1"
 task:
   list:
@@ -24,12 +23,51 @@ defaults:
     columns: [id, title, status]
 `
 
+func TestListDefaults_RoundTrip(t *testing.T) {
 	var cfg Config
-	if err := yaml.Unmarshal([]byte(input), &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(listDefaultsRoundTripYAML), &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	// Task.List assertions
+	assertListDefaultsUnmarshaled(t, &cfg)
+
+	t.Run("round-trip", func(t *testing.T) {
+		out, err := yaml.Marshal(&cfg)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var cfg2 Config
+		if err := yaml.Unmarshal(out, &cfg2); err != nil {
+			t.Fatalf("re-unmarshal: %v", err)
+		}
+		assertListDefaultsUnmarshaled(t, &cfg2)
+	})
+
+	t.Run("empty config omits list and defaults blocks", func(t *testing.T) {
+		empty := Config{}
+		emptyOut, err := yaml.Marshal(&empty)
+		if err != nil {
+			t.Fatalf("marshal empty: %v", err)
+		}
+		emptyStr := string(emptyOut)
+		if contains(emptyStr, "list:") {
+			t.Errorf("empty Config marshaled with 'list:' block: %s", emptyStr)
+		}
+		if contains(emptyStr, "defaults:") {
+			t.Errorf("empty Config marshaled with 'defaults:' block: %s", emptyStr)
+		}
+	})
+
+	t.Run("validates clean", func(t *testing.T) {
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() returned unexpected error: %v", err)
+		}
+	})
+}
+
+func assertListDefaultsUnmarshaled(t *testing.T, cfg *Config) {
+	t.Helper()
+
 	if cfg.Task.List == nil {
 		t.Fatal("cfg.Task.List is nil")
 	}
@@ -40,7 +78,6 @@ defaults:
 		t.Errorf("Task.List.Status = %v, want %v", cfg.Task.List.Status, want)
 	}
 
-	// Tracks.List assertions
 	if cfg.Tracks.List == nil {
 		t.Fatal("cfg.Tracks.List is nil")
 	}
@@ -48,7 +85,6 @@ defaults:
 		t.Errorf("Tracks.List.Columns = %v, want %v", cfg.Tracks.List.Columns, want)
 	}
 
-	// Defaults.List assertions
 	if cfg.Defaults == nil {
 		t.Fatal("cfg.Defaults is nil")
 	}
@@ -57,44 +93,6 @@ defaults:
 	}
 	if want := []string{"id", "title", "status"}; !slicesEqual(cfg.Defaults.List.Columns, want) {
 		t.Errorf("Defaults.List.Columns = %v, want %v", cfg.Defaults.List.Columns, want)
-	}
-
-	// Round-trip: marshal back and re-unmarshal
-	out, err := yaml.Marshal(&cfg)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var cfg2 Config
-	if err := yaml.Unmarshal(out, &cfg2); err != nil {
-		t.Fatalf("re-unmarshal: %v", err)
-	}
-	if cfg2.Task.List == nil || !slicesEqual(cfg2.Task.List.Columns, []string{"id", "title"}) {
-		t.Errorf("round-trip Task.List.Columns = %v, want [id title]", cfg2.Task.List)
-	}
-	if cfg2.Tracks.List == nil || !slicesEqual(cfg2.Tracks.List.Columns, []string{"id", "progress"}) {
-		t.Errorf("round-trip Tracks.List.Columns = %v, want [id progress]", cfg2.Tracks.List)
-	}
-	if cfg2.Defaults == nil || cfg2.Defaults.List == nil || !slicesEqual(cfg2.Defaults.List.Columns, []string{"id", "title", "status"}) {
-		t.Errorf("round-trip Defaults.List.Columns = %v, want [id title status]", cfg2.Defaults)
-	}
-
-	// Validate: empty-fields config must not emit list: {} or defaults: {} blocks
-	empty := Config{}
-	emptyOut, err := yaml.Marshal(&empty)
-	if err != nil {
-		t.Fatalf("marshal empty: %v", err)
-	}
-	emptyStr := string(emptyOut)
-	if contains(emptyStr, "list:") {
-		t.Errorf("empty Config marshaled with 'list:' block: %s", emptyStr)
-	}
-	if contains(emptyStr, "defaults:") {
-		t.Errorf("empty Config marshaled with 'defaults:' block: %s", emptyStr)
-	}
-
-	// cfg.Validate() on this config must return nil
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("Validate() returned unexpected error: %v", err)
 	}
 }
 
