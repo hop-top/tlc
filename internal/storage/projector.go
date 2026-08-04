@@ -99,11 +99,11 @@ func (p *FilesystemProjector) canonicalPath(taskID string) string {
 func (p *FilesystemProjector) writeCanonical(task *core.Task) error {
 	path := p.canonicalPath(task.ID)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return fmt.Errorf("create canonical dir: %w", err)
 	}
 	data, err := json.MarshalIndent(task, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal task %s: %w", task.ID, err)
 	}
 	return os.WriteFile(path, data, 0o644)
 }
@@ -113,7 +113,7 @@ func (p *FilesystemProjector) writeCanonical(task *core.Task) error {
 func (p *FilesystemProjector) removeSymlinks(taskID string) error {
 	canonicalName := taskID + ".json"
 
-	return filepath.WalkDir(p.cfg.BaseDir, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(p.cfg.BaseDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip inaccessible paths
 		}
@@ -137,6 +137,10 @@ func (p *FilesystemProjector) removeSymlinks(taskID string) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return fmt.Errorf("walk projection dir: %w", err)
+	}
+	return nil
 }
 
 // sortPrefix composes the sort prefix from sort_by config fields.
@@ -189,7 +193,7 @@ func (p *FilesystemProjector) createGroupSymlinks(
 		}
 		dir := filepath.Join(p.cfg.BaseDir, "by-"+group, dirName)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+			return fmt.Errorf("create group dir %s: %w", dir, err)
 		}
 
 		// Avoid duplicate ID in filename when sort_by includes "id"
@@ -201,10 +205,10 @@ func (p *FilesystemProjector) createGroupSymlinks(
 		// Compute relative path from link directory to canonical file
 		relTarget, err := filepath.Rel(dir, p.canonicalPath(task.ID))
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve symlink target: %w", err)
 		}
 		if err := os.Symlink(relTarget, linkName); err != nil {
-			return err
+			return fmt.Errorf("create symlink %s: %w", linkName, err)
 		}
 	}
 	return nil

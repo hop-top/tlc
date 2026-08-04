@@ -21,7 +21,7 @@ import (
 // to util.ParseStorageTime so the returned time.Time is always
 // UTC-normalised regardless of any offset in the stored string.
 func parseRFC3339(s string) (time.Time, error) {
-	return util.ParseStorageTime(s)
+	return util.ParseStorageTime(s) //nolint:wrapcheck // thin alias; kit's parse error already names the offending timestamp
 }
 
 // project calls projector.ProjectTask if a projector is set, logging errors.

@@ -108,7 +108,10 @@ func (s *SQLiteStorage) ListAgentRuns(
 		}
 		records = append(records, r)
 	}
-	return records, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate agent run rows: %w", err)
+	}
+	return records, nil
 }
 
 func scanAgentRun(row *sql.Row) (*core.AgentRunRecord, error) {

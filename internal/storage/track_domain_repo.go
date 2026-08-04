@@ -35,7 +35,7 @@ func ScanTrack(row *sql.Row) (core.Track, error) {
 		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr, &dueAtStr,
 	)
 	if err != nil {
-		return t, err
+		return t, fmt.Errorf("scan track row: %w", err)
 	}
 	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr, dueAtStr); err != nil {
 		return t, err
@@ -54,7 +54,7 @@ func ScanTrackRows(rows *sql.Rows) (core.Track, error) {
 		&assignedTo, &createdAt, &updatedAt, &projectID, &metaStr, &dueAtStr,
 	)
 	if err != nil {
-		return t, err
+		return t, fmt.Errorf("scan track row: %w", err)
 	}
 	if err := populateTrack(&t, createdAt, updatedAt, assignedTo, projectID, metaStr, dueAtStr); err != nil {
 		return t, err
