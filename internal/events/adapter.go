@@ -20,5 +20,5 @@ func NewBusPublisher(b bus.Bus) *BusPublisher {
 
 // Publish creates a bus.Event from the domain arguments and publishes it.
 func (a *BusPublisher) Publish(ctx context.Context, topic, source string, payload any) error {
-	return a.b.Publish(ctx, bus.NewEvent(bus.Topic(topic), source, payload))
+	return a.b.Publish(ctx, bus.NewEvent(bus.Topic(topic), source, payload)) //nolint:wrapcheck // thin bus adapter; kit typed errors surface verbatim
 }

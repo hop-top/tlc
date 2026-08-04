@@ -138,7 +138,7 @@ func flowCompletion(dc *TypesDirConfig) scheme.TypeRegistration {
 			flowsDir := dc.flowsDir()
 			entries, err := os.ReadDir(flowsDir)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("read flows dir %s: %w", flowsDir, err)
 			}
 			ids := make([]string, 0, len(entries))
 			for _, entry := range entries {
