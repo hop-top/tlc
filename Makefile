@@ -53,8 +53,7 @@ SHIMS_BIN_DIR = internal/flowtest/shims/bin
 SHIMS = claude codex gemini copilot opencode fabric llm \
         npm npx uv pip composer \
         docker docker-compose \
-        gh git \
-        passthrough
+        gh git
 
 build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 	@echo "$(COLOR_BLUE)Building flowtest shims...$(COLOR_RESET)"
@@ -63,6 +62,8 @@ build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 		go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/$$shim ./internal/flowtest/shims/$$shim/ || exit 1; \
 		echo "  built $$shim"; \
 	done
+	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/tlc-shim-passthrough ./internal/flowtest/shims/passthrough/
+	@echo "  built tlc-shim-passthrough"
 	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/tlc-shim-catchall ./internal/flowtest/shims/catchall/
 	@echo "  built tlc-shim-catchall"
 	@echo "$(COLOR_GREEN)✓ Shims built to $(SHIMS_BIN_DIR)/$(COLOR_RESET)"
