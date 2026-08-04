@@ -313,7 +313,7 @@ func (r *BlockedByRef) UnmarshalJSON(data []byte) error {
 	if trimmed[0] == '"' {
 		var s string
 		if err := json.Unmarshal(data, &s); err != nil {
-			return err
+			return fmt.Errorf("blocked-by entry: %w", err)
 		}
 		ref, err := parseBlockedByRef(s)
 		if err != nil {

@@ -21,7 +21,7 @@ type commandRunner func(name string, args ...string) ([]byte, error)
 func defaultRunner(name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).Output()
+	return exec.CommandContext(ctx, name, args...).Output() //nolint:wrapcheck // callers add the command context; keeps *exec.ExitError assertable
 }
 
 var (

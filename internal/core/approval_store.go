@@ -168,7 +168,7 @@ func (s *FileApprovalStore) CancelRun(ctx context.Context, runID, by string) err
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("run not found: %s", runID)
 		}
-		return err
+		return fmt.Errorf("read run dir %s: %w", dir, err)
 	}
 	var firstErr error
 	for _, e := range entries {
@@ -205,7 +205,7 @@ func (s *FileApprovalStore) WaitFor(
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, ctx.Err() //nolint:wrapcheck // context.Canceled/DeadlineExceeded surface verbatim for caller sentinel checks
 		case <-time.After(poll):
 		}
 	}
@@ -255,7 +255,10 @@ func (s *FileApprovalStore) write(rec *ApprovalRecord) error {
 		return fmt.Errorf("encode approval: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		return fmt.Errorf("close tmp: %w", err)
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("rename approval into place: %w", err)
+	}
+	return nil
 }

@@ -226,7 +226,7 @@ func copyConfig(c *AgentConfig) *AgentConfig {
 func parseAgentFile(path string) (map[string]*AgentConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("agent registry: read %s: %w", path, err)
 	}
 	var f agentConfigFile
 	if err := yaml.Unmarshal(data, &f); err != nil {
