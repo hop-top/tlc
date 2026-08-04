@@ -856,6 +856,12 @@ func (s *SQLiteStorage) UpdateLogNote(ctx context.Context, logID int64, note str
 	})
 }
 
+// GetLogs returns a task's log entries. Ties on timestamp are broken by
+// id: the column is RFC3339 TEXT at one-second resolution, so rows
+// written inside the same second compare equal and ordering by timestamp
+// alone leaves their order to SQLite. id is INTEGER PRIMARY KEY
+// AUTOINCREMENT, hence a strictly monotonic stand-in for insertion order,
+// which makes "newest" deterministic for callers that take the first row.
 func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirection string) ([]*core.LogEntry, error) {
 	order := "DESC"
 	if strings.ToUpper(sortDirection) == sqlOrderASC {
@@ -866,10 +872,10 @@ func (s *SQLiteStorage) GetLogs(ctx context.Context, taskID string, sortDirectio
 	var rows *sql.Rows
 	var err error
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
-		query = fmt.Sprintf("SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs WHERE task_id = ? AND project_id = ? ORDER BY timestamp %s", order)
+		query = fmt.Sprintf("SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs WHERE task_id = ? AND project_id = ? ORDER BY timestamp %s, id %s", order, order)
 		rows, err = s.db.QueryContext(ctx, query, taskID, proj.ProjectID)
 	} else {
-		query = fmt.Sprintf("SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs WHERE task_id = ? ORDER BY timestamp %s", order)
+		query = fmt.Sprintf("SELECT id, task_id, timestamp, by, action, note, meta FROM task_logs WHERE task_id = ? ORDER BY timestamp %s, id %s", order, order)
 		rows, err = s.db.QueryContext(ctx, query, taskID)
 	}
 	if err != nil {
@@ -1210,7 +1216,10 @@ func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*c
 	if strings.ToLower(query.SortDirection) == "asc" {
 		order = "ASC"
 	}
-	sqlQuery += " ORDER BY timestamp " + order
+	// id breaks timestamp ties deterministically — see GetLogs. This
+	// matters most for Limit 1 reads (amendLatestLogNote), where an
+	// arbitrary tie-winner means rewriting the wrong log row.
+	sqlQuery += " ORDER BY timestamp " + order + ", id " + order
 
 	if query.Limit > 0 {
 		sqlQuery += " LIMIT ?"
