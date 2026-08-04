@@ -1,0 +1,6 @@
+[tools]
+# Keep in lockstep with .github/workflows/ci.yml's golangci-lint-action
+# version. Minor versions disagree on findings (2.8 vs 2.12 differ on
+# gocognit and goconst), so an unpinned local run reports a different set
+# of issues than CI and lint failures only surface after push.
+golangci-lint = "2.12.2"
