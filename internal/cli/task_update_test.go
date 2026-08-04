@@ -1025,6 +1025,240 @@ func TestTaskUpdateStatusWithNote(t *testing.T) {
 	})
 }
 
+// TestTaskUpdateFieldOnlyNote covers notes supplied on updates that are
+// not status transitions. Before this, --note was read only inside the
+// Changed("status") branch, so SHA-linkage notes on ordinary edits were
+// dropped silently at exit 0. Per docs/state-change-notes-design.md
+// §189-195, a note is valid on ANY update and lands on an UPDATED log
+// row.
+func TestTaskUpdateFieldOnlyNote(t *testing.T) {
+	t.Run("NoteWithFieldEditIsRecorded", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{
+			ID:     "T-0001",
+			Title:  "Tag plus note",
+			Status: core.StatusTodo,
+		})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{
+			"task", "update", "T-0001",
+			"--add-tag", "wip",
+			"--note", "def5678 second",
+		})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task update --add-tag --note failed: %v", err)
+		}
+
+		s2, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s2.Close()
+
+		updated := getTaskByAlias(t, ctx, "T-0001")
+		if updated == nil {
+			t.Fatal("task not found after update")
+		}
+		// The field edit must still land.
+		hasTag := false
+		for _, tag := range updated.Tags {
+			if tag == "wip" {
+				hasTag = true
+			}
+		}
+		if !hasTag {
+			t.Errorf("tags = %v, want to contain %q", updated.Tags, "wip")
+		}
+		if updated.Status != core.StatusTodo {
+			t.Errorf("status = %s, want TODO (note must not force a transition)", updated.Status)
+		}
+
+		logs, err := s2.GetLogs(ctx, updated.ID, "desc")
+		if err != nil {
+			t.Fatalf("GetLogs: %v", err)
+		}
+		found := false
+		for _, l := range logs {
+			if contains(l.Note, "def5678 second") {
+				found = true
+				if l.Action != core.ActionUpdated {
+					t.Errorf("action = %q, want %q", l.Action, core.ActionUpdated)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("expected note on UPDATED log row; got logs: %+v", logs)
+		}
+	})
+
+	t.Run("NoteAloneIsRecorded", func(t *testing.T) {
+		// The original report: --note as the sole flag exited 0 and
+		// wrote nothing, because --note never set changed = true.
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{
+			ID:     "T-0001",
+			Title:  "Note alone",
+			Status: core.StatusTodo,
+		})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{
+			"task", "update", "T-0001",
+			"--note", "abc1234 sha linkage",
+		})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task update --note failed: %v", err)
+		}
+
+		s2, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s2.Close()
+
+		updated := getTaskByAlias(t, ctx, "T-0001")
+		if updated == nil {
+			t.Fatal("task not found after update")
+		}
+		if updated.Status != core.StatusTodo {
+			t.Errorf("status = %s, want TODO", updated.Status)
+		}
+
+		logs, err := s2.GetLogs(ctx, updated.ID, "desc")
+		if err != nil {
+			t.Fatalf("GetLogs: %v", err)
+		}
+		found := false
+		for _, l := range logs {
+			if contains(l.Note, "abc1234 sha linkage") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected bare --note to be recorded; got logs: %+v", logs)
+		}
+	})
+
+	t.Run("StatusAndFieldEditShareOneNote", func(t *testing.T) {
+		// design doc §189: a single note attaches to BOTH the
+		// transition row and the field-update row.
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{
+			ID:     "T-0001",
+			Title:  "Both",
+			Status: core.StatusTodo,
+		})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{
+			"task", "update", "T-0001",
+			"--status", "IN_PROGRESS",
+			"--priority", "P0",
+			"--note", "escalating now",
+		})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task update --status --priority --note failed: %v", err)
+		}
+
+		s2, _ := getStorageRaw()
+		defer s2.Close()
+
+		updated := getTaskByAlias(t, ctx, "T-0001")
+		if updated == nil {
+			t.Fatal("task not found after update")
+		}
+		if updated.Status != core.StatusInProgress {
+			t.Errorf("status = %s, want IN_PROGRESS", updated.Status)
+		}
+
+		logs, _ := s2.GetLogs(ctx, updated.ID, "desc")
+		var sawTransition, sawUpdate bool
+		for _, l := range logs {
+			if !contains(l.Note, "escalating now") {
+				continue
+			}
+			if l.Action == core.ActionUpdated {
+				sawUpdate = true
+			} else {
+				sawTransition = true
+			}
+		}
+		if !sawTransition {
+			t.Errorf("expected note on the transition row; got logs: %+v", logs)
+		}
+		if !sawUpdate {
+			t.Errorf("expected note on the UPDATED row; got logs: %+v", logs)
+		}
+	})
+
+	t.Run("FieldEditWithoutNoteWritesNoUpdatedLog", func(t *testing.T) {
+		// Guard against log spam: only noted edits get an UPDATED row.
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		s.CreateTask(ctx, &core.Task{
+			ID:     "T-0001",
+			Title:  "No note",
+			Status: core.StatusTodo,
+		})
+
+		cmd := newTestCmd()
+		cmd.AddCommand(TaskCmd)
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs([]string{"task", "update", "T-0001", "--priority", "P2"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task update --priority failed: %v", err)
+		}
+
+		s2, _ := getStorageRaw()
+		defer s2.Close()
+
+		updated := getTaskByAlias(t, ctx, "T-0001")
+		if updated == nil {
+			t.Fatal("task not found after update")
+		}
+		logs, _ := s2.GetLogs(ctx, updated.ID, "desc")
+		for _, l := range logs {
+			if l.Action == core.ActionUpdated {
+				t.Errorf("unexpected UPDATED log row for un-noted edit: %+v", l)
+			}
+		}
+	})
+}
+
 // TestTaskDeleteWithNote verifies --note|-n is plumbed to a DELETED
 // log entry written before the row mutation. Post-T-1232 the cascade
 // is dropped, so the log entry must remain queryable after delete.

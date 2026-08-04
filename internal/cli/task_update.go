@@ -9,6 +9,7 @@ import (
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"hop.top/kit/go/console/output"
 	"hop.top/kit/go/runtime/bus"
 	"hop.top/kit/go/runtime/domain"
@@ -148,6 +149,10 @@ against the workflow state machine unless --force is set.`,
 			}
 			if cmd.Flags().Changed("no-auto-remind") {
 				changes.NoAutoRemind = &taskUpdateNoAutoRemind
+			}
+			if cmd.Flags().Changed("note") {
+				changes.Note = taskUpdateNote
+				changes.NoteFields = editedFieldNames(cmd)
 			}
 
 			changed, err := applyTaskFieldChanges(ctx, s, res.Storage, task, changes)
@@ -399,6 +404,26 @@ func init() {
 
 	TaskDeleteCmd.Flags().BoolVarP(&taskDeleteYes, "yes", "y", false, "Skip confirmation")
 	TaskDeleteCmd.Flags().StringVarP(&taskDeleteNote, "note", "n", "", "Delete note (recorded against the transition log)")
+}
+
+// editedFieldNames returns the names of the non-status fields this
+// invocation actually changed, for the `fields` key in an UPDATED log
+// row's meta. "status" is excluded because the transition row already
+// records it, and note/amend/force are inputs rather than edited fields.
+func editedFieldNames(cmd *cobra.Command) []string {
+	skip := map[string]bool{
+		"status": true, "note": true, "amend": true, "force": true,
+		"yes": true, "no-prompt": true,
+	}
+	var fields []string
+	// Visit only walks flags the user actually set.
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if skip[f.Name] {
+			return
+		}
+		fields = append(fields, f.Name)
+	})
+	return fields
 }
 
 // amendLatestLogNote rewrites the note of the most recent log entry for

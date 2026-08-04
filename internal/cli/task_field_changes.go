@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,23 @@ type TaskFieldChanges struct {
 
 	// NoAutoRemind: nil = no change (matches Changed("no-auto-remind")).
 	NoAutoRemind *bool
+
+	// Note is the caller's reason for this edit, recorded on an UPDATED
+	// log row so it survives updates that are not status transitions.
+	// Before this existed, a note supplied alongside a plain field edit
+	// was read only by the Status branch and silently discarded, losing
+	// commit-SHA linkage notes. See docs/state-change-notes-design.md
+	// §189-195.
+	//
+	// When Status is also set, StatusNote carries the same text onto the
+	// transition row; both rows keep it so neither view of the history
+	// loses the reason. Empty = record nothing.
+	//
+	// NoteFields optionally names the fields this edit touched, stored
+	// under meta.fields for audit. Callers that don't track field names
+	// may leave it nil.
+	Note       string
+	NoteFields []string
 
 	// Eva: nil slices = no change. Included for parity with the CLI's
 	// --add-eva/--remove-eva/--clear-eva; the HTTP API is free to leave
@@ -345,7 +363,14 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		changed = true
 	}
 
+	// A note is itself a reason to persist: it records why an edit
+	// happened. A bare note with no field edit is a valid annotation,
+	// not a no-op, so it must not be swallowed by the !changed return.
 	if !changed {
+		if changes.Note != "" {
+			addUpdateNoteLog(ctx, taskStorage, task, changes)
+			return true, nil
+		}
 		return false, nil
 	}
 
@@ -375,5 +400,74 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		return changed, fmt.Errorf("failed to update: %w", err)
 	}
 
+	// Record the note for the non-status part of the edit. A status-only
+	// edit is already fully described by its transition row above, so
+	// adding an UPDATED row there would just duplicate it.
+	if changes.Note != "" && !statusOnlyEdit(changes) {
+		addUpdateNoteLog(ctx, taskStorage, task, changes)
+	}
+
 	return changed, nil
+}
+
+// statusOnlyEdit reports whether the sole field this edit touches is
+// status, in which case TransitionWithWorkflow's log row already carries
+// the note via StatusNote and an extra UPDATED row would duplicate it.
+//
+// Enumerated explicitly rather than via reflection: TaskFieldChanges
+// holds a func field (AutoCreateTrack) that is not comparable, and a new
+// field added here should force a deliberate decision rather than
+// silently defaulting either way.
+func statusOnlyEdit(changes TaskFieldChanges) bool {
+	if changes.Status == nil {
+		return false
+	}
+	touchesOther := changes.Title != nil ||
+		changes.Description != nil ||
+		changes.AssignedTo != nil ||
+		changes.Effort != nil ||
+		changes.Priority != nil ||
+		changes.BlockedReason != nil ||
+		changes.Timeout != nil ||
+		changes.Track != nil ||
+		changes.Due != nil ||
+		changes.RemindAt != nil ||
+		changes.RRule != nil ||
+		changes.NoAutoRemind != nil ||
+		changes.Unblock ||
+		changes.ClearBlockedBy ||
+		changes.ClearEva ||
+		len(changes.AddTags) > 0 ||
+		len(changes.RemoveTags) > 0 ||
+		len(changes.AddBlockedBy) > 0 ||
+		len(changes.RemoveBlockedBy) > 0 ||
+		len(changes.AddEva) > 0 ||
+		len(changes.RemoveEva) > 0
+	return !touchesOther
+}
+
+// addUpdateNoteLog appends an UPDATED log row carrying the caller's note,
+// with the edited field names under meta.fields when known. A failure to
+// write the note is reported as a warning rather than an error: the task
+// row is already committed, and losing the audit note must not make a
+// successful edit look failed.
+func addUpdateNoteLog(
+	ctx context.Context, taskStorage *storage.SQLiteStorage,
+	task *core.Task, changes TaskFieldChanges,
+) {
+	entry := &core.LogEntry{
+		TaskID:    task.ID,
+		Timestamp: time.Now().UTC(),
+		By:        core.GetCurrentUser(),
+		Action:    core.ActionUpdated,
+		Note:      changes.Note,
+	}
+	if len(changes.NoteFields) > 0 {
+		fields := append([]string(nil), changes.NoteFields...)
+		sort.Strings(fields)
+		entry.Meta = map[string]any{"fields": fields}
+	}
+	if err := taskStorage.AddLog(ctx, entry); err != nil {
+		fmt.Printf("Warning: failed to write note for %s: %v\n", formatTaskAlias(task), err)
+	}
 }
