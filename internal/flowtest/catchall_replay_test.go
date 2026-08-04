@@ -27,7 +27,7 @@ func TestCatchallReplaysRecordedCassette(t *testing.T) {
 	binDir := t.TempDir()
 	shimPath := filepath.Join(binDir, "tlc-shim-catchall")
 
-	build := exec.Command("go", "build", "-tags", "shimbin", "-buildvcs=false",
+	build := exec.CommandContext(t.Context(), "go", "build", "-tags", "shimbin", "-buildvcs=false",
 		"-o", shimPath, "hop.top/tlc/internal/flowtest/shims/catchall")
 	build.Env = os.Environ()
 	if out, err := build.CombinedOutput(); err != nil {
@@ -47,7 +47,7 @@ func TestCatchallReplaysRecordedCassette(t *testing.T) {
 	)
 
 	// Record: catchall execs the real echo and writes the cassette.
-	rec := exec.Command(toolPath, "hello-replay")
+	rec := exec.CommandContext(t.Context(), toolPath, "hello-replay")
 	rec.Env = append(env, "TLC_FLOW_TEST_MODE=record")
 	recOut, err := rec.CombinedOutput()
 	if err != nil {
@@ -58,7 +58,7 @@ func TestCatchallReplaysRecordedCassette(t *testing.T) {
 	}
 
 	// Replay: must emit the recorded stdout, not crash on RawResponse.
-	rep := exec.Command(toolPath, "hello-replay")
+	rep := exec.CommandContext(t.Context(), toolPath, "hello-replay")
 	rep.Env = append(env, "TLC_FLOW_TEST_MODE=replay")
 	repOut, err := rep.CombinedOutput()
 	if err != nil {

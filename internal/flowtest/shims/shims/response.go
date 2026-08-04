@@ -31,10 +31,14 @@ func decodeRawExec(raw *xrr.RawResponse) *execadapter.Response {
 	p := raw.Payload
 
 	if v, ok := p["stdout"]; ok {
-		resp.Stdout, _ = v.(string)
+		if s, ok := v.(string); ok {
+			resp.Stdout = s
+		}
 	}
 	if v, ok := p["stderr"]; ok {
-		resp.Stderr, _ = v.(string)
+		if s, ok := v.(string); ok {
+			resp.Stderr = s
+		}
 	}
 	if v, ok := p["exit_code"]; ok {
 		resp.ExitCode = toInt(v)
