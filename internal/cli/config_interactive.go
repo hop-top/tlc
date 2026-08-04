@@ -137,7 +137,7 @@ func promptDuration(kh keyHint, current string, w io.Writer) (string, error) {
 						return nil
 					}
 					_, err := time.ParseDuration(s)
-					return err
+					return err //nolint:wrapcheck // huh validator; message renders inline under the field
 				}),
 		),
 	).WithOutput(w).Run()

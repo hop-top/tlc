@@ -179,7 +179,7 @@ func executeContainerForRunner(
 	}
 	defer func() { _ = os.Remove(tmpContext.Name()) }()
 	if _, err := tmpContext.Write(contextJSON); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("write context file: %w", err)
 	}
 	_ = tmpContext.Close()
 

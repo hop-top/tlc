@@ -125,7 +125,7 @@ func pickStore() (*alias.Store, string, error) {
 func loadStore(path string) (*alias.Store, error) {
 	s := alias.NewStore(path)
 	if err := s.Load(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load alias store %s: %w", path, err)
 	}
 	return s, nil
 }
@@ -142,7 +142,7 @@ func runAliasAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolve alias store: %w", err)
 	}
 	if err := store.Set(name, expansion); err != nil {
-		return err
+		return fmt.Errorf("set alias %q: %w", name, err)
 	}
 	if err := store.Save(); err != nil {
 		return fmt.Errorf("save alias: %w", err)
@@ -193,7 +193,10 @@ func runAliasList(cmd *cobra.Command) error {
 	}
 	printSection("global", globalAliases)
 	printSection("local", localAliases)
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("flush alias table: %w", err)
+	}
+	return nil
 }
 
 func runAliasRemove(cmd *cobra.Command, args []string) error {
@@ -207,7 +210,7 @@ func runAliasRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("alias %q not found", name)
 	}
 	if err := store.Remove(name); err != nil {
-		return err
+		return fmt.Errorf("remove alias %q: %w", name, err)
 	}
 	if err := store.Save(); err != nil {
 		return fmt.Errorf("save aliases: %w", err)

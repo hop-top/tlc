@@ -176,7 +176,7 @@ the full log history sorted by configured direction.`,
 			// classifies the result (e.g. all not-found → ExitNotFound).
 			joined := errors.Join(errs...)
 			if len(args) == 1 {
-				return joined
+				return joined //nolint:wrapcheck // aggregate of already-wrapped errors; wrapping would hide the sentinels exitCodeFor matches
 			}
 			return fmt.Errorf("some tasks failed: %w", joined)
 		}

@@ -112,7 +112,7 @@ func runURISnippet(cmd *cobra.Command, _ []string) error {
 	}
 	snippet, err := generate.Snippet(platform, spec)
 	if err != nil {
-		return err
+		return fmt.Errorf("generate %s registration snippet: %w", platform, err)
 	}
 	fmt.Fprint(cmd.OutOrStdout(), snippet)
 	return nil

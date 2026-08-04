@@ -79,7 +79,7 @@ func runAgentListRuns(cmd *cobra.Command) error {
 
 	format := viper.GetString("output.format")
 	if agentListJSON || format == formatJSON {
-		return output.Render(cmd.OutOrStdout(), formatJSON, runs)
+		return output.Render(cmd.OutOrStdout(), formatJSON, runs) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 	}
 
 	out := cmd.OutOrStdout()

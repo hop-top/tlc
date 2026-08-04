@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -140,7 +141,11 @@ func toolspecFlagsToSchema(cmd *cobra.Command, flags []toolspec.Flag) []FlagSche
 
 // GenerateSchemaJSON returns indented JSON of the full CLI subcommand schema.
 func GenerateSchemaJSON(root *cobra.Command) ([]byte, error) {
-	return json.MarshalIndent(GenerateSchema(root), "", "  ")
+	data, err := json.MarshalIndent(GenerateSchema(root), "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal command schema: %w", err)
+	}
+	return data, nil
 }
 
 // GenerateTaskSchema is a backward-compatible alias that introspects
@@ -164,5 +169,9 @@ func GenerateTaskSchema() []CommandSchema {
 
 // GenerateTaskSchemaJSON is a backward-compatible alias.
 func GenerateTaskSchemaJSON() ([]byte, error) {
-	return json.MarshalIndent(GenerateTaskSchema(), "", "  ")
+	data, err := json.MarshalIndent(GenerateTaskSchema(), "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal task schema: %w", err)
+	}
+	return data, nil
 }

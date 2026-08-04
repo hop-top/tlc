@@ -144,7 +144,7 @@ func resetAllFlags() {
 func runCommand(_ context.Context, cmd ResolvedCommand) error {
 	resetAllFlags()
 	RootCmd.SetArgs(append([]string{cmd.Cmd}, cmd.Args...))
-	return RootCmd.Execute()
+	return RootCmd.Execute() //nolint:wrapcheck // dispatches the real subcommand; its error is already user-facing
 }
 
 // formatCmd returns a human-readable representation of a resolved command.

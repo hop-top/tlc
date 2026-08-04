@@ -107,7 +107,7 @@ func runWorkspaceList(cmd *cobra.Command, _ []string) error {
 
 	format := viper.GetString("output.format")
 	if format == formatJSON || format == formatYAML {
-		return output.Render(cmd.OutOrStdout(), format, allData)
+		return output.Render(cmd.OutOrStdout(), format, allData) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 	}
 	printWorkspaceListTable(cmd, allData)
 	return nil

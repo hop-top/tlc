@@ -99,7 +99,7 @@ func runTrackGraph(cmd *cobra.Command, args []string) error {
 
 	switch format {
 	case formatJSON, formatYAML:
-		return output.Render(w, format, strategy)
+		return output.Render(w, format, strategy) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 
 	case "mermaid":
 		_, _ = fmt.Fprint(w, core.RenderMermaid(strategy, tasks))

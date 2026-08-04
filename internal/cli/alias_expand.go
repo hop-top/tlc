@@ -320,7 +320,7 @@ func readAliasesBlock(path string) (map[string]string, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	// Parse permissively into a yaml.Node so we can branch on the
 	// shape of the `aliases:` value rather than relying on
@@ -328,7 +328,7 @@ func readAliasesBlock(path string) (map[string]string, error) {
 	// scalar/list/non-string value).
 	var root yaml.Node
 	if err := yaml.Unmarshal(raw, &root); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	mapping := unwrapDocumentMapping(&root)
 	if mapping == nil {
@@ -449,7 +449,10 @@ func verifyEntriesInStore(src map[string]string, store *alias.Store) bool {
 // with kit's user/project distinction.
 func unsetAliasesAtPath(path string) error {
 	opts := kitconfig.Options{ProjectConfigPath: path}
-	return kitconfig.Unset("aliases", kitconfig.ScopeProject, opts)
+	if err := kitconfig.Unset("aliases", kitconfig.ScopeProject, opts); err != nil {
+		return fmt.Errorf("unset aliases in %s: %w", path, err)
+	}
+	return nil
 }
 
 // allLegacyConfigPaths enumerates every config file that may carry a

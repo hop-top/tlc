@@ -221,7 +221,10 @@ func runTagFilter(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(groups) == 0 {
-		return cmd.Help()
+		if err := cmd.Help(); err != nil {
+			return fmt.Errorf("render help: %w", err)
+		}
+		return nil
 	}
 
 	s, err := getStorage()
