@@ -1010,7 +1010,6 @@ tlc plugin test github-sync --integration
 
 ## References
 
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands
 - [tlc-config-spec-0.1.md](tlc-config-spec-0.1.md) — Configuration
 - [tlc-auth-spec-0.1.md](tlc-auth-spec-0.1.md) — Authentication (to be created)
 - [task-exec-spec-0.1.md](task-exec-spec-0.1.md) — Execution protocol

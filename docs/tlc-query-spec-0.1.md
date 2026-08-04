@@ -578,7 +578,6 @@ unquoted_string = [a-zA-Z0-9_-]+
 
 ## References
 
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands
 - [task-crud-spec-0.1.md](task-crud-spec-0.1.md) — Task schema
 - [task-line-spec-0.1.md](task-line-spec-0.1.md) — Task line syntax
 

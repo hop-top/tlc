@@ -2,7 +2,7 @@
 
 **Status**: Ratified — vtodo-export-sync track 2026-05  
 **Date**: 2026-05-02  
-**Cross-references**: [identifiers-spec-0.1.md](identifiers-spec-0.1.md), [sync-architecture-0.1.md](sync-architecture-0.1.md), [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md), [tlc-plugin-spec-0.1.md](tlc-plugin-spec-0.1.md)
+**Cross-references**: [identifiers-spec-0.1.md](identifiers-spec-0.1.md), [sync-architecture-0.1.md](sync-architecture-0.1.md), [tlc-plugin-spec-0.1.md](tlc-plugin-spec-0.1.md)
 
 ---
 
@@ -404,7 +404,6 @@ END:VJOURNAL
 
 - [identifiers-spec-0.1.md](identifiers-spec-0.1.md) — TypeID format and display aliases
 - [sync-architecture-0.1.md](sync-architecture-0.1.md) — TLC sync principles and plugin architecture
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands and flags (`--format`, `--output`, etc.)
 - [tlc-plugin-spec-0.1.md](tlc-plugin-spec-0.1.md) — Plugin interface and manifest schema
 - RFC 5545 — iCalendar Specification (VTODO, VJOURNAL, RRULE, RELATED-TO)
 - RFC 9253 — iCalendar Recurrence Relations for Task Management (DEPENDS-ON)

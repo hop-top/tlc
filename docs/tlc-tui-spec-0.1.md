@@ -1208,7 +1208,6 @@ T-0089 Refactor auth module   @codex  ✏️  codex (editing)
 
 ## References
 
-- [tlc-cli-spec-0.1.md](tlc-cli-spec-0.1.md) — CLI commands
 - [tlc-config-spec-0.1.md](tlc-config-spec-0.1.md) — Configuration
 - [task-crud-spec-0.1.md](task-crud-spec-0.1.md) — Task schema
 - [task-flow-spec-0.1.md](task-flow-spec-0.1.md) — Flow execution

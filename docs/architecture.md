@@ -330,10 +330,8 @@ Per-feature specs at `docs/`:
 - [task-flow-spec-0.1](task-flow-spec-0.1.md) — Flow YAML structure, step types, branching
 - [task-log-spec-0.1](task-log-spec-0.1.md) — Audit log actions and schema
 - [sync-architecture-0.1](sync-architecture-0.1.md) — Bidirectional sync, conflict resolution, meta fields
-- [tlc-cli-spec-0.1](tlc-cli-spec-0.1.md) — CLI command reference
 - [tlc-tui-spec-0.1](tlc-tui-spec-0.1.md) — TUI keybindings and views
 - [tlc-config-spec-0.1](tlc-config-spec-0.1.md) — Configuration hierarchy
-- [tlc-uri-spec-0.1](tlc-uri-spec-0.1.md) — URI scheme and resolution
 - [task-exec-spec-0.1](task-exec-spec-0.1.md) — Deterministic execution (stdout/stderr capture, timeouts)
 - [vtodo-sync-spec-0.1](vtodo-sync-spec-0.1.md) — RFC 5545 iCalendar VTODO export, RRULE recurrence, sync plugin
 
