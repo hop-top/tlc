@@ -21,6 +21,64 @@ type relatedTaskSummary struct {
 	Status core.TaskStatus
 }
 
+// blockerJSON is one entry of the top-level "blocked_by" array added to
+// `task show --format json`.
+//
+// The raw durable IDs remain available under meta.blocked_by for
+// backwards compatibility; this view resolves each ref to its display
+// alias, title and status so dependencies are usable from scripts
+// without a second lookup per edge.
+type blockerJSON struct {
+	// Ref is the resolved display alias (T-NNNN), project-qualified for
+	// cross-project blockers. Falls back to the stored raw ref when the
+	// blocker cannot be resolved.
+	Ref string `json:"ref"`
+	// ID is the durable task ID, empty when unresolved.
+	ID string `json:"id,omitempty"`
+	// Title is the blocker's title, empty when unresolved.
+	Title string `json:"title,omitempty"`
+	// Status is the blocker's status, empty when unresolved.
+	Status core.TaskStatus `json:"status,omitempty"`
+	// Met reports whether the blocker is satisfied (terminal status).
+	// An unresolved blocker is never met.
+	Met bool `json:"met"`
+	// Missing flags a stored ref that resolves to no task.
+	Missing bool `json:"missing,omitempty"`
+}
+
+// taskShowJSON wraps a task so the JSON/YAML view can carry derived
+// fields alongside every original key. Embedding keeps the existing
+// payload shape byte-for-byte and only adds keys.
+type taskShowJSON struct {
+	*core.Task
+	BlockedBy []blockerJSON `json:"blocked_by,omitempty"`
+}
+
+// blockerSummariesToJSON converts resolved blocker summaries into the
+// JSON view, marking each as met/unmet.
+func blockerSummariesToJSON(refs []string, summaries []relatedTaskSummary) []blockerJSON {
+	wm := core.DefaultWorkflow()
+	out := make([]blockerJSON, 0, len(summaries))
+	for i, s := range summaries {
+		entry := blockerJSON{Ref: s.Ref, Title: s.Title, Status: s.Status}
+		if s.Status == "" {
+			// Unresolved: keep the stored ref so the edge stays visible.
+			entry.Missing = true
+			entry.Title = ""
+			if i < len(refs) {
+				entry.Ref = refs[i]
+			}
+		} else {
+			if i < len(refs) {
+				entry.ID = refs[i]
+			}
+			entry.Met = wm.IsTerminal(s.Status)
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 var TaskShowCmd = &cobra.Command{
 	Use:   "show <task-id>...",
 	Short: "Show task details",
@@ -82,7 +140,16 @@ the full log history sorted by configured direction.`,
 
 			format := viper.GetString("output.format")
 			if format == formatJSON || format == formatYAML {
-				printTask(cmd, task, logs, format)
+				// Resolve blockers so the structured view carries
+				// seq IDs, titles and met/unmet state rather than
+				// only the opaque IDs under meta.blocked_by.
+				refs := task.BlockedBy()
+				printTaskWithBlockers(
+					cmd, task, logs, format,
+					blockerSummariesToJSON(refs, resolveBlockedBySummaries(
+						ctx, s, res.Storage, refs,
+					)),
+				)
 				continue
 			}
 			if format == formatVtodo {

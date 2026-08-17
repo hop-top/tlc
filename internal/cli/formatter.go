@@ -221,11 +221,24 @@ func collectVtodoLogs(tasks []*core.Task) []*core.LogEntry {
 }
 
 func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, format string) {
+	printTaskWithBlockers(cmd, task, logs, format, nil)
+}
+
+// printTaskWithBlockers renders a task, adding a resolved "blocked_by"
+// array to the structured views. Every pre-existing key is preserved —
+// blockers are an additive field, not a restructuring.
+func printTaskWithBlockers(
+	cmd *cobra.Command,
+	task *core.Task,
+	logs []*core.LogEntry,
+	format string,
+	blockers []blockerJSON,
+) {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
 		result := map[string]interface{}{
-			"task": task,
+			"task": taskShowJSON{Task: task, BlockedBy: blockers},
 			"logs": logs,
 		}
 		_ = output.Render(out, format, result) //nolint:errcheck // best-effort output
@@ -347,6 +360,7 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 			blockerIDs[dep] = true
 		}
 	}
+	unmet := unmetBlockersByTask(tasks)
 	emphasis := make(map[int]output.EmphasisKind)
 	for i, t := range tasks {
 		switch {
@@ -368,7 +382,7 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	if cols != nil {
 		rows := make([]taskTableRow, len(tasks))
 		for i, t := range tasks {
-			rows[i] = buildWideRow(t)
+			rows[i] = buildWideRow(t, unmet[t.ID])
 		}
 		_ = renderStyledListCols(w, formatTable, rows, emphasis, cols) //nolint:errcheck // best-effort output
 		return
@@ -385,7 +399,7 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	}
 	rows := make([]narrowRow, len(tasks))
 	for i, t := range tasks {
-		c := computeTaskCells(t)
+		c := computeTaskCells(t, unmet[t.ID])
 		rows[i] = narrowRow{
 			ID:       c.id,
 			Title:    c.title,
@@ -399,6 +413,92 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	_ = renderStyledList(w, formatTable, rows, emphasis) //nolint:errcheck // best-effort output
 }
 
+// unmetBlockersByTask maps each task ID to the display refs of its
+// blockers that are not yet satisfied.
+//
+// A blocker is met when its status is terminal (DONE/SKIPPED). Blockers
+// are resolved against the listed tasks first; anything not on the page
+// (including cross-project refs) is looked up once via storage. A
+// blocker that cannot be resolved at all is reported as "<ref>?" so a
+// dangling edge stays visible rather than silently reading as met.
+func unmetBlockersByTask(tasks []*core.Task) map[string][]string {
+	wm := core.DefaultWorkflow()
+
+	// Index the page by every identifier a blocked_by entry may use.
+	onPage := make(map[string]*core.Task, len(tasks)*2)
+	for _, t := range tasks {
+		onPage[t.ID] = t
+		if alias := formatTaskAlias(t); alias != "" {
+			onPage[alias] = t
+		}
+	}
+
+	// Collect refs needing a storage lookup, then resolve them in one
+	// pass so the common case (blockers on the same page) costs nothing.
+	offPage := make(map[string]*core.Task)
+	var missing []string
+	for _, t := range tasks {
+		for _, ref := range t.BlockedBy() {
+			if _, ok := onPage[ref]; ok {
+				continue
+			}
+			if _, ok := offPage[ref]; ok {
+				continue
+			}
+			missing = append(missing, ref)
+		}
+	}
+	if len(missing) > 0 {
+		resolveOffPageBlockers(missing, offPage)
+	}
+
+	out := make(map[string][]string)
+	for _, t := range tasks {
+		var unmet []string
+		for _, ref := range t.BlockedBy() {
+			blocker, ok := onPage[ref]
+			if !ok {
+				blocker, ok = offPage[ref]
+			}
+			if !ok || blocker == nil {
+				// Unresolvable edge — surface it, flagged.
+				unmet = append(unmet, ref+"?")
+				continue
+			}
+			if wm.IsTerminal(blocker.Status) {
+				continue
+			}
+			unmet = append(unmet, formatTaskAlias(blocker))
+		}
+		if len(unmet) > 0 {
+			out[t.ID] = unmet
+		}
+	}
+	return out
+}
+
+// resolveOffPageBlockers looks up blocker refs that were not part of the
+// listed tasks, filling found entries into dst. Lookup failures leave
+// the ref absent so the caller renders it as unresolved.
+func resolveOffPageBlockers(refs []string, dst map[string]*core.Task) {
+	s, err := getStorageRaw()
+	if err != nil {
+		return
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	for _, ref := range refs {
+		lookup := ref
+		if translated, tErr := parseTaskRefForCLI(ctx, s, ref); tErr == nil && translated != "" {
+			lookup = translated
+		}
+		if blocker, gErr := s.GetTask(ctx, lookup); gErr == nil && blocker != nil {
+			dst[ref] = blocker
+		}
+	}
+}
+
 // taskCells holds the computed display strings for all table columns.
 type taskCells struct {
 	id, title, status, assigned, due, stale, blocked string
@@ -407,7 +507,7 @@ type taskCells struct {
 
 // computeTaskCells derives every display cell for a task in one place,
 // eliminating duplicated cell-derivation logic across row builders.
-func computeTaskCells(t *core.Task) taskCells {
+func computeTaskCells(t *core.Task, unmetBlockers []string) taskCells {
 	assignee := "-"
 	if t.AssignedTo != nil {
 		assignee = *t.AssignedTo
@@ -428,9 +528,18 @@ func computeTaskCells(t *core.Task) taskCells {
 			staleCol = "! " + formatDuration(*s)
 		}
 	}
+	// The Blocked column reports both kinds of blocker: the free-text
+	// BlockedReason and unmet dependency edges. Dependencies used to be
+	// invisible here, which hid broken/destroyed blocked-by edges from
+	// every non-interactive view.
 	blockedCol := "-"
-	if t.IsBlocked() {
+	switch {
+	case t.IsBlocked() && len(unmetBlockers) > 0:
+		blockedCol = *t.BlockedReason + "; " + strings.Join(unmetBlockers, ",")
+	case t.IsBlocked():
 		blockedCol = *t.BlockedReason
+	case len(unmetBlockers) > 0:
+		blockedCol = strings.Join(unmetBlockers, ",")
 	}
 	priorityCol := "-"
 	if t.Priority != "" {
@@ -459,8 +568,8 @@ func computeTaskCells(t *core.Task) taskCells {
 }
 
 // buildWideRow populates a taskTableRow with all available fields.
-func buildWideRow(t *core.Task) taskTableRow {
-	c := computeTaskCells(t)
+func buildWideRow(t *core.Task, unmetBlockers []string) taskTableRow {
+	c := computeTaskCells(t, unmetBlockers)
 	return taskTableRow{
 		ID:       c.id,
 		Title:    c.title,
