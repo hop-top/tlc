@@ -401,7 +401,13 @@ func (s *TrackService) resolveRefList(
 				blockedBy = append(blockedBy, depID)
 			}
 		case ref.TaskID != "":
-			blockedBy = append(blockedBy, ref.TaskID)
+			id, rErr := s.resolveTaskIDRef(ctx, ref.TaskID)
+			if rErr != nil {
+				return nil, nil, fmt.Errorf(
+					"task %s: %w", taskID, rErr,
+				)
+			}
+			blockedBy = append(blockedBy, id)
 		case ref.CrossTrack != nil:
 			id, deferred, rErr := s.resolveCrossTrackRef(
 				ctx, ref.CrossTrack,

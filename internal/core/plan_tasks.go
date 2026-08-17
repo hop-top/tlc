@@ -109,13 +109,9 @@ func (s *TrackService) CreateTasksFromPlan(
 					)
 				}
 			case ref.TaskID != "":
-				t, err := s.taskRepo.GetTask(ctx, ref.TaskID)
-				if err != nil || t == nil {
+				if _, err := s.resolveTaskIDRef(ctx, ref.TaskID); err != nil {
 					return nil, fmt.Errorf(
-						"plan task %d (%q): blocked-by references "+
-							"task %q which does not exist; create it "+
-							"first or use an intra-track index",
-						i, spec.Title, ref.TaskID,
+						"plan task %d (%q): %w", i, spec.Title, err,
 					)
 				}
 			case ref.CrossTrack != nil:
@@ -171,7 +167,13 @@ func (s *TrackService) CreateTasksFromPlan(
 			case ref.IsIndex():
 				blockedBy = append(blockedBy, createdIDs[ref.Index])
 			case ref.TaskID != "":
-				blockedBy = append(blockedBy, ref.TaskID)
+				id, rErr := s.resolveTaskIDRef(ctx, ref.TaskID)
+				if rErr != nil {
+					return nil, fmt.Errorf(
+						"plan task %d (%q): %w", i, spec.Title, rErr,
+					)
+				}
+				blockedBy = append(blockedBy, id)
 			case ref.CrossTrack != nil:
 				id, deferred, rErr := s.resolveCrossTrackRef(
 					ctx, ref.CrossTrack,
@@ -278,6 +280,30 @@ func (s *TrackService) CreateTasksFromPlan(
 	}
 
 	return result, nil
+}
+
+// resolveTaskIDRef resolves a same-project "T-NNNN" blocked-by ref to
+// the target task's durable ID.
+//
+// Stored blocked_by entries are durable task IDs, so persisting the raw
+// display alias would leave a dangling edge that resolves to nothing.
+// The repository accepts either form on lookup; only its answer's ID is
+// authoritative.
+func (s *TrackService) resolveTaskIDRef(
+	ctx context.Context,
+	ref string,
+) (string, error) {
+	t, err := s.taskRepo.GetTask(ctx, ref)
+	if err != nil || t == nil {
+		return "", fmt.Errorf(
+			"blocked-by references task %q which does not exist; "+
+				"create it first or use an intra-track index", ref,
+		)
+	}
+	if t.ID == "" {
+		return ref, nil
+	}
+	return t.ID, nil
 }
 
 // preflightCrossTrackRef validates a cross-track ref for *hard*
