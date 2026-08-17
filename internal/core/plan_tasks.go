@@ -119,7 +119,7 @@ func (s *TrackService) CreateTasksFromPlan(
 					)
 				}
 			case ref.TaskID != "":
-				if _, err := s.resolveTaskIDRef(ctx, ref.TaskID); err != nil {
+				if _, err := s.resolveTaskIDRef(ctx, projectID, ref.TaskID); err != nil {
 					return nil, fmt.Errorf(
 						"plan task %d (%q): %w", i, spec.Title, err,
 					)
@@ -177,7 +177,7 @@ func (s *TrackService) CreateTasksFromPlan(
 			case ref.IsIndex():
 				blockedBy = append(blockedBy, createdIDs[ref.Index])
 			case ref.TaskID != "":
-				id, rErr := s.resolveTaskIDRef(ctx, ref.TaskID)
+				id, rErr := s.resolveTaskIDRef(ctx, projectID, ref.TaskID)
 				if rErr != nil {
 					return nil, fmt.Errorf(
 						"plan task %d (%q): %w", i, spec.Title, rErr,
@@ -298,25 +298,25 @@ func (s *TrackService) CreateTasksFromPlan(
 // resolveTaskIDRef resolves a same-project "T-NNNN" blocked-by ref to
 // the target task's durable ID.
 //
-// Stored blocked_by entries are durable task IDs, so persisting the raw
-// display alias would leave a dangling edge that resolves to nothing.
-// The repository accepts either form on lookup; only its answer's ID is
-// authoritative.
+// Stored blocked_by entries are durable task IDs, while plan frontmatter
+// spells refs as display aliases. Storage maps an alias to a row only
+// through (project_id, seq), so resolution goes via ParseTaskRef — the
+// same translation `task update --add-blocked-by` performs. Persisting
+// the raw alias instead would leave a dangling edge.
 func (s *TrackService) resolveTaskIDRef(
 	ctx context.Context,
+	projectID string,
 	ref string,
 ) (string, error) {
-	t, err := s.taskRepo.GetTask(ctx, ref)
-	if err != nil || t == nil {
+	id, err := ParseTaskRef(ctx, s.taskRepo, projectID, ref)
+	if err != nil || id == "" {
 		return "", fmt.Errorf(
-			"blocked-by references task %q which does not exist; "+
-				"create it first or use an intra-track index", ref,
+			"blocked-by references task %q which does not exist in "+
+				"project %q; create it first or use an intra-track index",
+			ref, projectID,
 		)
 	}
-	if t.ID == "" {
-		return ref, nil
-	}
-	return t.ID, nil
+	return id, nil
 }
 
 // preflightCrossTrackRef validates a cross-track ref for *hard*

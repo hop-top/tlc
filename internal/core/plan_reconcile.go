@@ -85,7 +85,7 @@ func (s *TrackService) ReconcileTasksFromPlan(
 		return nil, err
 	}
 
-	deferred, err := s.resolveBlockedByFromMapping(ctx, specs, rc.newMap)
+	deferred, err := s.resolveBlockedByFromMapping(ctx, specs, projectID, rc.newMap)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: resolve blocked-by: %w", err)
 	}
@@ -338,6 +338,7 @@ func tagsEqual(a, b []string) bool {
 func (s *TrackService) resolveBlockedByFromMapping(
 	ctx context.Context,
 	specs []PlanTaskSpec,
+	projectID string,
 	mapping map[int]string,
 ) ([]UnresolvedEntry, error) {
 	var deferred []UnresolvedEntry
@@ -350,7 +351,7 @@ func (s *TrackService) resolveBlockedByFromMapping(
 		// the edges a previous ingest of this plan authored, while
 		// leaving out-of-band edges in place.
 		crossProject, err := s.resolveOneTaskBlockedBy(
-			ctx, taskID, spec.BlockedBy, mapping,
+			ctx, taskID, projectID, spec.BlockedBy, mapping,
 		)
 		if err != nil {
 			return nil, err
@@ -367,6 +368,7 @@ func (s *TrackService) resolveBlockedByFromMapping(
 func (s *TrackService) resolveOneTaskBlockedBy(
 	ctx context.Context,
 	taskID string,
+	projectID string,
 	refs []BlockedByRef,
 	mapping map[int]string,
 ) ([]string, error) {
@@ -379,7 +381,7 @@ func (s *TrackService) resolveOneTaskBlockedBy(
 	}
 
 	blockedBy, unresolved, crossProject, err := s.resolveRefList(
-		ctx, taskID, refs, mapping,
+		ctx, taskID, projectID, refs, mapping,
 	)
 	if err != nil {
 		return nil, err
@@ -443,6 +445,7 @@ func setStringSliceMeta(task *Task, key string, values []string) {
 func (s *TrackService) resolveRefList(
 	ctx context.Context,
 	taskID string,
+	projectID string,
 	refs []BlockedByRef,
 	mapping map[int]string,
 ) (blockedBy, unresolved, crossProject []string, err error) {
@@ -453,7 +456,7 @@ func (s *TrackService) resolveRefList(
 				blockedBy = append(blockedBy, depID)
 			}
 		case ref.TaskID != "":
-			id, rErr := s.resolveTaskIDRef(ctx, ref.TaskID)
+			id, rErr := s.resolveTaskIDRef(ctx, projectID, ref.TaskID)
 			if rErr != nil {
 				return nil, nil, nil, fmt.Errorf(
 					"task %s: %w", taskID, rErr,

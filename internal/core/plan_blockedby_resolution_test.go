@@ -2,42 +2,54 @@ package core
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 )
 
-// resolvingTaskRepo is a task repo stub that can resolve a display
-// alias ("T-0968") to a stored task whose durable ID is a typeid
-// ("task_01..."), mirroring real storage semantics. Created tasks are
-// accumulated and become resolvable by their durable ID.
+// resolvingTaskRepo mirrors real storage semantics: GetTask matches the
+// durable ID column only, while a "T-NNNN" display alias resolves through
+// GetTaskBySeq. Seeded tasks carry their alias's seq in Task.Seq.
 type resolvingTaskRepo struct {
 	stubTaskRepo
-	// byRef maps any accepted lookup key (display alias or durable ID)
-	// to the stored task.
 	byRef   map[string]*Task
+	bySeq   map[int64]*Task
 	created []*Task
 	updated []*Task
 }
 
 func newResolvingTaskRepo(seed ...*Task) *resolvingTaskRepo {
-	r := &resolvingTaskRepo{byRef: make(map[string]*Task)}
+	r := &resolvingTaskRepo{
+		byRef: make(map[string]*Task),
+		bySeq: make(map[int64]*Task),
+	}
 	for _, t := range seed {
 		r.add(t)
 	}
 	return r
 }
 
-// add registers a task under its durable ID and, when set, its display
-// alias stored in Meta["alias"].
+// add registers a task under its durable ID, plus its seq when set so
+// display-alias lookups resolve the way storage does.
 func (r *resolvingTaskRepo) add(t *Task) {
 	r.byRef[t.ID] = t
-	if alias, ok := t.Meta["alias"].(string); ok && alias != "" {
-		r.byRef[alias] = t
+	if t.Seq != 0 {
+		r.bySeq[t.Seq] = t
 	}
 	r.tasks = append(r.tasks, t)
 }
 
 func (r *resolvingTaskRepo) GetTask(_ context.Context, id string) (*Task, error) {
 	if t, ok := r.byRef[id]; ok {
+		return t, nil
+	}
+	return nil, nil
+}
+
+func (r *resolvingTaskRepo) GetTaskBySeq(
+	_ context.Context, _ string, seq int64,
+) (*Task, error) {
+	if t, ok := r.bySeq[seq]; ok {
 		return t, nil
 	}
 	return nil, nil
@@ -59,8 +71,8 @@ func (r *resolvingTaskRepo) CreateTask(_ context.Context, task *Task) error {
 func (r *resolvingTaskRepo) UpdateTask(_ context.Context, task *Task) error {
 	r.updated = append(r.updated, task)
 	r.byRef[task.ID] = task
-	if alias, ok := task.Meta["alias"].(string); ok && alias != "" {
-		r.byRef[alias] = task
+	if task.Seq != 0 {
+		r.bySeq[task.Seq] = task
 	}
 	for i, t := range r.tasks {
 		if t.ID == task.ID {
@@ -72,15 +84,101 @@ func (r *resolvingTaskRepo) UpdateTask(_ context.Context, task *Task) error {
 	return nil
 }
 
-// blockerTask builds an existing task with a durable typeid-style ID and
-// a display alias.
+// seqTaskRepo resolves display aliases the way real storage does: only
+// GetTaskBySeq maps a T-NNNN alias to a row; GetTask matches the durable
+// ID column alone. A stub that answers GetTask("T-0001") would hide the
+// alias-resolution requirement entirely.
+type seqTaskRepo struct {
+	stubTaskRepo
+	byID    map[string]*Task
+	bySeq   map[int64]*Task
+	created []*Task
+}
+
+func newSeqTaskRepo(seed ...*Task) *seqTaskRepo {
+	r := &seqTaskRepo{
+		byID:  make(map[string]*Task),
+		bySeq: make(map[int64]*Task),
+	}
+	for _, t := range seed {
+		r.byID[t.ID] = t
+		if t.Seq != 0 {
+			r.bySeq[t.Seq] = t
+		}
+		r.tasks = append(r.tasks, t)
+	}
+	return r
+}
+
+func (r *seqTaskRepo) GetTask(_ context.Context, id string) (*Task, error) {
+	return r.byID[id], nil
+}
+
+func (r *seqTaskRepo) GetTaskBySeq(_ context.Context, _ string, seq int64) (*Task, error) {
+	return r.bySeq[seq], nil
+}
+
+func (r *seqTaskRepo) CreateTask(_ context.Context, task *Task) error {
+	cp := *task
+	if task.Meta != nil {
+		cp.Meta = make(map[string]any, len(task.Meta))
+		for k, v := range task.Meta {
+			cp.Meta[k] = v
+		}
+	}
+	r.created = append(r.created, &cp)
+	return nil
+}
+
+// TestCreateTasksFromPlan_ResolvesDisplayAlias pins the end-to-end
+// contract against realistic storage semantics: a plan ref written as
+// the display alias "T-0001" must resolve via seq lookup, exactly as
+// `task update --add-blocked-by T-0001` does.
+func TestCreateTasksFromPlan_ResolvesDisplayAlias(t *testing.T) {
+	trackRepo := newStubTrackRepo()
+	ensureTrack(t, trackRepo, "trk")
+
+	const durableID = "task_01m06mv4sqf979kfdpkk76sq53"
+	taskRepo := newSeqTaskRepo(&Task{
+		ID: durableID, Seq: 1, Title: "Standalone blocker",
+		Status: StatusTodo,
+	})
+	svc := NewTrackService(trackRepo, taskRepo)
+
+	specs := []PlanTaskSpec{{
+		Title:     "Plan task B",
+		BlockedBy: []BlockedByRef{{TaskID: "T-0001"}},
+	}}
+
+	if _, err := svc.CreateTasksFromPlan(
+		context.Background(), "trk", specs, "", &stubIDGen{next: 2},
+	); err != nil {
+		t.Fatalf("CreateTasksFromPlan: %v", err)
+	}
+
+	if len(taskRepo.created) != 1 {
+		t.Fatalf("created %d tasks, want 1", len(taskRepo.created))
+	}
+	got := NormalizeBlockedBy(taskRepo.created[0].Meta["blocked_by"])
+	if len(got) != 1 || got[0] != durableID {
+		t.Errorf("blocked_by = %v, want [%s] resolved via seq alias", got, durableID)
+	}
+}
+
+// blockerTask builds an existing task with a durable typeid-style ID
+// whose Seq backs the given "T-NNNN" display alias.
 func blockerTask(durableID, alias, title, trackID string) *Task {
+	seq, err := strconv.ParseInt(strings.TrimPrefix(alias, "T-"), 10, 64)
+	if err != nil {
+		panic("blockerTask: alias must be T-NNNN, got " + alias)
+	}
 	return &Task{
 		ID:      durableID,
+		Seq:     seq,
 		Title:   title,
 		Status:  StatusTodo,
 		TrackID: strPtr(trackID),
-		Meta:    map[string]any{"alias": alias},
+		Meta:    map[string]any{},
 	}
 }
 
