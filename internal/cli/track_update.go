@@ -232,6 +232,19 @@ attaches an additional planning document to the track's plan directory.`,
 					)
 				}
 
+				// Cross-project refs cannot be resolved locally. Say so
+				// rather than letting the edge disappear behind an
+				// "Unchanged" summary.
+				for _, d := range rec.DeferredCrossProject {
+					_, _ = fmt.Fprintf(
+						w,
+						"Warning: task %s blocked-by %q is cross-project "+
+							"and stays deferred until that project is "+
+							"available\n",
+						d.TaskID, d.Ref,
+					)
+				}
+
 				// Phase 2: resolve pending cross-track refs after
 				// reconciliation, same as first-run path.
 				phase2, p2Err := svc.ResolvePendingCrossTrackRefs(

@@ -35,7 +35,8 @@ type PlanTaskSpec struct {
 // represents either an intra-track index (int, 0-based), an
 // explicit task ID ("T-NNNN"), a cross-track reference
 // ("<track-id>#N", 1-based task number), or a cross-project
-// reference ("org/project#T-NNNN" or "tlc://org/project/T-NNNN").
+// reference ("org/project/T-NNNN", canonical; "org/project#T-NNNN"
+// and "tlc://org/project/T-NNNN" also accepted).
 type BlockedByRef struct {
 	// Index is >= 0 when this entry is an intra-track index.
 	Index int
@@ -44,8 +45,8 @@ type BlockedByRef struct {
 	// CrossTrack is set when the entry is "<track-id>#N".
 	CrossTrack *CrossTrackRef
 	// CrossProject is set when the entry references a task in
-	// another project (e.g. "hop-top/c12n#T-0018" or
-	// "tlc://hop-top/c12n/T-0018").
+	// another project (e.g. "hop-top/c12n/T-0018", canonical;
+	// "hop-top/c12n#T-0018" and "tlc://hop-top/c12n/T-0018" legacy).
 	CrossProject *CrossProjectRef
 }
 
@@ -90,11 +91,19 @@ var (
 	crossTrackPattern = regexp.MustCompile(
 		`^([a-z0-9][a-z0-9-]*)#(\d+)$`,
 	)
-	// crossProjectPattern matches "<org/project>#<T-NNNN>" refs.
-	// Project IDs contain a slash separating org and project
-	// segments (each: alphanumerics, hyphens, underscores).
+	// crossProjectPattern matches the legacy "<org/project>#<T-NNNN>"
+	// spelling. Deprecated in favour of crossProjectSlashPattern but
+	// still accepted so existing plans keep working.
 	crossProjectPattern = regexp.MustCompile(
 		`^([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)#(T-\d+)$`,
+	)
+	// crossProjectSlashPattern matches the canonical
+	// "<org>/<project>/<T-NNNN>" ref. The slash form is what the
+	// resolver stores and what `--blocked-by` accepts, so plan
+	// frontmatter uses the same spelling. Project IDs may carry more
+	// than two segments; the task ID is the final segment.
+	crossProjectSlashPattern = regexp.MustCompile(
+		`^([a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)+)/(T-\d+)$`,
 	)
 )
 
@@ -136,7 +145,16 @@ func parseBlockedByRef(raw interface{}) (BlockedByRef, error) {
 				CrossTrack: &CrossTrackRef{TrackID: m[1], TaskNum: n},
 			}, nil
 		}
-		// Cross-project shorthand: "org/project#T-NNNN".
+		// Canonical cross-project ref: "org/project/T-NNNN".
+		if m := crossProjectSlashPattern.FindStringSubmatch(s); m != nil {
+			return BlockedByRef{
+				CrossProject: &CrossProjectRef{
+					ProjectID: m[1],
+					TaskID:    m[2],
+				},
+			}, nil
+		}
+		// Legacy cross-project shorthand: "org/project#T-NNNN".
 		if m := crossProjectPattern.FindStringSubmatch(s); m != nil {
 			return BlockedByRef{
 				CrossProject: &CrossProjectRef{
@@ -160,7 +178,8 @@ func parseBlockedByRef(raw interface{}) (BlockedByRef, error) {
 		return BlockedByRef{}, fmt.Errorf(
 			"blocked-by entry %q is not a valid form; expected an int "+
 				"index, \"T-NNNN\", \"<track-id>#<N>\", "+
-				"\"<org/project>#<T-NNNN>\", or \"tlc://<org>/<project>/<T-NNNN>\"",
+				"\"<org>/<project>/<T-NNNN>\", or "+
+				"\"tlc://<org>/<project>/<T-NNNN>\"",
 			s,
 		)
 	default:
