@@ -27,6 +27,16 @@ const metaKeyUnresolved = "blocked_by_unresolved"
 // A dedicated cross-project resolver can process them later.
 const metaKeyCrossProject = "blocked_by_cross_project"
 
+// metaKeyPlanOwned is the task.Meta key recording which
+// meta["blocked_by"] entries were authored by plan frontmatter.
+//
+// Plan ingestion owns exactly the edges it declared: a later run may
+// retract those, but must leave edges added out-of-band (e.g. via
+// `task update --add-blocked-by`) untouched. Without this provenance
+// record the two sources are indistinguishable and a re-ingest silently
+// destroys manual dependencies.
+const metaKeyPlanOwned = "blocked_by_plan"
+
 // PlanIngestResult describes the outcome of a single
 // CreateTasksFromPlan call (phase 1).
 type PlanIngestResult struct {
@@ -209,6 +219,9 @@ func (s *TrackService) CreateTasksFromPlan(
 		meta := make(map[string]any)
 		if len(blockedBy) > 0 {
 			meta["blocked_by"] = blockedBy
+			// Every edge here came from plan frontmatter, so a later
+			// re-ingest is free to retract it.
+			meta[metaKeyPlanOwned] = blockedBy
 		}
 		if len(taskUnresolved) > 0 {
 			meta[metaKeyUnresolved] = taskUnresolved
@@ -599,12 +612,17 @@ func (s *TrackService) ResolvePendingCrossTrackRefs(
 			continue
 		}
 
-		// Promote newly resolved entries into blocked_by.
+		// Promote newly resolved entries into blocked_by. They
+		// originate from plan frontmatter, so mark them plan-owned
+		// and retractable by a later ingest.
 		combined := append([]string{}, task.BlockedBy()...)
+		owned := NormalizeStringSliceMeta(task.Meta[metaKeyPlanOwned])
 		for _, v := range newlyResolved {
 			combined = append(combined, v)
+			owned = append(owned, v)
 		}
 		task.SetBlockedBy(combined)
+		setStringSliceMeta(task, metaKeyPlanOwned, owned)
 
 		// Update the unresolved meta entry.
 		if len(stillPending) == 0 {
