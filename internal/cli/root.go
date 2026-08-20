@@ -101,6 +101,7 @@ var commandGroups = map[string]string{
 	"track":   "knowledge",
 	"flow":    "knowledge",
 	"log":     "knowledge",
+	"audit":   "knowledge",
 	"project": "knowledge",
 	"prompt":  "knowledge",
 	"status":  "knowledge",
