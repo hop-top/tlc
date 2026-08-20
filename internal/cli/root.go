@@ -195,7 +195,11 @@ func kitRoot() *kitcli.Root {
 	// documented config key with three consumers (see
 	// docs/global-flags.md), so it is bound to kit's flag rather than
 	// migrated to kit's own `offline` key.
-	cmd.PersistentFlags().String("profile", os.Getenv("APS_PROFILE"), "aps profile name")
+	//
+	// --profile defaults from APS_PROFILE_ID — the profile id `aps run`
+	// exports. core.GetCurrentUser reads the same env var directly so
+	// actor attribution works even when the flag is never parsed.
+	cmd.PersistentFlags().String("profile", os.Getenv("APS_PROFILE_ID"), "aps profile name")
 	cmd.PersistentFlags().String("instance", "tlc", "Backend instance")
 	if err := viper.BindPFlag("runtime.offline", cmd.PersistentFlags().Lookup("offline")); err != nil {
 		log.Warn("Failed to bind offline flag", "error", err)
