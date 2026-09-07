@@ -181,11 +181,21 @@ func kitRoot() *kitcli.Root {
 
 	// Persistent global flags from cli-conventions §5.
 	// See docs/global-flags.md for behaviour and viper bindings.
-	cmd.PersistentFlags().Bool("offline", false, "Disable all network (skip sync, upgrade check, plugin downloads)")
+	// --offline is a kit-owned global as of kit v0.5.0-alpha.3
+	// (console/cli/netglobals.go), which registers it unconditionally and
+	// reserves the name. Registering it here too panics at init with
+	// "flag redefined". The binding stays: runtime.offline is this repo's
+	// documented config key with three consumers (see
+	// docs/global-flags.md), so it is bound to kit's flag rather than
+	// migrated to kit's own `offline` key.
 	cmd.PersistentFlags().String("profile", os.Getenv("APS_PROFILE"), "aps profile name")
 	cmd.PersistentFlags().String("instance", "tlc", "Backend instance")
-	if err := viper.BindPFlag("runtime.offline", cmd.PersistentFlags().Lookup("offline")); err != nil {
-		log.Warn("Failed to bind offline flag", "error", err)
+	if offlineFlag := cmd.PersistentFlags().Lookup("offline"); offlineFlag != nil {
+		if err := viper.BindPFlag("runtime.offline", offlineFlag); err != nil {
+			log.Warn("Failed to bind offline flag", "error", err)
+		}
+	} else {
+		log.Warn("kit did not register --offline; runtime.offline unbound")
 	}
 	if err := viper.BindPFlag("runtime.profile", cmd.PersistentFlags().Lookup("profile")); err != nil {
 		log.Warn("Failed to bind profile flag", "error", err)
