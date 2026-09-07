@@ -46,6 +46,24 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			AllProjects:     taskListAllProjects,
 		}
 
+		// Aggregate formats count the match set, never a page of it.
+		// Pagination is dropped from the query before it reaches the
+		// store: a truncated count carries no signal that it is
+		// truncated, so honoring --limit here under-reports silently
+		// and JSON/YAML consumers never see a warning. --limit and an
+		// aggregate format are contradictory; the aggregate wins, and
+		// an explicit --limit is reported as ignored on stderr.
+		aggregate := resolveAggregateFormat()
+		if aggregate != "" {
+			if cmd.Flags().Changed("limit") || cmd.Flags().Changed("offset") {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+					"note: --limit/--offset ignored with --%s; aggregates count the full match set\n",
+					aggregate)
+			}
+			query.Limit = 0
+			query.Offset = 0
+		}
+
 		if len(args) > 0 {
 			query.Search = args[0]
 		}
@@ -182,6 +200,20 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		}
 		defer func() { _ = s.Close() }()
 
+		// Aggregate fast path: count in SQL over the full match set so
+		// no rows are materialized. Only valid when every filter is
+		// expressible in the query — the post-query filters below
+		// (--stale/--blocked/--blocked-by/--overdue, qualified track
+		// IDs) are not, so those fall through to counting the full,
+		// unpaginated slice instead.
+		if aggregate != "" && canCountInStore(aggregate, query, trackQIDs) {
+			counts, cErr := s.CountTasksByStatus(ctx, query)
+			if cErr != nil {
+				return fmt.Errorf("failed to count tasks: %w", cErr)
+			}
+			return renderAggregate(cmd, aggregate, counts)
+		}
+
 		tasks, err := s.ListTasks(ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to list tasks: %w", err)
@@ -241,14 +273,79 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		}
 
 		format := viper.GetString("output.format")
-		if taskListSummary {
-			format = formatSummary
-		}
-		if taskListCounters {
-			format = formatCounters
+		if aggregate != "" {
+			format = aggregate
 		}
 		return formatTasks(cmd, tasks, format, statusProvided)
 	},
+}
+
+// resolveAggregateFormat returns the aggregate output format selected by
+// --summary / --counters, or "" when ordinary list output is wanted.
+// Aggregates are resolved before the store query because they change the
+// query itself: pagination must be dropped so the counts cover the whole
+// match set. --counters wins over --summary, matching the flag precedence
+// the tail-end format resolution has always applied.
+func resolveAggregateFormat() string {
+	if taskListCounters {
+		return formatCounters
+	}
+	if taskListSummary {
+		return formatSummary
+	}
+	return ""
+}
+
+// canCountInStore reports whether the aggregate can be computed as a
+// single SQL COUNT over the query, materializing no rows.
+//
+// Two things disqualify it. First, filters applied in Go after the store
+// query returns (--stale, --blocked, --blocked-by, --overdue, qualified
+// track IDs): a store-side COUNT would include rows those are about to
+// discard. Second, --summary groups by project, a dimension flat status
+// counts do not carry, so it can only be served this way when the query
+// is already scoped to one project.
+//
+// Disqualification is not a fallback to the buggy behavior: the slice path
+// still runs with pagination cleared, so the count covers the full match
+// set either way. It just materializes the rows to get there.
+func canCountInStore(format string, query core.Query, trackQIDs []core.QualifiedTrackID) bool {
+	if taskListStale || taskListBlocked || taskListOverdue ||
+		len(taskListBlockedBy) > 0 || len(trackQIDs) > 0 {
+		return false
+	}
+	if format == formatSummary && query.AllProjects {
+		return false
+	}
+	return true
+}
+
+// renderAggregate writes store-computed status counts in the selected
+// aggregate format.
+func renderAggregate(cmd *cobra.Command, format string, counts map[string]int) error {
+	out := cmd.OutOrStdout()
+	switch format {
+	case formatCounters:
+		renderCountersFromCounts(out, counts)
+	case formatSummary:
+		renderSummaryFromCounts(out, map[string]map[string]int{
+			aggregateProjectLabel(): counts,
+		})
+	default:
+		return fmt.Errorf("unsupported aggregate format %q", format)
+	}
+	return nil
+}
+
+// aggregateProjectLabel names the project bucket for a grouped summary
+// built from store counts, which carry no project dimension of their own.
+// Only reached when the query is scoped to one project — see
+// canCountInStore.
+func aggregateProjectLabel() string {
+	if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
+		return proj.ProjectID
+	}
+	return noProject
 }
 
 // filesystemOpener implements workspace.SourceOpener for local SQLite DBs.
@@ -324,11 +421,8 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	}
 
 	format := viper.GetString("output.format")
-	if taskListSummary {
-		format = formatSummary
-	}
-	if taskListCounters {
-		format = formatCounters
+	if agg := resolveAggregateFormat(); agg != "" {
+		format = agg
 	}
 	return formatWorkspaceTasks(cmd, tasks, format)
 }

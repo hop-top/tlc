@@ -699,9 +699,13 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 	return entries, nil
 }
 
-func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks"
-
+// buildTaskWhereClauses assembles the WHERE fragment shared by the task
+// list and task count queries: caller filters, full-text search, implicit
+// project scoping, archive exclusion, and the due_at temporal predicates.
+// Pagination (LIMIT/OFFSET) and ORDER BY are deliberately excluded so
+// aggregate callers can count the full match set independently of page
+// size — see CountTasksByStatus.
+func buildTaskWhereClauses(query core.Query) ([]string, []any) {
 	whereClauses, args := buildFilterClauses(query.Filters)
 
 	if query.Search != "" {
@@ -742,6 +746,14 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 			whereClauses = append(whereClauses, "(due_at IS NULL OR due_at = '')")
 		}
 	}
+
+	return whereClauses, args
+}
+
+func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
+	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks"
+
+	whereClauses, args := buildTaskWhereClauses(query)
 
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
@@ -794,6 +806,48 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		return nil, fmt.Errorf("failed to iterate task rows: %w", err)
 	}
 	return tasks, nil
+}
+
+// CountTasksByStatus returns per-status row counts over the query's full
+// match set, ignoring Limit and Offset.
+//
+// Aggregates must not depend on page size. Counting client-side over the
+// slice ListTasks returns yields the count of the page, which is silently
+// wrong whenever the match set exceeds the limit. This computes the counts
+// in SQL over the same WHERE fragment ListTasks uses, so pagination cannot
+// influence the result and no rows are materialized.
+//
+// Callers applying post-query filters ListTasks cannot express in SQL
+// (--stale, --blocked, --overdue, qualified track IDs) must not use this;
+// count the fully filtered slice instead, fetched without a limit.
+func (s *SQLiteStorage) CountTasksByStatus(ctx context.Context, query core.Query) (map[string]int, error) {
+	whereClauses, args := buildTaskWhereClauses(query)
+
+	sqlQuery := "SELECT status, COUNT(*) FROM tasks"
+	if len(whereClauses) > 0 {
+		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+	sqlQuery += " GROUP BY status"
+
+	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count tasks: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return nil, fmt.Errorf("failed to scan task count row: %w", err)
+		}
+		counts[status] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate task count rows: %w", err)
+	}
+	return counts, nil
 }
 
 func (s *SQLiteStorage) AddLog(ctx context.Context, entry *core.LogEntry) error {

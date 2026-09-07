@@ -33,13 +33,23 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 		}
 		defer func() { _ = s.Close() }()
 
+		format := viper.GetString("output.format")
+
 		// Query IN_PROGRESS + TODO tasks (stale detection only makes sense for active tasks).
+		// Staleness is decided in Go, so the store cannot pre-filter it;
+		// the cap bounds the scan for list output. Aggregate formats
+		// count the match set rather than a page of it, so the cap is
+		// lifted for them — a truncated count reads as a real one.
+		limit := 1000
+		if format == formatSummary || format == formatCounters {
+			limit = 0
+		}
 		tasks, err := s.ListTasks(ctx, core.Query{
 			Filters: []core.FieldFilter{
 				{Field: "status", Value: string(core.StatusInProgress)},
 				{Field: "status", Value: string(core.StatusTodo)},
 			},
-			Limit: 1000,
+			Limit: limit,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to list tasks: %w", err)
@@ -66,7 +76,6 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 			return nil
 		}
 
-		format := viper.GetString("output.format")
 		if err := formatTasks(cmd, stale, format, false); err != nil {
 			return err
 		}
