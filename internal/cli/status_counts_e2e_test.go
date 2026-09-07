@@ -28,11 +28,12 @@ const (
 	statusSeedTodo       = 80
 	statusOldAssignedCap = 50
 	statusSeedUser       = "counts-owner"
+	statusProjectID      = "status-fixture"
 )
 
 // seedStatusDB seeds assigned active tasks past the old cap, plus one
 // overdue task placed last by created_at so any scan cap would miss it.
-func seedStatusDB(t *testing.T, dbPath, projectID string) {
+func seedStatusDB(t *testing.T, dbPath string) {
 	t.Helper()
 
 	s, err := storage.NewSQLiteStorage(dbPath)
@@ -51,7 +52,7 @@ func seedStatusDB(t *testing.T, dbPath, projectID string) {
 		if i >= statusSeedInProgress {
 			status = core.StatusTodo
 		}
-		pid := projectID
+		pid := statusProjectID
 		created := base.Add(time.Duration(i) * time.Minute)
 		task := &core.Task{
 			ID:         fmt.Sprintf("T-%04d", i+1),
@@ -69,7 +70,7 @@ func seedStatusDB(t *testing.T, dbPath, projectID string) {
 
 	// One overdue task, created oldest so it sorts last under
 	// created_at DESC -- the position a scan cap would drop first.
-	pid := projectID
+	pid := statusProjectID
 	due := time.Now().UTC().Add(-48 * time.Hour)
 	oldest := base.Add(-24 * time.Hour)
 	overdue := &core.Task{
@@ -94,9 +95,8 @@ func TestStatus_CountsAreNotCapped(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "status.db")
-	const projectID = "status-fixture"
 
-	seedStatusDB(t, dbPath, projectID)
+	seedStatusDB(t, dbPath)
 	env := append(aggEnv(t, home, dbPath), "TLC_USER="+statusSeedUser)
 
 	out, code := runAgg(t, bin, cwd, env, "status")
@@ -137,9 +137,8 @@ func TestStatus_OverdueCountsWholeMatchSet(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "status.db")
-	const projectID = "status-fixture"
 
-	seedStatusDB(t, dbPath, projectID)
+	seedStatusDB(t, dbPath)
 	env := append(aggEnv(t, home, dbPath), "TLC_USER="+statusSeedUser)
 
 	out, code := runAgg(t, bin, cwd, env, "status")

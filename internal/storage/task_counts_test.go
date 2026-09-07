@@ -20,6 +20,7 @@ const (
 	// countsDefaultLimit mirrors `task list`'s --limit default. A count
 	// landing here rather than on the seeded totals is the regression.
 	countsDefaultLimit = 100
+	countsProjectID    = "counts-fixture"
 )
 
 // newCountsStorage returns a storage handle over a temp DB. GIT_* vars are
@@ -55,7 +56,7 @@ func splitEnv(e string) (key, val string, ok bool) {
 
 // seedCounts inserts countsSeedDone DONE + countsSeedTodo TODO tasks,
 // summing above countsDefaultLimit on purpose.
-func seedCounts(t *testing.T, s *SQLiteStorage, projectID string) {
+func seedCounts(t *testing.T, s *SQLiteStorage) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -65,7 +66,7 @@ func seedCounts(t *testing.T, s *SQLiteStorage, projectID string) {
 		if i >= countsSeedDone {
 			status = core.StatusTodo
 		}
-		pid := projectID
+		pid := countsProjectID
 		task := &core.Task{
 			ID:        fmt.Sprintf("T-%04d", i+1),
 			Title:     fmt.Sprintf("counts task %d", i+1),
@@ -80,7 +81,7 @@ func seedCounts(t *testing.T, s *SQLiteStorage, projectID string) {
 
 func TestCountTasksByStatus_IgnoresLimitAndOffset(t *testing.T) {
 	s := newCountsStorage(t)
-	seedCounts(t, s, "counts-fixture")
+	seedCounts(t, s)
 	ctx := t.Context()
 
 	// Every one of these queries describes the same match set; only the
@@ -123,7 +124,7 @@ func TestCountTasksByStatus_IgnoresLimitAndOffset(t *testing.T) {
 // ignoring the filters.
 func TestCountTasksByStatus_HonorsFilters(t *testing.T) {
 	s := newCountsStorage(t)
-	seedCounts(t, s, "counts-fixture")
+	seedCounts(t, s)
 	ctx := t.Context()
 
 	counts, err := s.CountTasksByStatus(ctx, core.Query{
@@ -149,7 +150,7 @@ func TestCountTasksByStatus_HonorsFilters(t *testing.T) {
 // the slice path the CLI falls back to, so the two cannot drift.
 func TestCountTasksByStatus_AgreesWithUnpaginatedList(t *testing.T) {
 	s := newCountsStorage(t)
-	seedCounts(t, s, "counts-fixture")
+	seedCounts(t, s)
 	ctx := t.Context()
 
 	q := core.Query{AllProjects: true}

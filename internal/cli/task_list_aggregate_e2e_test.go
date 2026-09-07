@@ -38,6 +38,7 @@ const (
 	// task_list.go. A count landing exactly here is the defect's
 	// signature.
 	aggDefaultLimit = 100
+	aggProjectID    = "agg-fixture"
 )
 
 // aggEnv returns an env for subprocess tlc runs, isolated from the
@@ -83,7 +84,7 @@ func aggEnv(t *testing.T, home, dbPath string) []string {
 // seedAggregateDB creates a DB holding aggSeedTotal tasks, more than the
 // default limit, split across two statuses so the per-status breakdown is
 // checked too and not just a single total.
-func seedAggregateDB(t *testing.T, dbPath, projectID string) {
+func seedAggregateDB(t *testing.T, dbPath string) {
 	t.Helper()
 
 	s, err := storage.NewSQLiteStorage(dbPath)
@@ -98,7 +99,7 @@ func seedAggregateDB(t *testing.T, dbPath, projectID string) {
 		if i >= aggSeedDone {
 			status = core.StatusTodo
 		}
-		pid := projectID
+		pid := aggProjectID
 		task := &core.Task{
 			ID:        fmt.Sprintf("T-%04d", i+1),
 			Title:     fmt.Sprintf("seeded task %d", i+1),
@@ -160,10 +161,9 @@ func TestTaskListAggregate_CountsFullMatchSet(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "agg.db")
-	const projectID = "agg-fixture"
 
-	seedAggregateDB(t, dbPath, projectID)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+projectID)
+	seedAggregateDB(t, dbPath)
+	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
 
 	cases := []struct {
 		name string
@@ -217,10 +217,9 @@ func TestTaskListSummary_TotalIsMatchSetTotal(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "agg.db")
-	const projectID = "agg-fixture"
 
-	seedAggregateDB(t, dbPath, projectID)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+projectID)
+	seedAggregateDB(t, dbPath)
+	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
 
 	for _, args := range [][]string{
 		{"task", "list", "--summary", "--archived", "--all-projects"},
@@ -250,10 +249,9 @@ func TestTaskListAggregate_NotesIgnoredLimit(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "agg.db")
-	const projectID = "agg-fixture"
 
-	seedAggregateDB(t, dbPath, projectID)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+projectID)
+	seedAggregateDB(t, dbPath)
+	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
 
 	out, code := runAgg(t, bin, cwd, env,
 		"task", "list", "--counters", "--archived", "--all-projects", "-n", "5")
@@ -283,10 +281,9 @@ func TestTaskListAggregate_ListOutputStillPaginates(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "agg.db")
-	const projectID = "agg-fixture"
 
-	seedAggregateDB(t, dbPath, projectID)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+projectID)
+	seedAggregateDB(t, dbPath)
+	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
 
 	out, code := runAgg(t, bin, cwd, env,
 		"task", "list", "--archived", "--all-projects", "-n", "7", "--format", "tls")

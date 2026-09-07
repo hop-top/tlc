@@ -825,7 +825,7 @@ func (s *SQLiteStorage) CountTasksByStatus(ctx context.Context, query core.Query
 
 	sqlQuery := "SELECT status, COUNT(*) FROM tasks"
 	if len(whereClauses) > 0 {
-		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
+		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ") //nolint:gosec // G202: whereClauses built from validated field names; values travel as ? args
 	}
 	sqlQuery += " GROUP BY status"
 
