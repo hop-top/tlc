@@ -54,7 +54,46 @@ Read-only; never mutates storage.`,
 		}
 		defer func() { _ = s.Close() }()
 
-		// Caller's active tasks.
+		// Caller's task counts. Counted in SQL over the full match
+		// set rather than by measuring a capped slice: the numbers are
+		// printed as fact, and a count that silently stops at the page
+		// size is indistinguishable from a real one.
+		mineCounts, err := s.CountTasksByStatus(ctx, core.Query{
+			Filters: []core.FieldFilter{
+				{Field: "assigned_to", Value: user},
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("count assigned tasks: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(w, "Tasks:    %d in progress, %d todo (yours)\n",
+			mineCounts[string(core.StatusInProgress)],
+			mineCounts[string(core.StatusTodo)])
+
+		// Overdue across project. Overdue-ness is a due_at comparison
+		// the store can express, so it counts in SQL too.
+		now := time.Now()
+		overdueCounts, err := s.CountTasksByStatus(ctx, core.Query{
+			Filters: []core.FieldFilter{
+				{Field: "status", Value: string(core.StatusInProgress)},
+				{Field: "status", Value: string(core.StatusTodo)},
+			},
+			DueBefore: &now,
+		})
+		if err != nil {
+			return fmt.Errorf("count overdue tasks: %w", err)
+		}
+		overdue := 0
+		for _, n := range overdueCounts {
+			overdue += n
+		}
+		if overdue > 0 {
+			_, _ = fmt.Fprintf(w, "Overdue:  %d task(s)\n", overdue)
+		}
+
+		// The inline list below is a preview, so it stays paginated —
+		// unlike the counts above, a capped list is self-evident.
 		mine, err := s.ListTasks(ctx, core.Query{
 			Filters: []core.FieldFilter{
 				{Field: "assigned_to", Value: user},
@@ -64,39 +103,6 @@ Read-only; never mutates storage.`,
 		})
 		if err != nil {
 			return fmt.Errorf("list in-progress tasks: %w", err)
-		}
-
-		mineTodo, err := s.ListTasks(ctx, core.Query{
-			Filters: []core.FieldFilter{
-				{Field: "assigned_to", Value: user},
-				{Field: "status", Value: string(core.StatusTodo)},
-			},
-			Limit: 50,
-		})
-		if err != nil {
-			return fmt.Errorf("list TODO tasks: %w", err)
-		}
-
-		_, _ = fmt.Fprintf(w, "Tasks:    %d in progress, %d todo (yours)\n",
-			len(mine), len(mineTodo))
-
-		// Overdue across project: cheap pass over active tasks.
-		now := time.Now()
-		var overdue int
-		active, _ := s.ListTasks(ctx, core.Query{ //nolint:errcheck // best-effort
-			Filters: []core.FieldFilter{
-				{Field: "status", Value: string(core.StatusInProgress)},
-				{Field: "status", Value: string(core.StatusTodo)},
-			},
-			Limit: 1000,
-		})
-		for _, t := range active {
-			if t.DueAt != nil && t.DueAt.Before(now) {
-				overdue++
-			}
-		}
-		if overdue > 0 {
-			_, _ = fmt.Fprintf(w, "Overdue:  %d task(s)\n", overdue)
 		}
 
 		// Surface the most relevant in-progress items inline.
