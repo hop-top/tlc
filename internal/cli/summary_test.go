@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"hop.top/tlc/internal/core"
@@ -257,5 +258,161 @@ func TestSummaryLine(t *testing.T) {
 	}
 	if !contains(line, "3 total") {
 		t.Errorf("expected '3 total' in summary line, got: %s", line)
+	}
+}
+
+// TestRenderFromCounts covers the counts-map renderers the aggregate paths
+// use. These take counts computed in the store, so a slice is never walked
+// and the totals cannot depend on page size.
+func TestRenderFromCounts(t *testing.T) {
+	t.Run("CountersSumsAndSorts", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderCountersFromCounts(&buf, map[string]int{"TODO": 60, "DONE": 90})
+		out := buf.String()
+
+		if !contains(out, "Status counts:") {
+			t.Errorf("missing header, got: %s", out)
+		}
+		// Statuses render alphabetically, so DONE precedes TODO.
+		if strings.Index(out, "DONE") > strings.Index(out, "TODO") {
+			t.Errorf("expected DONE before TODO, got: %s", out)
+		}
+		for _, want := range []string{"90", "60"} {
+			if !contains(out, want) {
+				t.Errorf("expected count %s, got: %s", want, out)
+			}
+		}
+	})
+
+	t.Run("CountersEmpty", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderCountersFromCounts(&buf, map[string]int{})
+		if !contains(buf.String(), "No tasks found") {
+			t.Errorf("expected 'No tasks found', got: %s", buf.String())
+		}
+	})
+
+	t.Run("SummaryTotalIsSumOfCounts", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderSummaryFromCounts(&buf, map[string]map[string]int{
+			"agg-fixture": {"DONE": 90, "TODO": 60},
+		})
+		out := buf.String()
+
+		if !contains(out, "Project: agg-fixture") {
+			t.Errorf("missing project header, got: %s", out)
+		}
+		// 150 is the sum, and deliberately above the default --limit of
+		// 100 so a page-scoped total would be visible here.
+		if !contains(out, "150") {
+			t.Errorf("expected Total of 150, got: %s", out)
+		}
+	})
+
+	t.Run("SummaryPerProjectTotals", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderSummaryFromCounts(&buf, map[string]map[string]int{
+			"alpha": {"TODO": 2},
+			"beta":  {"DONE": 3},
+		})
+		out := buf.String()
+
+		if strings.Index(out, "Project: alpha") > strings.Index(out, "Project: beta") {
+			t.Errorf("expected alpha before beta, got: %s", out)
+		}
+		// Each project totals independently; neither sees the other's rows.
+		if strings.Count(out, "Total") != 2 {
+			t.Errorf("expected one Total per project, got: %s", out)
+		}
+	})
+
+	t.Run("SummaryEmpty", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderSummaryFromCounts(&buf, map[string]map[string]int{})
+		if !contains(buf.String(), "No tasks found") {
+			t.Errorf("expected 'No tasks found', got: %s", buf.String())
+		}
+	})
+}
+
+// TestCanCountInStore pins which aggregate queries may be served by a
+// single SQL COUNT. Getting this wrong does not merely slow things down:
+// counting in the store while a Go-side filter is pending would count rows
+// that filter is about to discard.
+func TestCanCountInStore(t *testing.T) {
+	t.Cleanup(resetTaskFlags)
+
+	t.Run("PlainCountersQualifies", func(t *testing.T) {
+		resetTaskFlags()
+		if !canCountInStore(formatCounters, core.Query{}, nil) {
+			t.Error("plain --counters should count in the store")
+		}
+	})
+
+	t.Run("PostQueryFiltersDisqualify", func(t *testing.T) {
+		for name, set := range map[string]func(){
+			"stale":     func() { taskListStale = true },
+			"blocked":   func() { taskListBlocked = true },
+			"overdue":   func() { taskListOverdue = true },
+			"blockedBy": func() { taskListBlockedBy = []string{"T-0001"} },
+		} {
+			resetTaskFlags()
+			set()
+			if canCountInStore(formatCounters, core.Query{}, nil) {
+				t.Errorf("--%s is filtered in Go; store count would over-count", name)
+			}
+		}
+	})
+
+	t.Run("QualifiedTracksDisqualify", func(t *testing.T) {
+		resetTaskFlags()
+		qids := []core.QualifiedTrackID{{TrackID: "some-track"}}
+		if canCountInStore(formatCounters, core.Query{}, qids) {
+			t.Error("qualified track IDs are filtered in Go; store count would over-count")
+		}
+	})
+
+	t.Run("SummaryAllProjectsDisqualifies", func(t *testing.T) {
+		resetTaskFlags()
+		// Flat status counts carry no project dimension, so the grouped
+		// summary cannot split them across projects.
+		if canCountInStore(formatSummary, core.Query{AllProjects: true}, nil) {
+			t.Error("--summary --all-projects needs per-project counts")
+		}
+		// Counters are flat, so the same query is fine for them.
+		if !canCountInStore(formatCounters, core.Query{AllProjects: true}, nil) {
+			t.Error("--counters is flat; --all-projects should still count in the store")
+		}
+	})
+}
+
+// TestResolveAggregateFormat pins the flag precedence the pre-query
+// resolution now depends on.
+func TestResolveAggregateFormat(t *testing.T) {
+	t.Cleanup(resetTaskFlags)
+
+	resetTaskFlags()
+	if got := resolveAggregateFormat(); got != "" {
+		t.Errorf("no flags: got %q, want \"\"", got)
+	}
+
+	resetTaskFlags()
+	taskListSummary = true
+	if got := resolveAggregateFormat(); got != formatSummary {
+		t.Errorf("--summary: got %q, want %q", got, formatSummary)
+	}
+
+	resetTaskFlags()
+	taskListCounters = true
+	if got := resolveAggregateFormat(); got != formatCounters {
+		t.Errorf("--counters: got %q, want %q", got, formatCounters)
+	}
+
+	// Both: --counters wins, matching the pre-existing tail-end order.
+	resetTaskFlags()
+	taskListSummary = true
+	taskListCounters = true
+	if got := resolveAggregateFormat(); got != formatCounters {
+		t.Errorf("both flags: got %q, want %q", got, formatCounters)
 	}
 }
