@@ -41,7 +41,7 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 		// count the match set rather than a page of it, so the cap is
 		// lifted for them — a truncated count reads as a real one.
 		limit := 1000
-		if format == formatSummary || format == formatCounters {
+		if aggregateFormatValue(format) != "" {
 			limit = 0
 		}
 		tasks, err := s.ListTasks(ctx, core.Query{

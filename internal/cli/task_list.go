@@ -51,15 +51,16 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		// store: a truncated count carries no signal that it is
 		// truncated, so honoring --limit here under-reports silently
 		// and JSON/YAML consumers never see a warning. --limit and an
-		// aggregate format are contradictory; the aggregate wins, and
-		// an explicit --limit is reported as ignored on stderr.
-		aggregate := resolveAggregateFormat()
+		// aggregate format are contradictory; the aggregate wins.
+		//
+		// Resolved once, here, and threaded onward: every branch below
+		// must agree on whether this run is an aggregate, and a second
+		// resolution is a second chance to disagree.
+		aggregate := aggregateFormat()
+		paginationRequested := cmd.Flags().Changed("limit") ||
+			cmd.Flags().Changed("offset") ||
+			fromConfig["limit"] || fromConfig["offset"]
 		if aggregate != "" {
-			if cmd.Flags().Changed("limit") || cmd.Flags().Changed("offset") {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"note: --limit/--offset ignored with --%s; aggregates count the full match set\n",
-					aggregate)
-			}
 			query.Limit = 0
 			query.Offset = 0
 		}
@@ -179,7 +180,16 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			}
 		}
 
-		// Temporal filter validation + parsing (T-0908).
+		// --blocked is a column predicate (blocked_reason non-empty),
+		// so it pushes into the WHERE fragment rather than filtering
+		// the returned slice — keeping --counters --blocked on the
+		// counting path.
+		if taskListBlocked {
+			blocked := true
+			query.Blocked = &blocked
+		}
+
+		// Temporal filter validation + parsing.
 		// Mutual exclusion is checked here, before opening storage, so
 		// errors surface against the user's flags without I/O side
 		// effects. Parsing uses util.ParseUntil per
@@ -190,7 +200,7 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 
 		// Workspace mode: query across workspace projects.
 		if cmd.Flags().Changed("workspace") {
-			return runTaskListWorkspace(cmd, ctx, query)
+			return runTaskListWorkspace(cmd, ctx, query, aggregate)
 		}
 
 		// Default: single-project query.
@@ -201,17 +211,20 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		defer func() { _ = s.Close() }()
 
 		// Aggregate fast path: count in SQL over the full match set so
-		// no rows are materialized. Only valid when every filter is
-		// expressible in the query — the post-query filters below
-		// (--stale/--blocked/--blocked-by/--overdue, qualified track
-		// IDs) are not, so those fall through to counting the full,
-		// unpaginated slice instead.
-		if aggregate != "" && canCountInStore(aggregate, query, trackQIDs) {
-			counts, cErr := s.CountTasksByStatus(ctx, query)
+		// no rows are materialized. Valid exactly when nothing is
+		// filtered in Go afterwards — see taskListPostFilters, which
+		// is both the gate and the filter list, so the two cannot
+		// drift. Counts come grouped by project because that is the
+		// dimension --summary renders; --counters sums across them.
+		postFilters := taskListPostFilters(trackQIDs)
+		if aggregate != "" && len(postFilters) == 0 {
+			byProject, cErr := s.CountTasksByProjectAndStatus(ctx, query)
 			if cErr != nil {
-				return fmt.Errorf("failed to count tasks: %w", cErr)
+				return fmt.Errorf("failed to count tasks: %w; retry, or drop --%s for a row listing", cErr, aggregate)
 			}
-			return renderAggregate(cmd, aggregate, counts)
+			noteIgnoredPagination(cmd, aggregate, paginationRequested,
+				totalProjectCounts(byProject))
+			return renderAggregateCounts(cmd, aggregate, byProject)
 		}
 
 		tasks, err := s.ListTasks(ctx, query)
@@ -219,133 +232,24 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
-		// Load stale config once; apply project default timeout + auto-fire hooks.
-		var taskCfg config.TaskConfig
-		_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
-		_ = taskCfg.Validate()                   //nolint:errcheck // best-effort validation
-
-		// Apply project default stale timeout to all tasks with nil StaleTimeout.
-		for _, t := range tasks {
-			if t.StaleTimeout == nil && taskCfg.Stale.DefaultTimeout > 0 {
-				d := taskCfg.Stale.DefaultTimeout
-				t.StaleTimeout = &d
-			}
+		// Stale bookkeeping — the project default timeout and the
+		// auto-fired hooks — is for row output only. An aggregate
+		// wants numbers; it does not read StaleFiredAt, and firing a
+		// hook plus a write transaction per stale task off a command
+		// annotated read-only is a side effect nobody asked for. The
+		// boundary is documented in docs/task-crud-spec-0.1.md.
+		if aggregate == "" {
+			applyStaleDefaults(ctx, s, tasks)
 		}
 
-		// Auto-fire stale hooks once per crossing (StaleFiredAt == nil guards re-fire).
-		if len(taskCfg.Stale.Hooks) > 0 {
-			now := time.Now().UTC()
-			for _, t := range tasks {
-				if t.IsStale() && t.StaleFiredAt == nil {
-					_ = core.RunStaleHooks(t, taskCfg.Stale.Hooks) //nolint:errcheck // best-effort stale hook
-					t.StaleFiredAt = &now
-					_ = s.UpdateTask(ctx, t) //nolint:errcheck // best-effort stale timestamp persist
-				}
-			}
-		}
+		tasks = applyPostFilters(tasks, postFilters)
 
-		// Post-query filter for --stale, --blocked, --blocked-by, --overdue.
-		if taskListStale || taskListBlocked || len(taskListBlockedBy) > 0 || taskListOverdue {
-			filtered := tasks[:0]
-			for _, t := range tasks {
-				if taskListStale && !t.IsStale() {
-					continue
-				}
-				if taskListBlocked && !t.IsBlocked() {
-					continue
-				}
-				if len(taskListBlockedBy) > 0 && !taskBlockedByAny(t, taskListBlockedBy) {
-					continue
-				}
-				if taskListOverdue {
-					if t.Status == core.StatusDone || t.Status == core.StatusSkipped {
-						continue
-					}
-				}
-				filtered = append(filtered, t)
-			}
-			tasks = filtered
-		}
-
-		// Post-query filter for qualified track IDs (project-scoped).
-		if len(trackQIDs) > 0 {
-			tasks = filterByQualifiedTracks(tasks, trackQIDs)
-		}
-
-		format := viper.GetString("output.format")
 		if aggregate != "" {
-			format = aggregate
+			noteIgnoredPagination(cmd, aggregate, paginationRequested, len(tasks))
+			return formatTasks(cmd, tasks, aggregate, statusProvided)
 		}
-		return formatTasks(cmd, tasks, format, statusProvided)
+		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided)
 	},
-}
-
-// resolveAggregateFormat returns the aggregate output format selected by
-// --summary / --counters, or "" when ordinary list output is wanted.
-// Aggregates are resolved before the store query because they change the
-// query itself: pagination must be dropped so the counts cover the whole
-// match set. --counters wins over --summary, matching the flag precedence
-// the tail-end format resolution has always applied.
-func resolveAggregateFormat() string {
-	if taskListCounters {
-		return formatCounters
-	}
-	if taskListSummary {
-		return formatSummary
-	}
-	return ""
-}
-
-// canCountInStore reports whether the aggregate can be computed as a
-// single SQL COUNT over the query, materializing no rows.
-//
-// Two things disqualify it. First, filters applied in Go after the store
-// query returns (--stale, --blocked, --blocked-by, --overdue, qualified
-// track IDs): a store-side COUNT would include rows those are about to
-// discard. Second, --summary groups by project, a dimension flat status
-// counts do not carry, so it can only be served this way when the query
-// is already scoped to one project.
-//
-// Disqualification is not a fallback to the buggy behavior: the slice path
-// still runs with pagination cleared, so the count covers the full match
-// set either way. It just materializes the rows to get there.
-func canCountInStore(format string, query core.Query, trackQIDs []core.QualifiedTrackID) bool {
-	if taskListStale || taskListBlocked || taskListOverdue ||
-		len(taskListBlockedBy) > 0 || len(trackQIDs) > 0 {
-		return false
-	}
-	if format == formatSummary && query.AllProjects {
-		return false
-	}
-	return true
-}
-
-// renderAggregate writes store-computed status counts in the selected
-// aggregate format.
-func renderAggregate(cmd *cobra.Command, format string, counts map[string]int) error {
-	out := cmd.OutOrStdout()
-	switch format {
-	case formatCounters:
-		renderCountersFromCounts(out, counts)
-	case formatSummary:
-		renderSummaryFromCounts(out, map[string]map[string]int{
-			aggregateProjectLabel(): counts,
-		})
-	default:
-		return fmt.Errorf("unsupported aggregate format %q", format)
-	}
-	return nil
-}
-
-// aggregateProjectLabel names the project bucket for a grouped summary
-// built from store counts, which carry no project dimension of their own.
-// Only reached when the query is scoped to one project — see
-// canCountInStore.
-func aggregateProjectLabel() string {
-	if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
-		return proj.ProjectID
-	}
-	return noProject
 }
 
 // filesystemOpener implements workspace.SourceOpener for local SQLite DBs.
@@ -356,7 +260,9 @@ func (f *filesystemOpener) Open(project core.RegisteredProject) (workspace.Proje
 }
 
 // runTaskListWorkspace queries tasks across all projects in a workspace.
-func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Query) error {
+func runTaskListWorkspace(
+	cmd *cobra.Command, ctx context.Context, query core.Query, aggregate string,
+) error {
 	var workspaces []config.WorkspaceConfig
 	if err := viper.UnmarshalKey("workspaces", &workspaces); err != nil {
 		return fmt.Errorf("failed to read workspace config: %w", err)
@@ -421,8 +327,8 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	}
 
 	format := viper.GetString("output.format")
-	if agg := resolveAggregateFormat(); agg != "" {
-		format = agg
+	if aggregate != "" {
+		format = aggregate
 	}
 	return formatWorkspaceTasks(cmd, tasks, format)
 }
@@ -528,57 +434,18 @@ func applyTemporalFilters(cmd *cobra.Command, query *core.Query) error {
 		query.DueAfter = &t
 	}
 	if taskListOverdue {
+		// One definition of overdue, in SQL: due_at < now AND status
+		// NOT IN (DONE, SKIPPED). core.Query.Overdue carries both
+		// halves so the status exclusion cannot merge into the
+		// OR-joined Filters status group and widen the result set —
+		// and so `task list --overdue`, `status`, and
+		// `--counters --overdue` all mean the same rows.
 		now := time.Now().UTC()
-		query.DueBefore = &now
-		// Status exclusion (DONE / SKIPPED) is applied post-query in
-		// the same way --stale / --blocked filter results — adding it
-		// to query.Filters would merge under the existing OR-joined
-		// status group and silently widen the result set.
+		query.Overdue = &now
 	}
 	if taskListNoDue {
 		f := false
 		query.HasDue = &f
 	}
 	return nil
-}
-
-// taskBlockedByAny reports whether t is blocked by any of the given IDs.
-func taskBlockedByAny(t *core.Task, ids []string) bool {
-	blockers := t.BlockedBy()
-	for _, want := range ids {
-		for _, b := range blockers {
-			if strings.EqualFold(b, want) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// filterByQualifiedTracks returns tasks matching any of the qualified track IDs.
-// Local QIDs match any task with that track_id regardless of project.
-// Qualified QIDs match only tasks whose track_id and project_id both match.
-func filterByQualifiedTracks(tasks []*core.Task, qids []core.QualifiedTrackID) []*core.Task {
-	filtered := tasks[:0]
-	for _, t := range tasks {
-		if t.TrackID == nil || *t.TrackID == "" {
-			continue
-		}
-		for _, q := range qids {
-			if *t.TrackID != q.TrackID {
-				continue
-			}
-			if q.IsLocal() {
-				filtered = append(filtered, t)
-				break
-			}
-			// Qualified: must also match project.
-			projID := q.ProjectID()
-			if t.ProjectID != nil && *t.ProjectID == projID {
-				filtered = append(filtered, t)
-				break
-			}
-		}
-	}
-	return filtered
 }

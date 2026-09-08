@@ -18,11 +18,6 @@ const noProject = "(no project)"
 // printed Total is stated as fact and a truncated one is indistinguishable
 // from a real one. Callers behind a --limit must clear it first.
 func renderSummary(w io.Writer, tasks []*core.Task) {
-	if len(tasks) == 0 {
-		_, _ = fmt.Fprintln(w, "No tasks found")
-		return
-	}
-
 	groups := groupByProject(tasks)
 	byProject := make(map[string]map[string]int, len(groups))
 	for name, group := range groups {
@@ -38,9 +33,7 @@ func renderSummary(w io.Writer, tasks []*core.Task) {
 func renderSummaryFromCounts(w io.Writer, byProject map[string]map[string]int) {
 	total := 0
 	for _, counts := range byProject {
-		for _, n := range counts {
-			total += n
-		}
+		total += sumCounts(counts)
 	}
 	if total == 0 {
 		_, _ = fmt.Fprintln(w, "No tasks found")
@@ -54,12 +47,10 @@ func renderSummaryFromCounts(w io.Writer, byProject map[string]map[string]int) {
 		_, _ = fmt.Fprintf(w, "Project: %s\n", name)
 
 		counts := byProject[name]
-		projectTotal := 0
 		for _, status := range sortedKeys(counts) {
 			_, _ = fmt.Fprintf(w, "  %-15s %d\n", status, counts[status])
-			projectTotal += counts[status]
 		}
-		_, _ = fmt.Fprintf(w, "  %-15s %d\n", "Total", projectTotal)
+		_, _ = fmt.Fprintf(w, "  %-15s %d\n", "Total", sumCounts(counts))
 	}
 }
 
@@ -86,6 +77,16 @@ func statusCounts(tasks []*core.Task) map[string]int {
 	return counts
 }
 
+// sumCounts totals a status-count map. The same fold appeared at four
+// call sites, each free to drift from the others; one helper cannot.
+func sumCounts(counts map[string]int) int {
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	return total
+}
+
 // sortedKeys returns the keys of a map sorted alphabetically.
 func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
@@ -101,10 +102,6 @@ func sortedKeys[V any](m map[string]V) []string {
 //
 // Same contract as renderSummary: the slice must be the full match set.
 func renderCounters(w io.Writer, tasks []*core.Task) {
-	if len(tasks) == 0 {
-		_, _ = fmt.Fprintln(w, "No tasks found")
-		return
-	}
 	renderCountersFromCounts(w, statusCounts(tasks))
 }
 
@@ -112,11 +109,7 @@ func renderCounters(w io.Writer, tasks []*core.Task) {
 // status-count map, letting aggregate callers pass store-computed counts
 // that are independent of page size.
 func renderCountersFromCounts(w io.Writer, counts map[string]int) {
-	total := 0
-	for _, n := range counts {
-		total += n
-	}
-	if total == 0 {
+	if sumCounts(counts) == 0 {
 		_, _ = fmt.Fprintln(w, "No tasks found")
 		return
 	}
