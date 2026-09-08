@@ -32,13 +32,23 @@ As a Solo Developer, I want to query and list tasks with flexible filtering so t
 
 8. **Given** including completed work, **When** I run `tlc task list --archived`, **Then** archived tasks are included in results.
 
-9. **Given** many tasks, **When** I run `tlc task list --limit 10 --offset 20`, **Then** only 10 tasks are shown starting from position 20 (pagination).
+9. **Given** many tasks, **When** I run `tlc task list --limit 10 --offset 20`, **Then** only 10 tasks are shown starting from position 20 (pagination). Applies to row output; aggregate output ignores pagination — see scenarios 13-16.
 
 10. **Given** tasks, **When** I run `tlc task list --sort-by created_at --sort-direction asc`, **Then** tasks are sorted by created_at in ascending order.
 
 11. **Given** tasks, **When** I run `tlc task list "search term"`, **Then** only tasks matching the full-text search term are shown.
 
 12. **Given** tasks, **When** I run `tlc task list --format yaml`, **Then** output is valid YAML format.
+
+13. **Given** more tasks than the default `--limit` of 100, **When** I run `tlc task list --counters` or `tlc task list --summary`, **Then** the counts describe the whole match set, not the first page. A count that stops at the page size is indistinguishable from a real one, so pagination is dropped rather than honoured.
+
+14. **Given** the same, **When** I select the same aggregates by format instead of by flag — `tlc task list --format counters`, `-f summary`, or a config `output.format: summary` — **Then** the counts are identical to the flag spellings. Every spelling reaches the same renderers and must agree.
+
+15. **Given** an aggregate and a pagination request that would have truncated the result (`--limit`/`--offset` on the CLI, or a config `defaults.limit`), **When** I run it, **Then** stderr carries a note that pagination was ignored and stdout carries the full count. A pagination request that could not have truncated anything produces no note.
+
+16. **Given** tasks across several projects and a working directory that is not a project, **When** I run `tlc task list --summary`, **Then** one block is printed per project, not a single combined block. `--counters` is flat by definition and sums across projects.
+
+17. **Given** an aggregate format, **When** I run `tlc task list --counters` or `--summary` with stale hooks configured, **Then** no stale hook fires and no `stale_fired_at` is written. Counts do not read that field, and `task list` is annotated read-only; the documented auto-fire applies to row output.
 
 ## Tests
 
@@ -56,6 +66,15 @@ As a Solo Developer, I want to query and list tasks with flexible filtering so t
 - ✅ `internal/cli/task_list_test.go` — `TestTaskList/ListTasksAllProjects` (`--all-projects`)
 - ✅ `internal/cli/task_list_test.go` — `TestTaskList/ListTasksArchived` (`--archived`)
 - ✅ `internal/cli/task_create_test.go` — `TestTaskCreatePagination` (`--limit` / `--offset`)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListAggregate_CountsFullMatchSet` (aggregates count the match set, every spelling)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListSummary_TotalIsMatchSetTotal` (`--summary` Total)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListAggregate_ListOutputStillPaginates` (row output still paginates)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListAggregate_NoteOnlyWhenInformative` (note fires only when pagination would have truncated)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListAggregate_ConfigLimitIsAlsoIgnored` (config `defaults.limit`)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListSummary_GroupsByProjectOutsideAProject` (per-project grouping outside a project)
+- ✅ `internal/cli/task_list_aggregate_e2e_test.go` — `TestTaskListCounters_FlattensAcrossProjects` (`--counters` sums across projects)
+- ✅ `internal/cli/task_list_stale_hooks_e2e_test.go` — `TestTaskListAggregate_FiresNoStaleHooks` / `TestTaskList_StillFiresStaleHooks` (stale-hook boundary)
+- ✅ `internal/cli/summary_test.go` — `TestAggregateFormat` (flag, `--format`, `-f`, and config spellings agree)
 
 ## Acceptance Criteria Validation Status
 
@@ -74,6 +93,11 @@ As a Solo Developer, I want to query and list tasks with flexible filtering so t
 | 10 | Sort by field and direction | `TestTaskList/ListTasksSort` | ✅ COVERED |
 | 11 | Full-text search | `TestTaskList/ListTasksFullTextSearch` | ✅ COVERED |
 | 12 | YAML format output | `TestTaskList/ListTasksYAMLFormat` | ✅ COVERED |
+| 13 | Aggregates count the match set, not the page | `TestTaskListAggregate_CountsFullMatchSet`, `TestTaskListSummary_TotalIsMatchSetTotal` | ✅ COVERED |
+| 14 | Every aggregate spelling agrees | `TestAggregateFormat`, `TestTaskListAggregate_CountsFullMatchSet` | ✅ COVERED |
+| 15 | Ignored-pagination note is necessary and sufficient | `TestTaskListAggregate_NoteOnlyWhenInformative`, `TestTaskListAggregate_ConfigLimitIsAlsoIgnored` | ✅ COVERED |
+| 16 | `--summary` groups by project outside a project | `TestTaskListSummary_GroupsByProjectOutsideAProject`, `TestTaskListCounters_FlattensAcrossProjects` | ✅ COVERED |
+| 17 | Aggregates fire no stale hooks | `TestTaskListAggregate_FiresNoStaleHooks`, `TestTaskList_StillFiresStaleHooks` | ✅ COVERED |
 
 ## TODO
 
