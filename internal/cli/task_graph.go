@@ -50,7 +50,7 @@ Output formats:
 
 		statusFlags := taskListStatus
 		if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
-			statusFlags = []string{"IN_PROGRESS", "TODO"}
+			statusFlags = []string{string(core.StatusInProgress), string(core.StatusTodo)}
 		}
 		for _, st := range statusFlags {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
@@ -352,7 +352,7 @@ func init() {
 	TaskGraphCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
 	TaskGraphCmd.Flags().BoolVar(&taskListStale, "stale", false, "Show only stale tasks")
 	TaskGraphCmd.Flags().BoolVar(&taskListBlocked, "blocked", false, "Show only blocked tasks")
-	TaskGraphCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority (P0, P1, P2, P3)")
+	TaskGraphCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority")
 	TaskGraphCmd.Flags().StringSliceVar(&taskListBlockedBy, "blocked-by", []string{}, "Show only tasks blocked by the given task IDs")
 	TaskGraphCmd.Flags().StringVar(&taskGraphFormat, "format", "", "Output format: ascii (default), dot")
 }

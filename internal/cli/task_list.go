@@ -99,13 +99,13 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		statusProvided := cmd.Flags().Changed("status") || fromConfig["status"]
 		defaultStatusFilter := !statusProvided && !cmd.Flags().Changed("archived") && !fromConfig["archived"]
 		if defaultStatusFilter {
-			statusFlags = []string{"IN_PROGRESS", "TODO"}
+			statusFlags = []string{string(core.StatusInProgress), string(core.StatusTodo)}
 			query.StatusPriority = string(core.StatusInProgress)
 		}
 		for _, st := range statusFlags {
 			normalized, ok := NormalizeStatus(st)
 			if !ok {
-				return fmt.Errorf("unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", st)
+				return unknownStatusError(st)
 			}
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: normalized})
 		}
@@ -118,7 +118,7 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		for _, p := range taskListPriority {
 			normalized, ok := NormalizePriority(p)
 			if !ok {
-				return fmt.Errorf("unknown priority %q; valid values: P0, P1, P2, P3", p)
+				return unknownPriorityError(p)
 			}
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "priority", Value: normalized})
 		}
@@ -388,7 +388,7 @@ func init() {
 	TaskListCmd.Flags().StringVar(&taskListSquad, "squad", "", "Filter by aps squad members")
 	TaskListCmd.Flags().BoolVar(&taskListStale, "stale", false, "Show only stale tasks")
 	TaskListCmd.Flags().BoolVar(&taskListBlocked, "blocked", false, "Show only blocked tasks")
-	TaskListCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority (P0, P1, P2, P3)")
+	TaskListCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority")
 	TaskListCmd.Flags().StringSliceVar(&taskListBlockedBy, "blocked-by", []string{}, "Show only tasks blocked by the given task IDs")
 	TaskListCmd.Flags().StringVar(&taskListTrack, "track", "", "Filter by track ID")
 	TaskListCmd.Flags().StringVar(&taskListOutput, "output", "", "Write output to a file instead of stdout")

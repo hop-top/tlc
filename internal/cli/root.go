@@ -307,7 +307,48 @@ func kitRoot() *kitcli.Root {
 	// Discover tlc-* binary plugins on $PATH and register as subcommands.
 	dispatch.Register(root.Cmd, "tlc", "")
 
+	registerFlagEnums(root)
+
 	return root
+}
+
+// registerFlagEnums declares the closed value sets for tlc's enum flags so
+// a value-less or mistyped flag renders the legal values, `--help` names
+// them, and the shell completes them. Values come from the domain canon,
+// never a literal here.
+//
+// Every registration is command-SCOPED rather than tree-wide, because
+// `--status` is not one flag in this tree: a task's statuses are
+// TODO/IN_PROGRESS/DONE/SKIPPED while a track's are
+// pending/active/completed/abandoned/archived. A tree-wide WithFlagEnum is
+// stamped onto every flag of that name and the last registration wins
+// everywhere, so declaring both tree-wide would teach `track update
+// --status` the task set (or the reverse). Scoping keeps each leaf's flag
+// carrying its own set. `--priority` and `--effort` mean the same thing
+// everywhere they appear, but they are scoped too, for one rule per enum
+// rather than a mix a later reader has to audit.
+//
+// Registered before Execute, as kit requires: the sets are materialized
+// onto the flags during the Execute-time tree walk, so registrations added
+// afterwards never reach a flag.
+func registerFlagEnums(root *kitcli.Root) {
+	statuses := core.TaskStatusStrings()
+	priorities := core.PriorityStrings()
+	efforts := core.EffortStrings()
+
+	for _, path := range []string{"task list", "task graph", "task create", "task update"} {
+		root.WithCommandFlagEnum(path, "status", statuses...)
+		root.WithCommandFlagEnum(path, "priority", priorities...)
+	}
+	// --effort is a write-path flag only; task list/graph filter without it.
+	for _, path := range []string{"task create", "task update"} {
+		root.WithCommandFlagEnum(path, "effort", efforts...)
+	}
+
+	trackStatuses := core.TrackStatusStrings()
+	for _, path := range []string{"track list", "track update"} {
+		root.WithCommandFlagEnum(path, "status", trackStatuses...)
+	}
 }
 
 func init() {
