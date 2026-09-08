@@ -1,8 +1,9 @@
 package cli
 
-// Regression coverage: aggregate output (`--counters`, `--summary`) must
-// report counts of the whole match set, never of the page the default
-// `--limit 100` would return.
+// Regression coverage: aggregate output (`--counters`, `--summary`, and the
+// same two spelled as `--format` / `-f` / config `output.format`) must report
+// counts of the whole match set, never of the page the default `--limit 100`
+// would return.
 //
 // The defect these tests pin was silent. A truncated count is
 // indistinguishable from a real one -- no warning, no stderr note, exit 0 --
@@ -10,22 +11,14 @@ package cli
 // used downstream. That means asserting today's output proves nothing: the
 // seeded fixture deliberately holds more tasks than the default limit, so a
 // count equal to the limit is a failure and only the true total passes.
-//
-// Runs against a built binary, not the in-process command tree, so exit
-// codes are real (`go run` masks them) and the default flag values are the
-// ones a user actually gets.
 
 import (
-	"errors"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/storage"
 )
 
 const (
@@ -41,129 +34,43 @@ const (
 	aggProjectID    = "agg-fixture"
 )
 
-// aggEnv returns an env for subprocess tlc runs, isolated from the
-// developer's real state. HOME/XDG are redirected and the DB path is
-// pinned, so no run can reach ~/.local/share/tlc/db.sqlite.
-//
-// GIT_* vars are stripped: tests in this repo have leaked git state into
-// the user's config when run under hooks, and a subprocess inheriting
-// GIT_DIR/GIT_INDEX_FILE would resolve project context against whatever
-// repo invoked the test rather than its own tempdir.
-func aggEnv(t *testing.T, home, dbPath string) []string {
+// aggFixtureDB returns a private copy of the shared aggregate fixture:
+// aggSeedTotal tasks, more than the default limit, split across two statuses
+// so the per-status breakdown is checked too and not just a single total.
+func aggFixtureDB(t *testing.T) string {
 	t.Helper()
-
-	drop := map[string]bool{
-		"HOME":                true,
-		"USERPROFILE":         true,
-		"XDG_DATA_HOME":       true,
-		"XDG_CONFIG_HOME":     true,
-		"TLC_DB":              true,
-		"TLC_CONFIG":          true,
-		"TLC_STORAGE_DB_PATH": true,
-		"TLC_PROJECT_ID":      true,
-		"TLC_OUTPUT_FORMAT":   true,
-	}
-
-	env := []string{
-		"HOME=" + home,
-		"USERPROFILE=" + home,
-		"XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"),
-		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
-		"TLC_STORAGE_DB_PATH=" + dbPath,
-	}
-	for _, e := range os.Environ() {
-		key := strings.SplitN(e, "=", 2)[0]
-		if drop[key] || strings.HasPrefix(key, "GIT_") {
-			continue
-		}
-		env = append(env, e)
-	}
-	return env
+	return seedTemplateDB(t, "aggregate", e2eTaskSeed{
+		Total:   aggSeedTotal,
+		Project: aggProjectID,
+		Mutate: func(i int, task *core.Task) {
+			if i < aggSeedDone {
+				task.Status = core.StatusDone
+			}
+		},
+	})
 }
 
-// seedAggregateDB creates a DB holding aggSeedTotal tasks, more than the
-// default limit, split across two statuses so the per-status breakdown is
-// checked too and not just a single total.
-func seedAggregateDB(t *testing.T, dbPath string) {
+// aggFixture builds a run context over a private copy of the fixture.
+func aggFixture(t *testing.T) (bin, cwd string, env []string) {
 	t.Helper()
-
-	s, err := storage.NewSQLiteStorage(dbPath)
-	if err != nil {
-		t.Fatalf("open seed storage: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := t.Context()
-	for i := range aggSeedTotal {
-		status := core.StatusDone
-		if i >= aggSeedDone {
-			status = core.StatusTodo
-		}
-		pid := aggProjectID
-		task := &core.Task{
-			ID:        fmt.Sprintf("T-%04d", i+1),
-			Title:     fmt.Sprintf("seeded task %d", i+1),
-			Status:    status,
-			ProjectID: &pid,
-		}
-		if err := s.CreateTask(ctx, task); err != nil {
-			t.Fatalf("seed task %d: %v", i+1, err)
-		}
-	}
-}
-
-// runAgg runs the built binary and returns stdout+stderr and the exit
-// code, asserting nothing itself so callers can check both.
-func runAgg(t *testing.T, bin, cwd string, env []string, args ...string) (string, int) {
-	t.Helper()
-
-	cmd := exec.CommandContext(t.Context(), bin, args...)
-	cmd.Env = env
-	cmd.Dir = cwd
-	out, err := cmd.CombinedOutput()
-
-	code := 0
-	if err != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("tlc %v: %v\n%s", args, err, out)
-		}
-		code = exitErr.ExitCode()
-	}
-	return string(out), code
-}
-
-// countFor extracts the integer printed against a status label in the
-// aggregate tables, both of which render as "  <LABEL>  <n>".
-func countFor(t *testing.T, out, label string) int {
-	t.Helper()
-
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 2 || fields[0] != label {
-			continue
-		}
-		var n int
-		if _, err := fmt.Sscanf(fields[1], "%d", &n); err != nil {
-			t.Fatalf("parse count for %q from %q: %v", label, line, err)
-		}
-		return n
-	}
-	t.Fatalf("no %q row in aggregate output:\n%s", label, out)
-	return 0
+	bin = buildTLCBinary(t)
+	dbPath := aggFixtureDB(t)
+	env = append(e2eEnv(t, t.TempDir(), dbPath), "TLC_PROJECT_ID="+aggProjectID)
+	return bin, t.TempDir(), env
 }
 
 // TestTaskListAggregate_CountsFullMatchSet is the headline regression.
 // Every aggregate invocation must report the seeded totals, with and
 // without an explicit -n, and must never report the default limit.
+//
+// Every spelling of an aggregate appears. The bool flags were the only
+// spelling the pre-query resolution recognized, so `--format summary`,
+// `-f counters` and a config `output.format: summary` stayed on the
+// paginated path and reported the page size -- the same defect, wearing a
+// different flag.
 func TestTaskListAggregate_CountsFullMatchSet(t *testing.T) {
-	bin := buildTLCBinary(t)
-	home := t.TempDir()
-	cwd := t.TempDir()
-	dbPath := filepath.Join(home, "agg.db")
-
-	seedAggregateDB(t, dbPath)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
+	bin, cwd, env := aggFixture(t)
+	base := []string{"task", "list", "--archived", "--all-projects"}
 
 	cases := []struct {
 		name string
@@ -171,21 +78,31 @@ func TestTaskListAggregate_CountsFullMatchSet(t *testing.T) {
 	}{
 		// No -n: the default limit of 100 applies, which is exactly
 		// what silently truncated the count.
-		{"CountersDefaultLimit", []string{"task", "list", "--counters", "--archived", "--all-projects"}},
-		{"SummaryDefaultLimit", []string{"task", "list", "--summary", "--archived", "--all-projects"}},
+		{"CountersFlag", []string{"--counters"}},
+		{"SummaryFlag", []string{"--summary"}},
+		// The --format spellings, which reach the same renderers.
+		{"FormatCounters", []string{"--format", "counters"}},
+		{"FormatSummary", []string{"--format", "summary"}},
+		{"ShortFormatCounters", []string{"-f", "counters"}},
+		{"ShortFormatSummary", []string{"-f", "summary"}},
+		// The config spelling, documented as an output.format enum
+		// value.
+		{"ConfigFormatCounters", []string{"-c", "output.format=counters"}},
+		{"ConfigFormatSummary", []string{"-c", "output.format=summary"}},
 		// Explicit -n above the true total: correct before the fix,
 		// so it guards against a regression in the other direction.
-		{"CountersExplicitHighLimit", []string{"task", "list", "--counters", "--archived", "--all-projects", "-n", "1000"}},
-		{"SummaryExplicitHighLimit", []string{"task", "list", "--summary", "--archived", "--all-projects", "-n", "1000"}},
+		{"CountersHighLimit", []string{"--counters", "-n", "1000"}},
+		{"FormatSummaryHighLimit", []string{"--format", "summary", "-n", "1000"}},
 		// Explicit -n *below* the true total: the flags contradict,
 		// and the aggregate must win rather than report 5.
-		{"CountersExplicitLowLimit", []string{"task", "list", "--counters", "--archived", "--all-projects", "-n", "5"}},
-		{"SummaryExplicitLowLimit", []string{"task", "list", "--summary", "--archived", "--all-projects", "-n", "5"}},
+		{"CountersLowLimit", []string{"--counters", "-n", "5"}},
+		{"FormatCountersLowLimit", []string{"--format", "counters", "-n", "5"}},
+		{"ShortFormatSummaryLowLimit", []string{"-f", "summary", "-n", "5"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, code := runAgg(t, bin, cwd, env, tc.args...)
+			out, code := runTLC(t, bin, cwd, env, append(append([]string{}, base...), tc.args...)...)
 			if code != 0 {
 				t.Fatalf("exit %d, want 0\n%s", code, out)
 			}
@@ -210,22 +127,18 @@ func TestTaskListAggregate_CountsFullMatchSet(t *testing.T) {
 }
 
 // TestTaskListSummary_TotalIsMatchSetTotal pins the Total line
-// specifically. --summary states Total as fact, so a truncated one is the
-// most trust-damaging form of the defect.
+// specifically, in both spellings. --summary states Total as fact, so a
+// truncated one is the most trust-damaging form of the defect.
 func TestTaskListSummary_TotalIsMatchSetTotal(t *testing.T) {
-	bin := buildTLCBinary(t)
-	home := t.TempDir()
-	cwd := t.TempDir()
-	dbPath := filepath.Join(home, "agg.db")
-
-	seedAggregateDB(t, dbPath)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
+	bin, cwd, env := aggFixture(t)
 
 	for _, args := range [][]string{
 		{"task", "list", "--summary", "--archived", "--all-projects"},
+		{"task", "list", "--format", "summary", "--archived", "--all-projects"},
+		{"task", "list", "-f", "summary", "--archived", "--all-projects"},
 		{"task", "list", "--summary", "--archived", "--all-projects", "-n", "1000"},
 	} {
-		out, code := runAgg(t, bin, cwd, env, args...)
+		out, code := runTLC(t, bin, cwd, env, args...)
 		if code != 0 {
 			t.Fatalf("%v: exit %d, want 0\n%s", args, code, out)
 		}
@@ -239,37 +152,82 @@ func TestTaskListSummary_TotalIsMatchSetTotal(t *testing.T) {
 	}
 }
 
-// TestTaskListAggregate_NotesIgnoredLimit asserts the contradiction is
-// surfaced rather than silently resolved. Silently picking one of two
-// contradictory flags is what produced the original defect, so an
-// explicit --limit alongside an aggregate says so on stderr -- while
-// stdout still carries the correct count.
-func TestTaskListAggregate_NotesIgnoredLimit(t *testing.T) {
+// TestTaskListAggregate_ConfigLimitIsAlsoIgnored covers a limit that never
+// reaches pflag's Changed bit. A config `defaults.limit` is applied by
+// applyConfigDefaults, so an aggregate has to drop it just the same -- and
+// this is the case a Changed-keyed note reported nothing about.
+func TestTaskListAggregate_ConfigLimitIsAlsoIgnored(t *testing.T) {
 	bin := buildTLCBinary(t)
 	home := t.TempDir()
 	cwd := t.TempDir()
-	dbPath := filepath.Join(home, "agg.db")
+	dbPath := aggFixtureDB(t)
 
-	seedAggregateDB(t, dbPath)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
+	// A project config carrying both the DB path and a truncating limit.
+	tlcDir := filepath.Join(cwd, ".tlc")
+	if err := os.MkdirAll(tlcDir, 0o750); err != nil {
+		t.Fatalf("mkdir .tlc: %v", err)
+	}
+	cfg := "project:\n  id: " + aggProjectID + "\nstorage:\n  db_path: " + dbPath +
+		"\ndefaults:\n  limit: 10\n"
+	if err := os.WriteFile(filepath.Join(tlcDir, "config.yaml"), []byte(cfg), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 
-	out, code := runAgg(t, bin, cwd, env,
-		"task", "list", "--counters", "--archived", "--all-projects", "-n", "5")
+	env := e2eEnv(t, home, dbPath)
+	out, code := runTLC(t, bin, cwd, env, "task", "list", "--counters", "--archived")
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
-	if !strings.Contains(out, "--limit/--offset ignored") {
-		t.Errorf("expected a note that --limit was ignored, got:\n%s", out)
+
+	if got := countFor(t, out, string(core.StatusDone)); got != aggSeedDone {
+		t.Errorf("DONE = %d, want %d -- a config limit truncated the count\n%s", got, aggSeedDone, out)
+	}
+	// A config limit that WOULD have truncated is exactly when the note
+	// carries information, and the Changed-keyed version stayed silent.
+	if !strings.Contains(out, "ignored") {
+		t.Errorf("expected a note that the config limit was ignored, got:\n%s", out)
+	}
+}
+
+// TestTaskListAggregate_NoteOnlyWhenInformative pins when the note fires.
+//
+// Silently resolving two contradictory flags produced the original defect,
+// so the contradiction is surfaced -- but only when it mattered. An explicit
+// -n above the match set could not have truncated anything, so a note there
+// is noise that trains readers to ignore the real one.
+func TestTaskListAggregate_NoteOnlyWhenInformative(t *testing.T) {
+	bin, cwd, env := aggFixture(t)
+	base := []string{"task", "list", "--counters", "--archived", "--all-projects"}
+
+	cases := []struct {
+		name     string
+		args     []string
+		wantNote bool
+	}{
+		// Below the match set: the limit would have truncated, so say so.
+		{"LimitBelowTotal", []string{"-n", "5"}, true},
+		{"OffsetRequested", []string{"--offset", "10"}, true},
+		// At or above the match set: nothing was lost, so stay quiet.
+		{"LimitAboveTotal", []string{"-n", "100000"}, false},
+		{"LimitEqualsTotal", []string{"-n", "150"}, false},
+		// No pagination requested at all.
+		{"NoLimitFlag", nil, false},
 	}
 
-	// Without an explicit --limit there is no contradiction, so no note.
-	quiet, code := runAgg(t, bin, cwd, env,
-		"task", "list", "--counters", "--archived", "--all-projects")
-	if code != 0 {
-		t.Fatalf("exit %d, want 0\n%s", code, quiet)
-	}
-	if strings.Contains(quiet, "ignored") {
-		t.Errorf("unexpected ignore note without an explicit --limit:\n%s", quiet)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := runTLC(t, bin, cwd, env, append(append([]string{}, base...), tc.args...)...)
+			if code != 0 {
+				t.Fatalf("exit %d, want 0\n%s", code, out)
+			}
+			// The count is right either way; only the note varies.
+			if got := countFor(t, out, string(core.StatusDone)); got != aggSeedDone {
+				t.Errorf("DONE = %d, want %d\n%s", got, aggSeedDone, out)
+			}
+			if gotNote := strings.Contains(out, "ignored"); gotNote != tc.wantNote {
+				t.Errorf("note present = %v, want %v\n%s", gotNote, tc.wantNote, out)
+			}
+		})
 	}
 }
 
@@ -277,15 +235,9 @@ func TestTaskListAggregate_NotesIgnoredLimit(t *testing.T) {
 // the fix. Pagination on a list is correct and load-bearing; only
 // aggregates were meant to escape it.
 func TestTaskListAggregate_ListOutputStillPaginates(t *testing.T) {
-	bin := buildTLCBinary(t)
-	home := t.TempDir()
-	cwd := t.TempDir()
-	dbPath := filepath.Join(home, "agg.db")
+	bin, cwd, env := aggFixture(t)
 
-	seedAggregateDB(t, dbPath)
-	env := append(aggEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
-
-	out, code := runAgg(t, bin, cwd, env,
+	out, code := runTLC(t, bin, cwd, env,
 		"task", "list", "--archived", "--all-projects", "-n", "7", "--format", "tls")
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
@@ -299,5 +251,196 @@ func TestTaskListAggregate_ListOutputStillPaginates(t *testing.T) {
 	}
 	if rows != 7 {
 		t.Errorf("list rows = %d, want 7 (--limit must still bound list output)\n%s", rows, out)
+	}
+}
+
+// TestTaskListSummary_GroupsByProjectOutsideAProject is the F2 regression.
+//
+// Outside a project, nothing scopes the query to one project, so a summary
+// built from flat status counts collapsed every project into a single
+// "(no project)" bucket -- a strictly worse answer than the per-project
+// breakdown that shipped before, and one that looks plausible.
+func TestTaskListSummary_GroupsByProjectOutsideAProject(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	cwd := t.TempDir() // no .tlc/, no git: not a project
+	dbPath := filepath.Join(home, "multi.db")
+
+	// Three named projects plus genuinely project-less rows, so the
+	// no-project bucket is distinguishable from the collapse.
+	projects := []string{"proj-alpha", "proj-beta", "proj-gamma"}
+	seedTasks(t, dbPath, e2eTaskSeed{
+		Total:   12,
+		Project: "",
+		Mutate: func(i int, task *core.Task) {
+			if i%4 == 3 {
+				task.ProjectID = nil
+				return
+			}
+			pid := projects[i%3]
+			task.ProjectID = &pid
+		},
+	})
+
+	env := e2eEnv(t, home, dbPath)
+	out, code := runTLC(t, bin, cwd, env, "task", "list", "--summary", "--archived")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+
+	// One block per project, and the collapse's signature is exactly one
+	// block that is the no-project one.
+	if n := strings.Count(out, "Project: "); n < len(projects) {
+		t.Errorf("got %d project blocks, want at least %d -- projects collapsed into one bucket\n%s",
+			n, len(projects), out)
+	}
+	for _, p := range projects {
+		if !strings.Contains(out, "Project: "+p) {
+			t.Errorf("missing block for %q\n%s", p, out)
+		}
+	}
+	if !strings.Contains(out, "Project: "+noProject) {
+		t.Errorf("genuinely project-less tasks lost their %q block\n%s", noProject, out)
+	}
+}
+
+// TestTaskListSummary_AllProjectsGroupsByProject pins the same grouping for
+// an explicit --all-projects, which the allowlist used to bounce off the
+// counting path entirely.
+func TestTaskListSummary_AllProjectsGroupsByProject(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	cwd := t.TempDir()
+	dbPath := filepath.Join(home, "multi.db")
+
+	projects := []string{"proj-one", "proj-two"}
+	seedTasks(t, dbPath, e2eTaskSeed{
+		Total:   6,
+		Project: "",
+		Mutate: func(i int, task *core.Task) {
+			pid := projects[i%2]
+			task.ProjectID = &pid
+		},
+	})
+
+	env := e2eEnv(t, home, dbPath)
+	out, code := runTLC(t, bin, cwd, env,
+		"task", "list", "--summary", "--archived", "--all-projects")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+	for _, p := range projects {
+		if !strings.Contains(out, "Project: "+p) {
+			t.Errorf("missing block for %q\n%s", p, out)
+		}
+	}
+}
+
+// TestTaskListCounters_FlattensAcrossProjects checks --counters' side of the
+// per-project counts: it is a flat table by definition, so the projects sum.
+func TestTaskListCounters_FlattensAcrossProjects(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	cwd := t.TempDir()
+	dbPath := filepath.Join(home, "multi.db")
+
+	seedTasks(t, dbPath, e2eTaskSeed{
+		Total:   6,
+		Project: "",
+		Mutate: func(i int, task *core.Task) {
+			pid := []string{"proj-one", "proj-two"}[i%2]
+			task.ProjectID = &pid
+		},
+	})
+
+	env := e2eEnv(t, home, dbPath)
+	out, code := runTLC(t, bin, cwd, env,
+		"task", "list", "--counters", "--archived", "--all-projects")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+	if strings.Contains(out, "Project:") {
+		t.Errorf("--counters must not group by project\n%s", out)
+	}
+	if got := countFor(t, out, string(core.StatusTodo)); got != 6 {
+		t.Errorf("TODO = %d, want 6 (summed across projects)\n%s", got, out)
+	}
+}
+
+// TestTaskListOverdue_CountsInStore pins --overdue on the counting path.
+// It is a column predicate now -- due_at in the past AND the task still
+// open -- so it narrows the SQL count rather than filtering a page of rows.
+func TestTaskListOverdue_CountsInStore(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	cwd := t.TempDir()
+	dbPath := filepath.Join(home, "overdue.db")
+
+	// 120 rows, above the default limit: 40 overdue TODO, 40 overdue but
+	// DONE (finished, so not late), 40 not yet due.
+	past := timeAgo(48)
+	future := timeAhead(48)
+	seedTasks(t, dbPath, e2eTaskSeed{
+		Total:   120,
+		Project: aggProjectID,
+		Mutate: func(i int, task *core.Task) {
+			switch {
+			case i < 40:
+				task.DueAt = &past
+			case i < 80:
+				task.Status = core.StatusDone
+				task.DueAt = &past
+			default:
+				task.DueAt = &future
+			}
+		},
+	})
+
+	env := append(e2eEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
+	out, code := runTLC(t, bin, cwd, env,
+		"task", "list", "--counters", "--overdue", "--archived", "--all-projects")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+
+	if got := countFor(t, out, string(core.StatusTodo)); got != 40 {
+		t.Errorf("overdue TODO = %d, want 40\n%s", got, out)
+	}
+	// A DONE task past its due date is not overdue -- one definition,
+	// shared with `tlc status`.
+	if strings.Contains(out, string(core.StatusDone)) {
+		t.Errorf("finished tasks counted as overdue\n%s", out)
+	}
+}
+
+// TestTaskListBlocked_CountsInStore pins --blocked on the counting path,
+// where it belongs: blocked_reason is a column.
+func TestTaskListBlocked_CountsInStore(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	cwd := t.TempDir()
+	dbPath := filepath.Join(home, "blocked.db")
+
+	// 120 rows so a page-scoped count would be visibly wrong.
+	reason := "waiting on review"
+	seedTasks(t, dbPath, e2eTaskSeed{
+		Total:   120,
+		Project: aggProjectID,
+		Mutate: func(i int, task *core.Task) {
+			if i < 70 {
+				r := reason
+				task.BlockedReason = &r
+			}
+		},
+	})
+
+	env := append(e2eEnv(t, home, dbPath), "TLC_PROJECT_ID="+aggProjectID)
+	out, code := runTLC(t, bin, cwd, env,
+		"task", "list", "--counters", "--blocked", "--archived", "--all-projects")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+	if got := countFor(t, out, string(core.StatusTodo)); got != 70 {
+		t.Errorf("blocked TODO = %d, want 70 (whole match set)\n%s", got, out)
 	}
 }
