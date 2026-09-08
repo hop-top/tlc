@@ -149,3 +149,6 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+// Temporary: kit `next` at the flag-enum merge; drop at the next kit release.
+replace hop.top/kit => github.com/hop-top/poly-kit v0.0.0-20260908014946-05a93d908d48
