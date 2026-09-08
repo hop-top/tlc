@@ -151,4 +151,4 @@ require (
 )
 
 // Temporary: kit `next` at the flag-enum merge; drop at the next kit release.
-replace hop.top/kit => github.com/hop-top/poly-kit v0.0.0-20260908014946-05a93d908d48
+replace hop.top/kit => github.com/hop-top/poly-kit v0.0.0-20260908193225-d48c40454f49
