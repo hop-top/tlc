@@ -190,12 +190,8 @@ func kitRoot() *kitcli.Root {
 	// migrated to kit's own `offline` key.
 	cmd.PersistentFlags().String("profile", os.Getenv("APS_PROFILE"), "aps profile name")
 	cmd.PersistentFlags().String("instance", "tlc", "Backend instance")
-	if offlineFlag := cmd.PersistentFlags().Lookup("offline"); offlineFlag != nil {
-		if err := viper.BindPFlag("runtime.offline", offlineFlag); err != nil {
-			log.Warn("Failed to bind offline flag", "error", err)
-		}
-	} else {
-		log.Warn("kit did not register --offline; runtime.offline unbound")
+	if err := viper.BindPFlag("runtime.offline", cmd.PersistentFlags().Lookup("offline")); err != nil {
+		log.Warn("Failed to bind offline flag", "error", err)
 	}
 	if err := viper.BindPFlag("runtime.profile", cmd.PersistentFlags().Lookup("profile")); err != nil {
 		log.Warn("Failed to bind profile flag", "error", err)
