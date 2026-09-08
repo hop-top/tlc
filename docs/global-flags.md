@@ -1,10 +1,18 @@
 # Global Flags
 
-Persistent flags available on every `tlc` subcommand. Defined in
-`internal/cli/root.go` per [`cli-conventions-with-kit.md`][1] §5.
+Persistent flags available on every `tlc` subcommand. `--profile` and
+`--instance` are defined in `internal/cli/root.go` per
+[`cli-conventions-with-kit.md`][1] §5.
 
-These supplement kit-provided globals (`--quiet`, `--no-color`, `--format`,
-`--no-hints`, `--verbose/-V`, `-C/--chdir`) and the local `--config/-c`.
+`--offline` is kit-owned: kit registers it as a global and reserves the name,
+so `root.go` only binds it. What `root.go` still owns is the viper binding —
+`runtime.offline` is this repo's documented config key with three consumers
+(below), so the flag is bound to that key rather than migrated to kit's own
+`offline` key. A shadow binding kept deliberately, not an oversight.
+
+These supplement the other kit-provided globals (`--quiet`, `--no-color`,
+`--format`, `--no-hints`, `--verbose/-V`, `-C/--chdir`) and the local
+`--config/-c`.
 
 [1]: ../../.ops/docs/cli-conventions-with-kit.md
 
@@ -12,7 +20,7 @@ These supplement kit-provided globals (`--quiet`, `--no-color`, `--format`,
 
 | Flag         | Type   | Default          | Viper key          | Behaviour                                                                                                  |
 |--------------|--------|------------------|--------------------|------------------------------------------------------------------------------------------------------------|
-| `--offline`  | bool   | `false`          | `runtime.offline`  | Disable all network. Skips upgrade check, blocks `sync push`/`sync pull` (returns usage error), skips extension `InitAll`. |
+| `--offline`  | bool   | `false`          | `runtime.offline`  | Kit-owned flag, bound here. Disable all network. Skips upgrade check, blocks `sync push`/`sync pull` (returns usage error), skips extension `InitAll`. |
 | `--profile`  | string | `$APS_PROFILE`   | `runtime.profile`  | aps profile name. Reserved for future use; flag is accepted today but not yet read by any code path.        |
 | `--instance` | string | `tlc`            | `runtime.instance` | Backend instance identifier. Reserved for future use; flag is accepted today but not yet read by any code path. |
 

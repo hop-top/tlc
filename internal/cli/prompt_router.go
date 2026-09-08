@@ -57,6 +57,11 @@ type routerCommand struct {
 
 // routePrompt sends the user prompt to an LLM and returns resolved commands.
 // It is the escalation path when ClassifyPrompt returns nil.
+// routerTemperature keeps command routing near-deterministic. kit's
+// llm.Request takes a *float64 so an explicit value is distinguishable
+// from unset, hence the addressable var rather than a literal.
+var routerTemperature = 0.1
+
 func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]ResolvedCommand, string, error) {
 	provider, err := resolvePromptLLM()
 	if err != nil {
@@ -78,7 +83,7 @@ func routePrompt(ctx context.Context, prompt string, schemaJSON []byte) ([]Resol
 			{Role: "system", Content: systemMsg},
 			{Role: "user", Content: prompt},
 		},
-		Temperature: 0.1,
+		Temperature: &routerTemperature,
 		MaxTokens:   1024,
 	}
 

@@ -382,7 +382,7 @@ func routePromptWithProvider(
 			{Role: "system", Content: systemMsg},
 			{Role: "user", Content: prompt},
 		},
-		Temperature: 0.1,
+		Temperature: &routerTemperature,
 		MaxTokens:   1024,
 	}
 

@@ -13,28 +13,44 @@ const noProject = "(no project)"
 
 // renderSummary writes a concise status-grouped summary of tasks to w.
 // Tasks are grouped by project, then counted by status.
+//
+// The slice handed in must be the full match set, not a page of it: the
+// printed Total is stated as fact and a truncated one is indistinguishable
+// from a real one. Callers behind a --limit must clear it first.
 func renderSummary(w io.Writer, tasks []*core.Task) {
-	if len(tasks) == 0 {
+	groups := groupByProject(tasks)
+	byProject := make(map[string]map[string]int, len(groups))
+	for name, group := range groups {
+		byProject[name] = statusCounts(group)
+	}
+	renderSummaryFromCounts(w, byProject)
+}
+
+// renderSummaryFromCounts writes the grouped summary from per-project
+// status-count maps. Splitting this from renderSummary lets aggregate
+// callers pass counts computed in the store, where the count cannot
+// depend on page size.
+func renderSummaryFromCounts(w io.Writer, byProject map[string]map[string]int) {
+	total := 0
+	for _, counts := range byProject {
+		total += sumCounts(counts)
+	}
+	if total == 0 {
 		_, _ = fmt.Fprintln(w, "No tasks found")
 		return
 	}
 
-	groups := groupByProject(tasks)
-	projectNames := sortedKeys(groups)
-
-	for i, name := range projectNames {
+	for i, name := range sortedKeys(byProject) {
 		if i > 0 {
 			_, _ = fmt.Fprintln(w)
 		}
 		_, _ = fmt.Fprintf(w, "Project: %s\n", name)
 
-		counts := statusCounts(groups[name])
-		statusNames := sortedKeys(counts)
-
-		for _, status := range statusNames {
+		counts := byProject[name]
+		for _, status := range sortedKeys(counts) {
 			_, _ = fmt.Fprintf(w, "  %-15s %d\n", status, counts[status])
 		}
-		_, _ = fmt.Fprintf(w, "  %-15s %d\n", "Total", len(groups[name]))
+		_, _ = fmt.Fprintf(w, "  %-15s %d\n", "Total", sumCounts(counts))
 	}
 }
 
@@ -61,6 +77,16 @@ func statusCounts(tasks []*core.Task) map[string]int {
 	return counts
 }
 
+// sumCounts totals a status-count map. The same fold appeared at four
+// call sites, each free to drift from the others; one helper cannot.
+func sumCounts(counts map[string]int) int {
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	return total
+}
+
 // sortedKeys returns the keys of a map sorted alphabetically.
 func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
@@ -73,17 +99,23 @@ func sortedKeys[V any](m map[string]V) []string {
 
 // renderCounters writes a flat status-count table to w.
 // Unlike renderSummary, tasks are not grouped by project.
+//
+// Same contract as renderSummary: the slice must be the full match set.
 func renderCounters(w io.Writer, tasks []*core.Task) {
-	if len(tasks) == 0 {
+	renderCountersFromCounts(w, statusCounts(tasks))
+}
+
+// renderCountersFromCounts writes the flat counter table from a
+// status-count map, letting aggregate callers pass store-computed counts
+// that are independent of page size.
+func renderCountersFromCounts(w io.Writer, counts map[string]int) {
+	if sumCounts(counts) == 0 {
 		_, _ = fmt.Fprintln(w, "No tasks found")
 		return
 	}
 
-	counts := statusCounts(tasks)
-	statusNames := sortedKeys(counts)
-
 	_, _ = fmt.Fprintln(w, "Status counts:")
-	for _, status := range statusNames {
+	for _, status := range sortedKeys(counts) {
 		_, _ = fmt.Fprintf(w, "  %-15s %d\n", status, counts[status])
 	}
 }

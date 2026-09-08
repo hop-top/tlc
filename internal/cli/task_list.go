@@ -46,6 +46,25 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			AllProjects:     taskListAllProjects,
 		}
 
+		// Aggregate formats count the match set, never a page of it.
+		// Pagination is dropped from the query before it reaches the
+		// store: a truncated count carries no signal that it is
+		// truncated, so honoring --limit here under-reports silently
+		// and JSON/YAML consumers never see a warning. --limit and an
+		// aggregate format are contradictory; the aggregate wins.
+		//
+		// Resolved once, here, and threaded onward: every branch below
+		// must agree on whether this run is an aggregate, and a second
+		// resolution is a second chance to disagree.
+		aggregate := aggregateFormat()
+		paginationRequested := cmd.Flags().Changed("limit") ||
+			cmd.Flags().Changed("offset") ||
+			fromConfig["limit"] || fromConfig["offset"]
+		if aggregate != "" {
+			query.Limit = 0
+			query.Offset = 0
+		}
+
 		if len(args) > 0 {
 			query.Search = args[0]
 		}
@@ -161,7 +180,16 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			}
 		}
 
-		// Temporal filter validation + parsing (T-0908).
+		// --blocked is a column predicate (blocked_reason non-empty),
+		// so it pushes into the WHERE fragment rather than filtering
+		// the returned slice — keeping --counters --blocked on the
+		// counting path.
+		if taskListBlocked {
+			blocked := true
+			query.Blocked = &blocked
+		}
+
+		// Temporal filter validation + parsing.
 		// Mutual exclusion is checked here, before opening storage, so
 		// errors surface against the user's flags without I/O side
 		// effects. Parsing uses util.ParseUntil per
@@ -172,7 +200,7 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 
 		// Workspace mode: query across workspace projects.
 		if cmd.Flags().Changed("workspace") {
-			return runTaskListWorkspace(cmd, ctx, query)
+			return runTaskListWorkspace(cmd, ctx, query, aggregate)
 		}
 
 		// Default: single-project query.
@@ -182,72 +210,45 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		}
 		defer func() { _ = s.Close() }()
 
+		// Aggregate fast path: count in SQL over the full match set so
+		// no rows are materialized. Valid exactly when nothing is
+		// filtered in Go afterwards — see taskListPostFilters, which
+		// is both the gate and the filter list, so the two cannot
+		// drift. Counts come grouped by project because that is the
+		// dimension --summary renders; --counters sums across them.
+		postFilters := taskListPostFilters(trackQIDs)
+		if aggregate != "" && len(postFilters) == 0 {
+			byProject, cErr := s.CountTasksByProjectAndStatus(ctx, query)
+			if cErr != nil {
+				return fmt.Errorf("failed to count tasks: %w; retry, or drop --%s for a row listing", cErr, aggregate)
+			}
+			noteIgnoredPagination(cmd, aggregate, paginationRequested,
+				totalProjectCounts(byProject))
+			return renderAggregateCounts(cmd, aggregate, byProject)
+		}
+
 		tasks, err := s.ListTasks(ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to list tasks: %w", err)
 		}
 
-		// Load stale config once; apply project default timeout + auto-fire hooks.
-		var taskCfg config.TaskConfig
-		_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
-		_ = taskCfg.Validate()                   //nolint:errcheck // best-effort validation
-
-		// Apply project default stale timeout to all tasks with nil StaleTimeout.
-		for _, t := range tasks {
-			if t.StaleTimeout == nil && taskCfg.Stale.DefaultTimeout > 0 {
-				d := taskCfg.Stale.DefaultTimeout
-				t.StaleTimeout = &d
-			}
+		// Stale bookkeeping — the project default timeout and the
+		// auto-fired hooks — is for row output only. An aggregate
+		// wants numbers; it does not read StaleFiredAt, and firing a
+		// hook plus a write transaction per stale task off a command
+		// annotated read-only is a side effect nobody asked for. The
+		// boundary is documented in docs/task-crud-spec-0.1.md.
+		if aggregate == "" {
+			applyStaleDefaults(ctx, s, tasks)
 		}
 
-		// Auto-fire stale hooks once per crossing (StaleFiredAt == nil guards re-fire).
-		if len(taskCfg.Stale.Hooks) > 0 {
-			now := time.Now().UTC()
-			for _, t := range tasks {
-				if t.IsStale() && t.StaleFiredAt == nil {
-					_ = core.RunStaleHooks(t, taskCfg.Stale.Hooks) //nolint:errcheck // best-effort stale hook
-					t.StaleFiredAt = &now
-					_ = s.UpdateTask(ctx, t) //nolint:errcheck // best-effort stale timestamp persist
-				}
-			}
-		}
+		tasks = applyPostFilters(tasks, postFilters)
 
-		// Post-query filter for --stale, --blocked, --blocked-by, --overdue.
-		if taskListStale || taskListBlocked || len(taskListBlockedBy) > 0 || taskListOverdue {
-			filtered := tasks[:0]
-			for _, t := range tasks {
-				if taskListStale && !t.IsStale() {
-					continue
-				}
-				if taskListBlocked && !t.IsBlocked() {
-					continue
-				}
-				if len(taskListBlockedBy) > 0 && !taskBlockedByAny(t, taskListBlockedBy) {
-					continue
-				}
-				if taskListOverdue {
-					if t.Status == core.StatusDone || t.Status == core.StatusSkipped {
-						continue
-					}
-				}
-				filtered = append(filtered, t)
-			}
-			tasks = filtered
+		if aggregate != "" {
+			noteIgnoredPagination(cmd, aggregate, paginationRequested, len(tasks))
+			return formatTasks(cmd, tasks, aggregate, statusProvided)
 		}
-
-		// Post-query filter for qualified track IDs (project-scoped).
-		if len(trackQIDs) > 0 {
-			tasks = filterByQualifiedTracks(tasks, trackQIDs)
-		}
-
-		format := viper.GetString("output.format")
-		if taskListSummary {
-			format = formatSummary
-		}
-		if taskListCounters {
-			format = formatCounters
-		}
-		return formatTasks(cmd, tasks, format, statusProvided)
+		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided)
 	},
 }
 
@@ -259,7 +260,9 @@ func (f *filesystemOpener) Open(project core.RegisteredProject) (workspace.Proje
 }
 
 // runTaskListWorkspace queries tasks across all projects in a workspace.
-func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Query) error {
+func runTaskListWorkspace(
+	cmd *cobra.Command, ctx context.Context, query core.Query, aggregate string,
+) error {
 	var workspaces []config.WorkspaceConfig
 	if err := viper.UnmarshalKey("workspaces", &workspaces); err != nil {
 		return fmt.Errorf("failed to read workspace config: %w", err)
@@ -324,11 +327,8 @@ func runTaskListWorkspace(cmd *cobra.Command, ctx context.Context, query core.Qu
 	}
 
 	format := viper.GetString("output.format")
-	if taskListSummary {
-		format = formatSummary
-	}
-	if taskListCounters {
-		format = formatCounters
+	if aggregate != "" {
+		format = aggregate
 	}
 	return formatWorkspaceTasks(cmd, tasks, format)
 }
@@ -434,57 +434,18 @@ func applyTemporalFilters(cmd *cobra.Command, query *core.Query) error {
 		query.DueAfter = &t
 	}
 	if taskListOverdue {
+		// One definition of overdue, in SQL: due_at < now AND status
+		// NOT IN (DONE, SKIPPED). core.Query.Overdue carries both
+		// halves so the status exclusion cannot merge into the
+		// OR-joined Filters status group and widen the result set —
+		// and so `task list --overdue`, `status`, and
+		// `--counters --overdue` all mean the same rows.
 		now := time.Now().UTC()
-		query.DueBefore = &now
-		// Status exclusion (DONE / SKIPPED) is applied post-query in
-		// the same way --stale / --blocked filter results — adding it
-		// to query.Filters would merge under the existing OR-joined
-		// status group and silently widen the result set.
+		query.Overdue = &now
 	}
 	if taskListNoDue {
 		f := false
 		query.HasDue = &f
 	}
 	return nil
-}
-
-// taskBlockedByAny reports whether t is blocked by any of the given IDs.
-func taskBlockedByAny(t *core.Task, ids []string) bool {
-	blockers := t.BlockedBy()
-	for _, want := range ids {
-		for _, b := range blockers {
-			if strings.EqualFold(b, want) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// filterByQualifiedTracks returns tasks matching any of the qualified track IDs.
-// Local QIDs match any task with that track_id regardless of project.
-// Qualified QIDs match only tasks whose track_id and project_id both match.
-func filterByQualifiedTracks(tasks []*core.Task, qids []core.QualifiedTrackID) []*core.Task {
-	filtered := tasks[:0]
-	for _, t := range tasks {
-		if t.TrackID == nil || *t.TrackID == "" {
-			continue
-		}
-		for _, q := range qids {
-			if *t.TrackID != q.TrackID {
-				continue
-			}
-			if q.IsLocal() {
-				filtered = append(filtered, t)
-				break
-			}
-			// Qualified: must also match project.
-			projID := q.ProjectID()
-			if t.ProjectID != nil && *t.ProjectID == projID {
-				filtered = append(filtered, t)
-				break
-			}
-		}
-	}
-	return filtered
 }

@@ -702,46 +702,7 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
 	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks"
 
-	whereClauses, args := buildFilterClauses(query.Filters)
-
-	if query.Search != "" {
-		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
-		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
-	}
-
-	// Auto-filter by project if in a project context and not explicitly requesting all projects
-	if !query.AllProjects {
-		if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
-			whereClauses = append(whereClauses, "project_id = ?")
-			args = append(args, proj.ProjectID)
-		}
-	}
-
-	if !query.IncludeArchived {
-		whereClauses = append(whereClauses, "archived = 0")
-	}
-
-	// Temporal filters (T-0908). due_at is stored as RFC3339 UTC TEXT
-	// per docs/temporal-spec-0.1.md §4. RFC3339's lexicographic byte
-	// ordering matches chronological ordering when all values share the
-	// same offset (writes use UTC with the `Z` suffix uniformly — see
-	// the INSERT/UPDATE paths above), so a string `<` / `>` against an
-	// RFC3339 literal is a correct chronological compare.
-	if query.DueBefore != nil {
-		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at < ?")
-		args = append(args, query.DueBefore.UTC().Format(time.RFC3339))
-	}
-	if query.DueAfter != nil {
-		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at > ?")
-		args = append(args, query.DueAfter.UTC().Format(time.RFC3339))
-	}
-	if query.HasDue != nil {
-		if *query.HasDue {
-			whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at != ''")
-		} else {
-			whereClauses = append(whereClauses, "(due_at IS NULL OR due_at = '')")
-		}
-	}
+	whereClauses, args := buildTaskWhereClauses(query)
 
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
@@ -1584,40 +1545,4 @@ func (s *SQLiteStorage) Close() error {
 // Satisfies core.TaskReader.
 func (s *SQLiteStorage) GetTaskLogs(ctx context.Context, taskID string) ([]*core.LogEntry, error) {
 	return s.GetLogs(ctx, taskID, "desc")
-}
-
-// CountTasks returns the number of tasks matching the query.
-// Satisfies core.TaskReader.
-func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, error) {
-	sqlQuery := "SELECT COUNT(*) FROM tasks"
-
-	whereClauses, args := buildFilterClauses(query.Filters)
-
-	if query.Search != "" {
-		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
-		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
-	}
-
-	// Auto-filter by project if in a project context and not explicitly requesting all projects
-	if !query.AllProjects {
-		if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
-			whereClauses = append(whereClauses, "project_id = ?")
-			args = append(args, proj.ProjectID)
-		}
-	}
-
-	if !query.IncludeArchived {
-		whereClauses = append(whereClauses, "archived = 0")
-	}
-
-	if len(whereClauses) > 0 {
-		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
-	}
-
-	var count int
-	err := s.db.QueryRowContext(ctx, sqlQuery, args...).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count tasks: %w", err)
-	}
-	return count, nil
 }

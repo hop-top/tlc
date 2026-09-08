@@ -1,0 +1,225 @@
+package storage
+
+// Task WHERE-fragment construction and the aggregate COUNT queries built on
+// it. One fragment, one definition of every predicate: the list query, the
+// per-status count, the per-project count, and the scalar count all pass
+// through buildTaskWhereClauses, so a filter added here reaches all four and
+// cannot drift between them.
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"hop.top/tlc/internal/core"
+)
+
+// closedStatuses are the statuses that take a task out of the overdue
+// population: a finished task is not late. Shared by the Overdue predicate
+// so every caller of "overdue" means the same rows.
+var closedStatuses = []core.TaskStatus{core.StatusDone, core.StatusSkipped}
+
+// buildTaskWhereClauses assembles the WHERE fragment shared by the task
+// list and task count queries: caller filters, full-text search, implicit
+// project scoping, archive exclusion, the due_at temporal predicates, the
+// overdue compound predicate, and the blocked column predicate.
+//
+// Pagination (LIMIT/OFFSET) and ORDER BY are deliberately excluded so
+// aggregate callers can count the full match set independently of page
+// size — see CountTasksByStatus.
+func buildTaskWhereClauses(query core.Query) ([]string, []any) {
+	whereClauses, args := buildFilterClauses(query.Filters)
+
+	if query.Search != "" {
+		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
+		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
+	}
+
+	// Auto-filter by project if in a project context and not explicitly requesting all projects
+	if !query.AllProjects {
+		if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
+			whereClauses = append(whereClauses, "project_id = ?")
+			args = append(args, proj.ProjectID)
+		}
+	}
+
+	if !query.IncludeArchived {
+		whereClauses = append(whereClauses, "archived = 0")
+	}
+
+	tClauses, tArgs := buildTaskTimeClauses(query)
+	whereClauses = append(whereClauses, tClauses...)
+	args = append(args, tArgs...)
+
+	return whereClauses, args
+}
+
+// buildTaskTimeClauses assembles the due_at temporal predicates plus the two
+// compound/column predicates that share their shape: overdue and blocked.
+// Split from buildTaskWhereClauses to keep each function's branching readable.
+func buildTaskTimeClauses(query core.Query) (clauses []string, args []any) {
+	// Temporal filters. due_at is stored as RFC3339 UTC TEXT per
+	// docs/temporal-spec-0.1.md §4. RFC3339's lexicographic byte
+	// ordering matches chronological ordering when all values share the
+	// same offset (writes use UTC with the `Z` suffix uniformly — see
+	// the INSERT/UPDATE paths in sqlite.go), so a string `<` / `>`
+	// against an RFC3339 literal is a correct chronological compare.
+	if query.DueBefore != nil {
+		clauses = append(clauses, "due_at IS NOT NULL AND due_at < ?")
+		args = append(args, query.DueBefore.UTC().Format(time.RFC3339))
+	}
+	if query.DueAfter != nil {
+		clauses = append(clauses, "due_at IS NOT NULL AND due_at > ?")
+		args = append(args, query.DueAfter.UTC().Format(time.RFC3339))
+	}
+	if query.HasDue != nil {
+		if *query.HasDue {
+			clauses = append(clauses, "due_at IS NOT NULL AND due_at != ''")
+		} else {
+			clauses = append(clauses, "(due_at IS NULL OR due_at = '')")
+		}
+	}
+
+	// Overdue is one predicate, not two: the status exclusion travels in
+	// its own AND-joined NOT IN rather than through Filters, where it
+	// would merge into the OR-joined status group and widen the result
+	// set instead of narrowing it.
+	if query.Overdue != nil {
+		placeholders := make([]string, len(closedStatuses))
+		for i := range closedStatuses {
+			placeholders[i] = "?"
+		}
+		clauses = append(clauses,
+			fmt.Sprintf("due_at IS NOT NULL AND due_at < ? AND status NOT IN (%s)",
+				strings.Join(placeholders, ",")))
+		// Args follow placeholder order within the clause: the due_at
+		// bound first, then the excluded statuses.
+		args = append(args, query.Overdue.UTC().Format(time.RFC3339))
+		for _, st := range closedStatuses {
+			args = append(args, string(st))
+		}
+	}
+
+	if query.Blocked != nil {
+		if *query.Blocked {
+			clauses = append(clauses,
+				"blocked_reason IS NOT NULL AND blocked_reason != ''")
+		} else {
+			clauses = append(clauses,
+				"(blocked_reason IS NULL OR blocked_reason = '')")
+		}
+	}
+
+	return clauses, args
+}
+
+// taskWhereSuffix renders the WHERE fragment for a task query, or "" when
+// the query matches every row.
+func taskWhereSuffix(clauses []string) string {
+	if len(clauses) == 0 {
+		return ""
+	}
+	return " WHERE " + strings.Join(clauses, " AND ")
+}
+
+// CountTasksByStatus returns per-status row counts over the query's full
+// match set, ignoring Limit and Offset.
+//
+// Aggregates must not depend on page size. Counting client-side over the
+// slice ListTasks returns yields the count of the page, which is silently
+// wrong whenever the match set exceeds the limit. This computes the counts
+// in SQL over the same WHERE fragment ListTasks uses, so pagination cannot
+// influence the result and no rows are materialized.
+//
+// Callers applying post-query filters this fragment cannot express
+// (--stale, --blocked-by, qualified track IDs) must not use this; count
+// the fully filtered slice instead, fetched without a limit.
+func (s *SQLiteStorage) CountTasksByStatus(ctx context.Context, query core.Query) (map[string]int, error) {
+	whereClauses, args := buildTaskWhereClauses(query)
+
+	//nolint:gosec // G202: whereClauses built from validated field names; values travel as ? args
+	sqlQuery := "SELECT status, COUNT(*) FROM tasks" +
+		taskWhereSuffix(whereClauses) + " GROUP BY status"
+
+	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count tasks: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return nil, fmt.Errorf("failed to scan task count row: %w", err)
+		}
+		counts[status] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate task count rows: %w", err)
+	}
+	return counts, nil
+}
+
+// CountTasksByProjectAndStatus returns row counts grouped by project and
+// then by status, over the query's full match set, ignoring Limit and
+// Offset.
+//
+// The project dimension is what a grouped summary renders, and it is a
+// column, so grouping by it in SQL keeps a cross-project summary on the
+// counting path instead of forcing every row to be materialized just to
+// bucket it in Go. Tasks with no project land under the empty-string key;
+// callers map that to their own display label.
+func (s *SQLiteStorage) CountTasksByProjectAndStatus(
+	ctx context.Context, query core.Query,
+) (map[string]map[string]int, error) {
+	whereClauses, args := buildTaskWhereClauses(query)
+
+	//nolint:gosec // G202: whereClauses built from validated field names; values travel as ? args
+	sqlQuery := "SELECT COALESCE(project_id, ''), status, COUNT(*) FROM tasks" +
+		taskWhereSuffix(whereClauses) + " GROUP BY project_id, status"
+
+	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count tasks by project: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	counts := make(map[string]map[string]int)
+	for rows.Next() {
+		var project, status string
+		var n int
+		if err := rows.Scan(&project, &status, &n); err != nil {
+			return nil, fmt.Errorf("failed to scan task count row: %w", err)
+		}
+		if counts[project] == nil {
+			counts[project] = make(map[string]int)
+		}
+		counts[project][status] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate task count rows: %w", err)
+	}
+	return counts, nil
+}
+
+// CountTasks returns the number of tasks matching the query.
+// Satisfies core.TaskReader.
+//
+// Built on buildTaskWhereClauses rather than a hand-rolled filter copy, so
+// every predicate the list query honors — the temporal ones included —
+// narrows this count too.
+func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, error) {
+	whereClauses, args := buildTaskWhereClauses(query)
+
+	// whereClauses are built from validated field names; values travel as ? args.
+	sqlQuery := "SELECT COUNT(*) FROM tasks" + taskWhereSuffix(whereClauses)
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, sqlQuery, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count tasks: %w", err)
+	}
+	return count, nil
+}

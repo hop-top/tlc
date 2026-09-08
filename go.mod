@@ -26,10 +26,9 @@ require (
 	go.jetify.com/typeid v1.3.0
 	golang.org/x/crypto v0.50.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/term v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.0
-	hop.top/kit v0.5.0-alpha.1
+	hop.top/kit v0.5.0-alpha.3
 	hop.top/vstar v0.0.0-20260526030101-766e6e3a0692
 	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.48.2
@@ -38,6 +37,7 @@ require (
 require (
 	cel.dev/expr v0.25.1 // indirect
 	charm.land/fang/v2 v2.0.1 // indirect
+	connectrpc.com/connect v1.19.1 // indirect
 	filippo.io/age v1.3.1 // indirect
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
@@ -47,6 +47,7 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/aws/aws-lambda-go v1.54.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
@@ -138,7 +139,7 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
