@@ -12,7 +12,6 @@ package cli
 import (
 	"bytes"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -41,82 +40,6 @@ func styledHasBoxRune(s string) bool {
 		}
 	}
 	return false
-}
-
-// buildTLCBinary builds the tlc binary into a tempdir for subprocess
-// runs. Reused across PTY tests in this file via testing.B initOnce.
-func buildTLCBinary(t *testing.T) string {
-	t.Helper()
-	binDir := t.TempDir()
-	binPath := filepath.Join(binDir, "tlc")
-	cmd := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binPath, "./cmd/tlc")
-	cmd.Dir = styledRepoRoot(t)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go build tlc: %v\n%s", err, out)
-	}
-	return binPath
-}
-
-// styledRepoRoot returns the absolute path to the tlc repo root by
-// walking up from the working directory until go.mod is found.
-// Distinct from cli.repoRoot (agent_helpers.go) which returns CWD or
-// "/workspace" depending on agent run mode.
-func styledRepoRoot(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd: %v", err)
-	}
-	d := wd
-	for {
-		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
-			return d
-		}
-		parent := filepath.Dir(d)
-		if parent == d {
-			t.Fatalf("repo root not found from %s", wd)
-		}
-		d = parent
-	}
-}
-
-// styledEnv returns a test-isolated env with HOME/XDG paths pinned to
-// the given tempdir so subprocess tlc runs see no shared state.
-func styledEnv(home, dbPath string) []string {
-	override := map[string]bool{
-		"HOME":          true,
-		"USERPROFILE":   true,
-		"XDG_DATA_HOME": true,
-		"TLC_DB":        true,
-	}
-	env := []string{
-		"HOME=" + home,
-		"USERPROFILE=" + home,
-		"XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"),
-		"TLC_DB=" + dbPath,
-	}
-	for _, e := range os.Environ() {
-		key := strings.SplitN(e, "=", 2)[0]
-		if override[key] {
-			continue
-		}
-		env = append(env, e)
-	}
-	return env
-}
-
-// runTLCPlain runs tlc with stdout as a pipe (non-TTY).
-func runTLCPlain(t *testing.T, bin, cwd string, env []string, args ...string) string {
-	t.Helper()
-	cmd := exec.CommandContext(t.Context(), bin, args...)
-	cmd.Env = env
-	cmd.Dir = cwd
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("tlc %v: %v\n%s", args, err, out)
-	}
-	return string(out)
 }
 
 // runTLCPTY runs tlc attached to a pseudo-terminal so kit/output sees
@@ -160,15 +83,15 @@ func TestStyledTable_TTYAndNonTTYContentIdentity(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir() // separate dir so init writes a fresh .tlc/
 	dbPath := filepath.Join(home, "test.db")
-	env := styledEnv(home, dbPath)
+	env := e2eEnv(t, home, dbPath)
 
 	// Seed: init + one track + one task so listings have content.
-	runTLCPlain(t, bin, cwd, env, "init")
-	runTLCPlain(t, bin, cwd, env, "track", "create", "demo-track", "--type", "feature")
-	runTLCPlain(t, bin, cwd, env, "task", "create", "alpha task")
+	runTLCOK(t, bin, cwd, env, "init")
+	runTLCOK(t, bin, cwd, env, "track", "create", "demo-track", "--type", "feature")
+	runTLCOK(t, bin, cwd, env, "task", "create", "alpha task")
 
 	// Non-TTY path.
-	plain := runTLCPlain(t, bin, cwd, env, "task", "list")
+	plain := runTLCOK(t, bin, cwd, env, "task", "list")
 	if styledAnsiRe.MatchString(plain) {
 		t.Errorf("non-TTY task list leaked ANSI escapes: %q", plain)
 	}
