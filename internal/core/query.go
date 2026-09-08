@@ -36,9 +36,20 @@ type Query struct {
 	AllProjects     bool   // If true, don't filter by current project
 	StatusPriority  string // Status value to sort first (e.g. "IN_PROGRESS")
 
-	// Temporal filters on tasks.due_at (T-0908). See TaskFilter docs and
-	// internal/storage/sqlite.go::ListTasks for SQL pushdown semantics.
+	// Temporal filters on tasks.due_at. See TaskFilter docs and
+	// internal/storage/task_counts.go::buildTaskWhereClauses for SQL
+	// pushdown semantics.
 	DueBefore *time.Time
 	DueAfter  *time.Time
 	HasDue    *bool
+
+	// Overdue selects tasks past their due date that are still open:
+	// due_at < Overdue AND status NOT IN (DONE, SKIPPED). One definition
+	// of overdue, expressed in SQL, shared by every caller — the status
+	// exclusion cannot merge into the OR-joined Filters status group.
+	Overdue *time.Time
+
+	// Blocked, when set, selects tasks by whether blocked_reason is a
+	// non-empty string. A column predicate, so it pushes down to SQL.
+	Blocked *bool
 }
