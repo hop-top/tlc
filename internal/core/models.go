@@ -13,6 +13,42 @@ const (
 	StatusSkipped    TaskStatus = "SKIPPED"
 )
 
+// taskStatuses is the closed set of task statuses in lifecycle order. The
+// single source of truth: validation messages, the CLI's flag-enum
+// registration, fuzzy normalisation, and shell completion all read it, so
+// adding or removing a status here reaches every consumer at once.
+var taskStatuses = []TaskStatus{
+	StatusTodo,
+	StatusInProgress,
+	StatusDone,
+	StatusSkipped,
+}
+
+// TaskStatuses returns the closed set of task statuses in lifecycle order.
+// The returned slice is a copy; mutating it does not affect the canon.
+func TaskStatuses() []TaskStatus {
+	return append([]TaskStatus(nil), taskStatuses...)
+}
+
+// TaskStatusStrings returns TaskStatuses as plain strings, for consumers
+// that render or register the set (error messages, flag enums, completion).
+func TaskStatusStrings() []string {
+	return enumStrings(taskStatuses)
+}
+
+// ValidTaskStatus reports whether s is a recognized task status (or empty).
+func ValidTaskStatus(s TaskStatus) bool {
+	if s == "" {
+		return true
+	}
+	for _, v := range taskStatuses {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
 // Effort represents task size estimate: XS, S, M, L, XL.
 type Effort string
 
@@ -24,11 +60,30 @@ const (
 	EffortXL Effort = "XL"
 )
 
+// efforts is the closed set of effort values in ascending size order.
+// Same contract as taskStatuses: one declaration, every consumer reads it.
+var efforts = []Effort{EffortXS, EffortS, EffortM, EffortL, EffortXL}
+
+// Efforts returns the closed set of effort values in ascending size order.
+// The returned slice is a copy.
+func Efforts() []Effort {
+	return append([]Effort(nil), efforts...)
+}
+
+// EffortStrings returns Efforts as plain strings.
+func EffortStrings() []string {
+	return enumStrings(efforts)
+}
+
 // ValidEffort returns true if e is a recognised effort value (or empty).
 func ValidEffort(e Effort) bool {
-	switch e {
-	case "", EffortXS, EffortS, EffortM, EffortL, EffortXL:
+	if e == "" {
 		return true
+	}
+	for _, v := range efforts {
+		if e == v {
+			return true
+		}
 	}
 	return false
 }
@@ -43,13 +98,43 @@ const (
 	PriorityP3 Priority = "P3"
 )
 
+// priorities is the closed set of priorities in descending urgency order.
+// Same contract as taskStatuses: one declaration, every consumer reads it.
+var priorities = []Priority{PriorityP0, PriorityP1, PriorityP2, PriorityP3}
+
+// Priorities returns the closed set of priorities in descending urgency
+// order. The returned slice is a copy.
+func Priorities() []Priority {
+	return append([]Priority(nil), priorities...)
+}
+
+// PriorityStrings returns Priorities as plain strings.
+func PriorityStrings() []string {
+	return enumStrings(priorities)
+}
+
 // ValidPriority returns true if p is a recognised priority value (or empty).
 func ValidPriority(p Priority) bool {
-	switch p {
-	case "", PriorityP0, PriorityP1, PriorityP2, PriorityP3:
+	if p == "" {
 		return true
 	}
+	for _, v := range priorities {
+		if p == v {
+			return true
+		}
+	}
 	return false
+}
+
+// enumStrings renders a canonical enum slice as plain strings, preserving
+// declaration order. One helper so every enum's string form is derived the
+// same way rather than re-typed beside its constants.
+func enumStrings[T ~string](values []T) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = string(v)
+	}
+	return out
 }
 
 type Task struct {

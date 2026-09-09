@@ -366,7 +366,7 @@ func init() {
 	)
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateStatus, "status", "",
-		"New status (pending, active, completed, abandoned, archived)",
+		"New status",
 	)
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateAssignedTo, "assigned-to", "",

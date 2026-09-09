@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/sahilm/fuzzy"
+
+	"hop.top/tlc/internal/core"
 )
 
 // statusAliases maps lowercase alias/variant → canonical uppercase value.
@@ -27,8 +30,10 @@ var statusAliases = map[string]string{
 	"skip":        "SKIPPED",
 }
 
-// statusCanonical is the ordered list for fuzzy matching.
-var statusCanonical = []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"}
+// statusCanonical is the ordered list for fuzzy matching, read from the
+// domain canon so a status added there reaches normalisation, the error
+// messages, the flag enums, and completion without a second edit.
+var statusCanonical = core.TaskStatusStrings()
 
 // priorityAliases maps lowercase alias/variant → canonical uppercase value.
 var priorityAliases = map[string]string{
@@ -50,8 +55,9 @@ var priorityAliases = map[string]string{
 	"low":      "P3",
 }
 
-// priorityCanonical is the ordered list for fuzzy matching.
-var priorityCanonical = []string{"P0", "P1", "P2", "P3"}
+// priorityCanonical is the ordered list for fuzzy matching, read from the
+// domain canon (see statusCanonical).
+var priorityCanonical = core.PriorityStrings()
 
 // effortAliases maps lowercase alias/variant → canonical uppercase value.
 // Single-letter canonicals (S, M, L) make fuzzy matching unreliable for
@@ -80,8 +86,42 @@ var effortAliases = map[string]string{
 	"huge":        "XL",
 }
 
-// effortCanonical is the ordered list for fuzzy matching.
-var effortCanonical = []string{"XS", "S", "M", "L", "XL"}
+// effortCanonical is the ordered list for fuzzy matching, read from the
+// domain canon (see statusCanonical).
+var effortCanonical = core.EffortStrings()
+
+// unknownStatusError renders the rejection for a status the normaliser
+// could not resolve, naming the legal set. Every caller — task list, task
+// create, task update, the HTTP surface — formats through this one helper,
+// so the message and the flag-enum registration cannot drift apart.
+func unknownStatusError(input string) error {
+	return fmt.Errorf("unknown status %q; valid values: %s", input, enumList(statusCanonical))
+}
+
+// unknownPriorityError is unknownStatusError for --priority.
+func unknownPriorityError(input string) error {
+	return fmt.Errorf("unknown priority %q; valid values: %s", input, enumList(priorityCanonical))
+}
+
+// invalidPriorityError is the set-on-write rejection for --priority. The
+// wording differs from unknownPriorityError ("invalid" + "must be one of"
+// rather than "unknown" + "valid values") because the filter path and the
+// write path have always phrased it differently; both now read the same
+// canonical set, so only the prose differs.
+func invalidPriorityError(input string) error {
+	return fmt.Errorf("invalid priority %q: must be one of %s", input, enumList(priorityCanonical))
+}
+
+// unknownEffortError is unknownStatusError for --effort.
+func unknownEffortError(input string) error {
+	return fmt.Errorf("invalid effort %q: must be one of %s", input, enumList(effortCanonical))
+}
+
+// enumList renders a canonical set the way the error messages and the
+// flag-enum help suffix both spell it: comma-separated, declaration order.
+func enumList(values []string) string {
+	return strings.Join(values, ", ")
+}
 
 // NormalizeStatus resolves input to a canonical status string.
 // Resolution order: exact (case-insensitive) → alias → fuzzy.

@@ -184,21 +184,21 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	if status != "" {
 		normalized, ok := NormalizeStatus(status)
 		if !ok {
-			return fmt.Errorf("unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", status)
+			return unknownStatusError(status)
 		}
 		status = normalized
 	}
 	if effort != "" {
 		normalized, ok := NormalizeEffort(effort)
 		if !ok {
-			return fmt.Errorf("invalid effort %q: must be one of XS, S, M, L, XL", effort)
+			return unknownEffortError(effort)
 		}
 		effort = normalized
 	}
 	if priority != "" {
 		normalized, ok := NormalizePriority(priority)
 		if !ok {
-			return fmt.Errorf("invalid priority %q: must be one of P0, P1, P2, P3", priority)
+			return invalidPriorityError(priority)
 		}
 		priority = normalized
 	}
@@ -380,8 +380,8 @@ func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
 	cmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
 	cmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
-	cmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate (XS, S, M, L, XL)")
-	cmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority (P0, P1, P2, P3)")
+	cmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate")
+	cmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority")
 	cmd.Flags().StringSliceVar(&taskBlockedBy, "blocked-by", []string{}, "Blocking task IDs (repeatable)")
 	cmd.Flags().StringSliceVar(&taskTags, "tag", []string{}, "Tags (repeatable)")
 	cmd.Flags().StringVarP(&taskReference, "reference", "r", "", "Reference pointer")

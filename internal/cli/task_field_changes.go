@@ -170,7 +170,7 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 	if changes.Status != nil {
 		normalized, ok := NormalizeStatus(*changes.Status)
 		if !ok {
-			return changed, fmt.Errorf("%w: unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", domain.ErrValidation, *changes.Status)
+			return changed, fmt.Errorf("%w: %v", domain.ErrValidation, unknownStatusError(*changes.Status))
 		}
 		nextStatus := core.TaskStatus(normalized)
 		wm := core.DefaultWorkflow()
@@ -198,7 +198,7 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		} else {
 			normalized, ok := NormalizeEffort(*changes.Effort)
 			if !ok {
-				return changed, fmt.Errorf("%w: invalid effort %q: must be one of XS, S, M, L, XL", domain.ErrValidation, *changes.Effort)
+				return changed, fmt.Errorf("%w: %v", domain.ErrValidation, unknownEffortError(*changes.Effort))
 			}
 			task.Effort = core.Effort(normalized)
 		}
@@ -213,7 +213,7 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		} else {
 			normalized, ok := NormalizePriority(*changes.Priority)
 			if !ok {
-				return changed, fmt.Errorf("%w: invalid priority %q: must be one of P0, P1, P2, P3", domain.ErrValidation, *changes.Priority)
+				return changed, fmt.Errorf("%w: %v", domain.ErrValidation, invalidPriorityError(*changes.Priority))
 			}
 			task.Priority = core.Priority(normalized)
 		}

@@ -71,7 +71,7 @@ func handleTaskList(deps *serveDeps) http.HandlerFunc {
 		if v := query.Get("status"); v != "" {
 			normalized, ok := NormalizeStatus(v)
 			if !ok {
-				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q; valid values: TODO, IN_PROGRESS, DONE, SKIPPED", v)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "%v", unknownStatusError(v))
 				return
 			}
 			q.Filters = append(q.Filters, core.FieldFilter{Field: "status", Value: normalized})
@@ -159,7 +159,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		if effort != "" {
 			normalized, ok := NormalizeEffort(effort)
 			if !ok {
-				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_effort", "invalid effort %q: must be one of XS, S, M, L, XL", effort)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_effort", "%v", unknownEffortError(effort))
 				return
 			}
 			effort = normalized
@@ -168,7 +168,7 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 		if priority != "" {
 			normalized, ok := NormalizePriority(priority)
 			if !ok {
-				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_priority", "invalid priority %q: must be one of P0, P1, P2, P3", priority)
+				writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_priority", "%v", invalidPriorityError(priority))
 				return
 			}
 			priority = normalized
