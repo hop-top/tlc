@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build build-plugins build-shims test test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild smoke-chdir pre-merge
+.PHONY: help install build build-plugins build-shims test test-plugins test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild smoke-chdir pre-merge
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -13,6 +13,9 @@ COLOR_BLUE=\033[34m
 BINARY_NAME=tlc
 BIN_DIR=bin
 PLUGIN_DIRS=$(wildcard plugins/*/main.go)
+# Plugins carrying their own go.mod. The root module's ./... cannot reach them,
+# so `go test ./...` skips them silently — they need an explicit per-module run.
+NESTED_PLUGIN_MODS=$(patsubst %/go.mod,%,$(wildcard plugins/*/go.mod))
 COVERAGE_DIR=coverage
 TMP_DIR=tmp
 MAIN_PATH=cmd/tlc/main.go
@@ -37,14 +40,30 @@ build: build-plugins ## Build the binary and plugins to bin/
 	@go build -v -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ Built $(BIN_DIR)/$(BINARY_NAME)$(COLOR_RESET)"
 
+# A plugin carrying its own go.mod is a NESTED MODULE: the root module cannot
+# resolve it as a package path (`go build ./plugins/x/` fails with "main module
+# does not contain package"), so it has to be built from inside its own
+# directory with an absolute -o. Every build is exit-checked; a bare
+# `go build ...; echo "✓ Built"` prints the tick whether or not a binary was
+# produced, which is how four plugins silently stopped shipping.
 build-plugins: ## Build all plugin binaries
 	@if [ -n "$(PLUGIN_DIRS)" ]; then \
+		root=$$(pwd); \
 		for p in $(PLUGIN_DIRS); do \
 			dir=$$(dirname $$p); \
 			name=$$(basename $$dir); \
 			echo "$(COLOR_BLUE)Building plugin $$name...$(COLOR_RESET)"; \
 			mkdir -p $$dir/bin; \
-			go build -buildvcs=false -o $$dir/bin/$$name ./$$dir/; \
+			out=$$root/$$dir/bin/$$name; \
+			if [ -f "$$dir/go.mod" ]; then \
+				( cd "$$dir" && go build -buildvcs=false -o "$$out" ./ ) || \
+					{ echo "$(COLOR_YELLOW)✗ Failed to build plugin $$name (nested module $$dir)$(COLOR_RESET)" >&2; exit 1; }; \
+			else \
+				go build -buildvcs=false -o "$$out" ./$$dir/ || \
+					{ echo "$(COLOR_YELLOW)✗ Failed to build plugin $$name$(COLOR_RESET)" >&2; exit 1; }; \
+			fi; \
+			[ -f "$$out" ] || \
+				{ echo "$(COLOR_YELLOW)✗ Plugin $$name reported success but produced no binary$(COLOR_RESET)" >&2; exit 1; }; \
 			echo "$(COLOR_GREEN)✓ Built $$dir/bin/$$name$(COLOR_RESET)"; \
 		done; \
 	fi
@@ -68,7 +87,7 @@ build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 	@echo "  built tlc-shim-catchall"
 	@echo "$(COLOR_GREEN)✓ Shims built to $(SHIMS_BIN_DIR)/$(COLOR_RESET)"
 
-test: ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
+test: test-plugins ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
 	@echo "$(COLOR_BLUE)Running tests...$(COLOR_RESET)"
 	@go test -v -race ./...
 	@echo "$(COLOR_GREEN)✓ All tests passed$(COLOR_RESET)"
@@ -76,6 +95,19 @@ test: ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
 test-short: ## Run tests without race detector (faster)
 	@echo "$(COLOR_BLUE)Running tests (short mode)...$(COLOR_RESET)"
 	@go test -v -short ./...
+	@for m in $(NESTED_PLUGIN_MODS); do \
+		( cd "$$m" && go test -short -buildvcs=false ./... ) || \
+			{ echo "$(COLOR_YELLOW)✗ Tests failed in nested module $$m$(COLOR_RESET)" >&2; exit 1; }; \
+	done
+
+# Nested plugin modules are invisible to the root module's ./..., so their tests
+# never ran under `make test`. Run each from its own directory, exit-checked.
+test-plugins: ## Run tests for nested plugin modules (skipped by root ./...)
+	@for m in $(NESTED_PLUGIN_MODS); do \
+		echo "$(COLOR_BLUE)Testing nested module $$m...$(COLOR_RESET)"; \
+		( cd "$$m" && go test -race -buildvcs=false ./... ) || \
+			{ echo "$(COLOR_YELLOW)✗ Tests failed in nested module $$m$(COLOR_RESET)" >&2; exit 1; }; \
+	done
 
 lint: ## Run golangci-lint
 	@echo "$(COLOR_BLUE)Running linters...$(COLOR_RESET)"
@@ -96,6 +128,10 @@ fmt: ## Format all Go files (gofumpt + goimports; gofumpt is a strict gofmt supe
 vet: ## Run go vet
 	@echo "$(COLOR_BLUE)Running go vet...$(COLOR_RESET)"
 	@go vet ./...
+	@for m in $(NESTED_PLUGIN_MODS); do \
+		( cd "$$m" && go vet -buildvcs=false ./... ) || \
+			{ echo "$(COLOR_YELLOW)✗ Vet failed in nested module $$m$(COLOR_RESET)" >&2; exit 1; }; \
+	done
 	@echo "$(COLOR_GREEN)✓ Vet passed$(COLOR_RESET)"
 
 tidy: ## Tidy and verify go modules
