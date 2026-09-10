@@ -35,6 +35,11 @@ func TestMain(m *testing.M) {
 
 	before := snapshotConfigPaths(pkgDir)
 
+	// Name the writer if one appears. checkNoStrayConfig below runs too
+	// late to do that: it sees the finished file, not the goroutine that
+	// wrote it. The watcher dumps stacks while the write is happening.
+	watchForStrayConfig(pkgDir)
+
 	code := m.Run()
 
 	if code == 0 {
@@ -149,6 +154,8 @@ func checkNoStrayConfig(dir string, before map[string]configFingerprint) error {
 		}
 
 		return fmt.Errorf("test wrote a config file into the package directory: %s\n"+
+			"Scroll up for the \"stray config appeared\" report: it dumps the goroutine stacks taken\n"+
+			"while the write was in flight, which names the test and the exact write path.\n"+
 			"A test reached viper.WriteConfig without a config file set, so viper fell back to the\n"+
 			"working directory. Chdir into t.TempDir() and call viper.SetConfigFile with a path\n"+
 			"inside it — see setupSyncConfigTest in sync_test.go. Production code must route the\n"+
