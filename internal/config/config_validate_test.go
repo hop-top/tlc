@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -526,5 +527,67 @@ func TestTaskConfig_ValidateWorkflowSkipsSchedulingKeys(t *testing.T) {
 	}
 	if err := cfg.Task.Validate(); err == nil {
 		t.Error("Validate must reject an out-of-vocabulary scheduling key")
+	}
+}
+
+// A rule whose FROM status is terminal can never fire: ValidateTransition
+// refuses every transition out of a terminal status before it ever
+// consults the rules, and `tlc task reopen` is the sanctioned way out.
+// Accepting such a rule silently left the user with a rule they wrote,
+// config validation blessed, and nothing honored. Reject it instead, so
+// the config fails loudly and names the status.
+func TestTaskConfig_StateMachineRuleFromTerminalStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.StateMachine.Rules["DONE"] = []string{"TODO"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for state machine rule out of terminal status DONE, got nil")
+	}
+	if !strings.Contains(err.Error(), "DONE") {
+		t.Errorf("error must name the offending status, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "reopen") {
+		t.Errorf("error must point at the sanctioned way out, got: %v", err)
+	}
+}
+
+// The per-tag overrides get the same check. This is the case that
+// motivated it: `workflows.reopenable.state_machine.rules.DONE` was
+// accepted here and inert at runtime.
+func TestTaskConfig_WorkflowOverrideRuleFromTerminalStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Workflows = map[string]WorkflowOverride{
+		"reopenable": {
+			StateMachine: &WorkflowDefinition{
+				Rules: map[string][]string{"DONE": {"TODO"}},
+			},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for override rule out of terminal status DONE, got nil")
+	}
+	if !strings.Contains(err.Error(), "reopenable") {
+		t.Errorf("error must name the override tag, got: %v", err)
+	}
+}
+
+// Terminal statuses remain legal as rule TARGETS — that is how a task
+// reaches DONE at all. Only the FROM side is rejected, so this check
+// cannot creep into forbidding completion.
+func TestTaskConfig_TerminalStatusAllowedAsRuleTarget(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.StateMachine.Rules["TODO"] = []string{"IN_PROGRESS", "DONE", "SKIPPED"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("terminal status as a rule target must stay valid, got: %v", err)
+	}
+}
+
+// The built-in rule set keys only off TODO and IN_PROGRESS, both
+// non-terminal, so the default config must survive the new check.
+func TestTaskConfig_DefaultsSurviveTerminalFromCheck(t *testing.T) {
+	cfg := DefaultConfig()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config must validate, got: %v", err)
 	}
 }
