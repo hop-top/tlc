@@ -44,6 +44,11 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			SortDirection:   taskListSortDirection,
 			IncludeArchived: taskListArchived,
 			AllProjects:     taskListAllProjects,
+			// Rank order for --sort-by priority. The store cannot read
+			// config, so the configured vocabulary travels with the
+			// query; without it "sort by priority" would mean
+			// alphabetical, which is only right for P0..P3 by accident.
+			PriorityOrder: core.ConfiguredPriorityStrings(),
 		}
 
 		// Aggregate formats count the match set, never a page of it.

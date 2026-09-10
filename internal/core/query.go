@@ -52,4 +52,21 @@ type Query struct {
 	// Blocked, when set, selects tasks by whether blocked_reason is a
 	// non-empty string. A column predicate, so it pushes down to SQL.
 	Blocked *bool
+
+	// PriorityOrder is the priority vocabulary in rank order, most
+	// urgent first, used to make SortBy=="priority" mean urgency
+	// instead of alphabet.
+	//
+	// Carried on the query rather than read by the store because the
+	// vocabulary is a CONFIG fact and internal/storage must not depend
+	// on config or the CLI. The caller that already knows the
+	// configured order passes it down; an empty slice leaves the store
+	// on its previous plain column sort, which is what library
+	// consumers and the built-in P0..P3 (where alphabet and rank
+	// coincide) need.
+	//
+	// Tasks with no priority always sort last regardless of direction:
+	// "not triaged" is not a rank, and a task the user never
+	// prioritised must not outrank one they deliberately marked lowest.
+	PriorityOrder []string
 }

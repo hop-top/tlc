@@ -172,8 +172,15 @@ const (
 	PriorityP3 Priority = "P3"
 )
 
-// priorities is the closed set of priorities in descending urgency order.
-// Same contract as taskStatuses: one declaration, every consumer reads it.
+// priorities is the BUILT-IN set of priorities in descending urgency
+// order, used when the user's config declares no `task.priorities`.
+//
+// Same contract, and the same caveat, as taskStatuses: it is the
+// fallback and the compile-time home of the Priority* constants, not the
+// whole story. Consumers that render or accept a priority vocabulary —
+// validation messages, the flag enums, fuzzy normalisation, shell
+// completion, priority-ordered sorting — read
+// ConfiguredPriorityStrings, which falls back to this slice.
 var priorities = []Priority{PriorityP0, PriorityP1, PriorityP2, PriorityP3}
 
 // Priorities returns the closed set of priorities in descending urgency
@@ -187,13 +194,76 @@ func PriorityStrings() []string {
 	return enumStrings(priorities)
 }
 
+// ConfiguredPriorityStrings returns the effective priority vocabulary:
+// the names declared in the user's `task.priorities`, in declared order
+// (most urgent first), or the built-in set when config declares none.
+//
+// Declaration order is rank order — see config.PriorityDefinition — so
+// the returned slice is also the sort key for priority-ordered listing,
+// and callers must not sort it.
+//
+// Resolved lazily on every call rather than cached in a package-level
+// var, for the same two reasons ConfiguredTaskStatusStrings is: a var
+// initialised at package-init time predates any config file and could
+// only ever hold the built-ins, and reading the provider directly rather
+// than through the memoising DefaultWorkflow* singleton keeps pre-argv
+// callers (help rendering, flag usage) from freezing config before
+// `-c key=value` overrides have merged.
+func ConfiguredPriorityStrings() []string {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Priorities) == 0 {
+		return PriorityStrings()
+	}
+	out := make([]string, 0, len(cfg.Priorities))
+	for _, p := range cfg.Priorities {
+		if p.Name != "" {
+			out = append(out, p.Name)
+		}
+	}
+	if len(out) == 0 {
+		return PriorityStrings()
+	}
+	return out
+}
+
+// PriorityRank returns the ordinal of p within the effective priority
+// vocabulary — 0 for the most urgent — and whether p is in it.
+//
+// This is what makes "sort by priority" mean urgency rather than
+// alphabet. With the built-in P0..P3 the two coincide by accident:
+// lexicographic order over "P0".."P3" happens to be rank order, which is
+// why nothing needed this before. A vocabulary of
+// URGENT/NORMAL/LATER sorts to LATER, NORMAL, URGENT lexicographically —
+// exactly backwards.
+//
+// The empty priority is not in any vocabulary and gets ok=false.
+// Callers order it last: "no priority set" is not the same fact as "the
+// least urgent priority", and a task the user never triaged must not
+// outrank one they deliberately marked lowest.
+func PriorityRank(p Priority) (int, bool) {
+	if p == "" {
+		return 0, false
+	}
+	for i, name := range ConfiguredPriorityStrings() {
+		if string(p) == name {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ValidPriority returns true if p is a recognised priority value (or empty).
+//
+// Empty is valid: priority is optional, unlike status. Every caller
+// depends on that — it is how a task created without -p passes
+// validation — so the empty case is checked before the vocabulary, not
+// folded into it.
 func ValidPriority(p Priority) bool {
 	if p == "" {
 		return true
 	}
-	for _, v := range priorities {
-		if p == v {
+	for _, v := range ConfiguredPriorityStrings() {
+		if string(p) == v {
 			return true
 		}
 	}

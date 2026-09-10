@@ -383,6 +383,31 @@ type StatusDefinition struct {
 	TLSMarker   string `yaml:"tls_marker,omitempty"` // Single char for TLS format
 }
 
+// PriorityDefinition defines a single task priority.
+//
+// Declared as a LIST, and declaration order IS rank order, most urgent
+// first — the same shape `task.statuses` uses, for the same reasons.
+// There is deliberately no explicit `rank` field:
+//
+//   - A map keyed by name cannot express order at all. The decoder lands
+//     YAML mappings in a Go map, whose iteration order is randomised, so
+//     a map schema would have no order to read.
+//   - A `rank` field alongside a list would be a SECOND source of truth
+//     for the same fact. Two sources drift: a list whose declaration
+//     order disagrees with its ranks has no defensible reading, and
+//     validating them into agreement only re-derives the list order.
+//
+// Unlike StatusDefinition there are no roles. A role exists so a
+// lifecycle command (`claim`, `complete`) can name what it MEANS rather
+// than spell a status; no command targets "the urgent one", so a
+// priority's only semantics are its name and its rank.
+type PriorityDefinition struct {
+	Name        string `yaml:"name"`
+	Label       string `yaml:"label,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	Color       string `yaml:"color,omitempty"`
+}
+
 // WorkflowDefinition defines allowed state transitions.
 type WorkflowDefinition struct {
 	Rules map[string][]string `yaml:"rules"` // map[from][]to
@@ -433,6 +458,7 @@ type TaskConfig struct {
 	ProjectionDir    string                      `yaml:"projection_dir,omitempty"`
 	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
+	Priorities       []PriorityDefinition        `yaml:"priorities,omitempty"`
 	StateMachine     *WorkflowDefinition         `yaml:"state_machine,omitempty"`
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
@@ -494,6 +520,25 @@ func GetDefaultStatuses() []StatusDefinition {
 	}
 }
 
+// GetDefaultPriorities returns the four built-in priorities in
+// descending urgency order — the fallback when config declares none.
+//
+// Unlike GetDefaultStatuses this is NOT written back into TaskConfig by
+// Validate. Statuses are mandatory (the workflow engine needs a
+// vocabulary to enforce), so an empty list there is filled in. Priority
+// is optional end to end, and materialising the built-ins into the
+// struct would make "declared no priorities" indistinguishable from
+// "declared exactly the built-in four" — which is precisely the
+// distinction the by_priority check and the enum restamp read.
+func GetDefaultPriorities() []PriorityDefinition {
+	return []PriorityDefinition{
+		{Name: "P0", Label: "Critical", Color: "red"},
+		{Name: "P1", Label: "High", Color: "yellow"},
+		{Name: "P2", Label: "Medium", Color: "blue"},
+		{Name: "P3", Label: "Low", Color: "gray"},
+	}
+}
+
 // GetDefaultStateMachine returns the default workflow transition rules.
 func GetDefaultStateMachine() *WorkflowDefinition {
 	return &WorkflowDefinition{
@@ -504,8 +549,27 @@ func GetDefaultStateMachine() *WorkflowDefinition {
 	}
 }
 
-// Validate validates the task configuration.
+// Validate validates the task configuration: everything ValidateWorkflow
+// covers, plus the checks that are advisory rather than structural.
+//
+// Split from ValidateWorkflow because the two have different
+// consequences. This one runs on the CLI's warning-only config path;
+// ValidateWorkflow additionally runs on DefaultWorkflow's FATAL path, so
+// anything added here that does not genuinely make the workflow
+// unbuildable would turn a cosmetic config mistake into a tool that
+// refuses to start.
 func (t *TaskConfig) Validate() error {
+	if err := t.ValidateWorkflow(); err != nil {
+		return err
+	}
+	return t.validateSchedulingKeys()
+}
+
+// ValidateWorkflow validates the parts of the task configuration the
+// workflow engine and the CLI vocabularies are built from: the statuses,
+// their roles and markers, the declared priorities, and the transition
+// rules. A failure here means no coherent workflow can be constructed.
+func (t *TaskConfig) ValidateWorkflow() error {
 	if err := validateRelativePath("task.projection_dir", t.ProjectionDir); err != nil {
 		return err
 	}
@@ -571,6 +635,10 @@ func (t *TaskConfig) Validate() error {
 		}
 	}
 
+	if err := t.ValidatePriorities(); err != nil {
+		return err
+	}
+
 	// Validate state machine rules reference defined statuses
 	if err := validateRules(t.StateMachine, statusSet, ""); err != nil {
 		return err
@@ -586,6 +654,77 @@ func (t *TaskConfig) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// EffectivePriorities returns the priority vocabulary this config
+// implies: the declared list when non-empty, else the built-in four.
+// One helper so the CLI, the validator and the scheduling lookup cannot
+// disagree about what "the vocabulary" is.
+func (t *TaskConfig) EffectivePriorities() []PriorityDefinition {
+	if len(t.Priorities) == 0 {
+		return GetDefaultPriorities()
+	}
+	return t.Priorities
+}
+
+// ValidatePriorities checks the declared priority vocabulary itself:
+// every definition names something, and no name is declared twice.
+//
+// Exported and separate from validateSchedulingKeys because the two have
+// different blast radii. This one gates the vocabulary the workflow and
+// the CLI both read, so it belongs on the fatal DefaultWorkflow path
+// alongside the status checks. The scheduling-key check does not.
+func (t *TaskConfig) ValidatePriorities() error {
+	seen := make(map[string]bool, len(t.Priorities))
+	for _, p := range t.Priorities {
+		if p.Name == "" {
+			return fmt.Errorf("priority definition must have a name")
+		}
+		if seen[p.Name] {
+			return fmt.Errorf("duplicate priority name: %s", p.Name)
+		}
+		seen[p.Name] = true
+	}
+	return nil
+}
+
+// validateSchedulingKeys rejects a `task.scheduling.by_priority` entry
+// naming a priority outside the vocabulary.
+//
+// It exists because such an entry is otherwise SILENT.
+// SchedulingConfig.ByPriority is a map[string]... — typed open, but
+// effectively closed, because the lookup happens with a priority that has
+// already been validated against the vocabulary. An entry naming anything
+// else is unreachable: it never matches, never errors, and never fires. A
+// user who renames their vocabulary and forgets to rename the scheduling
+// keys gets silence rather than a diagnosis.
+//
+// Deliberately NOT called from DefaultWorkflowE, which treats a Validate
+// failure as fatal. Auto-scheduling defaults are an optional convenience;
+// a stale key in them is a reason to warn, not a reason to refuse to run
+// every command in the tool. It runs on the warning-only config
+// validation path in the CLI instead — which is where the user sees it,
+// and where the status vocabulary's own soft checks already live.
+func (t *TaskConfig) validateSchedulingKeys() error {
+	effective := t.EffectivePriorities()
+	prioritySet := make(map[string]bool, len(effective))
+	names := make([]string, 0, len(effective))
+	for _, p := range effective {
+		prioritySet[p.Name] = true
+		names = append(names, p.Name)
+	}
+
+	// Sorted iteration so a config with several bad keys always reports
+	// the same one; Go map range order is randomised.
+	for _, key := range slices.Sorted(maps.Keys(t.Scheduling.ByPriority)) {
+		if !prioritySet[key] {
+			return fmt.Errorf(
+				"task.scheduling.by_priority references unknown priority %q; valid values: %s",
+				key, strings.Join(names, ", "),
+			)
+		}
+	}
 	return nil
 }
 

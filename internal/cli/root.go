@@ -340,8 +340,9 @@ func kitRoot() *kitcli.Root {
 // onto the flags during the Execute-time tree walk, so registrations added
 // afterwards never reach a flag.
 //
-// That walk is also why the task `--status` set registered here is the
-// BUILT-IN one rather than the user's configured vocabulary. kit stamps
+// That walk is also why the task `--status` and `--priority` sets
+// registered here are the BUILT-IN ones rather than the user's configured
+// vocabularies. kit stamps
 // the enums in Root.Execute -> prepareTree, which is the first statement
 // of Execute and therefore runs before cobra parses argv — while the
 // config file is only read later, from cobra.OnInitialize(initConfig)
@@ -349,7 +350,8 @@ func kitRoot() *kitcli.Root {
 // enum set: WithCommandFlagEnum takes values, not a provider. So the
 // configured vocabulary is stamped in a second pass once config exists,
 // by restampConfiguredStatusEnum below, using kit's documented
-// FlagEnumAnnotation contract.
+// FlagEnumAnnotation contract. `--effort` is not config-driven yet and so
+// keeps its single, pre-config registration.
 func registerFlagEnums(root *kitcli.Root) {
 	statuses := core.TaskStatusStrings()
 	priorities := core.PriorityStrings()
@@ -375,8 +377,45 @@ func registerFlagEnums(root *kitcli.Root) {
 // a separate flag and are deliberately not restamped here.
 var taskStatusEnumCommands = []string{"task list", "task graph", "task create", "task update"}
 
-// restampConfiguredStatusEnum rewrites the task `--status` flag-enum
-// annotation to the user's configured status vocabulary.
+// taskPriorityEnumCommands are the command paths whose `--priority` flag
+// carries the task priority vocabulary. Same list as the status one
+// today, kept separate because the two vocabularies are independent and a
+// future command may take one flag without the other.
+var taskPriorityEnumCommands = []string{"task list", "task graph", "task create", "task update"}
+
+// configuredTaskEnums enumerates the config-driven flag vocabularies that
+// need the post-config second pass: the flag name, the commands carrying
+// it, the accessor for the configured set, and the accessor for the
+// built-in set the pre-config registration stamped.
+//
+// A table rather than a copy of the status code per flag: the restamp,
+// the completion bind and the "is this even different from the built-in"
+// short-circuit are identical logic for --status and --priority, and the
+// version of this that duplicated them for status alone is what left
+// --priority stamped with a hardcoded canon.
+var configuredTaskEnums = []struct {
+	flag       string
+	commands   []string
+	configured func() []string
+	builtin    func() []string
+}{
+	{
+		flag:       "status",
+		commands:   taskStatusEnumCommands,
+		configured: core.ConfiguredTaskStatusStrings,
+		builtin:    core.TaskStatusStrings,
+	},
+	{
+		flag:       "priority",
+		commands:   taskPriorityEnumCommands,
+		configured: core.ConfiguredPriorityStrings,
+		builtin:    core.PriorityStrings,
+	},
+}
+
+// restampConfiguredStatusEnum rewrites the config-driven task flag-enum
+// annotations — `--status` and `--priority` — to the vocabularies the
+// user actually declared.
 //
 // Why a second pass: kit materializes flag enums in prepareTree, the first
 // thing Root.Execute does, which is strictly before cobra parses argv and
@@ -392,38 +431,42 @@ var taskStatusEnumCommands = []string{"task list", "task graph", "task create", 
 // already-registered completion function, so that half is claimed ahead of
 // kit by bindConfiguredStatusCompletion.
 //
-// A no-op when the configured vocabulary equals the built-in one, which
-// keeps an unchanged config byte-identical to today's behaviour.
 func restampConfiguredStatusEnum(root *kitcli.Root) {
 	if root == nil || root.Cmd == nil {
 		return
 	}
-	configured := core.ConfiguredTaskStatusStrings()
-	if slices.Equal(configured, core.TaskStatusStrings()) {
-		return
-	}
-	for _, path := range taskStatusEnumCommands {
-		// Rewrite the REGISTRY entry, not only the flag annotation: kit
-		// re-runs applyFlagEnums on every prepareTree, re-stamping and
-		// re-appending its help suffix from the registry. Updating only
-		// the annotation leaves the registry holding the built-ins, and
-		// the next walk appends a second, stale "(one of: ...)".
-		root.WithCommandFlagEnum(path, "status", configured...)
+	for _, spec := range configuredTaskEnums {
+		configured := spec.configured()
+		// A no-op when the configured vocabulary equals the built-in
+		// one, which keeps an unchanged config byte-identical to
+		// today's behaviour — including the help suffix kit already
+		// appended for the built-ins.
+		if slices.Equal(configured, spec.builtin()) {
+			continue
+		}
+		for _, path := range spec.commands {
+			// Rewrite the REGISTRY entry, not only the flag annotation: kit
+			// re-runs applyFlagEnums on every prepareTree, re-stamping and
+			// re-appending its help suffix from the registry. Updating only
+			// the annotation leaves the registry holding the built-ins, and
+			// the next walk appends a second, stale "(one of: ...)".
+			root.WithCommandFlagEnum(path, spec.flag, configured...)
 
-		cmd := findCommandByPath(root.Cmd, path)
-		if cmd == nil {
-			continue
+			cmd := findCommandByPath(root.Cmd, path)
+			if cmd == nil {
+				continue
+			}
+			f := cmd.Flags().Lookup(spec.flag)
+			if f == nil {
+				continue
+			}
+			if f.Annotations == nil {
+				f.Annotations = make(map[string][]string)
+			}
+			previous := f.Annotations[kitcli.FlagEnumAnnotation]
+			f.Annotations[kitcli.FlagEnumAnnotation] = append([]string(nil), configured...)
+			retargetFlagEnumHelp(f, previous, configured)
 		}
-		f := cmd.Flags().Lookup("status")
-		if f == nil {
-			continue
-		}
-		if f.Annotations == nil {
-			f.Annotations = make(map[string][]string)
-		}
-		previous := f.Annotations[kitcli.FlagEnumAnnotation]
-		f.Annotations[kitcli.FlagEnumAnnotation] = append([]string(nil), configured...)
-		retargetFlagEnumHelp(f, previous, configured)
 	}
 }
 
@@ -466,8 +509,9 @@ func retargetFlagEnumHelp(f *pflag.Flag, previous, configured []string) {
 	f.Usage += " " + suffix
 }
 
-// bindConfiguredStatusCompletion binds a completion function for the task
-// `--status` flag that reads the configured vocabulary at completion time.
+// bindConfiguredStatusCompletion binds completion functions for the
+// config-driven task flags — `--status` and `--priority` — that read the
+// configured vocabulary at completion time.
 //
 // It must win over the closure kit binds during prepareTree, which
 // captured the pre-config built-ins. Cobra keys completion functions by
@@ -485,25 +529,30 @@ func bindConfiguredStatusCompletion(root *kitcli.Root) {
 	if root == nil || root.Cmd == nil {
 		return
 	}
-	for _, path := range taskStatusEnumCommands {
-		cmd := findCommandByPath(root.Cmd, path)
-		if cmd == nil {
-			continue
-		}
-		if cmd.Flags().Lookup("status") == nil {
-			continue
-		}
-		_ = cmd.RegisterFlagCompletionFunc("status", func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			values := core.ConfiguredTaskStatusStrings()
-			out := make([]string, 0, len(values))
-			lower := strings.ToLower(toComplete)
-			for _, v := range values {
-				if strings.HasPrefix(strings.ToLower(v), lower) {
-					out = append(out, v)
-				}
+	for _, spec := range configuredTaskEnums {
+		// Bound to the loop var so each flag's closure reads its own
+		// vocabulary rather than whichever spec the loop ended on.
+		configured := spec.configured
+		for _, path := range spec.commands {
+			cmd := findCommandByPath(root.Cmd, path)
+			if cmd == nil {
+				continue
 			}
-			return out, cobra.ShellCompDirectiveNoFileComp
-		})
+			if cmd.Flags().Lookup(spec.flag) == nil {
+				continue
+			}
+			_ = cmd.RegisterFlagCompletionFunc(spec.flag, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+				values := configured()
+				out := make([]string, 0, len(values))
+				lower := strings.ToLower(toComplete)
+				for _, v := range values {
+					if strings.HasPrefix(strings.ToLower(v), lower) {
+						out = append(out, v)
+					}
+				}
+				return out, cobra.ShellCompDirectiveNoFileComp
+			})
+		}
 	}
 }
 

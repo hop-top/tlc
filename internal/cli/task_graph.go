@@ -38,6 +38,7 @@ Output formats:
 			SortDirection:   taskListSortDirection,
 			IncludeArchived: taskListArchived,
 			AllProjects:     taskListAllProjects,
+			PriorityOrder:   core.ConfiguredPriorityStrings(),
 		}
 
 		if len(args) > 0 {

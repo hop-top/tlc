@@ -460,10 +460,17 @@ func DefaultWorkflow() *WorkflowManager {
 func DefaultWorkflowE() (*WorkflowManager, error) {
 	defaultWorkflowOnce.Do(func() {
 		cfg := resolveTaskConfig()
-		// Validate applies config defaults (statuses, state machine) and
-		// rejects rules referencing undeclared statuses — the failure mode
-		// NewWorkflowManager alone does not catch.
-		if err := cfg.Validate(); err != nil {
+		// ValidateWorkflow applies config defaults (statuses, state
+		// machine) and rejects rules referencing undeclared statuses —
+		// the failure mode NewWorkflowManager alone does not catch.
+		//
+		// ValidateWorkflow, not Validate: failure here is FATAL, so this
+		// path must check only what genuinely makes a workflow
+		// unbuildable. The advisory checks Validate adds on top — a
+		// stale `task.scheduling.by_priority` key, say — belong on the
+		// CLI's warning-only path, not on the one that stops every
+		// command in the tool from running.
+		if err := cfg.ValidateWorkflow(); err != nil {
 			defaultWorkflowErr = err
 			return
 		}

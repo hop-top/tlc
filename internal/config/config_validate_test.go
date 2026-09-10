@@ -397,3 +397,121 @@ func TestTaskConfig_EmptyStatusesPopulatedWithDefaults(t *testing.T) {
 		t.Error("expected state machine to be populated with defaults")
 	}
 }
+
+// TestTaskConfig_PriorityVocabularyValidation covers the priority
+// vocabulary's own structural checks — the ones that are fatal because
+// DefaultWorkflow builds on them.
+func TestTaskConfig_PriorityVocabularyValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		priorities []PriorityDefinition
+		wantErr    bool
+	}{
+		{"empty falls back to built-ins", nil, false},
+		{
+			"custom vocabulary accepted",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "LATER"}},
+			false,
+		},
+		{
+			"duplicate name rejected",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "URGENT"}},
+			true,
+		},
+		{
+			"unnamed definition rejected",
+			[]PriorityDefinition{{Name: "URGENT"}, {Label: "no name"}},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Task.Priorities = tt.priorities
+			err := cfg.Validate()
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestTaskConfig_EmptyPrioritiesNotMaterialised pins the deliberate
+// asymmetry with statuses: Validate fills in default STATUSES but must
+// leave Priorities empty, so "declared none" stays distinguishable from
+// "declared exactly the built-in four".
+func TestTaskConfig_EmptyPrioritiesNotMaterialised(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Priorities = nil
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Task.Priorities) != 0 {
+		t.Errorf("Validate materialised %d priorities; it must leave the list empty",
+			len(cfg.Task.Priorities))
+	}
+	if got := len(cfg.Task.EffectivePriorities()); got != 4 {
+		t.Errorf("EffectivePriorities() = %d entries, want the 4 built-ins", got)
+	}
+}
+
+// TestTaskConfig_SchedulingKeyOutsideVocabulary covers the silent no-op:
+// a by_priority key naming a priority outside the vocabulary is
+// unreachable at runtime and must be reported rather than ignored.
+func TestTaskConfig_SchedulingKeyOutsideVocabulary(t *testing.T) {
+	tests := []struct {
+		name       string
+		priorities []PriorityDefinition
+		key        string
+		wantErr    bool
+	}{
+		{"built-in key under built-in vocabulary", nil, "P0", false},
+		{"unknown key under built-in vocabulary", nil, "NOSUCH", true},
+		{
+			"declared key under custom vocabulary",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "LATER"}},
+			"URGENT", false,
+		},
+		{
+			"built-in key under custom vocabulary is now unknown",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "LATER"}},
+			"P0", true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Task.Priorities = tt.priorities
+			cfg.Task.Scheduling.ByPriority = map[string]PriorityScheduleRule{
+				tt.key: {Due: time.Hour},
+			}
+			err := cfg.Validate()
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestTaskConfig_ValidateWorkflowSkipsSchedulingKeys pins the split that
+// keeps a stale scheduling key off DefaultWorkflow's FATAL path. Validate
+// must reject it; ValidateWorkflow must not, or a cosmetic config mistake
+// would stop every command in the tool from running.
+func TestTaskConfig_ValidateWorkflowSkipsSchedulingKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Scheduling.ByPriority = map[string]PriorityScheduleRule{
+		"NOSUCH": {Due: time.Hour},
+	}
+	if err := cfg.Task.ValidateWorkflow(); err != nil {
+		t.Errorf("ValidateWorkflow must ignore scheduling keys, got: %v", err)
+	}
+	if err := cfg.Task.Validate(); err == nil {
+		t.Error("Validate must reject an out-of-vocabulary scheduling key")
+	}
+}

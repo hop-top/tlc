@@ -699,6 +699,43 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 	return entries, nil
 }
 
+// priorityRankOrder builds the ORDER BY fragment that sorts by priority
+// RANK rather than by the column's text, plus its bind args. Returns an
+// empty expression when it does not apply, leaving the caller on the
+// plain column sort.
+//
+// It applies only for SortBy=="priority" with a PriorityOrder supplied.
+// A vocabulary of URGENT/NORMAL/LATER sorts to LATER, NORMAL, URGENT as
+// text — exactly backwards — while the built-in P0..P3 sorts correctly
+// by accident, which is why the plain column sort survived this long.
+//
+// Unset priority is pinned last in BOTH directions by a separate leading
+// term, so reversing the direction reverses the ranked tasks without
+// promoting the untriaged ones to the top. Ranks are bound as parameters
+// rather than interpolated: the values come from a user's config file.
+func priorityRankOrder(query core.Query, order string) (string, []any) {
+	if query.SortBy != "priority" || len(query.PriorityOrder) == 0 {
+		return "", nil
+	}
+	var b strings.Builder
+	args := make([]any, 0, len(query.PriorityOrder)+1)
+
+	// Unset last, regardless of direction.
+	b.WriteString("CASE WHEN priority IS NULL OR priority = '' THEN 1 ELSE 0 END ASC, CASE priority")
+	for i, name := range query.PriorityOrder {
+		b.WriteString(" WHEN ? THEN ?")
+		args = append(args, name, i)
+	}
+	// Unranked but non-empty values (a priority written before the
+	// vocabulary was renamed) sort after every ranked one, ahead of
+	// unset, and stay visible rather than silently collapsing into
+	// rank 0 alongside the most urgent.
+	b.WriteString(" ELSE ? END ")
+	args = append(args, len(query.PriorityOrder))
+	b.WriteString(order)
+	return b.String(), args
+}
+
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
 	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks"
 
@@ -720,8 +757,13 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		if strings.ToLower(query.SortDirection) == "desc" {
 			order = sqlOrderDESC
 		}
-		orderParts = append(orderParts,
-			fmt.Sprintf("%s %s", query.SortBy, order)) //nolint:gosec // G202: SortBy is validated against known columns
+		if expr, exprArgs := priorityRankOrder(query, order); expr != "" {
+			orderParts = append(orderParts, expr)
+			args = append(args, exprArgs...)
+		} else {
+			orderParts = append(orderParts,
+				fmt.Sprintf("%s %s", query.SortBy, order)) //nolint:gosec // G202: SortBy is validated against known columns
+		}
 	} else {
 		orderParts = append(orderParts, "created_at DESC")
 	}

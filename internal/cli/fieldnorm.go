@@ -54,21 +54,33 @@ func statusCanonical() []string {
 // declared status, plus trivial spelling variants derived for EVERY
 // declared status.
 //
-// Derivation exists so a user-declared status is not a second-class
-// citizen: IN_REVIEW gets "in_review", "in-review" and "inreview" for the
-// same reason IN_PROGRESS has them, without the user restating the
-// obvious in config. Only mechanical variants are derived — lowercase,
-// and underscore/hyphen/removed separators. Nothing semantic like
-// "review" is invented, because guessing a meaning the user did not
-// declare is how a typo silently resolves to the wrong status.
-//
-// Built-in aliases are applied last and win, so an unchanged vocabulary
-// resolves precisely as it did before this became config-driven.
+// See buildAliases for the derivation rules and the built-ins-win
+// precedence that keeps an unchanged vocabulary resolving precisely as it
+// did before this became config-driven.
 func statusAliases() map[string]string {
-	canon := statusCanonical()
-	aliases := make(map[string]string, len(canon)*4+len(builtinStatusAliases))
+	return buildAliases(statusCanonical(), builtinStatusAliases)
+}
 
-	// Derived variants for every declared status.
+// buildAliases is the shared alias-table construction for a
+// config-driven vocabulary: mechanical spelling variants derived for
+// every declared value, then the hand-written built-ins layered on top
+// but only where their target is still declared.
+//
+// One implementation rather than one per field. The status and priority
+// versions were character-for-character identical apart from the two
+// inputs, and a second copy is a second place for the built-ins-win
+// precedence — the part that makes an unchanged config behave exactly as
+// before — to be changed in only one of them.
+//
+// Derivation is deliberately limited to LOWERCASE and
+// underscore/hyphen/removed separators. A user-declared value should not
+// be a second-class citizen — IN_REVIEW earns "in_review", "in-review"
+// and "inreview" for the same reason IN_PROGRESS has them — but nothing
+// semantic is invented, because guessing a meaning the user never
+// declared is how a typo silently resolves to the wrong value.
+func buildAliases(canon []string, builtins map[string]string) map[string]string {
+	aliases := make(map[string]string, len(canon)*4+len(builtins))
+
 	for _, name := range canon {
 		lower := strings.ToLower(name)
 		aliases[lower] = name
@@ -77,12 +89,11 @@ func statusAliases() map[string]string {
 		aliases[strings.NewReplacer("_", "", "-", "").Replace(lower)] = name
 	}
 
-	// Hand-written built-ins win, but only for statuses still declared.
 	declared := make(map[string]bool, len(canon))
 	for _, name := range canon {
 		declared[name] = true
 	}
-	for alias, target := range builtinStatusAliases {
+	for alias, target := range builtins {
 		if declared[target] {
 			aliases[alias] = target
 		}
@@ -90,8 +101,26 @@ func statusAliases() map[string]string {
 	return aliases
 }
 
-// priorityAliases maps lowercase alias/variant → canonical uppercase value.
-var priorityAliases = map[string]string{
+// builtinPriorityAliases maps lowercase alias/variant → canonical value
+// for the BUILT-IN priorities.
+//
+// Every entry here is SEMANTIC ("critical" → P0) or positional ("0" →
+// P0): meanings a rule could not derive from the spelling of "P0", so
+// they stay declared. Like builtinStatusAliases they are gated on their
+// target still being declared, so a config that keeps the built-in four
+// keeps every shorthand exactly as before, while a config that drops P3
+// does not leave "low" resolving to a priority the user no longer has.
+//
+// Deliberately NOT extended by derivation: a custom vocabulary gets the
+// mechanical spelling variants of its own names (see priorityAliases)
+// and nothing else. Guessing that a user's "LATER" means "low" — or that
+// "1" should now mean the second of THEIR priorities rather than P1 — is
+// how a typo silently lands on the wrong urgency. The numeric shorthands
+// in particular are positions in the built-in vocabulary, not positions
+// in an arbitrary one; re-pointing them at whatever sits at index N of a
+// renamed list would make `-p 0` mean different things in different
+// projects with no way for the user to see it.
+var builtinPriorityAliases = map[string]string{
 	// canonical (lowercased)
 	"p0": "P0",
 	"p1": "P1",
@@ -110,9 +139,28 @@ var priorityAliases = map[string]string{
 	"low":      "P3",
 }
 
-// priorityCanonical is the ordered list for fuzzy matching, read from the
-// domain canon (see statusCanonical).
-var priorityCanonical = core.PriorityStrings()
+// priorityCanonical returns the effective priority vocabulary in rank
+// order: the user's `task.priorities` when declared, else the built-in
+// set.
+//
+// A function, not the package-level var it replaced, for the reason
+// statusCanonical is: the var was initialised at package-init time, long
+// before any config file is read, so it could only ever hold the
+// built-ins.
+func priorityCanonical() []string {
+	return core.ConfiguredPriorityStrings()
+}
+
+// priorityAliases returns the effective alias table for the current
+// priority vocabulary: mechanical spelling variants derived for EVERY
+// declared priority, plus the hand-written built-ins whose target is
+// still declared.
+//
+// Shares buildAliases with statusAliases, so the derivation rules and
+// the built-ins-win precedence cannot drift between the two fields.
+func priorityAliases() map[string]string {
+	return buildAliases(priorityCanonical(), builtinPriorityAliases)
+}
 
 // effortAliases maps lowercase alias/variant → canonical uppercase value.
 // Single-letter canonicals (S, M, L) make fuzzy matching unreliable for
@@ -155,7 +203,7 @@ func unknownStatusError(input string) error {
 
 // unknownPriorityError is unknownStatusError for --priority.
 func unknownPriorityError(input string) error {
-	return fmt.Errorf("unknown priority %q; valid values: %s", input, enumList(priorityCanonical))
+	return fmt.Errorf("unknown priority %q; valid values: %s", input, enumList(priorityCanonical()))
 }
 
 // invalidPriorityError is the set-on-write rejection for --priority. The
@@ -164,7 +212,7 @@ func unknownPriorityError(input string) error {
 // write path have always phrased it differently; both now read the same
 // canonical set, so only the prose differs.
 func invalidPriorityError(input string) error {
-	return fmt.Errorf("invalid priority %q: must be one of %s", input, enumList(priorityCanonical))
+	return fmt.Errorf("invalid priority %q: must be one of %s", input, enumList(priorityCanonical()))
 }
 
 // unknownEffortError is unknownStatusError for --effort.
@@ -189,7 +237,7 @@ func NormalizeStatus(input string) (string, bool) {
 // Resolution order: exact (case-insensitive) → alias → fuzzy.
 // Returns ("", false) when no match found.
 func NormalizePriority(input string) (string, bool) {
-	return normalizeEnum(input, priorityAliases, priorityCanonical)
+	return normalizeEnum(input, priorityAliases(), priorityCanonical())
 }
 
 // NormalizeEffort resolves input to a canonical effort string.

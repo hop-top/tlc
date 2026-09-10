@@ -304,9 +304,53 @@ func TestSortTasks_DefaultsToCreatedAtAsc(t *testing.T) {
 		mkTask("b", "B", core.StatusTodo, now),
 		mkTask("a", "A", core.StatusTodo, now.Add(-1*time.Hour)),
 	}
-	sortTasks(tasks, "", "")
+	sortTasks(tasks, "", "", nil)
 	if tasks[0].ID != "a" {
 		t.Fatalf("expected 'a' first, got %s", tasks[0].ID)
+	}
+}
+
+// Workspace mode sorts by priority RANK, not by the text of the priority
+// column. The vocabulary below is chosen so alphabetical order is the
+// exact reverse of rank order — with the built-in P0..P3 the two coincide
+// and a text sort would pass by accident.
+//
+// The field previously had no case in compareTasks at all: --sort-by
+// priority fell through to created_at and silently ignored the flag.
+func TestSortTasks_PriorityUsesRankOrder(t *testing.T) {
+	now := time.Now()
+	order := []string{"URGENT", "NORMAL", "LATER"}
+
+	mk := func(id string, p core.Priority) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Priority = p
+		return task
+	}
+	tasks := []*core.Task{
+		mk("later", "LATER"),
+		mk("unset", ""),
+		mk("urgent", "URGENT"),
+		mk("normal", "NORMAL"),
+	}
+
+	sortTasks(tasks, "priority", "asc", order)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want := []string{"urgent", "normal", "later", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
+	}
+
+	// Reversing the direction reverses the RANKED tasks only: unset is
+	// not a rank, so it stays last rather than being promoted to first.
+	sortTasks(tasks, "priority", "desc", order)
+	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want = []string{"later", "normal", "urgent", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("desc order = %v, want %v", got, want)
+		}
 	}
 }
 

@@ -35,22 +35,64 @@ func unmarshalConfig(cfg *config.Config) error {
 	if err := viper.Unmarshal(cfg, useYAMLTag); err != nil {
 		return err //nolint:wrapcheck // thin passthrough; callers add context
 	}
-	normalizeStateMachineKeys(&cfg.Task)
+	normalizeTaskConfigKeys(&cfg.Task)
 	return nil
 }
 
 // unmarshalConfigKey decodes a single viper subtree into out.
-// Decoding a task section additionally normalises state-machine keys, so
-// every decode path — whole config or `task` subtree — yields rules whose
-// `from` keys carry the case the user wrote.
+// Decoding a task section additionally normalises the task section's map
+// keys, so every decode path — whole config or `task` subtree — yields
+// keys carrying the case the user wrote.
 func unmarshalConfigKey(key string, out any) error {
 	if err := viper.UnmarshalKey(key, out, useYAMLTag); err != nil {
 		return err //nolint:wrapcheck // thin passthrough; callers add context
 	}
 	if taskCfg, ok := out.(*config.TaskConfig); ok {
-		normalizeStateMachineKeys(taskCfg)
+		normalizeTaskConfigKeys(taskCfg)
 	}
 	return nil
+}
+
+// normalizeTaskConfigKeys restores the case of every map key in the task
+// section that names a status or a priority.
+//
+// One entry point rather than a normaliser per surface: viper lower-cases
+// map keys globally, so every current and future `map[<vocabulary
+// name>]...` in this config hits the identical bug, and the version that
+// handled only the state machine is why `task.scheduling.by_priority`
+// silently never fired.
+func normalizeTaskConfigKeys(cfg *config.TaskConfig) {
+	normalizeStateMachineKeys(cfg)
+	normalizeSchedulingKeys(cfg)
+}
+
+// normalizeSchedulingKeys re-cases `task.scheduling.by_priority` keys
+// against the declared priority names.
+//
+// This is the other half of making by_priority work at all. The lookup in
+// applySchedulingConfig interpolates a CANONICAL priority ("P0") into the
+// viper key path, while viper stored the user's key lower-cased ("p0"),
+// so the two could never meet — the rule was unreachable for every
+// priority whose canonical spelling is not already lower-case. Re-casing
+// here means the decoded config carries "P0", and the config validator
+// can then treat a key that still does not match as the user error it is
+// rather than as decoder noise.
+func normalizeSchedulingKeys(cfg *config.TaskConfig) {
+	if cfg == nil || len(cfg.Scheduling.ByPriority) == 0 {
+		return
+	}
+	canon := make(map[string]string, len(cfg.Priorities)+4)
+	for _, p := range cfg.EffectivePriorities() {
+		canon[strings.ToLower(p.Name)] = p.Name
+	}
+	out := make(map[string]config.PriorityScheduleRule, len(cfg.Scheduling.ByPriority))
+	for key, rule := range cfg.Scheduling.ByPriority {
+		if name, ok := canon[strings.ToLower(key)]; ok {
+			key = name
+		}
+		out[key] = rule
+	}
+	cfg.Scheduling.ByPriority = out
 }
 
 // normalizeStateMachineKeys restores the case of state-machine `from` keys.
