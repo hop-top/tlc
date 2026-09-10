@@ -1,9 +1,5 @@
 package config
 
-import (
-	"time"
-)
-
 // DefaultConfig returns the in-memory default Config value.
 //
 // Runtime configuration is not built from this: the live cascade is
@@ -20,36 +16,18 @@ func DefaultConfig() *Config {
 			Verbose: false,
 		},
 		Task: TaskConfig{
-			DefaultStatus:    "TODO",
-			AutoAssign:       false,
-			RequireReference: true,
-			Statuses:         GetDefaultStatuses(),
-			StateMachine:     GetDefaultStateMachine(),
+			DefaultStatus: "TODO",
+			Statuses:      GetDefaultStatuses(),
+			StateMachine:  GetDefaultStateMachine(),
 		},
 		Git: GitConfig{
-			Branch: GitBranchConfig{
-				PrefixFromType: true,
-				ZeroPadIssue:   4,
-				Separator:      "/",
-			},
-			Commit: GitCommitConfig{
-				AutoGenerate: true,
-				Template:     "{type}: {description} (closes #{issue})",
-			},
-		},
-		Sync: SyncConfig{
-			Enabled:          true,
-			Interval:         5 * time.Minute,
-			ConflictStrategy: "prompt",
-			BatchSize:        50,
+			Track: false,
 		},
 		Storage: StorageConfig{
 			Backend: "sqlite",
 			DBPath:  ".tlc/db.sqlite",
 		},
 		UI: UIConfig{
-			Pager:      "auto",
-			DateFormat: "2006-01-02 15:04:05",
 			Timezone:   "local",
 			TableStyle: "unicode",
 		},

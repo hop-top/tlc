@@ -12,11 +12,18 @@ import (
 )
 
 // ProjectConfig contains project-specific configuration.
+//
+// No `workspace` field: workspaces are selected by name through the
+// workspace commands and the `workspaces` list, never by a project-level
+// pointer. The key was declared and never read.
 type ProjectConfig struct {
-	ID                  string `yaml:"id"`
-	FallbackMode        string `yaml:"fallback_mode"`
+	ID           string `yaml:"id"`
+	FallbackMode string `yaml:"fallback_mode"`
+
+	// DuplicateIDStrategy is "share", "unique" or "prompt". Written by
+	// `tlc init` and read back by it on a later run when
+	// --duplicate-id-strategy is absent.
 	DuplicateIDStrategy string `yaml:"duplicate_id_strategy"`
-	Workspace           string `yaml:"workspace,omitempty"`
 }
 
 // WorkspaceConfig contains workspace configuration.
@@ -330,11 +337,14 @@ func InferAdapterFromURI(uri string) string {
 }
 
 // OutputConfig contains output-related configuration.
+//
+// No `quiet` field: --quiet is a flag, read off the command by its one
+// consumer, and no code path reads a `output.quiet` config key. A field
+// here would advertise a setting that does nothing.
 type OutputConfig struct {
 	Format  string `yaml:"format"`
 	Color   bool   `yaml:"color"`
 	Verbose bool   `yaml:"verbose"`
-	Quiet   bool   `yaml:"quiet"`
 	LogFile string `yaml:"log_file"`
 }
 
@@ -647,11 +657,14 @@ type PriorityDerivationConfig struct {
 }
 
 // TaskConfig contains task-related configuration.
+//
+// No `auto_assign` or `require_reference`: both were declared,
+// defaulted and documented without a reader. `task create` assigns
+// nobody automatically and requires no external reference, whatever
+// either key said.
 type TaskConfig struct {
-	DefaultStatus    string                      `yaml:"default_status"`
-	AutoAssign       bool                        `yaml:"auto_assign"`
-	RequireReference bool                        `yaml:"require_reference"`
-	TodoFile         string                      `yaml:"todo_file"`
+	DefaultStatus string                      `yaml:"default_status"`
+	TodoFile      string                      `yaml:"todo_file"`
 	ProjectionDir    string                      `yaml:"projection_dir,omitempty"`
 	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
@@ -1136,68 +1149,68 @@ func validateRules(def *WorkflowDefinition, statusSet map[string]bool, tag strin
 }
 
 // GitConfig contains git-related configuration.
+//
+// `track` is the whole of it. The `branch` and `commit` subtrees —
+// prefix_from_type, zero_pad_issue, separator, auto_generate, template,
+// co_author — were declared, defaulted and documented without a single
+// reader: tlc names no branches and writes no commit messages, so there
+// was nothing for them to configure. Should tlc grow either behaviour,
+// the keys come back attached to the code that honours them.
 type GitConfig struct {
-	Track  bool            `yaml:"track"`
-	Branch GitBranchConfig `yaml:"branch"`
-	Commit GitCommitConfig `yaml:"commit"`
-}
-
-// GitBranchConfig contains git branch configuration.
-type GitBranchConfig struct {
-	PrefixFromType bool   `yaml:"prefix_from_type"`
-	ZeroPadIssue   int    `yaml:"zero_pad_issue"`
-	Separator      string `yaml:"separator"`
-}
-
-// GitCommitConfig contains git commit configuration.
-type GitCommitConfig struct {
-	AutoGenerate bool   `yaml:"auto_generate"`
-	Template     string `yaml:"template"`
-	CoAuthor     string `yaml:"co_author"`
+	Track bool `yaml:"track"`
 }
 
 // SyncConfig contains synchronization configuration.
+//
+// Only the GitHub subtree survives, because only it is read. `enabled`,
+// `auto_push`, `interval`, `batch_size` and `conflict_strategy` had no
+// consumer: sync runs when a sync command is invoked, never on a timer,
+// and conflict resolution takes its strategy from `--strategy` alone.
+// `conflict_strategy` was the sharpest of these — it named a real
+// mechanism with real values, so it read as the way to set a default,
+// while the flag's own default was the only thing that ever applied.
+//
+// Jira and Linear had whole config trees here and no code behind them.
+// Both integrations exist as sync PLUGINS, which carry their own
+// configuration; these structs described a second, imaginary place to
+// configure them.
 type SyncConfig struct {
-	Enabled          bool             `yaml:"enabled"`
-	AutoPush         bool             `yaml:"auto_push"`
-	Interval         time.Duration    `yaml:"interval"`
-	ConflictStrategy string           `yaml:"conflict_strategy"`
-	BatchSize        int              `yaml:"batch_size"`
-	GitHub           GitHubSyncConfig `yaml:"github"`
-	Jira             JiraSyncConfig   `yaml:"jira"`
-	Linear           LinearSyncConfig `yaml:"linear"`
+	GitHub GitHubSyncConfig `yaml:"github"`
 }
 
 // Validate validates the sync configuration.
 func (s *SyncConfig) Validate() error {
-	if s.GitHub.Enabled && s.GitHub.Repo == "" {
-		return fmt.Errorf("sync.github.repo is required when GitHub sync is enabled")
+	// Previously this required a repo whenever `sync.github.enabled` was
+	// set — a check keyed on a field nothing read, gating a value
+	// nothing consumed. What is worth checking is the direction, which
+	// the GitHub auto-configuration genuinely reads: an unrecognised
+	// value there silently behaves as "not configured".
+	switch s.GitHub.SyncDirection {
+	case "", "pull", "push", "bidirectional":
+	default:
+		return fmt.Errorf(
+			"invalid sync.github.sync_direction: %s (must be pull, push, or bidirectional)",
+			s.GitHub.SyncDirection,
+		)
 	}
 	return nil
 }
 
 // GitHubSyncConfig contains GitHub sync configuration.
+//
+// These three are what the GitHub auto-configuration actually reads and
+// writes. `enabled`, `import_labels` and `import_milestones` were
+// declared beside them with no reader; what gets imported is the
+// plugin's business, decided over the RPC payload.
 type GitHubSyncConfig struct {
-	Enabled          bool   `yaml:"enabled"`
-	Repo             string `yaml:"repo"`
-	SyncDirection    string `yaml:"sync_direction"`
-	ImportLabels     bool   `yaml:"import_labels"`
-	ImportMilestones bool   `yaml:"import_milestones"`
-}
+	Repo string `yaml:"repo"`
 
-// JiraSyncConfig contains Jira sync configuration.
-type JiraSyncConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	URL           string `yaml:"url"`
-	Project       string `yaml:"project"`
+	// SyncDirection is "pull", "push" or "bidirectional".
 	SyncDirection string `yaml:"sync_direction"`
-}
 
-// LinearSyncConfig contains Linear sync configuration.
-type LinearSyncConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	TeamID        string `yaml:"team_id"`
-	SyncDirection string `yaml:"sync_direction"`
+	// UseGhAuth records that a GITHUB_TOKEN was found during
+	// auto-configuration. Written by the CLI rather than by hand.
+	UseGhAuth bool `yaml:"use_gh_auth,omitempty"`
 }
 
 // InboxConfig controls inbox-based task creation and transitions.
@@ -1220,12 +1233,15 @@ func (ic *InboxConfig) InboxDir() string {
 }
 
 // StorageConfig contains storage configuration.
+//
+// No `connection_string`: the postgres backend it was declared for is
+// accepted by Validate but not implemented, and nothing ever read the
+// key. It comes back with the backend that needs it.
 type StorageConfig struct {
-	Backend          string           `yaml:"backend"`
-	DBPath           string           `yaml:"db_path"`
-	ConnectionString string           `yaml:"connection_string"`
-	Filesystem       FilesystemConfig `yaml:"filesystem"`
-	Inbox            InboxConfig      `yaml:"inbox"`
+	Backend    string           `yaml:"backend"`
+	DBPath     string           `yaml:"db_path"`
+	Filesystem FilesystemConfig `yaml:"filesystem"`
+	Inbox      InboxConfig      `yaml:"inbox"`
 }
 
 // DBFilePath returns the configured database path or the default "db.sqlite".
@@ -1336,10 +1352,14 @@ func (s *StorageConfig) Validate() error {
 }
 
 // UIConfig contains UI-related configuration.
+//
+// Every field here has a reader. `pager`, `editor` and `date_format`
+// were declared and defaulted for years without one: no code paged
+// output, shelled to an editor, or formatted a date through them, so
+// setting any of the three changed nothing. They are gone rather than
+// implemented — the tool already renders dates through ui.timezone and
+// has no paging or editing flow to hang the other two on.
 type UIConfig struct {
-	Pager            string            `yaml:"pager"`
-	Editor           string            `yaml:"editor"`
-	DateFormat       string            `yaml:"date_format"`
 	Timezone         string            `yaml:"timezone"`
 	TableStyle       string            `yaml:"table_style"`
 	TagColors        map[string]string `yaml:"tag_colors"`

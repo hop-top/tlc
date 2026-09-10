@@ -231,7 +231,13 @@ func kitRoot() *kitcli.Root {
 
 	// Bridge kit's flat viper keys to TLC's namespaced keys on the global viper.
 	// kit binds --no-color to root.Viper["no-color"] and --quiet to root.Viper["quiet"].
-	// TLC reads "output.color" and "output.quiet" from the global viper.
+	//
+	// TLC reads "output.color" from the global viper (see the markdown
+	// render in formatter.go). "output.quiet" has no such reader: the
+	// binding below exists so the --quiet FLAG resolves, and the only
+	// consumer reads that flag off the command (upgrade.go), never the
+	// config key. Setting `output.quiet` in a config file therefore does
+	// nothing, which is why the key is not part of the config schema.
 	if err := viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color")); err != nil {
 		log.Warn("Failed to bind color flag", "error", err)
 	}
@@ -640,8 +646,21 @@ func init() {
 	// Install kit-themed TableStyle so renderStyledList forwards it to
 	// output.WithTableStyle. The styled path activates only on TTY writers;
 	// non-TTY writers (pipes, tests) keep the plain tabwriter renderer.
+	//
+	// This is the pre-config style. initConfig re-derives it once
+	// ui.theme / ui.table_style are readable; until then a command that
+	// renders before config load still has a style rather than none.
 	setTableStyle(kitRootInstance.TableStyle())
+
+	// Hand initConfig the root without letting it name kitRootInstance,
+	// which would close an initialization cycle.
+	themeTarget = kitRootInstance
 }
+
+// themeTarget is the kit Root that applyUITheme themes from initConfig.
+// Assigned in init(); nil only in tests that never ran it, which
+// applyUITheme tolerates.
+var themeTarget *kitcli.Root
 
 // Execute runs the root command and handles any errors.
 // Alias expansion is applied to os.Args before cobra parses them.
@@ -959,6 +978,17 @@ func initConfig() {
 		}
 	}
 
+	// Apply ui.theme / ui.table_style now that the merged config is
+	// readable. It cannot happen in kitRoot(): kitRootInstance is a
+	// package var, so kitcli.New has already run by the time cobra
+	// calls initConfig.
+	//
+	// Reached through themeTarget rather than kitRootInstance directly:
+	// naming the var here would close the init cycle
+	// kitRootInstance → kitRoot → initConfig → kitRootInstance that the
+	// RunE wiring below already sidesteps. init() fills it in.
+	applyUITheme(themeTarget, viper.GetString("ui.theme"), viper.GetString("ui.table_style"))
+
 	setupLogging()
 }
 
@@ -1116,10 +1146,13 @@ func setupLogging() {
 }
 
 func setDefaults() {
+	// Only keys something actually reads are seeded here. A SetDefault
+	// for an unread key is not inert: `config set` rewrites the whole
+	// merged config back to disk, so every seeded key lands in the
+	// user's file as a real setting that nothing honours.
 	viper.SetDefault("output.format", "table")
 	viper.SetDefault("output.color", true)
 	viper.SetDefault("output.verbose", false)
-	viper.SetDefault("output.quiet", false)
 
 	dataDir := config.UserDataDir()
 	viper.SetDefault("task.todo_file", filepath.Join(dataDir, "todo.txt"))
@@ -1132,23 +1165,19 @@ func setDefaults() {
 	// `default_status "TODO" does not match any defined status`. Left
 	// unset, the key means what it says — "the user nominated one" — and
 	// an omitted one resolves to the initial-role status instead.
-	viper.SetDefault("task.auto_assign", false)
-	viper.SetDefault("task.require_reference", true)
 	viper.SetDefault("task.archive_threshold", 7*24*time.Hour)
 
 	viper.SetDefault("git.track", false)
-	viper.SetDefault("git.branch.prefix_from_type", true)
-	viper.SetDefault("git.branch.zero_pad_issue", 4)
-	viper.SetDefault("git.branch.separator", "/")
-	viper.SetDefault("git.commit.auto_generate", true)
-	viper.SetDefault("git.commit.template", "{type}: {description} (closes #{issue})")
 
 	viper.SetDefault("storage.backend", backendSQLite)
-	viper.SetDefault("ui.pager", "auto")
-	viper.SetDefault("ui.editor", os.Getenv("EDITOR"))
-	viper.SetDefault("ui.date_format", "2006-01-02 15:04:05")
 	viper.SetDefault("ui.timezone", "local")
 	viper.SetDefault("ui.table_style", "unicode")
+	// Seeded for discoverability as much as for the value: the
+	// interactive config search walks viper.AllKeys(), so a key with no
+	// default cannot be found by name there. "neon" is the palette kit
+	// already defaults to, so this seeds the behaviour that was in
+	// effect anyway.
+	viper.SetDefault("ui.theme", "neon")
 }
 
 var dbSyncOnce sync.Once

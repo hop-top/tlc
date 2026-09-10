@@ -96,7 +96,7 @@ func autoConfigureGitHub(directionHint string) error {
 
 	// Check existing configuration
 	existingRepo := viper.GetString("sync.github.repo")
-	existingDirection := viper.GetString("sync.github.direction")
+	existingDirection := viper.GetString("sync.github.sync_direction")
 
 	// Determine if we need to update configuration
 	needsUpdate := false
@@ -128,7 +128,7 @@ func autoConfigureGitHub(directionHint string) error {
 	}
 
 	if newDirection != existingDirection {
-		viper.Set("sync.github.direction", newDirection)
+		viper.Set("sync.github.sync_direction", newDirection)
 		needsUpdate = true
 	}
 

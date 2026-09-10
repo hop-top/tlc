@@ -180,10 +180,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 			Limit:   1,
 		})
 		if err == nil && len(existingTasks) > 0 {
-			strategy := *duplicateIDStrategy
-			if strategy == "" {
-				strategy = strategyShare
-			}
+			strategy := resolveDuplicateIDStrategy(*duplicateIDStrategy)
 
 			switch strategy {
 			case strategyShare:
@@ -356,6 +353,26 @@ func generateUniqueProjectID(ctx context.Context, s *storage.SQLiteStorage, base
 
 	ts := time.Now().Format("20060102")
 	return fmt.Sprintf("%s-%s", baseID, ts)
+}
+
+// resolveDuplicateIDStrategy picks the duplicate-ID strategy: the
+// --duplicate-id-strategy flag, else the `project.duplicate_id_strategy`
+// config key, else the built-in default.
+//
+// The config step is what makes that key mean anything. `tlc init`
+// writes it, ProjectConfig.Validate rejects a bad value, and the
+// interactive setup prompts for it — but the flag is registered with
+// StringVar and never bound to viper, so nothing read the recorded
+// answer back. Re-running init in the same project silently reverted to
+// "share" no matter what the file said.
+func resolveDuplicateIDStrategy(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if fromConfig := viper.GetString("project.duplicate_id_strategy"); fromConfig != "" {
+		return fromConfig
+	}
+	return strategyShare
 }
 
 func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) {
