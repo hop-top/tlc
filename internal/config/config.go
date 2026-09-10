@@ -557,6 +557,95 @@ type SchedulingConfig struct {
 	AgeNudges  []AgeNudgeRule                  `yaml:"age_nudges,omitempty"`
 }
 
+// PriorityDerivationRule is one "if this, then that priority" rule.
+//
+// Declared as a LIST, and declaration order IS precedence order, first
+// match wins — the same shape and the same reasoning as
+// `task.priorities` and `task.statuses`. A map keyed by rule name cannot
+// express order at all: the decoder lands YAML mappings in a Go map with
+// randomised iteration, which is exactly the trap the per-tag workflow
+// override hit. Order here is the user's own, readable in their config,
+// and identical on every run.
+//
+// Every rule MUST be named. The name is not decoration: it is what a
+// `--explain` line cites, what a duplicate-name error can point at, and
+// what makes a rule set reviewable. An unnamed rule is unciteable.
+//
+// Conditions are ANDed. A rule declaring both `due_within` and
+// `min_dependents` fires only when both hold. There is deliberately no
+// OR: two conditions that should each suffice are two rules, which reads
+// the same and keeps precedence explicit.
+//
+// A rule with no condition at all is rejected rather than treated as a
+// catch-all. A catch-all is spellable — `due_within: 87600h` or
+// `min_age: 0s` — and an accidentally empty rule (a typo'd key name that
+// decoded to nothing) would otherwise silently claim every task.
+type PriorityDerivationRule struct {
+	// Name identifies the rule. Required and unique within the set.
+	Name string `yaml:"name"`
+
+	// Then is the priority the rule assigns. Must be in the effective
+	// priority vocabulary.
+	Then string `yaml:"then"`
+
+	// DueWithin fires when the task has a due date no further out than
+	// this. An overdue task (due in the past) satisfies every DueWithin.
+	// A task with no due date satisfies none.
+	DueWithin time.Duration `yaml:"due_within,omitempty"`
+
+	// MinAge fires when the task was created at least this long ago.
+	MinAge time.Duration `yaml:"min_age,omitempty"`
+
+	// MinDependents fires when at least this many other tasks declare
+	// this one in their `blocked_by`. A task blocking many others is
+	// worth more than one blocking none.
+	MinDependents int `yaml:"min_dependents,omitempty"`
+
+	// Tag fires when the task carries this tag.
+	Tag string `yaml:"tag,omitempty"`
+
+	// Always makes the rule a catch-all, matching every task.
+	//
+	// A catch-all is a legitimate last rule ("everything else is P3"),
+	// but it must be SAID. `min_age: 0s` cannot say it: a zero duration
+	// is what an unset field decodes to, so a rule whose only condition
+	// key was mistyped would be indistinguishable from a deliberate
+	// catch-all and would silently claim every task. This field is the
+	// difference between the two.
+	//
+	// Combining Always with another condition is rejected: the other
+	// condition would be dead text.
+	Always bool `yaml:"always,omitempty"`
+}
+
+// PriorityDerivationConfig holds config-driven priority derivation.
+//
+// Off unless `rules` is non-empty: with no rules declared, every
+// derivation entry point is a no-op and behaviour is byte-identical to a
+// build without this feature.
+type PriorityDerivationConfig struct {
+	// Rules are evaluated in declaration order; the first whose
+	// conditions all hold supplies the priority.
+	Rules []PriorityDerivationRule `yaml:"rules,omitempty"`
+
+	// OnCreate derives a priority for a task created without one.
+	//
+	// Default false. Deriving at create time is the least surprising
+	// moment there is — the task has no priority for the derivation to
+	// contradict, and the user sees the result in the create output — but
+	// it is still a value they did not type, so they opt in.
+	OnCreate bool `yaml:"on_create,omitempty"`
+
+	// IncludeActive lets derivation touch tasks sitting in an
+	// `active`-role status.
+	//
+	// Default false, which is the mid-flight guard: re-prioritising the
+	// task someone is working on right now moves it in every list they
+	// have open, for a reason they did not act on. Excluded tasks are
+	// reported as skipped rather than silently passed over.
+	IncludeActive bool `yaml:"include_active,omitempty"`
+}
+
 // TaskConfig contains task-related configuration.
 type TaskConfig struct {
 	DefaultStatus    string                      `yaml:"default_status"`
@@ -573,6 +662,7 @@ type TaskConfig struct {
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
 	Scheduling       SchedulingConfig            `yaml:"scheduling,omitempty"`
+	PriorityDeriv    PriorityDerivationConfig    `yaml:"priority_derivation,omitempty"`
 	List             *ListDefaults               `yaml:"list,omitempty"`
 }
 
@@ -694,7 +784,14 @@ func (t *TaskConfig) Validate() error {
 	if err := t.ValidateWorkflow(); err != nil {
 		return err
 	}
-	return t.validateSchedulingKeys()
+	if err := t.validateSchedulingKeys(); err != nil {
+		return err
+	}
+	// Derivation rules ride the advisory path, not the fatal one: a
+	// broken rule set must not stop every command in the tool. The
+	// derivation entry points re-run this check and refuse outright, so
+	// a rule set reported here is never half-applied there.
+	return t.ValidatePriorityDerivation()
 }
 
 // ValidateWorkflow validates the parts of the task configuration the
@@ -858,6 +955,121 @@ func (t *TaskConfig) ValidateEfforts() error {
 		seen[e.Name] = true
 	}
 	return nil
+}
+
+// ValidatePriorityDerivation checks the declared derivation rule set:
+// every rule is named, named once, states a priority in the effective
+// vocabulary, and declares at least one condition. It also refuses two
+// rules whose conditions are IDENTICAL, since which of them "wins" would
+// then be an artefact of the order they happened to be typed in rather
+// than a decision.
+//
+// Deliberately NOT called from DefaultWorkflowE. A broken derivation rule
+// set must not stop `task list` from running — the vocabulary gates every
+// write, derivation gates only the command that asks for it. The
+// derivation entry points call this themselves and refuse to run, and the
+// CLI's warning-only validation path reports it everywhere else. That is
+// the "reported, not silently resolved" contract: the rule set never
+// half-applies.
+//
+// Returns nil when no rules are declared: derivation off is not an error.
+func (t *TaskConfig) ValidatePriorityDerivation() error {
+	rules := t.PriorityDeriv.Rules
+	if len(rules) == 0 {
+		return nil
+	}
+
+	valid := make(map[string]bool)
+	names := make([]string, 0, len(t.EffectivePriorities()))
+	for _, p := range t.EffectivePriorities() {
+		valid[p.Name] = true
+		names = append(names, p.Name)
+	}
+
+	seenName := make(map[string]int, len(rules))
+	seenCond := make(map[string]string, len(rules))
+	for i, r := range rules {
+		if r.Name == "" {
+			return fmt.Errorf(
+				"task.priority_derivation.rules[%d]: rule must have a name; "+
+					"the name is what an explain line and a duplicate-rule "+
+					"error cite", i)
+		}
+		if prev, dup := seenName[r.Name]; dup {
+			return fmt.Errorf(
+				"task.priority_derivation.rules: duplicate rule name %q "+
+					"(indices %d and %d); rule names must be unique so a "+
+					"rule can be cited unambiguously", r.Name, prev, i)
+		}
+		seenName[r.Name] = i
+
+		if r.Then == "" {
+			return fmt.Errorf(
+				"task.priority_derivation.rules[%q]: `then` must name the "+
+					"priority to assign (one of: %s)",
+				r.Name, strings.Join(names, ", "))
+		}
+		if !valid[r.Then] {
+			return fmt.Errorf(
+				"task.priority_derivation.rules[%q]: `then: %s` is not in "+
+					"the priority vocabulary (%s)",
+				r.Name, r.Then, strings.Join(names, ", "))
+		}
+
+		cond := r.conditionKey()
+		if cond == "" {
+			return fmt.Errorf(
+				"task.priority_derivation.rules[%q]: rule declares no "+
+					"condition; a catch-all must be spelled explicitly as "+
+					"`always: true` so a mistyped condition key cannot "+
+					"silently claim every task", r.Name)
+		}
+		if r.Always && cond != "always" {
+			return fmt.Errorf(
+				"task.priority_derivation.rules[%q]: `always: true` cannot "+
+					"be combined with another condition (%s); the other "+
+					"condition would never be read", r.Name, cond)
+		}
+		if prev, clash := seenCond[cond]; clash {
+			return fmt.Errorf(
+				"task.priority_derivation.rules: rules %q and %q declare "+
+					"identical conditions; which one applies would depend on "+
+					"the order they were typed rather than on a decision — "+
+					"merge them, or make their conditions differ",
+				prev, r.Name)
+		}
+		seenCond[cond] = r.Name
+	}
+
+	return nil
+}
+
+// conditionKey renders a rule's conditions as a canonical string, so two
+// rules that test exactly the same thing compare equal.
+//
+// Field-by-field rather than by reflection or by hashing the struct:
+// Name and Then are deliberately excluded (two rules may legitimately
+// assign the same priority), and a condition field added later should
+// force a deliberate decision here rather than silently defaulting into
+// or out of the comparison.
+func (r PriorityDerivationRule) conditionKey() string {
+	var parts []string
+	if r.Always {
+		parts = append(parts, "always")
+	}
+	if r.DueWithin != 0 {
+		parts = append(parts, "due_within="+r.DueWithin.String())
+	}
+	if r.MinAge != 0 {
+		parts = append(parts, "min_age="+r.MinAge.String())
+	}
+	if r.MinDependents != 0 {
+		parts = append(parts, fmt.Sprintf("min_dependents=%d", r.MinDependents))
+	}
+	if r.Tag != "" {
+		parts = append(parts, "tag="+r.Tag)
+	}
+	return strings.Join(parts, ",")
 }
 
 // validateSchedulingKeys rejects a `task.scheduling.by_priority` entry

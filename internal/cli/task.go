@@ -429,6 +429,7 @@ func init() {
 	TaskCmd.AddCommand(TaskSkipCmd)
 	TaskCmd.AddCommand(TaskBlockCmd)
 	TaskCmd.AddCommand(TaskUnblockCmd)
+	TaskCmd.AddCommand(TaskReprioritiseCmd)
 
 	TaskCmd.PersistentFlags().BoolVar(&taskNoPrompt, "no-prompt", false, "Skip confirmation prompts")
 

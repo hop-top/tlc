@@ -289,6 +289,22 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		task.NoAutoRemind = sched.noAutoRemind
 	}
 
+	// Provenance first, then derivation, then the priority-keyed
+	// scheduling defaults — in that order, because each reads what the
+	// previous one settled.
+	//
+	// A -p on create is a human's value, so it is marked manual here and
+	// no rule will ever overwrite it. A task created WITHOUT -p gets a
+	// derived one only when the user opted in via
+	// `task.priority_derivation.on_create`; with that off, or with no
+	// rules declared at all, this whole block is a no-op and the task is
+	// stored exactly as it was before.
+	if task.Priority != "" {
+		core.MarkPriorityManual(task)
+	} else if err := deriveTaskPriorityOnCreate(w, task); err != nil {
+		return err
+	}
+
 	// Apply priority-based scheduling defaults from config.
 	applySchedulingConfig(task)
 
