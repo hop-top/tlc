@@ -30,12 +30,25 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing github repo when enabled",
+			name: testInvalid + " github sync_direction",
 			setup: func(c *Config) {
-				c.Sync.GitHub.Enabled = true
-				c.Sync.GitHub.Repo = ""
+				c.Sync.GitHub.SyncDirection = testInvalid
 			},
 			wantErr: true,
+		},
+		{
+			name: "valid github sync_direction",
+			setup: func(c *Config) {
+				c.Sync.GitHub.SyncDirection = "bidirectional"
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty github sync_direction",
+			setup: func(c *Config) {
+				c.Sync.GitHub.SyncDirection = ""
+			},
+			wantErr: false,
 		},
 		{
 			name: testInvalid + " storage backend",

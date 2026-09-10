@@ -1151,47 +1151,56 @@ type GitConfig struct {
 }
 
 // SyncConfig contains synchronization configuration.
+//
+// Only the GitHub subtree survives, because only it is read. `enabled`,
+// `auto_push`, `interval`, `batch_size` and `conflict_strategy` had no
+// consumer: sync runs when a sync command is invoked, never on a timer,
+// and conflict resolution takes its strategy from `--strategy` alone.
+// `conflict_strategy` was the sharpest of these — it named a real
+// mechanism with real values, so it read as the way to set a default,
+// while the flag's own default was the only thing that ever applied.
+//
+// Jira and Linear had whole config trees here and no code behind them.
+// Both integrations exist as sync PLUGINS, which carry their own
+// configuration; these structs described a second, imaginary place to
+// configure them.
 type SyncConfig struct {
-	Enabled          bool             `yaml:"enabled"`
-	AutoPush         bool             `yaml:"auto_push"`
-	Interval         time.Duration    `yaml:"interval"`
-	ConflictStrategy string           `yaml:"conflict_strategy"`
-	BatchSize        int              `yaml:"batch_size"`
-	GitHub           GitHubSyncConfig `yaml:"github"`
-	Jira             JiraSyncConfig   `yaml:"jira"`
-	Linear           LinearSyncConfig `yaml:"linear"`
+	GitHub GitHubSyncConfig `yaml:"github"`
 }
 
 // Validate validates the sync configuration.
 func (s *SyncConfig) Validate() error {
-	if s.GitHub.Enabled && s.GitHub.Repo == "" {
-		return fmt.Errorf("sync.github.repo is required when GitHub sync is enabled")
+	// Previously this required a repo whenever `sync.github.enabled` was
+	// set — a check keyed on a field nothing read, gating a value
+	// nothing consumed. What is worth checking is the direction, which
+	// the GitHub auto-configuration genuinely reads: an unrecognised
+	// value there silently behaves as "not configured".
+	switch s.GitHub.SyncDirection {
+	case "", "pull", "push", "bidirectional":
+	default:
+		return fmt.Errorf(
+			"invalid sync.github.sync_direction: %s (must be pull, push, or bidirectional)",
+			s.GitHub.SyncDirection,
+		)
 	}
 	return nil
 }
 
 // GitHubSyncConfig contains GitHub sync configuration.
+//
+// These three are what the GitHub auto-configuration actually reads and
+// writes. `enabled`, `import_labels` and `import_milestones` were
+// declared beside them with no reader; what gets imported is the
+// plugin's business, decided over the RPC payload.
 type GitHubSyncConfig struct {
-	Enabled          bool   `yaml:"enabled"`
-	Repo             string `yaml:"repo"`
-	SyncDirection    string `yaml:"sync_direction"`
-	ImportLabels     bool   `yaml:"import_labels"`
-	ImportMilestones bool   `yaml:"import_milestones"`
-}
+	Repo string `yaml:"repo"`
 
-// JiraSyncConfig contains Jira sync configuration.
-type JiraSyncConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	URL           string `yaml:"url"`
-	Project       string `yaml:"project"`
+	// SyncDirection is "pull", "push" or "bidirectional".
 	SyncDirection string `yaml:"sync_direction"`
-}
 
-// LinearSyncConfig contains Linear sync configuration.
-type LinearSyncConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	TeamID        string `yaml:"team_id"`
-	SyncDirection string `yaml:"sync_direction"`
+	// UseGhAuth records that a GITHUB_TOKEN was found during
+	// auto-configuration. Written by the CLI rather than by hand.
+	UseGhAuth bool `yaml:"use_gh_auth,omitempty"`
 }
 
 // InboxConfig controls inbox-based task creation and transitions.

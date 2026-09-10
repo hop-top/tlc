@@ -73,8 +73,8 @@ func defaultGroups() []groupEntry {
 		},
 		{
 			Name:        "sync",
-			Description: "Sync and GitHub integration",
-			Patterns:    []string{"sync.enabled", "sync.github.*"},
+			Description: "GitHub sync integration",
+			Patterns:    []string{"sync.github.*"},
 		},
 	}
 }
@@ -139,26 +139,6 @@ func defaultKeyHints() map[string]keyHint {
 			Description: "Auto-archive completed tasks after this duration",
 			IsDuration:  true,
 		},
-		"sync.enabled": {
-			Key: "sync.enabled", Description: "Enable sync",
-			IsBool: true,
-		},
-		"sync.auto_push": {
-			Key: "sync.auto_push", Description: "Auto-push after sync",
-			IsBool: true,
-		},
-		"sync.interval": {
-			Key: "sync.interval", Description: "Sync interval",
-			IsDuration: true,
-		},
-		"sync.conflict_strategy": {
-			Key:         "sync.conflict_strategy",
-			Description: "How to resolve sync conflicts",
-		},
-		"sync.github.enabled": {
-			Key: "sync.github.enabled", Description: "Enable GitHub sync",
-			IsBool: true,
-		},
 		"sync.github.repo": {
 			Key:         "sync.github.repo",
 			Description: "GitHub repo (owner/name) to sync with",
@@ -166,16 +146,7 @@ func defaultKeyHints() map[string]keyHint {
 		"sync.github.sync_direction": {
 			Key:         "sync.github.sync_direction",
 			Description: "Sync direction for GitHub",
-		},
-		"sync.github.import_labels": {
-			Key:         "sync.github.import_labels",
-			Description: "Import labels from GitHub",
-			IsBool:      true,
-		},
-		"sync.github.import_milestones": {
-			Key:         "sync.github.import_milestones",
-			Description: "Import milestones from GitHub",
-			IsBool:      true,
+			Enum:        []string{"pull", "push", "bidirectional"},
 		},
 		"ui.timezone": {
 			Key:         "ui.timezone",

@@ -1,9 +1,5 @@
 package config
 
-import (
-	"time"
-)
-
 // DefaultConfig returns the in-memory default Config value.
 //
 // Runtime configuration is not built from this: the live cascade is
@@ -28,12 +24,6 @@ func DefaultConfig() *Config {
 		},
 		Git: GitConfig{
 			Track: false,
-		},
-		Sync: SyncConfig{
-			Enabled:          true,
-			Interval:         5 * time.Minute,
-			ConflictStrategy: "prompt",
-			BatchSize:        50,
 		},
 		Storage: StorageConfig{
 			Backend: "sqlite",

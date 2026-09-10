@@ -85,21 +85,9 @@ git:
 
 # External system sync
 sync:
-  enabled: true
-  interval: 5m
-  conflict_strategy: prompt
-
   github:
-    enabled: true
     repo: org/repo
     sync_direction: bidirectional
-    import_labels: true
-    import_milestones: true
-
-  jira:
-    enabled: false
-    url: https://company.atlassian.net
-    project: PROJ
 
 # Storage backend
 storage:
@@ -421,40 +409,22 @@ release ever read them.
 
 ### `sync` — External System Sync
 
-#### Global Sync Settings
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `true` | Enable external system sync |
-| `interval` | duration | `5m` | Polling interval (e.g., `5m`, `1h`) |
-| `conflict_strategy` | enum | `prompt` | Conflict resolution: `prompt`, `local`, `remote`, `manual` |
-| `batch_size` | int | `50` | Max tasks per sync batch |
-
-**Conflict Strategies**:
-- `prompt` — Ask user on conflict
-- `local` — Keep local changes
-- `remote` — Keep remote changes
-- `manual` — Mark as conflict, require manual resolution
-
-**Example**:
-```yaml
-sync:
-  enabled: true
-  interval: 10m
-  conflict_strategy: prompt
-```
+Sync runs when a sync command is invoked. There is no polling loop, no
+batching setting, and no configured conflict default: `tlc sync pull`
+takes its conflict strategy from `--strategy` (`remote-wins`,
+`local-wins`, `last-write-wins`, `manual`).
 
 #### `sync.github` — GitHub Integration
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `false` | Enable GitHub sync |
 | `repo` | string | - | Repository (org/repo) |
-| `sync_direction` | enum | `bidirectional` | Sync mode: `pull`, `push`, `bidirectional` |
-| `import_labels` | bool | `true` | Import GitHub labels as tags |
-| `import_milestones` | bool | `true` | Import milestones |
-| `import_assignees` | bool | `true` | Import assignees |
-| `issue_filter` | string | - | JQ filter for issues to import |
+| `sync_direction` | enum | - | Sync mode: `pull`, `push`, `bidirectional` |
+| `use_gh_auth` | bool | `false` | Set by tlc when a `GITHUB_TOKEN` is detected |
+
+Both `repo` and `sync_direction` are normally written by tlc itself the
+first time a sync command runs in a GitHub checkout, rather than typed by
+hand. An unrecognised `sync_direction` is rejected at config validation.
 
 **Sync Directions**:
 - `pull` — Only pull from GitHub (read-only)
@@ -465,53 +435,17 @@ sync:
 ```yaml
 sync:
   github:
-    enabled: true
     repo: myorg/myrepo
     sync_direction: bidirectional
-    import_labels: true
-    import_milestones: true
-    issue_filter: '.labels[] | select(.name | startswith("tlc:"))'
 ```
 
-#### `sync.jira` — Jira Integration
+#### Other providers
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `false` | Enable Jira sync |
-| `url` | string | - | Jira instance URL |
-| `project` | string | - | Jira project key |
-| `sync_direction` | enum | `bidirectional` | Sync mode |
-| `issue_type` | string | `Task` | Default issue type for new issues |
-| `import_custom_fields` | bool | `false` | Import custom fields as metadata |
-
-**Example**:
-```yaml
-sync:
-  jira:
-    enabled: true
-    url: https://company.atlassian.net
-    project: PROJ
-    sync_direction: pull
-    issue_type: Task
-```
-
-#### `sync.linear` — Linear Integration
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `false` | Enable Linear sync |
-| `team_id` | string | - | Linear team ID |
-| `sync_direction` | enum | `bidirectional` | Sync mode |
-| `import_projects` | bool | `true` | Import Linear projects as milestones |
-
-**Example**:
-```yaml
-sync:
-  linear:
-    enabled: true
-    team_id: team_abc123
-    sync_direction: bidirectional
-```
+Jira, Linear, GitLab, Gitea, Bitbucket, Azure DevOps and vTodo are sync
+**plugins**. Each is configured through its own plugin settings and
+environment (for example `JIRA_EMAIL` / `JIRA_TOKEN`), not through
+`sync.*` keys in this file. Earlier drafts of this spec documented
+`sync.jira.*` and `sync.linear.*` blocks; no release ever read them.
 
 ---
 
@@ -947,14 +881,13 @@ output:
   format: xml  # Error: format must be table|json|yaml|tls|summary
 
 # Invalid: bad type
-sync:
-  interval: "not-a-duration"  # Error: interval must be duration (e.g., 5m)
+tracks:
+  stale_threshold: "not-a-duration"  # Error: must be duration (e.g., 48h)
 
-# Invalid: missing required field
+# Invalid: value outside the enum
 sync:
   github:
-    enabled: true
-    # Error: repo is required when enabled=true
+    sync_direction: sideways  # Error: must be pull, push, or bidirectional
 ```
 
 ### Validation Command
@@ -999,8 +932,8 @@ tlc config migrate --dry-run
 Config version: 0.1
 TLC version: 0.2
 Migration required:
-  - Rename: git.worktree_dir → git.worktree.directory
-  - Add: sync.conflict_strategy (default: prompt)
+  - Rename: task.stale_timeout → task.stale.default_timeout
+  - Add: tracks.stale_threshold (default: 48h)
 
 # Perform migration
 tlc config migrate
@@ -1037,12 +970,7 @@ task:
   default_status: TODO
 
 git:
-  worktree:
-    directory: .worktrees
-    auto_create: true
-
-sync:
-  enabled: false
+  track: false
 
 storage:
   backend: sqlite
@@ -1059,59 +987,22 @@ output:
 
 task:
   default_status: TODO
-  auto_assign: false
 
 git:
   track: true
 
 sync:
-  enabled: true
-  interval: 5m
-  conflict_strategy: prompt
-
   github:
-    enabled: true
     repo: myorg/myrepo
     sync_direction: bidirectional
-    import_labels: true
-    import_milestones: true
 
 storage:
   backend: sqlite
   db_path: .tlc/db.sqlite
 
 ui:
-  pager: less
-  editor: vim
   timezone: UTC
-```
-
-### Multi-System Sync
-
-```yaml
-version: 0.1
-
-sync:
-  enabled: true
-  interval: 10m
-  conflict_strategy: prompt
-
-  github:
-    enabled: true
-    repo: myorg/frontend
-    sync_direction: bidirectional
-
-  jira:
-    enabled: true
-    url: https://company.atlassian.net
-    project: FRONT
-    sync_direction: pull
-    issue_type: Story
-
-  linear:
-    enabled: true
-    team_id: team_abc123
-    sync_direction: bidirectional
+  theme: dark
 ```
 
 ---
