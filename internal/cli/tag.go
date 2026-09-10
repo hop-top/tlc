@@ -94,6 +94,26 @@ var TagListCmd = &cobra.Command{
 
 // runTagAdd adds tags to a task given its ID.
 func runTagAdd(cmd *cobra.Command, taskID string, newTags []string) error {
+	// `tlc tag <id> <tag…>` writes tags without going through
+	// applyTaskFieldChanges, so it needs the gate of its own — it is the
+	// most direct tag write in the tool and would otherwise be the hole
+	// the policy leaks through.
+	//
+	// BEFORE the task is resolved, unlike task update's gate, because
+	// this command's resolver cannot resolve a T-NNNN alias at all — it
+	// goes through uri.NewResolver, which does not do the project-scoped
+	// seq lookup `task show` does, so every alias-addressed invocation
+	// fails NOT_FOUND before any tag is examined. That is a pre-existing
+	// defect and not this change's to fix, but gating after it would
+	// make the policy unenforceable on the exact form users type.
+	//
+	// Only the NEW tags are checked, for the reason applyTaskFieldChanges
+	// spells out — a task already carrying a since-disallowed tag must
+	// stay editable.
+	if err := core.ValidateTags(newTags); err != nil {
+		return err
+	}
+
 	s, err := getStorage()
 	if err != nil {
 		return err

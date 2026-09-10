@@ -174,6 +174,14 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 			priority = normalized
 		}
 
+		// Same tag vocabulary gate the CLI's saveTask applies. A policy
+		// enforced only on the CLI is not a policy: the HTTP surface
+		// writes to the same store.
+		if err := core.ValidateTags(req.Tags); err != nil {
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_tags", "%v", err)
+			return
+		}
+
 		// Same config-driven validation the CLI's saveTask applies.
 		valCfg := getValidationConfig()
 		if err := valCfg.ValidateTaskOp(config.ValidationOpCreate, config.TaskFields{

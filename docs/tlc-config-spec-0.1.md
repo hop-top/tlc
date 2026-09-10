@@ -231,6 +231,58 @@ If no status declares `skipped`, `tlc task skip` falls back to a status
 literally named `SKIPPED` and warns. If neither exists it refuses rather
 than electing an arbitrary terminal status.
 
+#### `task.tags` — Tag Policy and Vocabulary
+
+Controls whether a tag has to be in a vocabulary before it can be
+written to a task.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `policy` | enum | `open` | `open` accepts any tag; `closed` accepts only tags the vocabulary admits |
+| `allowed` | list | — | Project-specific tags a `closed` policy admits, in addition to the generated axes |
+
+`open` is the default and preserves the historical behaviour: any tag
+may be created on use. A config that says nothing about tags behaves
+exactly as it did before this key existed.
+
+Under `closed`, the axes TLC already generates are admitted **by
+construction** and do not need restating in `allowed`:
+
+- `type:*` — one per Conventional Commits type, plus `type:breaking`
+- `priority:*` — from `task.priorities` (the built-in `P0`–`P3` are
+  admitted under both their own names and the `critical`/`high`/
+  `medium`/`low` aliases the sync plugins put on the wire)
+- `effort:*` — from `task.efforts`
+- `status:*` — from `task.statuses`, plus `status:blocked`
+
+So `allowed` says only what is specific to the project. An entry ending
+in `:*` opens a whole dimension — `domain:*` admits `domain:storage` and
+any other `domain:` tag — which is what makes an open-ended axis usable
+without abandoning the guarantee elsewhere. That is the only wildcard
+shape accepted: it is anchored to a dimension prefix, so it can widen a
+namespace but never widen to everything.
+
+Enforcement covers every write path — `task create --tag`,
+`task update --add-tag`, `tlc tag <id> <tag…>`, the `serve` HTTP routes,
+the plan importer and the inbox. The two paths that read `todo.txt`
+(startup ingest and `doctor --fix`) drop disallowed tags and keep the
+task rather than failing, because they run on the happy path of ordinary
+read commands.
+
+A rejection names the offending tag and the whole allowed set, and
+`task create --help` / `task update --help` advertise the vocabulary when
+the policy is closed.
+
+```yaml
+task:
+  tags:
+    policy: closed
+    allowed:
+      - storage
+      - cli
+      - domain:*
+```
+
 #### `task.state_machine` — Transition Rules
 
 The `task.state_machine.rules` list defines allowed transitions.

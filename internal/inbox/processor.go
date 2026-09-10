@@ -131,6 +131,19 @@ func (p *FileInboxProcessor) processCreates(
 			continue
 		}
 
+		// The tag vocabulary gate. The inbox already has exactly the
+		// right shape of failure for it: the offending file goes to
+		// failed/ with the reason in its sidecar, so the user gets the
+		// message naming the tag and the allowed set, and the other
+		// files in the batch still process.
+		if err := core.ValidateTags(parsed.Tags); err != nil {
+			p.fail(name, err, result)
+			_ = moveFile(src, filepath.Join( //nolint:errcheck // best-effort move to failed/
+				p.inboxDir, dirFailed, name,
+			))
+			continue
+		}
+
 		task := buildTask(taskID, parsed, p.projectID)
 
 		if err := p.svc.CreateTask(

@@ -433,6 +433,90 @@ type EffortDefinition struct {
 	Color       string `yaml:"color,omitempty"`
 }
 
+// TagPolicy names how `task.tags.allowed` is enforced.
+//
+// Two values only, and the pair is deliberately not three: there is no
+// "warn" mode. A tag that is warned about is still written, so the next
+// reader of the store sees a vocabulary that the config says does not
+// exist — which is the drift a policy exists to prevent, arriving one
+// warning later.
+type TagPolicy string
+
+const (
+	// TagPolicyOpen accepts any tag. The default, and the whole reason
+	// this key can be added without breaking a single existing project:
+	// a config that says nothing about tags behaves exactly as it did
+	// before the key existed.
+	TagPolicyOpen TagPolicy = "open"
+
+	// TagPolicyClosed accepts only tags the vocabulary admits.
+	TagPolicyClosed TagPolicy = "closed"
+)
+
+// TagsConfig is the `task.tags` section: the tag vocabulary and how
+// strictly it is enforced.
+//
+// Allowed is ADDITIVE to the axes tlc already generates — see
+// core.TagVocabulary. A closed policy that made the user restate
+// `type:feat`, every `priority:*` and every `status:*` before they could
+// use them would be restating vocabularies that already exist in this
+// same config file, and would silently rot the moment they renamed a
+// priority. So the generated axes are admitted by construction and
+// `allowed` says only what is project-specific.
+type TagsConfig struct {
+	// Policy is "open" (default) or "closed". Empty means open.
+	Policy TagPolicy `yaml:"policy,omitempty"`
+
+	// Allowed lists the project-specific tags a closed policy admits, on
+	// top of the generated axes.
+	//
+	// An entry ending in `:*` admits the whole prefix — `domain:*` admits
+	// `domain:storage` and any other `domain:` tag. The wildcard is
+	// deliberately limited to that one shape: it is anchored to a
+	// dimension prefix, so it can widen a namespace but can never widen
+	// to everything, which a free `*` or a regex could. An open-ended
+	// axis like `domain:` is the case that makes a literal-only list
+	// unusable in practice — nobody can enumerate their domains up front
+	// — while an axis the project genuinely wants closed is still closed
+	// by listing its members literally. Both guarantees are available;
+	// which one applies is per-prefix and visible in the config.
+	Allowed []string `yaml:"allowed,omitempty"`
+}
+
+// Effective returns the policy this section implies: the declared value,
+// or open when none is declared.
+func (t TagsConfig) Effective() TagPolicy {
+	if t.Policy == "" {
+		return TagPolicyOpen
+	}
+	return t.Policy
+}
+
+// Validate rejects a policy value outside the known set.
+//
+// On the FATAL ValidateWorkflow path rather than the advisory one, for
+// the same reason ValidateEfforts is: this value decides what the write
+// gate accepts. A typo'd `policy: colsed` that only warned would fall
+// back to open and silently accept every tag the user believed they had
+// closed off — a policy that reports itself as configured while
+// enforcing nothing is worse than no policy at all.
+func (t TagsConfig) Validate() error {
+	switch t.Policy {
+	case "", TagPolicyOpen, TagPolicyClosed:
+	default:
+		return fmt.Errorf(
+			"task.tags.policy %q is not a known policy: must be one of %s, %s",
+			t.Policy, TagPolicyOpen, TagPolicyClosed,
+		)
+	}
+	for i, a := range t.Allowed {
+		if strings.TrimSpace(a) == "" {
+			return fmt.Errorf("task.tags.allowed[%d]: tag must not be empty", i)
+		}
+	}
+	return nil
+}
+
 // WorkflowDefinition defines allowed state transitions.
 type WorkflowDefinition struct {
 	Rules map[string][]string `yaml:"rules"` // map[from][]to
@@ -485,6 +569,7 @@ type TaskConfig struct {
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
 	Priorities       []PriorityDefinition        `yaml:"priorities,omitempty"`
 	Efforts          []EffortDefinition          `yaml:"efforts,omitempty"`
+	Tags             TagsConfig                  `yaml:"tags,omitempty"`
 	StateMachine     *WorkflowDefinition         `yaml:"state_machine,omitempty"`
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
@@ -688,6 +773,10 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	}
 
 	if err := t.ValidateEfforts(); err != nil {
+		return err
+	}
+
+	if err := t.Tags.Validate(); err != nil {
 		return err
 	}
 
