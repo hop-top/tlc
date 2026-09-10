@@ -124,6 +124,19 @@ var needsLabels = []Label{
 // done: the old literals named P0-P3's aliases and a fixed
 // TODO/IN_PROGRESS/DONE/SKIPPED regardless of what the user declared.
 func GetTemplates(projectType ProjectType) []Label {
+	out, _ := GetTemplatesWithConflicts(projectType)
+	return out
+}
+
+// GetTemplatesWithConflicts is GetTemplates plus the label names that
+// were generated more than once with disagreeing colors.
+//
+// The conflict list exists because the alternative to reporting a
+// duplicate is failing on one, and failing would leave `label init`
+// refusing to seed anything at all (see dedupeByName). Callers that
+// render to a user — `label init` — print it; callers that only need
+// the set use GetTemplates and ignore it.
+func GetTemplatesWithConflicts(projectType ProjectType) ([]Label, []LabelConflict) {
 	generated := generatedAxes()
 	common := make([]Label, 0, len(typeLabels)+len(generated)+len(needsLabels))
 	common = append(common, typeLabels...)
@@ -321,8 +334,8 @@ func GetTemplates(projectType ProjectType) []Label {
 		// and adding to generic while forgetting the copy would give an
 		// unknown type a SMALLER set than the generic it is supposed to
 		// be identical to.
-		return GetTemplates(TypeGeneric)
+		return GetTemplatesWithConflicts(TypeGeneric)
 	}
 
-	return append(common, domains...)
+	return dedupeByName(append(common, domains...))
 }

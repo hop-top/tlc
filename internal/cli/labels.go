@@ -52,7 +52,16 @@ Use --type to force a specific template (` + projectTypeList() + `).`,
 
 		fmt.Printf("Detected project type: %s\n", pType)
 
-		templates := labels.GetTemplates(pType)
+		templates, conflicts := labels.GetTemplatesWithConflicts(pType)
+
+		// Printed before the set, and to stderr, so a duplicate is
+		// visible without corrupting the label listing a caller may be
+		// piping. The seeding still proceeds: one label carrying the
+		// wrong one of two declared colors beats seeding nothing.
+		for _, c := range conflicts {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", c)
+		}
+
 		fmt.Printf("Suggested labels for %s:\n", pType)
 		for _, l := range templates {
 			fmt.Printf("  - %s (%s): %s\n", l.Name, l.Color, l.Description)

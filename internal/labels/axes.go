@@ -272,3 +272,66 @@ func generatedAxes() []Label {
 	out = append(out, statusAxis(core.ConfiguredTaskStatusDefinitions())...)
 	return out
 }
+
+// LabelConflict records one label name that was generated more than
+// once, and the two colors that disagreed about it.
+type LabelConflict struct {
+	Name    string
+	Kept    string // color of the entry that survived
+	Dropped string // color of the entry that was skipped
+}
+
+func (c LabelConflict) String() string {
+	return fmt.Sprintf("label %q generated twice with different colors: keeping %s, dropping %s", c.Name, c.Kept, c.Dropped)
+}
+
+// dedupeByName collapses labels sharing a name, keeping the FIRST
+// occurrence and reporting every skipped entry that disagreed about the
+// color.
+//
+// Two configs reach here with a duplicate name, and neither is caught
+// upstream:
+//
+//   - A vocabulary declaring its own non-terminal BLOCKED. statusAxis
+//     generates a label for it and then appends the fixed
+//     `status:blocked` unconditionally.
+//   - Two distinct declared names that labelValue collapses onto one
+//     value — IN_REVIEW and in-review, HIGH and high. Config validation
+//     rejects duplicate status NAMES, and these are not duplicates; the
+//     collision only exists after lowercasing and hyphenating, which
+//     happens here.
+//
+// SKIPPING the later entry is chosen over returning an error, on the
+// argument resolveColor already makes for an unrecognized color: a
+// `label init` that refuses to run leaves the user's forge with no
+// labels at all, which is a worse outcome than one label whose color is
+// arguably the wrong one of two. The difference from resolveColor is
+// that a silently wrong color IS the defect being fixed here, so the
+// skip is reported rather than swallowed, and `label init` prints it.
+//
+// FIRST wins rather than last so the surviving color is decided by
+// declaration order the user controls, not by the order generatedAxes
+// happens to concatenate the axes in. For a declared BLOCKED that means
+// the user's own swatch beats the fixed entry's — the answer a user who
+// took the trouble to declare the status would expect.
+//
+// A duplicate whose color already agrees is still collapsed but not
+// reported: there is nothing for the user to decide, and a warning
+// nobody can act on is noise.
+func dedupeByName(in []Label) ([]Label, []LabelConflict) {
+	seen := make(map[string]string, len(in))
+	out := make([]Label, 0, len(in))
+	var conflicts []LabelConflict
+	for _, l := range in {
+		kept, dup := seen[l.Name]
+		if !dup {
+			seen[l.Name] = l.Color
+			out = append(out, l)
+			continue
+		}
+		if kept != l.Color {
+			conflicts = append(conflicts, LabelConflict{Name: l.Name, Kept: kept, Dropped: l.Color})
+		}
+	}
+	return out, conflicts
+}
