@@ -24,8 +24,11 @@ import (
 // separate from the field assertions so a mutation that re-breaks
 // classification fails on the title, which is the user-visible harm,
 // rather than only on a field nobody looks at.
-func tokenNotInTitle(t *testing.T, title, token, wantTitle string) {
+func tokenNotInTitle(t *testing.T, title, token string) {
 	t.Helper()
+	// Every caller parses the same fixture line, so the expected title
+	// is a property of the fixture rather than of the call.
+	const wantTitle = "Rewrite the parser"
 	if strings.Contains(title, token) {
 		t.Errorf("token %q leaked into title %q; it must be classified as metadata", token, title)
 	}
@@ -39,7 +42,7 @@ func TestParseTLS_TypeTokenBecomesTagNotTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTLS failed: %v", err)
 	}
-	tokenNotInTitle(t, task.Title, "type:feat", "Rewrite the parser")
+	tokenNotInTitle(t, task.Title, "type:feat")
 
 	// Stored WHOLE, prefix included: the tag policy validates
 	// `type:feat`, and a bare `feat` would not be admitted by it.
@@ -56,7 +59,7 @@ func TestParseTLS_StatusTokenBecomesTagAndDoesNotSetStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTLS failed: %v", err)
 	}
-	tokenNotInTitle(t, task.Title, "status:in-progress", "Rewrite the parser")
+	tokenNotInTitle(t, task.Title, "status:in-progress")
 
 	if task.Status != core.StatusTodo {
 		t.Errorf("status = %q, want %q; the bracket marker is the only status source",
@@ -88,7 +91,7 @@ func TestParseTLS_PriorityAxisResolvesToCanonicalName(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseTLS failed: %v", err)
 			}
-			tokenNotInTitle(t, task.Title, tc.token, "Rewrite the parser")
+			tokenNotInTitle(t, task.Title, tc.token)
 			if task.Priority != tc.want {
 				t.Errorf("priority = %q, want %q", task.Priority, tc.want)
 			}
@@ -105,7 +108,7 @@ func TestParseTLS_PrioAliasStillParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTLS failed: %v", err)
 	}
-	tokenNotInTitle(t, task.Title, "prio:P1", "Rewrite the parser")
+	tokenNotInTitle(t, task.Title, "prio:P1")
 	if task.Priority != core.PriorityP1 {
 		t.Errorf("priority = %q, want %q", task.Priority, core.PriorityP1)
 	}
@@ -196,7 +199,7 @@ func TestParseTLS_UnresolvableAxisValueBecomesTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTLS failed: %v", err)
 	}
-	tokenNotInTitle(t, task.Title, "priority:nonsensical", "Rewrite the parser")
+	tokenNotInTitle(t, task.Title, "priority:nonsensical")
 	if task.Priority != "" {
 		t.Errorf("priority = %q, want empty; an unresolvable value must not reach the field",
 			task.Priority)

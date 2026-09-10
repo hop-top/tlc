@@ -30,9 +30,11 @@ func tagResolutionFixture(t *testing.T) (bin, home string, env []string) {
 // tagsOf reads a task's tags back through `task show`, so the assertion
 // is on persisted state rather than on the command's own report of
 // itself.
-func tagsOf(t *testing.T, bin, home string, env []string, ref string) string {
+func tagsOf(t *testing.T, bin, home string, env []string) string {
 	t.Helper()
-	return runTLCOK(t, bin, home, env, "task", "show", ref)
+	// Each fixture creates exactly one task, so the ref is a property of
+	// the fixture rather than of the call.
+	return runTLCOK(t, bin, home, env, "task", "show", "T-0001")
 }
 
 // TestTagResolvesDisplayAlias is the headline regression: the form the
@@ -50,7 +52,7 @@ func TestTagResolvesDisplayAlias(t *testing.T) {
 	// Assert the tag actually persisted. Exiting 0 is not evidence: the
 	// defect's whole shape was a command that looked fine and did not
 	// reach the task.
-	if shown := tagsOf(t, bin, home, env, "T-0001"); !strings.Contains(shown, "sometag") {
+	if shown := tagsOf(t, bin, home, env); !strings.Contains(shown, "sometag") {
 		t.Errorf("tag did not land on T-0001:\n%s", shown)
 	}
 }
@@ -72,7 +74,7 @@ func TestTagResolvesTypeID(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("`tlc tag %s typeidtag` failed (exit %d):\n%s", typeID, code, out)
 	}
-	if shown := tagsOf(t, bin, home, env, "T-0001"); !strings.Contains(shown, "typeidtag") {
+	if shown := tagsOf(t, bin, home, env); !strings.Contains(shown, "typeidtag") {
 		t.Errorf("tag did not land when addressed by TypeID:\n%s", shown)
 	}
 }
@@ -86,7 +88,7 @@ func TestTagMergesWithExistingTags(t *testing.T) {
 	runTLCOK(t, bin, home, env, "task", "create", "already tagged", "--tag", "existing")
 	runTLCOK(t, bin, home, env, "tag", "T-0001", "added")
 
-	shown := tagsOf(t, bin, home, env, "T-0001")
+	shown := tagsOf(t, bin, home, env)
 	for _, want := range []string{"existing", "added"} {
 		if !strings.Contains(shown, want) {
 			t.Errorf("expected tag %q on the task, got:\n%s", want, shown)
@@ -148,7 +150,7 @@ func TestTagResolvesLowercaseAlias(t *testing.T) {
 	runTLCOK(t, bin, home, env, "task", "create", "lowercase ref")
 	runTLCOK(t, bin, home, env, "tag", "t-0001", "lowertag")
 
-	if shown := tagsOf(t, bin, home, env, "T-0001"); !strings.Contains(shown, "lowertag") {
+	if shown := tagsOf(t, bin, home, env); !strings.Contains(shown, "lowertag") {
 		t.Errorf("tag did not land when addressed as t-0001:\n%s", shown)
 	}
 }
