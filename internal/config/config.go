@@ -743,12 +743,23 @@ func GetDefaultStatuses() []StatusDefinition {
 // struct would make "declared no priorities" indistinguishable from
 // "declared exactly the built-in four" — which is precisely the
 // distinction the by_priority check and the enum restamp read.
+//
+// The colors are the swatches the label axis has always emitted for
+// these four, declared here for the same reason GetDefaultEfforts
+// declares its own: the vocabulary and its presentation belong in one
+// place. Naming them "red"/"yellow"/"blue"/"gray" instead reads as
+// equivalent but is not — the name table resolveColor consults is a
+// TERMINAL palette, and routing the built-ins through it moved three of
+// the four (high, medium and low), landing medium on the same blue
+// status:in-progress already uses. A hex here is not a second source of
+// truth: resolveColor passes six hex digits through untouched, so this
+// stays the only place a built-in priority color is written.
 func GetDefaultPriorities() []PriorityDefinition {
 	return []PriorityDefinition{
-		{Name: "P0", Label: "Critical", Color: "red"},
-		{Name: "P1", Label: "High", Color: "yellow"},
-		{Name: "P2", Label: "Medium", Color: "blue"},
-		{Name: "P3", Label: "Low", Color: "gray"},
+		{Name: "P0", Label: "Critical", Color: "B60205"},
+		{Name: "P1", Label: "High", Color: "D93F0B"},
+		{Name: "P2", Label: "Medium", Color: "FBCA04"},
+		{Name: "P3", Label: "Low", Color: "0E8A16"},
 	}
 }
 

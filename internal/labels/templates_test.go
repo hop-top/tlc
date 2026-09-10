@@ -375,3 +375,63 @@ func namesOf(ls []Label) map[string]bool {
 	}
 	return m
 }
+
+// TestPriorityAxisColoursUnchanged pins the built-in priority swatches
+// across the move from a hardcoded template literal to config-derived
+// definitions, for the reason TestEffortAxisColoursUnchanged pins the
+// effort ones: `sync push` writes the color to the forge, so a swatch
+// that moved re-colors every issue already carrying that label.
+//
+// The effort axis got this guard when it moved; priority did not, and
+// three of its four swatches silently changed — priority:medium landing
+// on 1D76DB, the same blue `status:in-progress` already uses, so two
+// different axes rendered identically on the same issue.
+func TestPriorityAxisColoursUnchanged(t *testing.T) {
+	want := map[string]string{
+		"priority:critical": "B60205",
+		"priority:high":     "D93F0B",
+		"priority:medium":   "FBCA04",
+		"priority:low":      "0E8A16",
+	}
+	for _, l := range GetTemplates(TypeGeneric) {
+		w, ok := want[l.Name]
+		if !ok {
+			continue
+		}
+		if l.Color != w {
+			t.Errorf("%s color = %q, want %q", l.Name, l.Color, w)
+		}
+		delete(want, l.Name)
+	}
+	for name := range want {
+		t.Errorf("missing priority label %q", name)
+	}
+}
+
+// TestPriorityAxisDoesNotReuseInProgressBlue states the visible half of
+// the drift as its own property.
+//
+// priority:medium landing on 1D76DB was not merely a changed swatch: it
+// is the exact blue status:in-progress carries, and the two axes are
+// read together on one issue, so the badges became indistinguishable.
+// Pinned separately from the swatch list because it survives a future
+// deliberate re-palette — whatever medium moves to, it must not move
+// onto the active-status blue.
+//
+// Scoped to that one pair rather than asserting global distinctness
+// across the two axes: priority:high and status:blocked have shared
+// D93F0B since status:blocked was introduced, and a blanket rule would
+// assert a property this label set has never held.
+func TestPriorityAxisDoesNotReuseInProgressBlue(t *testing.T) {
+	byName := make(map[string]string)
+	for _, l := range GetTemplates(TypeGeneric) {
+		byName[l.Name] = l.Color
+	}
+	inProgress, ok := byName["status:in-progress"]
+	if !ok {
+		t.Fatal("status:in-progress absent; the collision guard has nothing to compare against")
+	}
+	if got := byName["priority:medium"]; got == inProgress {
+		t.Errorf("priority:medium color %q is status:in-progress's; the two axes render on the same issue", got)
+	}
+}
