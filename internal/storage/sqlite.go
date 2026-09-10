@@ -788,7 +788,7 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 			args = append(args, exprArgs...)
 		} else {
 			orderParts = append(orderParts,
-				fmt.Sprintf("%s %s", query.SortBy, order)) //nolint:gosec // G202: SortBy is validated against known columns
+				fmt.Sprintf("%s %s", query.SortBy, order))
 		}
 	} else {
 		orderParts = append(orderParts, "created_at DESC")

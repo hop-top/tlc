@@ -617,6 +617,7 @@ func bindConfiguredStatusCompletion(root *kitcli.Root) {
 			if cmd.Flags().Lookup(spec.flag) == nil {
 				continue
 			}
+			//nolint:errcheck // duplicate-registration error is the documented adopter-wins case; see the doc comment above
 			_ = cmd.RegisterFlagCompletionFunc(spec.flag, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 				values := configured()
 				out := make([]string, 0, len(values))
@@ -1349,12 +1350,12 @@ func preParseConfigTokens(args []string) []string {
 		return nil
 	}
 	fs := pflag.NewFlagSet("tlc-preparse", pflag.ContinueOnError)
-	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.ParseErrorsAllowlist.UnknownFlags = true
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {}
 	fs.BoolP("help", "h", false, "")
 	tokens := fs.StringArrayP("config", "c", nil, "")
-	_ = fs.Parse(args[1:])
+	_ = fs.Parse(args[1:]) //nolint:errcheck // malformed argv is cobra's to report on the real parse; see the doc comment above
 	return *tokens
 }
 

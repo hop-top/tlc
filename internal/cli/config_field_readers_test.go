@@ -350,7 +350,7 @@ func walkConfigLeaves(t *testing.T, typ reflect.Type, yamlPrefix, goPrefix strin
 const configPkgPath = "hop.top/tlc/internal/config"
 
 func deref(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t
