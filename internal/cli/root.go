@@ -345,9 +345,9 @@ func kitRoot() *kitcli.Root {
 // onto the flags during the Execute-time tree walk, so registrations added
 // afterwards never reach a flag.
 //
-// That walk is also why the task `--status` and `--priority` sets
-// registered here are the BUILT-IN ones rather than the user's configured
-// vocabularies. kit stamps
+// That walk is also why the task `--status`, `--priority` and `--effort`
+// sets registered here are the BUILT-IN ones rather than the user's
+// configured vocabularies. kit stamps
 // the enums in Root.Execute -> prepareTree, which is the first statement
 // of Execute and therefore runs before cobra parses argv — while the
 // config file is only read later, from cobra.OnInitialize(initConfig)
@@ -355,8 +355,7 @@ func kitRoot() *kitcli.Root {
 // enum set: WithCommandFlagEnum takes values, not a provider. So the
 // configured vocabulary is stamped in a second pass once config exists,
 // by restampConfiguredStatusEnum below, using kit's documented
-// FlagEnumAnnotation contract. `--effort` is not config-driven yet and so
-// keeps its single, pre-config registration.
+// FlagEnumAnnotation contract.
 func registerFlagEnums(root *kitcli.Root) {
 	statuses := core.TaskStatusStrings()
 	priorities := core.PriorityStrings()
@@ -388,6 +387,13 @@ var taskStatusEnumCommands = []string{"task list", "task graph", "task create", 
 // future command may take one flag without the other.
 var taskPriorityEnumCommands = []string{"task list", "task graph", "task create", "task update"}
 
+// taskEffortEnumCommands are the command paths whose `--effort` flag
+// carries the task effort vocabulary. A SHORTER list than the status and
+// priority ones: effort is a write-path flag only, so `task list` and
+// `task graph` do not carry it and restamping them would look up a flag
+// that is not there.
+var taskEffortEnumCommands = []string{"task create", "task update"}
+
 // configuredTaskEnums enumerates the config-driven flag vocabularies that
 // need the post-config second pass: the flag name, the commands carrying
 // it, the accessor for the configured set, and the accessor for the
@@ -416,11 +422,17 @@ var configuredTaskEnums = []struct {
 		configured: core.ConfiguredPriorityStrings,
 		builtin:    core.PriorityStrings,
 	},
+	{
+		flag:       "effort",
+		commands:   taskEffortEnumCommands,
+		configured: core.ConfiguredEffortStrings,
+		builtin:    core.EffortStrings,
+	},
 }
 
 // restampConfiguredStatusEnum rewrites the config-driven task flag-enum
-// annotations — `--status` and `--priority` — to the vocabularies the
-// user actually declared.
+// annotations — `--status`, `--priority` and `--effort` — to the
+// vocabularies the user actually declared.
 //
 // Why a second pass: kit materializes flag enums in prepareTree, the first
 // thing Root.Execute does, which is strictly before cobra parses argv and
@@ -435,7 +447,6 @@ var configuredTaskEnums = []struct {
 // Shell completion is NOT handled here — cobra refuses to replace an
 // already-registered completion function, so that half is claimed ahead of
 // kit by bindConfiguredStatusCompletion.
-//
 func restampConfiguredStatusEnum(root *kitcli.Root) {
 	if root == nil || root.Cmd == nil {
 		return
@@ -515,8 +526,8 @@ func retargetFlagEnumHelp(f *pflag.Flag, previous, configured []string) {
 }
 
 // bindConfiguredStatusCompletion binds completion functions for the
-// config-driven task flags — `--status` and `--priority` — that read the
-// configured vocabulary at completion time.
+// config-driven task flags — `--status`, `--priority` and `--effort` —
+// that read the configured vocabulary at completion time.
 //
 // It must win over the closure kit binds during prepareTree, which
 // captured the pre-config built-ins. Cobra keys completion functions by

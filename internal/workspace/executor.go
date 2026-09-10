@@ -66,7 +66,7 @@ func QueryAcross(
 		all = append(all, tasks...)
 	}
 
-	sortTasks(all, q.SortBy, q.SortDirection, q.PriorityOrder)
+	sortTasks(all, q.SortBy, q.SortDirection, q.PriorityOrder, q.EffortOrder)
 
 	// Post-merge pagination.
 	if q.Offset > 0 {
@@ -82,51 +82,77 @@ func QueryAcross(
 	return all, nil
 }
 
-// priorityRank returns p's ordinal within order, and whether it is
-// present. Kept local to this package: internal/core exposes the same
-// lookup against the CONFIGURED vocabulary, while the workspace sorter
-// must rank against whatever order its caller put on the query.
-func priorityRank(p core.Priority, order []string) (int, bool) {
-	if p == "" {
+// vocabRank returns v's ordinal within order, and whether it is present.
+// Kept local to this package: internal/core exposes the same lookup
+// against the CONFIGURED vocabulary, while the workspace sorter must rank
+// against whatever order its caller put on the query.
+func vocabRank(v string, order []string) (int, bool) {
+	if v == "" {
 		return 0, false
 	}
 	for i, name := range order {
-		if string(p) == name {
+		if v == name {
 			return i, true
 		}
 	}
 	return 0, false
 }
 
+// rankedField reads the vocabulary-column value a task carries for a
+// ranked sort field, or "" when the field is not one.
+//
+// One accessor so the unset-last pass and the rank compare cannot
+// disagree about which fields are ranked or where their values live —
+// the shape that let effort keep a text sort while priority got a ranked
+// one.
+func rankedField(t *core.Task, field string) string {
+	switch field {
+	case "priority":
+		return string(t.Priority)
+	case "effort":
+		return string(t.Effort)
+	default:
+		return ""
+	}
+}
+
+// isRankedField reports whether field sorts by a declared vocabulary's
+// rank rather than by text.
+func isRankedField(field string) bool {
+	return field == "priority" || field == "effort"
+}
+
 // sortTasks sorts in-place by the given field and direction.
 //
-// priorityOrder is the priority vocabulary in rank order, used only for
-// sortBy=="priority"; see compareTasks.
-func sortTasks(tasks []*core.Task, sortBy, direction string, priorityOrder []string) {
+// priorityOrder and effortOrder are those vocabularies in rank order,
+// used only for their own sortBy; see compareTasks.
+func sortTasks(tasks []*core.Task, sortBy, direction string, priorityOrder, effortOrder []string) {
 	if sortBy == "" {
 		sortBy = "created_at"
 	}
 	desc := strings.EqualFold(direction, "desc")
 
-	// Unset priority sorts last in BOTH directions, so it is decided
-	// before the direction flip rather than inside compareTasks — the
-	// same contract the SQL path implements with a separate leading
-	// ORDER BY term. Matching the two matters: a workspace query and a
-	// single-project query differing on where untriaged tasks land
-	// would be a difference nobody could explain from the flags.
-	if sortBy == "priority" {
+	// An unset vocabulary value sorts last in BOTH directions, so it is
+	// decided before the direction flip rather than inside compareTasks
+	// — the same contract the SQL path implements with a separate
+	// leading ORDER BY term. Matching the two matters: a workspace query
+	// and a single-project query differing on where untriaged or
+	// unestimated tasks land would be a difference nobody could explain
+	// from the flags.
+	if isRankedField(sortBy) {
 		sort.SliceStable(tasks, func(i, j int) bool {
-			iu := tasks[i].Priority == ""
-			ju := tasks[j].Priority == ""
+			iu := rankedField(tasks[i], sortBy) == ""
+			ju := rankedField(tasks[j], sortBy) == ""
 			return !iu && ju
 		})
 	}
 
 	sort.SliceStable(tasks, func(i, j int) bool {
-		if sortBy == "priority" && (tasks[i].Priority == "" || tasks[j].Priority == "") {
+		if isRankedField(sortBy) &&
+			(rankedField(tasks[i], sortBy) == "" || rankedField(tasks[j], sortBy) == "") {
 			return false
 		}
-		cmp := compareTasks(tasks[i], tasks[j], sortBy, priorityOrder)
+		cmp := compareTasks(tasks[i], tasks[j], sortBy, priorityOrder, effortOrder)
 		if desc {
 			return cmp > 0
 		}
@@ -135,7 +161,7 @@ func sortTasks(tasks []*core.Task, sortBy, direction string, priorityOrder []str
 }
 
 // compareTasks returns -1, 0, or 1.
-func compareTasks(a, b *core.Task, field string, priorityOrder []string) int {
+func compareTasks(a, b *core.Task, field string, priorityOrder, effortOrder []string) int {
 	switch field {
 	case "id":
 		return strings.Compare(a.ID, b.ID)
@@ -143,16 +169,22 @@ func compareTasks(a, b *core.Task, field string, priorityOrder []string) int {
 		return strings.Compare(a.Title, b.Title)
 	case "status":
 		return strings.Compare(string(a.Status), string(b.Status))
-	case "priority":
-		// Rank order, not text order: a vocabulary of
-		// URGENT/NORMAL/LATER compares backwards as text. With no
-		// vocabulary supplied there is no rank to read, so fall back to
-		// the text compare this case previously did not even have — the
-		// field used to drop through to created_at entirely.
-		ra, oka := priorityRank(a.Priority, priorityOrder)
-		rb, okb := priorityRank(b.Priority, priorityOrder)
+	case "priority", "effort":
+		// Rank order, not text order: a priority vocabulary of
+		// URGENT/NORMAL/LATER compares backwards as text, and the
+		// built-in effort XS, S, M, L, XL compares to L, M, S, XL, XS.
+		// With no vocabulary supplied there is no rank to read, so fall
+		// back to a text compare — which for these fields previously
+		// dropped through to created_at entirely.
+		order := priorityOrder
+		if field == "effort" {
+			order = effortOrder
+		}
+		va, vb := rankedField(a, field), rankedField(b, field)
+		ra, oka := vocabRank(va, order)
+		rb, okb := vocabRank(vb, order)
 		if !oka || !okb {
-			return strings.Compare(string(a.Priority), string(b.Priority))
+			return strings.Compare(va, vb)
 		}
 		switch {
 		case ra < rb:

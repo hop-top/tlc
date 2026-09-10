@@ -304,7 +304,7 @@ func TestSortTasks_DefaultsToCreatedAtAsc(t *testing.T) {
 		mkTask("b", "B", core.StatusTodo, now),
 		mkTask("a", "A", core.StatusTodo, now.Add(-1*time.Hour)),
 	}
-	sortTasks(tasks, "", "", nil)
+	sortTasks(tasks, "", "", nil, nil)
 	if tasks[0].ID != "a" {
 		t.Fatalf("expected 'a' first, got %s", tasks[0].ID)
 	}
@@ -333,7 +333,7 @@ func TestSortTasks_PriorityUsesRankOrder(t *testing.T) {
 		mk("normal", "NORMAL"),
 	}
 
-	sortTasks(tasks, "priority", "asc", order)
+	sortTasks(tasks, "priority", "asc", order, nil)
 	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
 	want := []string{"urgent", "normal", "later", "unset"}
 	for i := range want {
@@ -344,9 +344,49 @@ func TestSortTasks_PriorityUsesRankOrder(t *testing.T) {
 
 	// Reversing the direction reverses the RANKED tasks only: unset is
 	// not a rank, so it stays last rather than being promoted to first.
-	sortTasks(tasks, "priority", "desc", order)
+	sortTasks(tasks, "priority", "desc", order, nil)
 	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
 	want = []string{"later", "normal", "urgent", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("desc order = %v, want %v", got, want)
+		}
+	}
+}
+
+// Effort sorts by RANK too, and unlike priority it never sorted right as
+// text: the BUILT-IN XS, S, M, L, XL compares to L, M, S, XL, XS. So the
+// vocabulary here is the built-in one — no renaming needed to expose the
+// defect.
+func TestSortTasks_EffortUsesRankOrder(t *testing.T) {
+	now := time.Now()
+	order := []string{"XS", "S", "M", "L", "XL"}
+
+	mk := func(id string, e core.Effort) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Effort = e
+		return task
+	}
+	tasks := []*core.Task{
+		mk("xl", "XL"),
+		mk("unset", ""),
+		mk("xs", "XS"),
+		mk("m", "M"),
+	}
+
+	sortTasks(tasks, "effort", "asc", nil, order)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want := []string{"xs", "m", "xl", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
+	}
+
+	// Unset is not a size, so reversing promotes nothing: it stays last.
+	sortTasks(tasks, "effort", "desc", nil, order)
+	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want = []string{"xl", "m", "xs", "unset"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("desc order = %v, want %v", got, want)

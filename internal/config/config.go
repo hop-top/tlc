@@ -408,6 +408,31 @@ type PriorityDefinition struct {
 	Color       string `yaml:"color,omitempty"`
 }
 
+// EffortDefinition defines a single task effort size.
+//
+// Same shape and same reasoning as PriorityDefinition: a LIST whose
+// declaration order IS rank order, smallest first, with no separate
+// `rank` field. A map cannot express order (the decoder randomises it),
+// and a rank field beside a list is a second source of truth for one
+// fact.
+//
+// The only axis difference is which end of the list is "first". Priority
+// declares most urgent first; effort declares smallest first, matching
+// the built-in XS, S, M, L, XL and the ascending reading of "sort by
+// size". Both are simply "index 0 is rank 0"; what rank 0 MEANS is the
+// axis's own business.
+//
+// Effort ranks matter more than priority's did. With P0..P3 rank order
+// and alphabetical order coincide by accident, which is why nothing
+// noticed the text sort; XS, S, M, L, XL does not — it sorts to L, M, S,
+// XL, XS as text, wrong even for the built-in vocabulary.
+type EffortDefinition struct {
+	Name        string `yaml:"name"`
+	Label       string `yaml:"label,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	Color       string `yaml:"color,omitempty"`
+}
+
 // WorkflowDefinition defines allowed state transitions.
 type WorkflowDefinition struct {
 	Rules map[string][]string `yaml:"rules"` // map[from][]to
@@ -459,6 +484,7 @@ type TaskConfig struct {
 	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
 	Priorities       []PriorityDefinition        `yaml:"priorities,omitempty"`
+	Efforts          []EffortDefinition          `yaml:"efforts,omitempty"`
 	StateMachine     *WorkflowDefinition         `yaml:"state_machine,omitempty"`
 	Workflows        map[string]WorkflowOverride `yaml:"workflows,omitempty"`
 	Stale            StaleConfig                 `yaml:"stale,omitempty"`
@@ -536,6 +562,28 @@ func GetDefaultPriorities() []PriorityDefinition {
 		{Name: "P1", Label: "High", Color: "yellow"},
 		{Name: "P2", Label: "Medium", Color: "blue"},
 		{Name: "P3", Label: "Low", Color: "gray"},
+	}
+}
+
+// GetDefaultEfforts returns the five built-in effort sizes in ascending
+// order — the fallback when config declares none.
+//
+// Not materialised into TaskConfig by Validate, for the same reason
+// GetDefaultPriorities is not: effort is optional end to end, and
+// filling the struct in would make "declared no efforts" and "declared
+// exactly the built-in five" indistinguishable — the distinction the
+// enum restamp's built-in short-circuit reads.
+//
+// The colours are the swatches the label axis has always emitted for
+// these five, moved here so the vocabulary and its presentation are
+// declared in one place rather than re-listed beside the axis.
+func GetDefaultEfforts() []EffortDefinition {
+	return []EffortDefinition{
+		{Name: "XS", Label: "Extra small", Description: "XS — extra small", Color: "C2E0C6"},
+		{Name: "S", Label: "Small", Description: "S — small", Color: "9EDAB0"},
+		{Name: "M", Label: "Medium", Description: "M — medium", Color: "7BC99B"},
+		{Name: "L", Label: "Large", Description: "L — large", Color: "4FA97F"},
+		{Name: "XL", Label: "Extra large", Description: "XL — extra large", Color: "2E8B62"},
 	}
 }
 
@@ -639,6 +687,10 @@ func (t *TaskConfig) ValidateWorkflow() error {
 		return err
 	}
 
+	if err := t.ValidateEfforts(); err != nil {
+		return err
+	}
+
 	// Validate state machine rules reference defined statuses
 	if err := validateRules(t.StateMachine, statusSet, ""); err != nil {
 		return err
@@ -668,6 +720,16 @@ func (t *TaskConfig) EffectivePriorities() []PriorityDefinition {
 	return t.Priorities
 }
 
+// EffectiveEfforts returns the effort vocabulary this config implies:
+// the declared list when non-empty, else the built-in five.
+// EffectivePriorities for the effort axis.
+func (t *TaskConfig) EffectiveEfforts() []EffortDefinition {
+	if len(t.Efforts) == 0 {
+		return GetDefaultEfforts()
+	}
+	return t.Efforts
+}
+
 // ValidatePriorities checks the declared priority vocabulary itself:
 // every definition names something, and no name is declared twice.
 //
@@ -685,6 +747,27 @@ func (t *TaskConfig) ValidatePriorities() error {
 			return fmt.Errorf("duplicate priority name: %s", p.Name)
 		}
 		seen[p.Name] = true
+	}
+	return nil
+}
+
+// ValidateEfforts checks the declared effort vocabulary itself: every
+// definition names something, and no name is declared twice.
+//
+// ValidatePriorities for the effort axis, and on the same fatal path for
+// the same reason: this vocabulary is what the CLI's write gate accepts,
+// so a config the CLI cannot derive a coherent vocabulary from is a
+// config that would silently reject every effort the user writes.
+func (t *TaskConfig) ValidateEfforts() error {
+	seen := make(map[string]bool, len(t.Efforts))
+	for _, e := range t.Efforts {
+		if e.Name == "" {
+			return fmt.Errorf("effort definition must have a name")
+		}
+		if seen[e.Name] {
+			return fmt.Errorf("duplicate effort name: %s", e.Name)
+		}
+		seen[e.Name] = true
 	}
 	return nil
 }

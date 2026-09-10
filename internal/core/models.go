@@ -207,12 +207,18 @@ const (
 	EffortXL Effort = "XL"
 )
 
-// efforts is the closed set of effort values in ascending size order.
-// Same contract as taskStatuses: one declaration, every consumer reads it.
+// efforts is the BUILT-IN set of effort values in ascending size order,
+// used when the user's config declares no `task.efforts`.
+//
+// Same contract as priorities: this is the fallback and the compile-time
+// home of the Effort* constants, not the whole story. Consumers that
+// render or accept an effort vocabulary — the CLI normaliser, flag-enum
+// help, completion, effort-ordered sorting — read
+// ConfiguredEffortStrings, which falls back to this slice.
 var efforts = []Effort{EffortXS, EffortS, EffortM, EffortL, EffortXL}
 
-// Efforts returns the closed set of effort values in ascending size order.
-// The returned slice is a copy.
+// Efforts returns the built-in set of effort values in ascending size
+// order. The returned slice is a copy.
 func Efforts() []Effort {
 	return append([]Effort(nil), efforts...)
 }
@@ -222,13 +228,99 @@ func EffortStrings() []string {
 	return enumStrings(efforts)
 }
 
+// ConfiguredEffortStrings returns the effective effort vocabulary: the
+// names declared in the user's `task.efforts`, in declared order
+// (smallest first), or the built-in set when config declares none.
+//
+// Declaration order is rank order — see config.EffortDefinition — so the
+// returned slice is also the sort key for effort-ordered listing, and
+// callers must not sort it.
+//
+// Resolved lazily on every call rather than cached in a package-level
+// var, for the same two reasons ConfiguredPriorityStrings is: a var
+// initialised at package-init time predates any config file and could
+// only ever hold the built-ins, and reading the provider directly rather
+// than through the memoising DefaultWorkflow* singleton keeps pre-argv
+// callers (help rendering, flag usage, completion) from freezing config
+// before `-c key=value` overrides have merged.
+func ConfiguredEffortStrings() []string {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Efforts) == 0 {
+		return EffortStrings()
+	}
+	out := make([]string, 0, len(cfg.Efforts))
+	for _, e := range cfg.Efforts {
+		if e.Name != "" {
+			out = append(out, e.Name)
+		}
+	}
+	if len(out) == 0 {
+		return EffortStrings()
+	}
+	return out
+}
+
+// ConfiguredEffortDefinitions returns the effective effort vocabulary as
+// full definitions, in declared order — which IS rank order, smallest
+// first.
+//
+// The definition-level counterpart to ConfiguredEffortStrings, and the
+// same contract: callers must not sort the result, because sorting it
+// would destroy the only expression of rank the schema has.
+func ConfiguredEffortDefinitions() []config.EffortDefinition {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Efforts) == 0 {
+		return config.GetDefaultEfforts()
+	}
+	out := make([]config.EffortDefinition, 0, len(cfg.Efforts))
+	for _, e := range cfg.Efforts {
+		if e.Name != "" {
+			out = append(out, e)
+		}
+	}
+	if len(out) == 0 {
+		return config.GetDefaultEfforts()
+	}
+	return out
+}
+
+// EffortRank returns the ordinal of e within the effective effort
+// vocabulary — 0 for the smallest — and whether e is in it.
+//
+// This is what makes "sort by effort" mean size rather than alphabet.
+// Unlike priority, where P0..P3 sorts correctly as text by accident, the
+// built-in XS, S, M, L, XL never did: as text it sorts to L, M, S, XL,
+// XS. So this is a fix for the default vocabulary too, not only for
+// renamed ones.
+//
+// The empty effort is not in any vocabulary and gets ok=false. Callers
+// order it last: "no effort estimated" is not the same fact as "the
+// smallest effort", and an unestimated task must not sort ahead of one
+// the user deliberately sized XS.
+func EffortRank(e Effort) (int, bool) {
+	if e == "" {
+		return 0, false
+	}
+	for i, name := range ConfiguredEffortStrings() {
+		if string(e) == name {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ValidEffort returns true if e is a recognised effort value (or empty).
+//
+// Empty is valid: effort is optional, like priority and unlike status.
+// Every caller depends on that — it is how a task created without -e
+// passes validation — so the empty case is checked before the
+// vocabulary, not folded into it.
 func ValidEffort(e Effort) bool {
 	if e == "" {
 		return true
 	}
-	for _, v := range efforts {
-		if e == v {
+	for _, v := range ConfiguredEffortStrings() {
+		if string(e) == v {
 			return true
 		}
 	}

@@ -162,12 +162,28 @@ func priorityAliases() map[string]string {
 	return buildAliases(priorityCanonical(), builtinPriorityAliases)
 }
 
-// effortAliases maps lowercase alias/variant → canonical uppercase value.
+// builtinEffortAliases maps lowercase alias/variant → canonical value for
+// the BUILT-IN efforts.
+//
 // Single-letter canonicals (S, M, L) make fuzzy matching unreliable for
 // descriptive inputs like "small" or "medium", so each descriptive form
 // is registered explicitly here to be resolved at step 1 before fuzzy
 // runs.
-var effortAliases = map[string]string{
+//
+// Every entry is SEMANTIC — "tiny" → XS, "huge" → XL — a meaning no rule
+// could derive from the spelling of "XS", so they stay declared. Like the
+// status and priority built-ins they are gated on their target still
+// being declared, so a config that keeps the built-in five keeps every
+// descriptive form exactly as before, while a config that drops XL does
+// not leave "huge" resolving to a size the user no longer has.
+//
+// Deliberately NOT extended by derivation: a custom vocabulary gets the
+// mechanical spelling variants of its own names (see effortAliases) and
+// nothing else. Guessing that a user's TINY means "extra small" — or
+// re-pointing "small" at whatever sits second in a renamed list — is how
+// a typo silently lands on the wrong size, with no way for the user to
+// see that it happened.
+var builtinEffortAliases = map[string]string{
 	// canonical (lowercased)
 	"xs": "XS",
 	"s":  "S",
@@ -189,9 +205,28 @@ var effortAliases = map[string]string{
 	"huge":        "XL",
 }
 
-// effortCanonical is the ordered list for fuzzy matching, read from the
-// domain canon (see statusCanonical).
-var effortCanonical = core.EffortStrings()
+// effortCanonical returns the effective effort vocabulary in rank order
+// (smallest first): the user's `task.efforts` when declared, else the
+// built-in set.
+//
+// A function, not the package-level var it replaced, for the reason
+// statusCanonical and priorityCanonical are: the var was initialised at
+// package-init time, long before any config file is read, so it could
+// only ever hold the built-ins.
+func effortCanonical() []string {
+	return core.ConfiguredEffortStrings()
+}
+
+// effortAliases returns the effective alias table for the current effort
+// vocabulary: mechanical spelling variants derived for EVERY declared
+// effort, plus the hand-written built-ins whose target is still declared.
+//
+// Shares buildAliases with statusAliases and priorityAliases, so the
+// derivation rules and the built-ins-win precedence cannot drift between
+// the three fields.
+func effortAliases() map[string]string {
+	return buildAliases(effortCanonical(), builtinEffortAliases)
+}
 
 // unknownStatusError renders the rejection for a status the normaliser
 // could not resolve, naming the legal set. Every caller — task list, task
@@ -217,7 +252,7 @@ func invalidPriorityError(input string) error {
 
 // unknownEffortError is unknownStatusError for --effort.
 func unknownEffortError(input string) error {
-	return fmt.Errorf("invalid effort %q: must be one of %s", input, enumList(effortCanonical))
+	return fmt.Errorf("invalid effort %q: must be one of %s", input, enumList(effortCanonical()))
 }
 
 // enumList renders a canonical set the way the error messages and the
@@ -244,7 +279,7 @@ func NormalizePriority(input string) (string, bool) {
 // Resolution order: exact (case-insensitive) → alias → fuzzy.
 // Returns ("", false) when no match found.
 func NormalizeEffort(input string) (string, bool) {
-	return normalizeEnum(input, effortAliases, effortCanonical)
+	return normalizeEnum(input, effortAliases(), effortCanonical())
 }
 
 // normalizeEnum is the shared resolution logic for any enum field.

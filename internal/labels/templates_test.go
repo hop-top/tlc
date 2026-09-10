@@ -75,6 +75,39 @@ func TestEffortAxisPresent(t *testing.T) {
 	}
 }
 
+// TestEffortAxisColoursUnchanged pins the built-in effort swatches and
+// prose across the move from a hardcoded presentation map to
+// config-derived definitions.
+//
+// Colour is not cosmetic here: `sync push` writes it to the forge, so a
+// swatch that moved re-colours every issue carrying that label. The
+// descriptions are pinned for the same reason.
+func TestEffortAxisColoursUnchanged(t *testing.T) {
+	want := map[string]struct{ color, desc string }{
+		"effort:xs": {"C2E0C6", "XS — extra small"},
+		"effort:s":  {"9EDAB0", "S — small"},
+		"effort:m":  {"7BC99B", "M — medium"},
+		"effort:l":  {"4FA97F", "L — large"},
+		"effort:xl": {"2E8B62", "XL — extra large"},
+	}
+	for _, l := range GetTemplates(TypeGeneric) {
+		w, ok := want[l.Name]
+		if !ok {
+			continue
+		}
+		if l.Color != w.color {
+			t.Errorf("%s colour = %q, want %q", l.Name, l.Color, w.color)
+		}
+		if l.Description != w.desc {
+			t.Errorf("%s description = %q, want %q", l.Name, l.Description, w.desc)
+		}
+		delete(want, l.Name)
+	}
+	for name := range want {
+		t.Errorf("missing effort label %q", name)
+	}
+}
+
 // TestPriorityAxisMatchesPluginNames pins the priority label names to the
 // spelling every plugin's priorityToLabel produces. These already agreed;
 // the test exists so a future rename cannot silently break the agreement.

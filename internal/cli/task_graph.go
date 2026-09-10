@@ -39,6 +39,7 @@ Output formats:
 			IncludeArchived: taskListArchived,
 			AllProjects:     taskListAllProjects,
 			PriorityOrder:   core.ConfiguredPriorityStrings(),
+			EffortOrder:     core.ConfiguredEffortStrings(),
 		}
 
 		if len(args) > 0 {
