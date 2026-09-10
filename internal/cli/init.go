@@ -76,15 +76,13 @@ const (
 	strategyShare = "share"
 )
 
-// localProjectDBPath returns the absolute path to the project's local
-// SQLite database, respecting the current entry mode.
-func localProjectDBPath() string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
-	}
+// localProjectDBPathAt returns the absolute path to the project's local
+// SQLite database, respecting the current entry mode, resolved against
+// baseDir. Callers capture baseDir at command entry so a later chdir
+// cannot move the path that gets recorded in the project registry.
+func localProjectDBPathAt(baseDir string) string {
 	mode := config.DetectMode()
-	return filepath.Join(cwd, config.LocalConfigDir(mode), dbFileName())
+	return filepath.Join(config.LocalConfigDirAt(baseDir, mode), dbFileName())
 }
 
 // inferSpaceURI detects the workspace space URI from the directory
@@ -134,13 +132,22 @@ func inferLabel(projectID string) string {
 
 func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *bool, fallbackMode *string, duplicateIDStrategy *string) error {
 	mode := config.DetectMode()
-	configDir := config.LocalConfigDir(mode)
+
+	// Pin every path this command writes to the directory the command
+	// was invoked from, recorded by Execute before any command body
+	// ran. runInit does substantial work between here and its writes —
+	// storage access, prompts, project registration — and anything that
+	// moves the process in that window would otherwise redirect those
+	// writes to wherever the process ended up. That failure is silent,
+	// because .tlc/ is gitignored.
+	cwd := InvocationDir()
+	configDir := config.LocalConfigDirAt(cwd, mode)
+	// The relative layout name, captured before the local `config` map
+	// below shadows the package. Used for messages and the .gitignore
+	// entry, where the absolute path would be wrong.
+	configDirName := config.LocalConfigDir(mode)
 
 	// Refuse to init if the other mode's config already exists.
-	cwd, _ := os.Getwd() //nolint:errcheck // fallback to "." below
-	if cwd == "" {
-		cwd = "."
-	}
 	if conflictErr := config.CheckConfigConflict(cwd); conflictErr != nil && !*force {
 		return conflictErr
 	}
@@ -150,12 +157,13 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		// fallback_mode=auto (GH-1). Auto-created configs are minimal
 		// (no storage section); a full init overwrites them.
 		if !isAutoCreatedConfig(configDir) {
-			return fmt.Errorf("%s directory already exists. Use --force to overwrite", configDir)
+			return fmt.Errorf("%s directory already exists. Use --force to overwrite",
+				configDirName)
 		}
 	}
 
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
-		return fmt.Errorf("failed to create %s directory: %w", configDir, err)
+		return fmt.Errorf("failed to create %s directory: %w", configDirName, err)
 	}
 
 	config := make(map[string]interface{})
@@ -217,7 +225,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		}
 
 		// Register or reconnect the project in the global projects table.
-		projDBPath := localProjectDBPath()
+		projDBPath := localProjectDBPathAt(cwd)
 		spaceURI := inferSpaceURI()
 		label := inferLabel(finalProjectID)
 
@@ -285,12 +293,17 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		return fmt.Errorf("failed to write config.yaml: %w", err)
 	}
 
-	gitignoreEntry := configDir + "/"
-	if _, err := os.Stat(".git"); err == nil {
-		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	// The .gitignore ENTRY stays the relative name — an absolute path
+	// would not match anything git evaluates — while the .gitignore
+	// FILE it is written into is pinned to the invocation directory
+	// alongside every other write.
+	gitignoreEntry := configDirName + "/"
+	gitignorePath := filepath.Join(cwd, ".gitignore")
+	if _, err := os.Stat(filepath.Join(cwd, ".git")); err == nil {
+		f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {
 			defer func() { _ = f.Close() }()
-			content, _ := os.ReadFile(".gitignore") //nolint:errcheck // file may not exist yet
+			content, _ := os.ReadFile(gitignorePath) //nolint:errcheck // file may not exist yet
 			contentStr := string(content)
 
 			if track && !strings.Contains(contentStr, gitignoreEntry) {

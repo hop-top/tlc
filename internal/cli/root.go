@@ -687,6 +687,13 @@ func Execute() {
 		}
 		os.Args = newArgs
 	}
+	// Record the invocation directory now that -C has been applied and
+	// before any command body runs. Everything that WRITES a
+	// project-local config resolves against this rather than calling
+	// os.Getwd() at write time, so a chdir later in the process cannot
+	// redirect the write into an unrelated directory.
+	SetInvocationDir()
+
 	// Subcommands register on RootCmd via their own init() funcs, which
 	// run before main() — by the time Execute() is called they are all
 	// attached. Set GroupID now so kit's help renderer groups them

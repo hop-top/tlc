@@ -86,6 +86,17 @@ func detectProjectOnce() *ProjectDetection {
 		return handleFallbackMode()
 	}
 
+	// Absolutize before deriving anything from it. viper stores whatever
+	// path it was handed verbatim, so a relative ConfigFileUsed() makes
+	// the WriteConfig below resolve against the working directory AT
+	// WRITE TIME — the same late-resolution defect the config-dir
+	// writers had. Pinning it here means the file this function reads
+	// and the file it writes back are the same file, whatever the
+	// process does to its working directory in between.
+	if abs, absErr := filepath.Abs(configPath); absErr == nil {
+		configPath = abs
+	}
+
 	dotTlcDir := filepath.Dir(configPath)
 	tlcConfigPath := filepath.Join(dotTlcDir, "config.yaml")
 
@@ -238,11 +249,18 @@ func handleFallbackMode() *ProjectDetection {
 	}
 
 	entryMode := config.DetectMode()
-	configPath := filepath.Join(config.LocalConfigDir(entryMode), "config.yaml")
+	// Pin the directory here, at the detection entry point, so the
+	// reported path and the write below agree even if something moves
+	// the process before the write lands.
+	baseDir, err := os.Getwd()
+	if err != nil {
+		baseDir = ""
+	}
+	configPath := filepath.Join(config.LocalConfigDirAt(baseDir, entryMode), "config.yaml")
 
 	switch mode {
 	case fallbackModeAuto:
-		if err := CreateConfigWithInferredID(inferredID); err == nil {
+		if err := CreateConfigWithInferredIDAt(baseDir, inferredID); err == nil {
 			return &ProjectDetection{
 				ProjectID:  inferredID,
 				ConfigPath: configPath,
@@ -346,9 +364,29 @@ func canonicalConfigClaimsProject(projectID string) bool {
 	}
 }
 
+// CreateConfigWithInferredID creates the project-local config in the
+// current working directory. Prefer CreateConfigWithInferredIDAt from
+// any caller that does work between resolving its directory and this
+// write.
 func CreateConfigWithInferredID(projectID string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("determine working directory: %w", err)
+	}
+	return CreateConfigWithInferredIDAt(cwd, projectID)
+}
+
+// CreateConfigWithInferredIDAt creates the project-local config under
+// baseDir, which the caller captures at entry.
+//
+// Pinning the destination matters because this runs on the project
+// detection path, reached from a PersistentPreRunE long before the
+// write completes. Resolving the config directory at write time instead
+// would place the file wherever the process had moved to — and .tlc/ is
+// gitignored, so the misplaced file would be invisible to git status.
+func CreateConfigWithInferredIDAt(baseDir string, projectID string) error {
 	mode := config.DetectMode()
-	configDir := config.LocalConfigDir(mode)
+	configDir := config.LocalConfigDirAt(baseDir, mode)
 	configPath := filepath.Join(configDir, "config.yaml")
 
 	// Skip rewrite if any ancestor already has a config claiming this
@@ -363,7 +401,7 @@ func CreateConfigWithInferredID(projectID string) error {
 	}
 
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
-		return fmt.Errorf("failed to create %s directory: %w", configDir, err)
+		return fmt.Errorf("failed to create %s directory: %w", config.LocalConfigDir(mode), err)
 	}
 
 	cfg := map[string]interface{}{
@@ -407,4 +445,14 @@ func promptFallbackMode(projectID string) (string, error) {
 		return "", fmt.Errorf("failed to run fallback mode prompt: %w", err)
 	}
 	return choice, nil
+}
+
+// CanonicalConfigClaimsProjectForTest exposes the ancestor walk-up that
+// suppresses CreateConfigWithInferredID, so a test can assert it is NOT
+// suppressed before exercising the writer. A developer checkout under a
+// hop root always has a claiming ancestor and a CI checkout does not,
+// which is why the writer's misdirection reproduces only on CI unless a
+// test states the premise explicitly.
+func CanonicalConfigClaimsProjectForTest(projectID string) bool {
+	return canonicalConfigClaimsProject(projectID)
 }

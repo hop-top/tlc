@@ -91,10 +91,20 @@ func findHopDir(dir string) bool {
 	return false
 }
 
-// LocalConfigDir returns the project-local config directory name for
+// LocalConfigDir returns the project-local config directory NAME for
 // the given mode.
 //   - ModeStandalone -> ".tlc"
 //   - ModeHop        -> ".hop/tlc"
+//
+// The result is deliberately relative: callers join it onto an
+// arbitrary directory while walking up the tree, suffix-match paths
+// against it, and hand it to kit as a project marker. Returning an
+// absolute path would silently break all of those.
+//
+// Because it is relative, a caller that joins onto it and writes LATER
+// resolves it against wherever the process happens to be standing at
+// write time. Any command that writes through it must resolve it
+// against a directory captured at entry — see LocalConfigDirAt.
 func LocalConfigDir(mode EntryMode) string {
 	switch mode {
 	case ModeHop:
@@ -102,6 +112,32 @@ func LocalConfigDir(mode EntryMode) string {
 	default:
 		return ".tlc"
 	}
+}
+
+// LocalConfigDirAt returns the project-local config directory for the
+// given mode, resolved against baseDir.
+//
+// Writers must use this rather than LocalConfigDir. Passing the
+// directory the command was invoked from pins the destination at entry,
+// so a later chdir — a goroutine outliving its sandbox, a deferred
+// cleanup restoring a saved directory — cannot redirect the write. A
+// misdirected write is silent: .tlc/ is gitignored, so a config that
+// lands in the wrong directory never appears in git status.
+//
+// An empty or relative baseDir is resolved against the current working
+// directory, which preserves the old behavior for callers that have
+// nothing better to offer.
+func LocalConfigDirAt(baseDir string, mode EntryMode) string {
+	dir := LocalConfigDir(mode)
+	if baseDir == "" {
+		return dir
+	}
+	if !filepath.IsAbs(baseDir) {
+		if abs, err := filepath.Abs(baseDir); err == nil {
+			baseDir = abs
+		}
+	}
+	return filepath.Join(baseDir, dir)
 }
 
 // LocalConfigFile returns the "flat" project config filename for the
