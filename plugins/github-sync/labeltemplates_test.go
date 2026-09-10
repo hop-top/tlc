@@ -38,12 +38,12 @@ func templateGitHubLabels(pt labels.ProjectType) ([]*github.Label, []string) {
 // A label that reaches none of those buckets was dropped by the colon
 // check and can never come back from the forge.
 func TestSeededLabelsSurviveClassification(t *testing.T) {
-	for _, pt := range []labels.ProjectType{
-		labels.TypeGoBinary,
-		labels.TypeReactFrontend,
-		labels.TypePythonMVC,
-		labels.TypeGeneric,
-	} {
+	// Driven from AllProjectTypes rather than a retyped list: this
+	// asserts that every label `label init` can seed survives the pull
+	// classifier, so a type added to the templates and forgotten here
+	// would leave exactly the labels most likely to be novel — a new
+	// type's whole domain set — unchecked.
+	for _, pt := range labels.AllProjectTypes() {
 		t.Run(string(pt), func(t *testing.T) {
 			// One label at a time: feeding the whole set at once would
 			// let a single recognised label mask every dropped one,
