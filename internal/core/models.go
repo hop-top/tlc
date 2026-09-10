@@ -13,10 +13,17 @@ const (
 	StatusSkipped    TaskStatus = "SKIPPED"
 )
 
-// taskStatuses is the closed set of task statuses in lifecycle order. The
-// single source of truth: validation messages, the CLI's flag-enum
-// registration, fuzzy normalisation, and shell completion all read it, so
-// adding or removing a status here reaches every consumer at once.
+// taskStatuses is the BUILT-IN set of task statuses in lifecycle order,
+// used when the user's config declares no `task.statuses` of its own.
+//
+// It is no longer the whole story: `task.statuses` is a documented,
+// validated config surface, and a user who declares IN_REVIEW there means
+// it for the CLI too, not only for the workflow engine. Consumers that
+// render or accept a status vocabulary — validation messages, the flag
+// enums, fuzzy normalisation, shell completion — read
+// ConfiguredTaskStatusStrings, which falls back to this slice. This slice
+// remains the fallback and the compile-time home of the Status* constants
+// the code refers to by name.
 var taskStatuses = []TaskStatus{
 	StatusTodo,
 	StatusInProgress,
@@ -34,6 +41,33 @@ func TaskStatuses() []TaskStatus {
 // that render or register the set (error messages, flag enums, completion).
 func TaskStatusStrings() []string {
 	return enumStrings(taskStatuses)
+}
+
+// ConfiguredTaskStatusStrings returns the effective task-status vocabulary:
+// the names declared in the user's `task.statuses`, in declared order, or
+// the built-in set when config declares none.
+//
+// Resolved lazily on every call rather than cached in a package-level var,
+// because config is read long after package init: a var initialised at
+// init time would pin the built-ins forever. It reads through the same
+// taskConfigProvider hook DefaultWorkflow uses, so the vocabulary the CLI
+// accepts and the vocabulary the workflow enforces cannot disagree —
+// internal/core stays free of any dependency on viper or internal/cli.
+func ConfiguredTaskStatusStrings() []string {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Statuses) == 0 {
+		return TaskStatusStrings()
+	}
+	out := make([]string, 0, len(cfg.Statuses))
+	for _, s := range cfg.Statuses {
+		if s.Name != "" {
+			out = append(out, s.Name)
+		}
+	}
+	if len(out) == 0 {
+		return TaskStatusStrings()
+	}
+	return out
 }
 
 // ValidTaskStatus reports whether s is a recognized task status (or empty).

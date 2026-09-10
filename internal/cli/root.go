@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"hop.top/kit/go/ai/ext/dispatch"
 	kitcli "hop.top/kit/go/console/cli"
@@ -239,6 +241,11 @@ func kitRoot() *kitcli.Root {
 
 	// --- Lifecycle hooks ---
 	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+		// cobra.OnInitialize(initConfig) has run by now, so the user's
+		// configured status vocabulary is finally readable. Overwrite the
+		// built-in flag enum kit stamped before argv was parsed.
+		restampConfiguredStatusEnum(root)
+
 		offline := viper.GetBool("runtime.offline")
 		if c.Name() != "upgrade" && !offline {
 			notifyUpgrade(c.Context(), newChecker(), os.Stderr)
@@ -331,6 +338,17 @@ func kitRoot() *kitcli.Root {
 // Registered before Execute, as kit requires: the sets are materialized
 // onto the flags during the Execute-time tree walk, so registrations added
 // afterwards never reach a flag.
+//
+// That walk is also why the task `--status` set registered here is the
+// BUILT-IN one rather than the user's configured vocabulary. kit stamps
+// the enums in Root.Execute -> prepareTree, which is the first statement
+// of Execute and therefore runs before cobra parses argv — while the
+// config file is only read later, from cobra.OnInitialize(initConfig)
+// during PersistentPreRun. There is no kit API for a lazily-evaluated
+// enum set: WithCommandFlagEnum takes values, not a provider. So the
+// configured vocabulary is stamped in a second pass once config exists,
+// by restampConfiguredStatusEnum below, using kit's documented
+// FlagEnumAnnotation contract.
 func registerFlagEnums(root *kitcli.Root) {
 	statuses := core.TaskStatusStrings()
 	priorities := core.PriorityStrings()
@@ -348,6 +366,143 @@ func registerFlagEnums(root *kitcli.Root) {
 	trackStatuses := core.TrackStatusStrings()
 	for _, path := range []string{"track list", "track update"} {
 		root.WithCommandFlagEnum(path, "status", trackStatuses...)
+	}
+}
+
+// taskStatusEnumCommands are the command paths whose `--status` flag
+// carries the TASK status vocabulary. Track statuses are a separate set on
+// a separate flag and are deliberately not restamped here.
+var taskStatusEnumCommands = []string{"task list", "task graph", "task create", "task update"}
+
+// restampConfiguredStatusEnum rewrites the task `--status` flag-enum
+// annotation to the user's configured status vocabulary.
+//
+// Why a second pass: kit materializes flag enums in prepareTree, the first
+// thing Root.Execute does, which is strictly before cobra parses argv and
+// therefore before cobra.OnInitialize(initConfig) has read any config
+// file. registerFlagEnums consequently stamps the built-in four. This runs
+// from PersistentPreRunE — after initConfig — and overwrites that stamp
+// with the configured set, so `--help`, the parse-error message and shell
+// completion all name the vocabulary the user actually declared.
+//
+// It writes FlagEnumAnnotation directly, which kit documents as the
+// supported contract for adopters registering flags outside its builders.
+// Shell completion is NOT handled here — cobra refuses to replace an
+// already-registered completion function, so that half is claimed ahead of
+// kit by bindConfiguredStatusCompletion.
+//
+// A no-op when the configured vocabulary equals the built-in one, which
+// keeps an unchanged config byte-identical to today's behaviour.
+func restampConfiguredStatusEnum(root *kitcli.Root) {
+	if root == nil || root.Cmd == nil {
+		return
+	}
+	configured := core.ConfiguredTaskStatusStrings()
+	if slices.Equal(configured, core.TaskStatusStrings()) {
+		return
+	}
+	for _, path := range taskStatusEnumCommands {
+		// Rewrite the REGISTRY entry, not only the flag annotation: kit
+		// re-runs applyFlagEnums on every prepareTree, re-stamping and
+		// re-appending its help suffix from the registry. Updating only
+		// the annotation leaves the registry holding the built-ins, and
+		// the next walk appends a second, stale "(one of: ...)".
+		root.WithCommandFlagEnum(path, "status", configured...)
+
+		cmd := findCommandByPath(root.Cmd, path)
+		if cmd == nil {
+			continue
+		}
+		f := cmd.Flags().Lookup("status")
+		if f == nil {
+			continue
+		}
+		if f.Annotations == nil {
+			f.Annotations = make(map[string][]string)
+		}
+		previous := f.Annotations[kitcli.FlagEnumAnnotation]
+		f.Annotations[kitcli.FlagEnumAnnotation] = append([]string(nil), configured...)
+		retargetFlagEnumHelp(f, previous, configured)
+	}
+}
+
+// findCommandByPath resolves a space-separated command path below root.
+func findCommandByPath(root *cobra.Command, path string) *cobra.Command {
+	cur := root
+	for _, name := range strings.Fields(path) {
+		var next *cobra.Command
+		for _, c := range cur.Commands() {
+			if c.Name() == name {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		cur = next
+	}
+	return cur
+}
+
+// retargetFlagEnumHelp swaps the "(one of: ...)" suffix kit appended for
+// the pre-config values with one naming the configured set. kit's own
+// helper is idempotent by suffix match, so the stale suffix has to be
+// removed rather than left for a second append to skip.
+func retargetFlagEnumHelp(f *pflag.Flag, previous, configured []string) {
+	if len(previous) > 0 {
+		stale := "(one of: " + strings.Join(previous, ", ") + ")"
+		f.Usage = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(f.Usage), stale))
+	}
+	suffix := "(one of: " + strings.Join(configured, ", ") + ")"
+	if strings.HasSuffix(f.Usage, suffix) {
+		return
+	}
+	if f.Usage == "" {
+		f.Usage = suffix
+		return
+	}
+	f.Usage += " " + suffix
+}
+
+// bindConfiguredStatusCompletion binds a completion function for the task
+// `--status` flag that reads the configured vocabulary at completion time.
+//
+// It must win over the closure kit binds during prepareTree, which
+// captured the pre-config built-ins. Cobra keys completion functions by
+// *pflag.Flag and refuses to replace an existing entry
+// (RegisterFlagCompletionFunc errors on a duplicate, with no unregister
+// API), so this registers FIRST — from Execute, before Root.Prepare or
+// Root.Execute runs prepareTree — and kit's later bind is the one that
+// silently loses. kit documents that exact precedence: its bind ignores
+// the duplicate error because "that is exactly the adopter-wins case".
+//
+// Resolving inside the closure rather than capturing a slice is what
+// makes this correct despite running pre-config: completion requests
+// arrive during command execution, by which time initConfig has run.
+func bindConfiguredStatusCompletion(root *kitcli.Root) {
+	if root == nil || root.Cmd == nil {
+		return
+	}
+	for _, path := range taskStatusEnumCommands {
+		cmd := findCommandByPath(root.Cmd, path)
+		if cmd == nil {
+			continue
+		}
+		if cmd.Flags().Lookup("status") == nil {
+			continue
+		}
+		_ = cmd.RegisterFlagCompletionFunc("status", func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			values := core.ConfiguredTaskStatusStrings()
+			out := make([]string, 0, len(values))
+			lower := strings.ToLower(toComplete)
+			for _, v := range values {
+				if strings.HasPrefix(strings.ToLower(v), lower) {
+					out = append(out, v)
+				}
+			}
+			return out, cobra.ShellCompDirectiveNoFileComp
+		})
 	}
 }
 
@@ -399,6 +554,39 @@ func Execute() {
 	// inside this function before stripping the flag) and before kit's
 	// Execute (which dispatches to fang for help rendering).
 	applyCommandGroups()
+
+	// Claim the task --status completion slot before kit's prepareTree
+	// binds the pre-config built-ins: cobra keeps the FIRST registration
+	// for a flag and kit's later bind loses. Must run here rather than in
+	// kitRoot(): the task subcommands attach to RootCmd from their own
+	// init() funcs, which run after the kitRootInstance package var is
+	// initialised, so the tree is empty at registerFlagEnums time.
+	bindConfiguredStatusCompletion(kitRootInstance)
+
+	// Stamp the configured status vocabulary onto the --status flags
+	// before kit's Execute renders any help.
+	//
+	// `--help` never reaches PersistentPreRunE — cobra's
+	// OnInitialize(initConfig) fires from PersistentPreRun, which the
+	// help path skips entirely — so a restamp that only ran there would
+	// leave `--help` naming the built-in four while the same
+	// invocation's errors named the configured set.
+	//
+	// Prepare() first, then restamp: Prepare runs the same prepareTree
+	// that Execute would, so kit has already appended its "(one of:
+	// ...)" help suffix for the pre-config values by the time the
+	// restamp replaces it. Restamping before prepareTree instead would
+	// let kit append its stale suffix afterwards, leaving the flag
+	// advertising two different sets. Both are idempotent, so Execute
+	// re-running prepareTree is a no-op. initConfig is likewise
+	// idempotent and cobra runs it again for the normal path.
+	initConfig()
+	if err := kitRootInstance.Prepare(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(exitCodeFor(err))
+	}
+	restampConfiguredStatusEnum(kitRootInstance)
+
 	defer func() {
 		closePolicy()
 		if auditSub != nil {
