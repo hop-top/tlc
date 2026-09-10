@@ -642,6 +642,11 @@ func checkProjectTodoSynced(fix bool) checkResult {
 		if proj.ProjectID != "" {
 			ft.ProjectID = &proj.ProjectID
 		}
+		// Same filter the todo.txt ingest applies, for the same reason
+		// and to keep the two agreeing: this reads the same file, so a
+		// `#token` outside the vocabulary must not enter the store here
+		// after ingest declined to let it in there.
+		ft.Tags = filterAllowedTags(ft.ID, ft.Tags)
 		existing, getErr := s.GetTask(ctx, ft.ID)
 		if getErr != nil {
 			log.Printf("doctor: failed to get task %s: %v", ft.ID, getErr)

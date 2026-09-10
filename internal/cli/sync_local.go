@@ -13,6 +13,7 @@ import (
 
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
@@ -239,6 +240,17 @@ func importFromProjection(s *storage.SQLiteStorage) error {
 		if task.UpdatedAt.IsZero() {
 			task.UpdatedAt = task.CreatedAt
 		}
+		// Enforce the tag policy by DROPPING the disallowed tags rather
+		// than by failing, which is the opposite of what the CLI write
+		// paths do and is deliberate. This runs from ensureDBSynced on
+		// every storage open, on the happy path of read-only commands;
+		// an error here would make one stale `#token` in todo.txt refuse
+		// every command in the tool. Skipping the whole line would be
+		// just as wrong — it would silently discard the task itself. So
+		// the task lands, without the tags the vocabulary does not admit,
+		// and the reason is logged rather than printed: per the T-1234
+		// contract above, happy-path reads emit no per-row noise.
+		task.Tags = filterAllowedTags(formatTaskAlias(task), task.Tags)
 		if err := s.CreateTask(ctx, task); err != nil {
 			// Last-ditch race guard: another writer inserted the same
 			// ID between the probe and CreateTask. Treat as already-
@@ -267,6 +279,39 @@ func importFromProjection(s *storage.SQLiteStorage) error {
 		)
 	}
 	return nil
+}
+
+// filterAllowedTags returns the subset of tags the effective tag policy
+// admits, logging what it dropped and why.
+//
+// Returns tags unchanged under the default open policy, which is the
+// whole point: an existing project that has configured no policy sees
+// byte-identical ingest behaviour.
+func filterAllowedTags(alias string, tags []string) []string {
+	if len(tags) == 0 {
+		return tags
+	}
+	policy, vocab := core.TagPolicyFor()
+	if policy != config.TagPolicyClosed {
+		return tags
+	}
+	kept := make([]string, 0, len(tags))
+	var dropped []string
+	for _, t := range tags {
+		if vocab.Admits(t) {
+			kept = append(kept, t)
+			continue
+		}
+		dropped = append(dropped, t)
+	}
+	if len(dropped) > 0 {
+		log.Debug(
+			"ingestTODO: dropped tags outside the configured vocabulary",
+			"task", alias, "dropped", strings.Join(dropped, ","),
+			"allowed", strings.Join(vocab.Display(), ","),
+		)
+	}
+	return kept
 }
 
 // isUniqueIDConflict reports whether err is a SQLite UNIQUE-constraint

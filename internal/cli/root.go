@@ -251,6 +251,7 @@ func kitRoot() *kitcli.Root {
 		// built-in flag enum kit stamped before argv was parsed.
 		restampConfiguredStatusEnum(root)
 		refreshCreateStatusUsage()
+		annotateTagPolicyUsage(root)
 
 		offline := viper.GetBool("runtime.offline")
 		if c.Name() != "upgrade" && !offline {
@@ -486,6 +487,59 @@ func restampConfiguredStatusEnum(root *kitcli.Root) {
 	}
 }
 
+// tagFlagCommands are the command paths and flag names that WRITE tags,
+// and are therefore the ones a closed policy governs. `task list --tag`
+// filters rather than writes and is deliberately absent: a filter naming
+// a tag outside the vocabulary is a query that returns nothing, not a
+// violation, and advertising the vocabulary there would suggest the
+// filter is restricted to it.
+var tagFlagCommands = []struct {
+	path string
+	flag string
+}{
+	{"task create", "tag"},
+	{"task update", "add-tag"},
+}
+
+// annotateTagPolicyUsage appends the allowed vocabulary to the usage
+// text of the tag-writing flags when the policy is closed.
+//
+// Usage text rather than a flag ENUM, which is the mechanism --status,
+// --priority and --effort use. A flag enum makes cobra reject anything
+// outside the set during parsing, and under the default `open` policy
+// that set is unbounded — there is nothing to stamp. Stamping only under
+// `closed` would then make the two policies differ in WHERE the
+// rejection happens (cobra's parser vs the write gate) and in what the
+// message says, for one behaviour; one gate, in core, reachable from
+// every write path including the ones with no cobra in them at all, is
+// the version that can actually hold. So the enum machinery is left
+// alone and only the help string learns about the policy.
+//
+// Runs from PersistentPreRunE for the same reason the restamp does: it
+// needs the config, and config is not read until initConfig, which is
+// strictly after kit materialises flags in prepareTree.
+func annotateTagPolicyUsage(root *kitcli.Root) {
+	if root == nil || root.Cmd == nil {
+		return
+	}
+	policy, vocab := core.TagPolicyFor()
+	if policy != config.TagPolicyClosed {
+		return
+	}
+	suffix := "(policy closed; allowed: " + strings.Join(vocab.Display(), ", ") + ")"
+	for _, spec := range tagFlagCommands {
+		cmd := findCommandByPath(root.Cmd, spec.path)
+		if cmd == nil {
+			continue
+		}
+		f := cmd.Flags().Lookup(spec.flag)
+		if f == nil || strings.HasSuffix(f.Usage, suffix) {
+			continue
+		}
+		f.Usage = strings.TrimSpace(f.Usage + " " + suffix)
+	}
+}
+
 // findCommandByPath resolves a space-separated command path below root.
 func findCommandByPath(root *cobra.Command, path string) *cobra.Command {
 	cur := root
@@ -661,6 +715,11 @@ func Execute() {
 	}
 	restampConfiguredStatusEnum(kitRootInstance)
 	refreshCreateStatusUsage()
+	// Same reason the restamp is here and not only in PersistentPreRunE:
+	// `--help` never reaches PersistentPreRunE, so an annotation applied
+	// only there would leave the help text silent about a policy the
+	// same invocation's errors enforce.
+	annotateTagPolicyUsage(kitRootInstance)
 
 	defer func() {
 		closePolicy()

@@ -214,6 +214,14 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		priority = normalized
 	}
 
+	// The tag vocabulary gate. Before the regex rules below, not after:
+	// ValidationConfig can only see tags as one comma-joined string, so
+	// it can assert a shape but never membership, and its message would
+	// name a pattern rather than the offending tag.
+	if err := core.ValidateTags(tags); err != nil {
+		return err
+	}
+
 	// Config-driven validation for create.
 	valCfg := getValidationConfig()
 	if err := valCfg.ValidateTaskOp(config.ValidationOpCreate, config.TaskFields{
