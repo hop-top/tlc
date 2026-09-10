@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"sync"
 
 	"hop.top/tlc/internal/config"
@@ -213,21 +214,86 @@ func (wm *WorkflowManager) GetWorkflowForTags(tags []string) *WorkflowManager {
 
 var (
 	defaultWorkflow     *WorkflowManager
+	defaultWorkflowErr  error
 	defaultWorkflowOnce sync.Once
+
+	// taskConfigProvider supplies the user's loaded `task` config section
+	// to DefaultWorkflow. internal/core must not depend on viper or the
+	// CLI, so the CLI registers the provider at init time and core calls
+	// back into it. A nil provider (library consumers, most unit tests)
+	// falls back to the built-in statuses and state machine.
+	taskConfigProvider func() *config.TaskConfig
 )
 
-// DefaultWorkflow returns a singleton WorkflowManager with default settings.
+// SetTaskConfigProvider registers the source of the workflow's TaskConfig.
+// It must be called before the first DefaultWorkflow call; the singleton
+// caches whatever the provider returned on first use.
+func SetTaskConfigProvider(fn func() *config.TaskConfig) {
+	taskConfigProvider = fn
+}
+
+// builtinTaskConfig returns the built-in statuses and transition rules.
+func builtinTaskConfig() *config.TaskConfig {
+	return &config.TaskConfig{
+		Statuses:     config.GetDefaultStatuses(),
+		StateMachine: config.GetDefaultStateMachine(),
+	}
+}
+
+// resolveTaskConfig returns the provider's TaskConfig, or the built-ins
+// when no provider is registered or the provider yields nothing.
+func resolveTaskConfig() *config.TaskConfig {
+	if taskConfigProvider == nil {
+		return builtinTaskConfig()
+	}
+	cfg := taskConfigProvider()
+	if cfg == nil {
+		return builtinTaskConfig()
+	}
+	return cfg
+}
+
+// DefaultWorkflow returns the process-wide WorkflowManager built from the
+// user's configured statuses and state machine.
+//
+// Construction failure is fatal rather than a silent fall back to the
+// built-in TODO/IN_PROGRESS/DONE/SKIPPED set: a user who declared custom
+// statuses would otherwise get a workflow that quietly disagrees with
+// their config. Callers that want to handle the error use DefaultWorkflowE.
 func DefaultWorkflow() *WorkflowManager {
+	wm, err := DefaultWorkflowE()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid task workflow configuration: %v\n", err)
+		exit(1)
+		return nil
+	}
+	return wm
+}
+
+// DefaultWorkflowE is DefaultWorkflow with the construction error returned
+// instead of terminating the process.
+func DefaultWorkflowE() (*WorkflowManager, error) {
 	defaultWorkflowOnce.Do(func() {
-		cfg := &config.TaskConfig{
-			Statuses:     config.GetDefaultStatuses(),
-			StateMachine: config.GetDefaultStateMachine(),
+		cfg := resolveTaskConfig()
+		// Validate applies config defaults (statuses, state machine) and
+		// rejects rules referencing undeclared statuses — the failure mode
+		// NewWorkflowManager alone does not catch.
+		if err := cfg.Validate(); err != nil {
+			defaultWorkflowErr = err
+			return
 		}
-		var err error
-		defaultWorkflow, err = NewWorkflowManager(cfg)
-		if err != nil {
-			panic(fmt.Sprintf("failed to create default workflow: %v", err))
-		}
+		defaultWorkflow, defaultWorkflowErr = NewWorkflowManager(cfg)
 	})
-	return defaultWorkflow
+	return defaultWorkflow, defaultWorkflowErr
+}
+
+// exit is os.Exit, indirected so tests can observe the fatal path.
+var exit = os.Exit
+
+// ResetDefaultWorkflow clears the cached workflow singleton so the next
+// DefaultWorkflow call rebuilds it from the current provider. Tests only.
+func ResetDefaultWorkflow() {
+	defaultWorkflowOnce = sync.Once{}
+	defaultWorkflow = nil
+	defaultWorkflowErr = nil
 }
