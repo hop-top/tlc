@@ -212,14 +212,24 @@ Define custom statuses replacing the 4 defaults. Each entry is a
 | `description` | string | no | Short explanation of purpose |
 | `is_terminal` | bool | no | Terminal state; no outbound transitions |
 | `color` | string | no | ANSI/hex color for TUI/CLI output |
-| `role` | enum | no | Semantic role: `initial`, `active`, `completed` |
+| `role` | enum | no | Semantic role: `initial`, `active`, `completed`, `skipped` |
 | `tls_marker` | string | no | TLS bracket marker (e.g. `x`, `~`, `-`) |
 
 Semantic roles drive shortcut commands:
 
-- `initial` — target of `tlc task unclaim`
+- `initial` — target of `tlc task unclaim` and `tlc task reopen`
 - `active` — target of `tlc task claim`
 - `completed` — target of `tlc task complete`
+- `skipped` — target of `tlc task skip`
+
+A role is resolved to the FIRST status declaring it, so declare each
+role once. `completed` and `skipped` are separate roles because both
+are terminal and `is_terminal` cannot tell "done" from "abandoned"
+apart; without a distinct role the skip target is unreachable.
+
+If no status declares `skipped`, `tlc task skip` falls back to a status
+literally named `SKIPPED` and warns. If neither exists it refuses rather
+than electing an arbitrary terminal status.
 
 #### `task.state_machine` — Transition Rules
 
@@ -261,6 +271,7 @@ task:
       color: "#00FF00"
     - name: WONTFIX
       label: Won't Fix
+      role: skipped
       is_terminal: true
       tls_marker: "-"
       color: "#FF0000"
