@@ -19,6 +19,9 @@ jobs:
           cache: true
       - run: go build -buildvcs=false ./...
       - run: go vet ./...
+      # Without this the flowtest shim set is empty on a clean checkout and
+      # the embed assertions skip themselves, so shim-naming drift ships green.
+      - run: make build-shims
       - run: go test -race -short -skip 'TestTaskShowEva|TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove' ./...
 
   lint:

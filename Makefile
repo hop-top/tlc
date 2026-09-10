@@ -88,7 +88,7 @@ build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 	@echo "  built tlc-shim-catchall"
 	@echo "$(COLOR_GREEN)✓ Shims built to $(SHIMS_BIN_DIR)/$(COLOR_RESET)"
 
-test: test-plugins ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
+test: build-shims test-plugins ## Run all tests (CLI suite runs under TrueColor profile via TestMain)
 	@echo "$(COLOR_BLUE)Running tests...$(COLOR_RESET)"
 	@go test -v -race ./...
 	@echo "$(COLOR_GREEN)✓ All tests passed$(COLOR_RESET)"
