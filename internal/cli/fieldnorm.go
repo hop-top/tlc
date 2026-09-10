@@ -42,7 +42,7 @@ var builtinStatusAliases = map[string]string{
 // `task.statuses` when declared, else the built-in set.
 //
 // A function, not the package-level var it replaced. The var was
-// initialised at package-init time — long before any config file is
+// initialized at package-init time — long before any config file is
 // read — so it could only ever hold the built-ins. Resolution has to
 // happen per call, once config is loaded.
 func statusCanonical() []string {
@@ -144,7 +144,7 @@ var builtinPriorityAliases = map[string]string{
 // set.
 //
 // A function, not the package-level var it replaced, for the reason
-// statusCanonical is: the var was initialised at package-init time, long
+// statusCanonical is: the var was initialized at package-init time, long
 // before any config file is read, so it could only ever hold the
 // built-ins.
 func priorityCanonical() []string {
@@ -210,7 +210,7 @@ var builtinEffortAliases = map[string]string{
 // built-in set.
 //
 // A function, not the package-level var it replaced, for the reason
-// statusCanonical and priorityCanonical are: the var was initialised at
+// statusCanonical and priorityCanonical are: the var was initialized at
 // package-init time, long before any config file is read, so it could
 // only ever hold the built-ins.
 func effortCanonical() []string {
@@ -253,7 +253,7 @@ func dimensionAxisPrefixes() []string {
 // "prioroty" resolving, and who sees the result on their own terminal. A
 // TLS token is written by a machine — formatTLS, `label init`, a sync
 // plugin — and read on the hot path of every storage open, with no user
-// watching. Fuzzy there would silently coerce an unrecognised value onto
+// watching. Fuzzy there would silently coerce an unrecognized value onto
 // whatever scored highest instead of leaving it as the tag it is.
 func resolveAxisValue(aliases map[string]string, value string) (string, bool) {
 	v, ok := aliases[strings.ToLower(strings.TrimSpace(value))]

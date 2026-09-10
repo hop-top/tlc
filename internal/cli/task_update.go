@@ -395,7 +395,7 @@ func init() {
 	// stay supported verbatim: scripts depend on them, and removing an
 	// escape hatch is not part of adding a command. They write the same
 	// field the commands do, through the same taskFieldChanges path, so
-	// the two can never diverge in behaviour — only in ergonomics, which
+	// the two can never diverge in behavior — only in ergonomics, which
 	// is what the help text below points at.
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateBlocked, "blocked", "", "Set blocked reason (see also: tlc task block)")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateUnblock, "unblock", false, "Clear blocked reason (see also: tlc task unblock)")

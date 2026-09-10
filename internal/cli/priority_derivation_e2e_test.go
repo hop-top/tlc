@@ -61,7 +61,7 @@ task:
 
 // derivationIdenticalCondConfig declares two rules whose conditions are
 // identical and whose verdicts differ. Which one "wins" would be an
-// artefact of typing order, so it must be refused rather than resolved.
+// artifact of typing order, so it must be refused rather than resolved.
 const derivationIdenticalCondConfig = `storage:
   db_path: %s
 task:
@@ -363,7 +363,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	runTLCOK(t, bin, home, env, "task", "create", "untouched")
 	out := runTLCOK(t, bin, home, env, "task", "reprioritise", "--dry-run")
 	if !strings.Contains(out, "Dry run") {
-		t.Errorf("dry run output not labelled:\n%s", out)
+		t.Errorf("dry run output not labeled:\n%s", out)
 	}
 	if !strings.Contains(out, "P3") {
 		t.Errorf("dry run did not report the verdict it would apply:\n%s", out)
@@ -374,7 +374,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 }
 
 // TestNoDerivationConfiguredIsUnchanged is acceptance criterion 5: with
-// no rules declared, behaviour matches today's exactly. Creating without
+// no rules declared, behavior matches today's exactly. Creating without
 // -p leaves the priority empty, creating with -p stores it, and the
 // command says there is nothing to do rather than inventing a default.
 func TestNoDerivationConfiguredIsUnchanged(t *testing.T) {

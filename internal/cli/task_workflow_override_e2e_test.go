@@ -247,7 +247,7 @@ func TestUntaggedTaskUsesBaseWorkflow(t *testing.T) {
 	bin, home, env := statusVocabFixture(t, tagOverrideConfig)
 
 	runTLCOK(t, bin, home, env, "task", "create", "ordinary work")
-	runTLCOK(t, bin, home, env, "task", "create", "labelled work", "--tag", "backend")
+	runTLCOK(t, bin, home, env, "task", "create", "labeled work", "--tag", "backend")
 
 	for _, id := range []string{"T-0001", "T-0002"} {
 		// Base forbids TODO -> DONE.

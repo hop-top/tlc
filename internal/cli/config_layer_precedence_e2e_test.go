@@ -3,7 +3,7 @@ package cli
 // End-to-end coverage for CONFIG-LAYER PRECEDENCE of the task status
 // vocabulary and state machine.
 //
-// status_vocabulary_e2e_test.go proves the CLI honours *a* config file.
+// status_vocabulary_e2e_test.go proves the CLI honors *a* config file.
 // It says nothing about which file wins when several are in play, and the
 // cascade in root.go's initConfig has five layers. Every case below drives
 // the real binary against real files on disk, for the same reason the
@@ -56,7 +56,7 @@ task:
 `
 }
 
-// writeLayerConfig materialises a config at path, creating parents.
+// writeLayerConfig materializes a config at path, creating parents.
 func writeLayerConfig(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -292,7 +292,7 @@ func assertStatus(t *testing.T, got, want, msg string) {
 // used to call viper.ReadInConfig() on it. ReadInConfig REPLACES viper's
 // config map with that single file rather than merging into it, so every
 // ancestor layer the cascade had just assembled was thrown away: the
-// execute path honoured the closest file alone while --help, which never
+// execute path honored the closest file alone while --help, which never
 // re-reads, saw the whole cascade.
 //
 // The probe is a key the ancestor declares and the closest config never
@@ -357,7 +357,7 @@ func TestLayerSingleConfigProjectUnaffected(t *testing.T) {
 		layerVocabNoDefault("SOLOMARK", dbPath)+"  default_status: SOLOMARK\n")
 
 	assertStatus(t, statusOfNewTask(t, bin, work, "T-0001", env), "SOLOMARK",
-		"single-config project must honour its own default_status")
+		"single-config project must honor its own default_status")
 }
 
 // TestLayerExplicitConfigFileBeatsAncestorCascade pins the -c layers
@@ -607,7 +607,7 @@ func TestLayerKeyValueOverrideBeatsStateMachine(t *testing.T) {
 
 // TestLayerUserConfigBeatsBuiltinDefaults covers the user-level layer,
 // reachable hermetically because config.UserConfigDir resolves through
-// kit/xdg.ConfigDir and therefore honours XDG_CONFIG_HOME, which e2eEnv
+// kit/xdg.ConfigDir and therefore honors XDG_CONFIG_HOME, which e2eEnv
 // already redirects into the test's private HOME.
 //
 // The system layer (/etc/tlc) is NOT covered: config.SystemConfigDir is a
@@ -736,11 +736,11 @@ func TestLayerExplicitConfigFileReachesHelpRestamp(t *testing.T) {
 		return p
 	}
 
-	// Execute path honours it.
+	// Execute path honors it.
 	gotExec := vocabularyOf(t, bin, work, env, "-c", flagCfg())
 	assertVocabulary(t, gotExec, "EXPLICIT", "IN_PROGRESS", "SKIPPED")
 
-	// Help path honours it too, and names the same set. Comparing the two
+	// Help path honors it too, and names the same set. Comparing the two
 	// rather than only asserting the marker is what keeps the paths from
 	// drifting apart again in some way the marker alone would not catch.
 	gotHelp := helpVocabularyOf(t, bin, work, env, "-c", flagCfg())

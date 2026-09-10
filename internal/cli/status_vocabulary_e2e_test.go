@@ -125,7 +125,7 @@ func statusVocabEnv(t *testing.T, home, dbPath, cfgPath string) []string {
 	return append(e2eEnv(t, home, dbPath), "TLC_CONFIG="+cfgPath)
 }
 
-// writeVocabConfig materialises one of the templates above into home and
+// writeVocabConfig materializes one of the templates above into home and
 // returns the config path. The DB path is baked into the file rather than
 // left to the ambient project registry: an unpinned probe resolves through
 // the global registry, not the cwd, and silently reads an unrelated
@@ -245,7 +245,7 @@ func TestDefaultVocabularyUnchanged(t *testing.T) {
 		})
 	}
 
-	// The lowercase list filter is the other half of the old behaviour.
+	// The lowercase list filter is the other half of the old behavior.
 	out, code := runTLC(t, bin, home, env, "task", "list", "--status", "todo")
 	if code != 0 {
 		t.Errorf("task list --status todo should work (exit %d):\n%s", code, out)

@@ -291,7 +291,7 @@ func importFromProjection(s *storage.SQLiteStorage) error {
 //
 // Returns tags unchanged under the default open policy, which is the
 // whole point: an existing project that has configured no policy sees
-// byte-identical ingest behaviour.
+// byte-identical ingest behavior.
 func filterAllowedTags(alias string, tags []string) []string {
 	if len(tags) == 0 {
 		return tags
@@ -459,7 +459,7 @@ func parseTLSWith(vocab tlsVocabulary, line string) (*core.Task, error) {
 			// tlc field — core.Task has no Type — so it lands as a tag,
 			// which is what core.TagVocabulary already admits it as by
 			// construction and what github-sync does with any
-			// unrecognised `dimension:value` label. Stored WHOLE, prefix
+			// unrecognized `dimension:value` label. Stored WHOLE, prefix
 			// included, so the tag a todo.txt round trip produces is
 			// spelt the same as the one the tag policy validates.
 			task.Tags = append(task.Tags, token)
@@ -583,7 +583,7 @@ type tlsVocabulary struct {
 // The axis prefixes are DERIVED, not retyped, and that is the whole
 // point. They come from dimensionAxisPrefixes, which reads the same
 // generation internal/labels and core.TagVocabulary read; the three
-// remaining entries are TLS-only serialisation shapes that formatTLS
+// remaining entries are TLS-only serialization shapes that formatTLS
 // emits and no label axis has ever carried, so there is nothing to
 // derive them from.
 //
@@ -610,7 +610,7 @@ func newTLSVocabulary() tlsVocabulary {
 	//
 	// `domain:` and `ref:` mirror no axis at all: `ref:` is
 	// Task.Reference and `domain:` is a Meta key, both TLS
-	// serialisation choices that predate the label vocabulary.
+	// serialization choices that predate the label vocabulary.
 	prefixes = append(prefixes, "prio:", "domain:", "ref:")
 
 	return tlsVocabulary{

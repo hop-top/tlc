@@ -63,7 +63,7 @@ type Label struct {
 // mapLabelsToTask drops any label without one, and the TLS parser's
 // isMetaToken treats an unprefixed word as title text — so a bare `feat`
 // is not a weaker label, it is a label that does not survive a round
-// trip. `feat` and `fix` keep the colours they were seeded with before
+// trip. `feat` and `fix` keep the colors they were seeded with before
 // they gained the prefix, so an existing repo sees a rename rather than
 // a palette churn.
 //
@@ -81,7 +81,7 @@ var typeLabels = []Label{
 	{Name: "type:perf", Color: "FF8C00", Description: "Performance improvement"},
 	{Name: "type:build", Color: "8D6E63", Description: "Build system or dependencies"},
 	{Name: "type:ci", Color: "1D76DB", Description: "CI configuration"},
-	{Name: "type:style", Color: "D4C5F9", Description: "Formatting, no behaviour change"},
+	{Name: "type:style", Color: "D4C5F9", Description: "Formatting, no behavior change"},
 	{Name: "type:breaking", Color: "B60205", Description: "Breaking change (! or BREAKING CHANGE:)"},
 }
 
@@ -110,7 +110,7 @@ var typeLabels = []Label{
 // have issues nobody has triaged.
 //
 // The values round-trip: github-sync's mapLabelsToTask sends any
-// unrecognised `dimension:value` label to task tags, so a `needs:*`
+// unrecognized `dimension:value` label to task tags, so a `needs:*`
 // label pulled from a forge survives as a tag rather than being dropped.
 //
 // The swatches moved off the priority axis's. `needs:repro` shared
@@ -212,7 +212,7 @@ func GetTemplatesWithConflicts(projectType ProjectType) ([]Label, []LabelConflic
 		// `domain:jobs` covers queues, workers and schedules together:
 		// what they share, and what separates them from `api`, is that
 		// nothing is waiting on the other end of the request — so a
-		// failure is silent, and that is the fact worth labelling.
+		// failure is silent, and that is the fact worth labeling.
 		domains = []Label{
 			{Name: "domain:api", Color: "1D76DB", Description: "HTTP and API surface"},
 			{Name: "domain:db", Color: "0E8A16", Description: "Database and persistence"},
@@ -256,7 +256,7 @@ func GetTemplatesWithConflicts(projectType ProjectType) ([]Label, []LabelConflic
 	case TypeMonorepo:
 		// The one shape where a layer-shaped domain set would be wrong.
 		// A monorepo's packages already have their own layers, and they
-		// differ per package — labelling a task `domain:api` in a repo
+		// differ per package — labeling a task `domain:api` in a repo
 		// holding six services says nothing about where to look.
 		//
 		// What IS repo-wide is the work that crosses every package, and

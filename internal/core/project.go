@@ -55,7 +55,7 @@ func ResetDetectionCache() {
 // reads; MergeInConfig layers on top. Detection runs after the CLI's
 // initConfig has merged every project config root-most-to-closest, so a
 // replace here would throw the whole cascade away and leave the process
-// honouring the closest file alone — a setting a user puts at a repo root
+// honoring the closest file alone — a setting a user puts at a repo root
 // would reach --help (which never re-reads) and nothing else.
 func loadConfigLayer(path string) error {
 	prev := viper.ConfigFileUsed()

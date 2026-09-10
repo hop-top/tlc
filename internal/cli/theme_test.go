@@ -8,7 +8,7 @@ import (
 )
 
 // newProbeRoot builds a kit Root with kit's own default theme — the
-// state TLC was permanently stuck in before ui.theme was honoured.
+// state TLC was permanently stuck in before ui.theme was honored.
 func newProbeRoot(t *testing.T) *kitcli.Root {
 	t.Helper()
 	return kitcli.New(kitcli.Config{
@@ -115,7 +115,7 @@ func TestApplyUIThemeUnknownValues(t *testing.T) {
 }
 
 // TestApplyUIThemeEmptyKeepsDefault checks a config saying nothing about
-// theming behaves as it did before these keys were honoured.
+// theming behaves as it did before these keys were honored.
 func TestApplyUIThemeEmptyKeepsDefault(t *testing.T) {
 	root := newProbeRoot(t)
 	before := root.Theme

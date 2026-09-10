@@ -464,7 +464,7 @@ func TestTaskConfig_EmptyPrioritiesNotMaterialised(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(cfg.Task.Priorities) != 0 {
-		t.Errorf("Validate materialised %d priorities; it must leave the list empty",
+		t.Errorf("Validate materialized %d priorities; it must leave the list empty",
 			len(cfg.Task.Priorities))
 	}
 	if got := len(cfg.Task.EffectivePriorities()); got != 4 {

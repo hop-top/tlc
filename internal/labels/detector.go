@@ -52,7 +52,7 @@ func DetectProjectType(path string) ProjectType {
 	//
 	// It is below monorepo because an infra directory inside a
 	// workspace is a member, not the root, and the root is what gets
-	// labelled.
+	// labeled.
 	if isInfra(path) {
 		return TypeInfra
 	}

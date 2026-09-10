@@ -366,7 +366,7 @@ func (o *OutputConfig) Validate() error {
 // without any command losing its target.
 //
 // Roles are advisory, not an enum: `role` may hold any string, and an
-// unrecognised one simply indexes a role nothing asks for. Only
+// unrecognized one simply indexes a role nothing asks for. Only
 // RoleInitial and RoleActive are required (see TaskConfig.Validate).
 //
 // RoleSkipped distinguishes "finished, not done" from "finished, done".
@@ -400,7 +400,7 @@ type StatusDefinition struct {
 // There is deliberately no explicit `rank` field:
 //
 //   - A map keyed by name cannot express order at all. The decoder lands
-//     YAML mappings in a Go map, whose iteration order is randomised, so
+//     YAML mappings in a Go map, whose iteration order is randomized, so
 //     a map schema would have no order to read.
 //   - A `rank` field alongside a list would be a SECOND source of truth
 //     for the same fact. Two sources drift: a list whose declaration
@@ -422,7 +422,7 @@ type PriorityDefinition struct {
 //
 // Same shape and same reasoning as PriorityDefinition: a LIST whose
 // declaration order IS rank order, smallest first, with no separate
-// `rank` field. A map cannot express order (the decoder randomises it),
+// `rank` field. A map cannot express order (the decoder randomizes it),
 // and a rank field beside a list is a second source of truth for one
 // fact.
 //
@@ -580,7 +580,7 @@ type SchedulingConfig struct {
 // match wins — the same shape and the same reasoning as
 // `task.priorities` and `task.statuses`. A map keyed by rule name cannot
 // express order at all: the decoder lands YAML mappings in a Go map with
-// randomised iteration, which is exactly the trap the per-tag workflow
+// randomized iteration, which is exactly the trap the per-tag workflow
 // override hit. Order here is the user's own, readable in their config,
 // and identical on every run.
 //
@@ -638,7 +638,7 @@ type PriorityDerivationRule struct {
 // PriorityDerivationConfig holds config-driven priority derivation.
 //
 // Off unless `rules` is non-empty: with no rules declared, every
-// derivation entry point is a no-op and behaviour is byte-identical to a
+// derivation entry point is a no-op and behavior is byte-identical to a
 // build without this feature.
 type PriorityDerivationConfig struct {
 	// Rules are evaluated in declaration order; the first whose
@@ -656,7 +656,7 @@ type PriorityDerivationConfig struct {
 	// IncludeActive lets derivation touch tasks sitting in an
 	// `active`-role status.
 	//
-	// Default false, which is the mid-flight guard: re-prioritising the
+	// Default false, which is the mid-flight guard: re-prioritizing the
 	// task someone is working on right now moves it in every list they
 	// have open, for a reason they did not act on. Excluded tasks are
 	// reported as skipped rather than silently passed over.
@@ -746,7 +746,7 @@ func GetDefaultStatuses() []StatusDefinition {
 // Unlike GetDefaultStatuses this is NOT written back into TaskConfig by
 // Validate. Statuses are mandatory (the workflow engine needs a
 // vocabulary to enforce), so an empty list there is filled in. Priority
-// is optional end to end, and materialising the built-ins into the
+// is optional end to end, and materializing the built-ins into the
 // struct would make "declared no priorities" indistinguishable from
 // "declared exactly the built-in four" — which is precisely the
 // distinction the by_priority check and the enum restamp read.
@@ -773,13 +773,13 @@ func GetDefaultPriorities() []PriorityDefinition {
 // GetDefaultEfforts returns the five built-in effort sizes in ascending
 // order — the fallback when config declares none.
 //
-// Not materialised into TaskConfig by Validate, for the same reason
+// Not materialized into TaskConfig by Validate, for the same reason
 // GetDefaultPriorities is not: effort is optional end to end, and
 // filling the struct in would make "declared no efforts" and "declared
 // exactly the built-in five" indistinguishable — the distinction the
 // enum restamp's built-in short-circuit reads.
 //
-// The colours are the swatches the label axis has always emitted for
+// The colors are the swatches the label axis has always emitted for
 // these five, moved here so the vocabulary and its presentation are
 // declared in one place rather than re-listed beside the axis.
 func GetDefaultEfforts() []EffortDefinition {
@@ -1037,7 +1037,7 @@ func (t *TaskConfig) ValidateEfforts() error {
 // every rule is named, named once, states a priority in the effective
 // vocabulary, and declares at least one condition. It also refuses two
 // rules whose conditions are IDENTICAL, since which of them "wins" would
-// then be an artefact of the order they happened to be typed in rather
+// then be an artifact of the order they happened to be typed in rather
 // than a decision.
 //
 // Deliberately NOT called from DefaultWorkflowE. A broken derivation rule
@@ -1175,7 +1175,7 @@ func (t *TaskConfig) validateSchedulingKeys() error {
 	}
 
 	// Sorted iteration so a config with several bad keys always reports
-	// the same one; Go map range order is randomised.
+	// the same one; Go map range order is randomized.
 	for _, key := range slices.Sorted(maps.Keys(t.Scheduling.ByPriority)) {
 		if !prioritySet[key] {
 			return fmt.Errorf(
@@ -1243,8 +1243,8 @@ func validateRules(def *WorkflowDefinition, statusSet, terminalSet map[string]bo
 // prefix_from_type, zero_pad_issue, separator, auto_generate, template,
 // co_author — were declared, defaulted and documented without a single
 // reader: tlc names no branches and writes no commit messages, so there
-// was nothing for them to configure. Should tlc grow either behaviour,
-// the keys come back attached to the code that honours them.
+// was nothing for them to configure. Should tlc grow either behavior,
+// the keys come back attached to the code that honors them.
 type GitConfig struct {
 	Track bool `yaml:"track"`
 }
@@ -1272,7 +1272,7 @@ func (s *SyncConfig) Validate() error {
 	// Previously this required a repo whenever `sync.github.enabled` was
 	// set — a check keyed on a field nothing read, gating a value
 	// nothing consumed. What is worth checking is the direction, which
-	// the GitHub auto-configuration genuinely reads: an unrecognised
+	// the GitHub auto-configuration genuinely reads: an unrecognized
 	// value there silently behaves as "not configured".
 	switch s.GitHub.SyncDirection {
 	case "", "pull", "push", "bidirectional":

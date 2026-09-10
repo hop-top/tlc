@@ -23,7 +23,7 @@ var taskIDPattern = regexp.MustCompile(`(?i)^([a-z][a-z0-9_-]*/)?[a-z]-\d+$|^tlc
 //
 // This is a ROUTER, not a validator: it decides whether `tlc tag X …`
 // means "add tags to task X" or "filter by tags X …". It therefore has to
-// recognise every form a user may address a task by, including the
+// recognize every form a user may address a task by, including the
 // durable TypeID — which the alias pattern above cannot match, and which
 // was consequently misrouted into filter mode and answered with an empty
 // result rather than tagging the task.

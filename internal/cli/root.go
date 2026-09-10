@@ -462,7 +462,7 @@ func restampConfiguredStatusEnum(root *kitcli.Root) {
 		configured := spec.configured()
 		// A no-op when the configured vocabulary equals the built-in
 		// one, which keeps an unchanged config byte-identical to
-		// today's behaviour — including the help suffix kit already
+		// today's behavior — including the help suffix kit already
 		// appended for the built-ins.
 		if slices.Equal(configured, spec.builtin()) {
 			continue
@@ -516,14 +516,14 @@ var tagFlagCommands = []struct {
 // that set is unbounded — there is nothing to stamp. Stamping only under
 // `closed` would then make the two policies differ in WHERE the
 // rejection happens (cobra's parser vs the write gate) and in what the
-// message says, for one behaviour; one gate, in core, reachable from
+// message says, for one behavior; one gate, in core, reachable from
 // every write path including the ones with no cobra in them at all, is
 // the version that can actually hold. So the enum machinery is left
 // alone and only the help string learns about the policy.
 //
 // Runs from PersistentPreRunE for the same reason the restamp does: it
 // needs the config, and config is not read until initConfig, which is
-// strictly after kit materialises flags in prepareTree.
+// strictly after kit materializes flags in prepareTree.
 func annotateTagPolicyUsage(root *kitcli.Root) {
 	if root == nil || root.Cmd == nil {
 		return
@@ -699,7 +699,7 @@ func Execute() {
 	// for a flag and kit's later bind loses. Must run here rather than in
 	// kitRoot(): the task subcommands attach to RootCmd from their own
 	// init() funcs, which run after the kitRootInstance package var is
-	// initialised, so the tree is empty at registerFlagEnums time.
+	// initialized, so the tree is empty at registerFlagEnums time.
 	bindConfiguredStatusCompletion(kitRootInstance)
 
 	// Stamp the configured status vocabulary onto the --status flags
@@ -1149,7 +1149,7 @@ func setDefaults() {
 	// Only keys something actually reads are seeded here. A SetDefault
 	// for an unread key is not inert: `config set` rewrites the whole
 	// merged config back to disk, so every seeded key lands in the
-	// user's file as a real setting that nothing honours.
+	// user's file as a real setting that nothing honors.
 	viper.SetDefault("output.format", "table")
 	viper.SetDefault("output.color", true)
 	viper.SetDefault("output.verbose", false)
@@ -1175,7 +1175,7 @@ func setDefaults() {
 	// Seeded for discoverability as much as for the value: the
 	// interactive config search walks viper.AllKeys(), so a key with no
 	// default cannot be found by name there. "neon" is the palette kit
-	// already defaults to, so this seeds the behaviour that was in
+	// already defaults to, so this seeds the behavior that was in
 	// effect anyway.
 	viper.SetDefault("ui.theme", "neon")
 }
@@ -1329,7 +1329,7 @@ func preParseChdir(args []string) ([]string, string, bool) {
 // itself. At that moment cobra has not parsed argv, viper's binding for
 // the "config" key is still empty, and only the env-fed TLC_CONFIG was
 // visible — leaving `--help -c custom.yaml` advertising the built-in
-// vocabulary while the same invocation's validation honoured the custom
+// vocabulary while the same invocation's validation honored the custom
 // one.
 //
 // Delegating to a throwaway pflag.FlagSet rather than hand-scanning args

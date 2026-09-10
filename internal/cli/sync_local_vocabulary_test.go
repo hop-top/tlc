@@ -9,7 +9,7 @@ import (
 
 // The TLS parser's metadata-prefix list had gone deaf to three of the
 // four label axes. `type:`, `status:` and `priority:` were not
-// recognised, so a token on any of them was not classified as metadata
+// recognized, so a token on any of them was not classified as metadata
 // at all and fell through into the task TITLE — including `priority:`,
 // the spelling `label init` seeds and every sync plugin emits, while the
 // original `prio:` kept working.
@@ -20,7 +20,7 @@ import (
 // file exists to prevent, and it is the one that survives into every
 // later read of the task.
 
-// tokenNotInTitle is the assertion the old behaviour failed. Kept
+// tokenNotInTitle is the assertion the old behavior failed. Kept
 // separate from the field assertions so a mutation that re-breaks
 // classification fails on the title, which is the user-visible harm,
 // rather than only on a field nobody looks at.

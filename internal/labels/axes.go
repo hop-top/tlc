@@ -24,7 +24,7 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// hexRe matches the six hex digits a forge label colour must be.
+// hexRe matches the six hex digits a forge label color must be.
 var hexRe = regexp.MustCompile(`^[0-9A-Fa-f]{6}$`)
 
 // Color of the two labels that exist outside any configured vocabulary.
@@ -45,20 +45,20 @@ const (
 	fallbackColor     = "EDEDED"
 )
 
-// namedColors resolves the colour NAMES config declares — `task.statuses`
+// namedColors resolves the color NAMES config declares — `task.statuses`
 // and `task.priorities` carry "red", "blue", "gray" — into the six hex
 // digits a forge label needs.
 //
-// The two schemas genuinely differ: a config colour is a terminal
+// The two schemas genuinely differ: a config color is a terminal
 // rendering hint, shared with the TUI, where a name is the right level of
 // abstraction; a forge label is an RGB swatch. Something must translate,
 // and doing it here keeps `internal/config` from growing a
 // forge-specific concern.
 //
 // A value that is already six hex digits passes through, so a user who
-// wants an exact swatch can simply declare one. Anything unrecognised
+// wants an exact swatch can simply declare one. Anything unrecognized
 // falls back to a neutral grey rather than being emitted raw: GitHub
-// rejects a malformed colour outright, which would fail the whole
+// rejects a malformed color outright, which would fail the whole
 // `label init`, and one off-palette label is a much smaller harm than a
 // command that refuses to run.
 var namedColors = map[string]string{
@@ -107,7 +107,7 @@ func labelValue(name string) string {
 // and blocked, and that is not an arbitrary shortlist: a GitHub issue is
 // open or closed, and that bit ALREADY encodes the rest of the axis. A
 // terminal status is a closed issue, and the initial status is an open
-// issue nobody has touched — labelling either would restate in a label
+// issue nobody has touched — labeling either would restate in a label
 // what the issue state already says, and the two would then be free to
 // disagree after an edit on the forge side.
 //
@@ -115,11 +115,11 @@ func labelValue(name string) string {
 // untouched" and "open, someone is on it". That is exactly the set this
 // selects: non-terminal, non-initial. With the built-in vocabulary it
 // yields IN_PROGRESS alone, matching the plugins. With a vocabulary that
-// adds IN_REVIEW it yields both, which is the behaviour a custom
+// adds IN_REVIEW it yields both, which is the behavior a custom
 // vocabulary should get and a name-matched shortlist could not give.
 //
 // Deriving from role also means a user who renames IN_PROGRESS to
-// DOING keeps a working label, because `role: active` travelled with the
+// DOING keeps a working label, because `role: active` traveled with the
 // rename.
 func statusAxis(defs []config.StatusDefinition) []Label {
 	out := make([]Label, 0, len(defs)+1)
@@ -142,7 +142,7 @@ func statusAxis(defs []config.StatusDefinition) []Label {
 	//
 	// It is still on the status axis because that is where the wire
 	// format already puts it: all four sync plugins push and pull
-	// `status:blocked`, and the label has to exist with a defined colour
+	// `status:blocked`, and the label has to exist with a defined color
 	// or `sync push` creates it with a forge default. Appended as a
 	// fixed entry, after the generated ones, so its independence from
 	// the vocabulary is visible rather than implied.
@@ -238,7 +238,7 @@ func priorityDescription(p config.PriorityDefinition) string {
 // swatch and prose from the definition rather than from a table keyed by
 // the built-in constants.
 //
-// The built-in five carry their historic colours and descriptions on
+// The built-in five carry their historic colors and descriptions on
 // config.GetDefaultEfforts, so a config declaring no efforts produces
 // byte-identical labels to the hardcoded map this replaced.
 func effortAxis(defs []config.EffortDefinition) []Label {

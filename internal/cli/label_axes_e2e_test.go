@@ -27,7 +27,7 @@ import (
 // survive, so any TODO/IN_PROGRESS/DONE/SKIPPED in the output is a
 // hardcoded list leaking rather than a coincidence.
 //
-// Colours are declared per status, and deliberately mixed: a bare name
+// Colors are declared per status, and deliberately mixed: a bare name
 // (purple), a hex with a leading # (#FF00AA), and names on the statuses
 // that must NOT produce a label at all.
 const customLabelStatusConfig = `storage:
@@ -99,7 +99,7 @@ type seededLabel struct {
 }
 
 // parseLabelInit turns `label init` output into structured labels, so
-// assertions can talk about colour as well as name.
+// assertions can talk about color as well as name.
 func parseLabelInit(out string) []seededLabel {
 	var got []seededLabel
 	for _, line := range strings.Split(out, "\n") {
@@ -199,20 +199,20 @@ func TestLabelInitCustomStatusVocabulary(t *testing.T) {
 	}
 }
 
-// TestLabelInitStatusColoursFollowConfig pins the colour flow. An
-// invented palette would survive every name assertion above, so colour
+// TestLabelInitStatusColoursFollowConfig pins the color flow. An
+// invented palette would survive every name assertion above, so color
 // needs its own case: a declared hex passes through, a declared name
 // resolves, and neither is the old hardcoded 1D76DB by accident.
 func TestLabelInitStatusColoursFollowConfig(t *testing.T) {
 	got := labelNames(runLabelInit(t, customLabelStatusConfig))
 
 	if c := got["status:doing"]; c != "FF00AA" {
-		t.Errorf("status:doing colour = %q, want FF00AA from the declared #FF00AA", c)
+		t.Errorf("status:doing color = %q, want FF00AA from the declared #FF00AA", c)
 	}
 	// purple resolves through the name table; the assertion is that it
-	// is neither empty nor a raw colour name reaching the forge.
+	// is neither empty nor a raw color name reaching the forge.
 	if c := got["status:in-review"]; c == "" || c == "purple" {
-		t.Errorf("status:in-review colour = %q, want a resolved hex for the declared 'purple'", c)
+		t.Errorf("status:in-review color = %q, want a resolved hex for the declared 'purple'", c)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestLabelInitPriorityOrderIsRank(t *testing.T) {
 }
 
 // TestLabelInitColoursAreHex guards the config/forge seam across every
-// vocabulary: config declares colours by NAME, a forge label needs six
+// vocabulary: config declares colors by NAME, a forge label needs six
 // hex digits, and a name leaking through unresolved makes GitHub reject
 // the label.
 func TestLabelInitColoursAreHex(t *testing.T) {
@@ -269,7 +269,7 @@ func TestLabelInitColoursAreHex(t *testing.T) {
 	} {
 		for _, l := range runLabelInit(t, cfg) {
 			if !hex.MatchString(l.color) {
-				t.Errorf("label %q colour %q is not a 6-digit hex", l.name, l.color)
+				t.Errorf("label %q color %q is not a 6-digit hex", l.name, l.color)
 			}
 		}
 	}
@@ -337,7 +337,7 @@ func TestLabelInitTypeIsNotIgnored(t *testing.T) {
 		}
 	}
 
-	// An unrecognised value must emit generic's set EXACTLY, not merely
+	// An unrecognized value must emit generic's set EXACTLY, not merely
 	// something. --type is a free string, so this is the arm a typo
 	// reaches, and it is documented as equivalent to generic.
 	if got := domainsFor("not-a-real-type"); !slices.Equal(got, generic) {
