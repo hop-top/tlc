@@ -3,12 +3,27 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/labels"
 )
 
 var projectType string
+
+// projectTypeList renders the accepted --type values for help text.
+//
+// Both the long help and the flag usage read from labels.AllProjectTypes
+// so the documented set cannot drift from the set that actually
+// produces distinct labels — the drift that let `--type python-mvc` be
+// advertised while silently emitting the generic labels.
+func projectTypeList() string {
+	names := make([]string, 0, len(labels.AllProjectTypes()))
+	for _, pt := range labels.AllProjectTypes() {
+		names = append(names, string(pt))
+	}
+	return strings.Join(names, ", ")
+}
 
 var labelCmd = &cobra.Command{
 	Use:   "label",
@@ -20,8 +35,7 @@ var labelInitCmd = &cobra.Command{
 	Short: "Auto-detect and initialize project labels",
 	Long: `Detect the project type and seed a suggested label set.
 
-Use --type to force a specific template (go-binary, react-frontend,
-python-mvc, generic).`,
+Use --type to force a specific template (` + projectTypeList() + `).`,
 	Annotations: map[string]string{
 		"kit/side-effect": "write-local",
 		"kit/idempotent":  "yes",
@@ -72,14 +86,7 @@ var labelTemplatesCmd = &cobra.Command{
 		"kit/idempotent":  "yes",
 	},
 	RunE: func(_ *cobra.Command, _ []string) error {
-		pTypes := []labels.ProjectType{
-			labels.TypeGoBinary,
-			labels.TypeReactFrontend,
-			labels.TypePythonMVC,
-			labels.TypeGeneric,
-		}
-
-		for _, pt := range pTypes {
+		for _, pt := range labels.AllProjectTypes() {
 			fmt.Printf("[%s]\n", pt)
 			for _, l := range labels.GetTemplates(pt) {
 				fmt.Printf("  - %s\n", l.Name)
@@ -91,7 +98,7 @@ var labelTemplatesCmd = &cobra.Command{
 }
 
 func init() {
-	labelInitCmd.Flags().StringVar(&projectType, "type", "", "Force project type")
+	labelInitCmd.Flags().StringVar(&projectType, "type", "", "Force project type ("+projectTypeList()+")")
 
 	labelCmd.AddCommand(labelInitCmd)
 	labelCmd.AddCommand(labelListCmd)

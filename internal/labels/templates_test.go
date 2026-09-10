@@ -1,21 +1,15 @@
 package labels
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
-// allProjectTypes is every type `label init --type` accepts plus the
-// detector's fallbacks, so a case that only holds for go-binary cannot
-// pass by accident.
-var allProjectTypes = []ProjectType{
-	TypeGoBinary,
-	TypeGoSocket,
-	TypePythonMVC,
-	TypeReactFrontend,
-	TypeMicroservices,
-	TypeGeneric,
-}
+// allProjectTypes is every type `label init --type` documents plus an
+// unrecognised one, so a case that only holds for go-binary cannot pass
+// by accident and the free-string fallback stays covered.
+var allProjectTypes = append(AllProjectTypes(), ProjectType("not-a-real-type"))
 
 // TestNoBareLabels is the drift regression, stated as the property the
 // sync plugins actually enforce rather than as a list of names.
@@ -164,6 +158,114 @@ func TestDomainSetsUnchanged(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestDomainSetsPerType pins the domain set of every advertised type,
+// exactly — not as a subset. TestDomainSetsUnchanged above only asserts
+// the wanted names are PRESENT, which a type falling through to
+// `default` can satisfy by accident: generic's set is
+// {domain:core, domain:api}, so a "want domain:api" case passes for a
+// type that produced nothing of its own. Comparing the whole set is what
+// makes the phantom visible.
+func TestDomainSetsPerType(t *testing.T) {
+	want := map[ProjectType][]string{
+		TypeGoBinary:      {"domain:cli", "domain:core", "domain:config", "domain:io"},
+		TypeReactFrontend: {"domain:frontend", "domain:components", "domain:hooks"},
+		TypePythonMVC:     {"domain:models", "domain:views", "domain:api", "domain:migrations"},
+		TypeGeneric:       {"domain:core", "domain:api"},
+	}
+	for pt, w := range want {
+		got := domainsOf(GetTemplates(pt))
+		if !slices.Equal(got, w) {
+			t.Errorf("%s domains = %v, want %v", pt, got, w)
+		}
+	}
+}
+
+// TestEveryAdvertisedTypeIsDistinct is the defect, stated as the rule
+// that was broken rather than as a list of names.
+//
+// `label init --type X` prints "Detected project type: X" and then the
+// labels, so a type that falls through to `default` reports the user's
+// choice back to them while ignoring it. There is no output that
+// distinguishes "python-mvc has these domains" from "python-mvc was not
+// recognised" — which is why an advertised type producing generic's set
+// is worse than no such type at all.
+//
+// Generic is excluded because generic IS the default set.
+func TestEveryAdvertisedTypeIsDistinct(t *testing.T) {
+	generic := domainsOf(GetTemplates(TypeGeneric))
+	for _, pt := range AllProjectTypes() {
+		if pt == TypeGeneric {
+			continue
+		}
+		if got := domainsOf(GetTemplates(pt)); slices.Equal(got, generic) {
+			t.Errorf("--type %s produces generic's domains %v; it is advertised but falls through to default", pt, got)
+		}
+	}
+}
+
+// TestAllProjectTypesHaveOwnCase closes the gap in the other direction:
+// AllProjectTypes drives the help text and `label templates`, so a type
+// added there without a switch case would re-create the phantom. Every
+// listed type must contribute at least one domain no other listed type
+// has, which no `default` fallthrough can satisfy.
+//
+// Generic is exempt, and not as a convenience: its set is deliberately
+// the common denominator — `domain:core` is shared with go-binary and
+// `domain:api` with python-mvc — because generic names the shape we
+// know nothing else about. A unique label there would be a claim about
+// an unknown project.
+func TestAllProjectTypesHaveOwnCase(t *testing.T) {
+	counts := map[string]int{}
+	for _, pt := range AllProjectTypes() {
+		for _, d := range domainsOf(GetTemplates(pt)) {
+			counts[d]++
+		}
+	}
+	for _, pt := range AllProjectTypes() {
+		if pt == TypeGeneric {
+			continue
+		}
+		unique := false
+		for _, d := range domainsOf(GetTemplates(pt)) {
+			if counts[d] == 1 {
+				unique = true
+				break
+			}
+		}
+		if !unique {
+			t.Errorf("%s has no domain of its own; it shares every label with another type", pt)
+		}
+	}
+}
+
+// TestSharedAxesSurviveOnEveryType guards the axis generation that
+// already landed: the domain work must not disturb type/priority/effort/
+// status, which are generated rather than switched on project type.
+func TestSharedAxesSurviveOnEveryType(t *testing.T) {
+	for _, pt := range allProjectTypes {
+		got := namesOf(GetTemplates(pt))
+		for _, w := range []string{
+			"type:feat", "type:breaking", "priority:critical",
+			"effort:xs", "effort:xl", "status:in-progress",
+		} {
+			if !got[w] {
+				t.Errorf("%s: missing generated axis label %q", pt, w)
+			}
+		}
+	}
+}
+
+// domainsOf returns just the `domain:*` labels, in template order.
+func domainsOf(ls []Label) []string {
+	var out []string
+	for _, l := range ls {
+		if strings.HasPrefix(l.Name, "domain:") {
+			out = append(out, l.Name)
+		}
+	}
+	return out
 }
 
 func namesOf(ls []Label) map[string]bool {

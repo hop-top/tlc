@@ -16,6 +16,8 @@ package cli
 
 import (
 	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -282,6 +284,7 @@ func TestLabelInitDomainSetsPerType(t *testing.T) {
 	cases := map[string][]string{
 		"go-binary":      {"domain:cli", "domain:core", "domain:config", "domain:io"},
 		"react-frontend": {"domain:frontend", "domain:components", "domain:hooks"},
+		"python-mvc":     {"domain:models", "domain:views", "domain:api", "domain:migrations"},
 		"generic":        {"domain:core", "domain:api"},
 	}
 	for pType, want := range cases {
@@ -295,6 +298,61 @@ func TestLabelInitDomainSetsPerType(t *testing.T) {
 	}
 }
 
+// TestLabelInitTypeIsNotIgnored is the phantom-type defect through the
+// real binary.
+//
+// `label init --type X` echoes X back in its own header, so a type that
+// fell through to the default arm looked indistinguishable from a type
+// that worked: `--type python-mvc` printed "Detected project type:
+// python-mvc" above the generic labels. Comparing each type's domain
+// set against generic's is the only check that catches it — asserting
+// the presence of individual names cannot, because the generic set is a
+// subset of what several types legitimately emit.
+func TestLabelInitTypeIsNotIgnored(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, defaultLabelConfig)
+
+	domainsFor := func(pType string) []string {
+		out := runTLCOK(t, bin, home, env, "label", "init", "--type", pType)
+		var got []string
+		for name := range labelNames(parseLabelInit(out)) {
+			if strings.HasPrefix(name, "domain:") {
+				got = append(got, name)
+			}
+		}
+		sort.Strings(got)
+		return got
+	}
+
+	generic := domainsFor("generic")
+	for _, pType := range []string{"go-binary", "react-frontend", "python-mvc"} {
+		if got := domainsFor(pType); slices.Equal(got, generic) {
+			t.Errorf("--type %s emitted generic's domains %v; the flag was accepted and ignored", pType, got)
+		}
+	}
+}
+
+// TestLabelInitHelpNamesOnlyWorkingTypes is acceptance in the user's
+// terms: the help text is where a user learns which values --type
+// takes, so a name there that produces generic output is the whole
+// defect restated. go-socket and microservices were never in the help,
+// but they were declared constants, and the constants are what a future
+// contributor copies into it.
+func TestLabelInitHelpNamesOnlyWorkingTypes(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, defaultLabelConfig)
+	out := runTLCOK(t, bin, home, env, "label", "init", "--help")
+
+	for _, want := range []string{"go-binary", "react-frontend", "python-mvc", "generic"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("label init --help does not name working type %q:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"go-socket", "microservices"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("label init --help still advertises removed type %q:\n%s", gone, out)
+		}
+	}
+}
+
 // TestLabelTemplatesListsEveryType keeps the second surface coherent:
 // `label templates` enumerates the built-in templates, and generation
 // must not break its grouping or drop a type.
@@ -304,11 +362,19 @@ func TestLabelTemplatesListsEveryType(t *testing.T) {
 
 	for _, want := range []string{
 		"[go-binary]", "[react-frontend]", "[python-mvc]", "[generic]",
-		"domain:cli", "domain:frontend", "type:feat", "effort:xl",
+		"domain:cli", "domain:frontend", "domain:models", "domain:migrations",
+		"type:feat", "effort:xl",
 		"priority:critical", "status:in-progress",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("label templates output missing %q:\n%s", want, out)
+		}
+	}
+	// The listing is the other place a phantom surfaces: a type printed
+	// here with generic's labels under it reads as a real template.
+	for _, gone := range []string{"[go-socket]", "[microservices]"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("label templates still lists removed type %q:\n%s", gone, out)
 		}
 	}
 }
