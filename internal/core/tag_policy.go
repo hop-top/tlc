@@ -27,6 +27,26 @@ import (
 	"hop.top/tlc/internal/config"
 )
 
+// dimensionAxes names the four `dimension:value` axes, in the order
+// internal/labels emits them.
+//
+// One declaration of WHICH axes exist, separate from what each one
+// CONTAINS. The contents are already derived — three of the four from
+// the user's config — but the set of axis names was retyped at every
+// consumer, and the TLS parser is where that cost showed up: its
+// prefix list named `effort:` and `prio:` and had never learned
+// `type:`, `status:` or `priority:`, so a `type:feat` token written by
+// tlc's own `label init` vocabulary landed in the task title instead of
+// on the task. A consumer that derives the set from here cannot go deaf
+// to a fifth axis the way that list did.
+var dimensionAxes = []string{"type", "priority", "effort", "status"}
+
+// DimensionAxes returns the axis names, without the trailing colon.
+// The returned slice is a copy.
+func DimensionAxes() []string {
+	return append([]string(nil), dimensionAxes...)
+}
+
 // wildcardSuffix is the only wildcard shape `task.tags.allowed` accepts:
 // a dimension prefix followed by `:*`.
 //
