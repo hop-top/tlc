@@ -12,6 +12,7 @@ import (
 
 const (
 	githubStateClosed = "closed"
+	githubStateOpen   = "open"
 )
 
 // Task represents the TLC task structure as used by plugins.
@@ -79,8 +80,15 @@ var blockedByRe = regexp.MustCompile(`(?i)(?:blocked by|depends on)\s+#(\d+)`)
 // "Depends on #N" references (used to strip stale header lines on push).
 var blockedByLineRe = regexp.MustCompile(`(?im)^(?:blocked by|depends on)\s+#\d+\s*$`)
 
-// MapGitHubIssueToTask maps a GitHub issue to a TLC task.
+// MapGitHubIssueToTask maps a GitHub issue to a TLC task using the
+// built-in vocabulary.
 func MapGitHubIssueToTask(issue *github.Issue) *Task {
+	return MapGitHubIssueToTaskWith(issue, nil)
+}
+
+// MapGitHubIssueToTaskWith is MapGitHubIssueToTask against the vocabulary
+// the host sent.
+func MapGitHubIssueToTaskWith(issue *github.Issue, vocab *Vocabulary) *Task {
 	number := issue.GetNumber()
 	title := issue.GetTitle()
 	state := issue.GetState()
@@ -111,10 +119,10 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 	}
 
 	// Classify labels (also detects status labels in single pass)
-	hasInProgress, hasBlocked := mapLabelsToTask(issue.Labels, task)
+	activeStatus, hasBlocked := classifyLabels(issue.Labels, task, vocab)
 
 	// Determine status from state + labels + state_reason
-	mapStatusFromIssue(issue, state, hasInProgress, hasBlocked, task)
+	mapStatusFromIssueWith(issue, state, activeStatus, hasBlocked, task, vocab)
 
 	// Parse body for blocked-by references
 	parseBlockedBy(body, task)
@@ -148,31 +156,48 @@ func MapGitHubIssueToTask(issue *github.Issue) *Task {
 // mapLabelsToTask classifies issue labels into priority, effort, tags, and
 // detects status labels. Returns status label flags so callers avoid a
 // second iteration over labels.
+//
+// Retained as the built-in-vocabulary entry point so existing callers and
+// tests keep working; the vocabulary-aware form is mapLabelsToTaskWith.
 func mapLabelsToTask(labels []*github.Label, task *Task) (hasInProgress, hasBlocked bool) {
+	return mapLabelsToTaskWith(labels, task, nil)
+}
+
+// mapLabelsToTaskWith is mapLabelsToTask against an explicit vocabulary.
+// A nil vocab falls back to the built-in tables, so this is a superset of
+// the previous behavior rather than a change to it.
+func mapLabelsToTaskWith(labels []*github.Label, task *Task, vocab *Vocabulary) (hasInProgress, hasBlocked bool) {
+	active, blocked := classifyLabels(labels, task, vocab)
+	return active != "", blocked
+}
+
+// classifyLabels is mapLabelsToTaskWith returning the active status NAME
+// instead of a flag, for callers that must write the status through.
+func classifyLabels(labels []*github.Label, task *Task, vocab *Vocabulary) (activeStatus string, hasBlocked bool) {
 	var tags []string
 	for _, label := range labels {
 		name := label.GetName()
 		nameLower := strings.ToLower(name)
 
 		// Priority labels
-		if p, ok := labelToPriority[nameLower]; ok {
+		if p, ok := vocab.priorityFor(nameLower); ok {
 			task.Priority = p
 			continue
 		}
 
 		// Effort labels
-		if e, ok := labelToEffort[nameLower]; ok {
+		if e, ok := vocab.effortFor(nameLower); ok {
 			task.Effort = e
 			continue
 		}
 
 		// Status labels — capture flags, don't add to tags
-		if nameLower == "status:blocked" {
+		if nameLower == blockedLabel {
 			hasBlocked = true
 			continue
 		}
-		if nameLower == "status:in-progress" {
-			hasInProgress = true
+		if s, ok := vocab.activeStatusFor(nameLower); ok {
+			activeStatus = s
 			continue
 		}
 		if strings.HasPrefix(nameLower, "status:") {
@@ -190,13 +215,28 @@ func mapLabelsToTask(labels []*github.Label, task *Task) (hasInProgress, hasBloc
 	if len(tags) > 0 {
 		task.Tags = tags
 	}
-	return hasInProgress, hasBlocked
+	return activeStatus, hasBlocked
 }
 
 // mapStatusFromIssue determines the task status from issue state, label flags,
 // and state_reason. The hasInProgress/hasBlocked flags are provided by
 // mapLabelsToTask to avoid a second label iteration.
 func mapStatusFromIssue(issue *github.Issue, state string, hasInProgress, hasBlocked bool, task *Task) {
+	active := ""
+	if hasInProgress {
+		active = builtinActiveStatus
+	}
+	mapStatusFromIssueWith(issue, state, active, hasBlocked, task, nil)
+}
+
+// mapStatusFromIssueWith is mapStatusFromIssue carrying the active status
+// NAME rather than a bare flag.
+//
+// The name matters: an open issue labeled status:doing under a DOING
+// vocabulary must pull back as DOING. Collapsing that to a boolean and
+// then hardcoding IN_PROGRESS would round-trip the label correctly and
+// still write the wrong status into the store.
+func mapStatusFromIssueWith(issue *github.Issue, state, activeStatus string, hasBlocked bool, task *Task, vocab *Vocabulary) {
 	if state == githubStateClosed {
 		reason := issue.GetStateReason()
 		if reason == "not_planned" {
@@ -207,15 +247,20 @@ func mapStatusFromIssue(issue *github.Issue, state string, hasInProgress, hasBlo
 		return
 	}
 
+	initial := builtinInitialStatus
+	if vocab != nil && vocab.InitialStatus != "" {
+		initial = vocab.InitialStatus
+	}
+
 	switch {
 	case hasBlocked:
-		task.Status = "TODO"
+		task.Status = initial
 		reason := "blocked"
 		task.BlockedReason = &reason
-	case hasInProgress:
-		task.Status = "IN_PROGRESS"
+	case activeStatus != "":
+		task.Status = activeStatus
 	default:
-		task.Status = "TODO"
+		task.Status = initial
 	}
 }
 
@@ -257,12 +302,19 @@ func parseDueFromBody(body string) *time.Time {
 	return &t
 }
 
-// MapTaskToGitHubIssueRequest maps a TLC task to a GitHub issue request.
+// MapTaskToGitHubIssueRequest maps a TLC task to a GitHub issue request
+// using the built-in vocabulary.
 func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
-	state, stateReason := mapTaskStatusToGitHub(task)
+	return MapTaskToGitHubIssueRequestWith(task, nil)
+}
+
+// MapTaskToGitHubIssueRequestWith is MapTaskToGitHubIssueRequest against
+// the vocabulary the host sent.
+func MapTaskToGitHubIssueRequestWith(task *Task, vocab *Vocabulary) *github.IssueRequest {
+	state, stateReason := mapTaskStatusToGitHubWith(task, vocab)
 
 	// Build labels list
-	labels := buildPushLabels(task)
+	labels := buildPushLabelsWith(task, vocab)
 
 	// Build body: prepend blocked-by lines if present, then original description
 	body := buildPushBody(task)
@@ -290,35 +342,62 @@ func MapTaskToGitHubIssueRequest(task *Task) *github.IssueRequest {
 
 // mapTaskStatusToGitHub returns the GitHub state and state_reason for a task.
 func mapTaskStatusToGitHub(task *Task) (state, stateReason string) {
+	return mapTaskStatusToGitHubWith(task, nil)
+}
+
+// mapTaskStatusToGitHubWith closes an issue for any status the vocabulary
+// calls terminal, not only the two built-in names.
+//
+// Without this a DELIVERED/ABANDONED vocabulary would push every task as
+// an open issue, and the open/closed bit — which the status axis relies
+// on to carry terminality without a label — would stop meaning anything.
+func mapTaskStatusToGitHubWith(task *Task, vocab *Vocabulary) (state, stateReason string) {
+	if vocab != nil && len(vocab.TerminalStatuses) > 0 {
+		if reason, ok := vocab.TerminalStatuses[task.Status]; ok {
+			return githubStateClosed, reason
+		}
+		return githubStateOpen, ""
+	}
+
 	switch task.Status {
 	case "DONE":
-		return "closed", "completed"
+		return githubStateClosed, "completed"
 	case "SKIPPED":
-		return "closed", "not_planned"
+		return githubStateClosed, "not_planned"
 	default:
-		return "open", ""
+		return githubStateOpen, ""
 	}
 }
 
-// buildPushLabels constructs the label list for a GitHub issue from a task.
+// buildPushLabels constructs the label list for a GitHub issue from a task,
+// using the built-in vocabulary.
 func buildPushLabels(task *Task) []string {
+	return buildPushLabelsWith(task, nil)
+}
+
+// buildPushLabelsWith is buildPushLabels against an explicit vocabulary.
+// A nil vocab falls back to the built-in tables and emits byte-identical
+// labels to the version this replaced.
+func buildPushLabelsWith(task *Task, vocab *Vocabulary) []string {
 	var labels []string
 
-	// Status label
+	// Status label. Blocked wins over the status axis because it is an
+	// orthogonal flag, not a member of the vocabulary.
 	if task.BlockedReason != nil && *task.BlockedReason != "" {
-		labels = append(labels, "status:blocked")
-	} else if task.Status == "IN_PROGRESS" {
-		labels = append(labels, "status:in-progress")
+		labels = append(labels, blockedLabel)
+	} else if l, ok := vocab.statusLabel(task.Status); ok {
+		labels = append(labels, l)
 	}
-	// TODO, DONE, SKIPPED: no status:* label
+	// Terminal and initial statuses get no status:* label: open/closed
+	// already says it.
 
 	// Priority label
-	if l, ok := priorityToLabel[task.Priority]; ok {
+	if l, ok := vocab.priorityLabel(task.Priority); ok {
 		labels = append(labels, l)
 	}
 
 	// Effort label
-	if l, ok := effortToLabel[task.Effort]; ok {
+	if l, ok := vocab.effortLabel(task.Effort); ok {
 		labels = append(labels, l)
 	}
 

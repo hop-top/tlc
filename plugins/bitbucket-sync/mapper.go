@@ -111,14 +111,20 @@ func embedTLCUIDFooter(body, taskID string) string {
 
 // MapBitbucketIssueToTask maps a Bitbucket issue to a TLC task.
 func MapBitbucketIssueToTask(issue *BitbucketIssue, components []string) *Task {
+	return MapBitbucketIssueToTaskWith(issue, components, nil)
+}
+
+// MapBitbucketIssueToTaskWith is MapBitbucketIssueToTask against the
+// vocabulary the host sent.
+func MapBitbucketIssueToTaskWith(issue *BitbucketIssue, components []string, vocab *Vocabulary) *Task {
 	body := ""
 	if issue.Content != nil {
 		body = issue.Content.Raw
 	}
 
-	status := mapBitbucketStateToStatus(issue.State, components)
+	status := mapBitbucketStateToStatusWith(issue.State, components, vocab)
 	blockedReason := ""
-	if status == "TODO" && containsComponent(components, "status:blocked") {
+	if status == vocab.initialStatus() && containsComponent(components, blockedLabel) {
 		blockedReason = "blocked (from Bitbucket status:blocked label)"
 	}
 
@@ -155,7 +161,7 @@ func MapBitbucketIssueToTask(issue *BitbucketIssue, components []string) *Task {
 	task.Priority = mapBitbucketPriority(issue.Priority)
 
 	// Map components as structured labels
-	mapComponentsToTask(task, components)
+	mapComponentsToTaskWith(task, components, vocab)
 
 	// Parse body for "blocked by #N"
 	if matches := blockedByRegex.FindStringSubmatch(body); len(matches) > 1 {
@@ -177,21 +183,30 @@ func MapBitbucketIssueToTask(issue *BitbucketIssue, components []string) *Task {
 // mapBitbucketStateToStatus converts Bitbucket issue state + component labels
 // to a TLC status.
 func mapBitbucketStateToStatus(state string, components []string) string {
+	return mapBitbucketStateToStatusWith(state, components, nil)
+}
+
+// mapBitbucketStateToStatusWith resolves the status through the
+// vocabulary, so a renamed active or terminal status survives the trip.
+func mapBitbucketStateToStatusWith(state string, components []string, vocab *Vocabulary) string {
+	initial := vocab.initialStatus()
 	switch state {
 	case "new":
-		return "TODO"
+		return initial
 	case "open":
-		if containsComponent(components, "status:in-progress") {
-			return "IN_PROGRESS"
+		for _, c := range components {
+			if st, ok := vocab.activeStatusFor(strings.ToLower(c)); ok {
+				return st
+			}
 		}
-		// status:blocked stays TODO but sets BlockedReason
-		return "TODO"
+		// blocked stays in the initial status but sets BlockedReason
+		return initial
 	case "resolved", "closed":
-		return "DONE"
+		return vocab.terminalFor("completed")
 	case "wontfix", "invalid":
-		return "SKIPPED"
+		return vocab.terminalFor("not_planned")
 	default:
-		return "TODO"
+		return initial
 	}
 }
 
@@ -215,6 +230,12 @@ func mapBitbucketPriority(bbPriority string) string {
 // priority:* -> Priority, effort:* -> Effort, dimension:scope -> Tags.
 // Flat labels (no colon) are ignored.
 func mapComponentsToTask(task *Task, components []string) {
+	mapComponentsToTaskWith(task, components, nil)
+}
+
+// mapComponentsToTaskWith is mapComponentsToTask against the vocabulary
+// the host sent.
+func mapComponentsToTaskWith(task *Task, components []string, vocab *Vocabulary) {
 	for _, comp := range components {
 		parts := strings.SplitN(comp, ":", 2)
 		if len(parts) != 2 {
@@ -224,12 +245,17 @@ func mapComponentsToTask(task *Task, components []string) {
 
 		switch prefix {
 		case "priority":
-			mapped := mapLabelPriority(value)
-			if mapped != "" {
+			if mapped, ok := vocab.priorityFor(strings.ToLower(comp)); ok {
+				task.Priority = mapped
+			} else if mapped := mapLabelPriority(value); mapped != "" {
 				task.Priority = mapped
 			}
 		case "effort":
-			task.Effort = strings.ToUpper(value)
+			if mapped, ok := vocab.effortFor(strings.ToLower(comp)); ok {
+				task.Effort = mapped
+			} else {
+				task.Effort = strings.ToUpper(value)
+			}
 		case "status":
 			// handled in status mapping, skip
 		default:
@@ -257,7 +283,13 @@ func mapLabelPriority(value string) string {
 
 // MapTaskToBitbucketIssue maps a TLC task to a Bitbucket issue request.
 func MapTaskToBitbucketIssue(task *Task) *BitbucketIssueRequest {
-	state := mapStatusToBitbucketState(task.Status)
+	return MapTaskToBitbucketIssueWith(task, nil)
+}
+
+// MapTaskToBitbucketIssueWith is MapTaskToBitbucketIssue against the
+// vocabulary the host sent.
+func MapTaskToBitbucketIssueWith(task *Task, vocab *Vocabulary) *BitbucketIssueRequest {
+	state := mapStatusToBitbucketStateWith(task.Status, vocab)
 	bbPriority := mapTLCPriorityToBitbucket(task.Priority)
 
 	body := task.Description
@@ -299,21 +331,18 @@ func MapTaskToBitbucketIssue(task *Task) *BitbucketIssueRequest {
 
 	// Build component label from task fields for BB component field
 	var labels []string
-	if task.Priority != "" {
-		labels = append(labels, "priority:"+strings.ToLower(task.Priority))
+	if l, ok := vocab.priorityLabel(task.Priority); ok {
+		labels = append(labels, l)
 	}
-	if task.Effort != "" {
-		labels = append(labels, "effort:"+strings.ToLower(task.Effort))
+	if l, ok := vocab.effortLabel(task.Effort); ok {
+		labels = append(labels, l)
 	}
-	for _, tag := range task.Tags {
-		labels = append(labels, tag)
-	}
-	switch task.Status {
-	case "IN_PROGRESS":
-		labels = append(labels, "status:in-progress")
+	labels = append(labels, task.Tags...)
+	if l, ok := vocab.statusLabel(task.Status); ok {
+		labels = append(labels, l)
 	}
 	if task.BlockedReason != "" {
-		labels = append(labels, "status:blocked")
+		labels = append(labels, blockedLabel)
 	}
 
 	// Store labels as comma-separated BB component (BB's only label-like field)
@@ -328,18 +357,25 @@ func MapTaskToBitbucketIssue(task *Task) *BitbucketIssueRequest {
 
 // mapStatusToBitbucketState converts TLC status to Bitbucket issue state.
 func mapStatusToBitbucketState(status string) string {
-	switch status {
-	case "TODO":
-		return "open"
-	case "IN_PROGRESS":
-		return "open"
-	case "DONE":
+	return mapStatusToBitbucketStateWith(status, nil)
+}
+
+// mapStatusToBitbucketStateWith closes an issue for any status the
+// vocabulary calls terminal, not only the two built-in names.
+func mapStatusToBitbucketStateWith(status string, vocab *Vocabulary) string {
+	if reason, terminal := vocab.isTerminal(status); terminal {
+		if reason == "not_planned" {
+			return "invalid"
+		}
 		return "resolved"
-	case "SKIPPED":
-		return "invalid"
-	default:
-		return "new"
 	}
+	if status == vocab.initialStatus() {
+		return "open"
+	}
+	if _, ok := vocab.statusLabel(status); ok {
+		return "open"
+	}
+	return "new"
 }
 
 // mapTLCPriorityToBitbucket converts TLC priority to Bitbucket priority.
