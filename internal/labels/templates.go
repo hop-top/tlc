@@ -107,9 +107,18 @@ var typeLabels = []Label{
 // The values round-trip: github-sync's mapLabelsToTask sends any
 // unrecognised `dimension:value` label to task tags, so a `needs:*`
 // label pulled from a forge survives as a tag rather than being dropped.
+//
+// The swatches moved off the priority axis's. `needs:repro` shared
+// D93F0B with priority:high and status:blocked, and `needs:triage`
+// shared FBCA04 with priority:medium — and `needs:*` is read on the same
+// issue as both, so each pair rendered as one badge. Priority and effort
+// could not give way (their colors are pinned; `sync push` re-colors
+// live issues), so `needs:*` moved: triage to a darker gold, repro to a
+// muted brown that reads as a question rather than as an alarm, which is
+// what "cannot reproduce" actually is.
 var needsLabels = []Label{
-	{Name: "needs:triage", Color: "FBCA04", Description: "Unreviewed — needs a first pass"},
-	{Name: "needs:repro", Color: "D93F0B", Description: "Cannot reproduce — needs steps or a case"},
+	{Name: "needs:triage", Color: "B08800", Description: "Unreviewed — needs a first pass"},
+	{Name: "needs:repro", Color: "8E6A3F", Description: "Cannot reproduce — needs steps or a case"},
 	{Name: "needs:decision", Color: "5319E7", Description: "Blocked on a human decision, not on a task"},
 }
 
@@ -124,6 +133,19 @@ var needsLabels = []Label{
 // done: the old literals named P0-P3's aliases and a fixed
 // TODO/IN_PROGRESS/DONE/SKIPPED regardless of what the user declared.
 func GetTemplates(projectType ProjectType) []Label {
+	out, _ := GetTemplatesWithConflicts(projectType)
+	return out
+}
+
+// GetTemplatesWithConflicts is GetTemplates plus the label names that
+// were generated more than once with disagreeing colors.
+//
+// The conflict list exists because the alternative to reporting a
+// duplicate is failing on one, and failing would leave `label init`
+// refusing to seed anything at all (see dedupeByName). Callers that
+// render to a user — `label init` — print it; callers that only need
+// the set use GetTemplates and ignore it.
+func GetTemplatesWithConflicts(projectType ProjectType) ([]Label, []LabelConflict) {
 	generated := generatedAxes()
 	common := make([]Label, 0, len(typeLabels)+len(generated)+len(needsLabels))
 	common = append(common, typeLabels...)
@@ -321,8 +343,8 @@ func GetTemplates(projectType ProjectType) []Label {
 		// and adding to generic while forgetting the copy would give an
 		// unknown type a SMALLER set than the generic it is supposed to
 		// be identical to.
-		return GetTemplates(TypeGeneric)
+		return GetTemplatesWithConflicts(TypeGeneric)
 	}
 
-	return append(common, domains...)
+	return dedupeByName(append(common, domains...))
 }
