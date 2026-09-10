@@ -456,3 +456,82 @@ func assertEquals(t *testing.T, field, got, want string) {
 		t.Errorf("%s: got %q, want %q", field, got, want)
 	}
 }
+
+// TestParseCreateJSON_DefaultStatusIsConfigured pins the create DEFAULT
+// to the same resolver `tlc task create` uses.
+//
+// The validation gate was moved onto core.ValidTaskStatus, but the
+// default it feeds was left as a literal "TODO". A project declaring
+// OPEN/DOING/SHIPPED therefore got a file drop that wrote a status
+// outside its own vocabulary, which the state machine then had no
+// transition out of — the same "CLI accepts, inbox disagrees" split the
+// gate was fixed to close, one line lower.
+func TestParseCreateJSON_DefaultStatusIsConfigured(t *testing.T) {
+	withInitialStatus(t, "OPEN", "DOING", "SHIPPED")
+
+	data := []byte(`{"title": "no status given"}`)
+	r, err := ParseCreateJSON(data)
+	if err != nil {
+		t.Fatalf("create with no status rejected: %v", err)
+	}
+	assertEquals(t, "Status", r.Status, "OPEN")
+}
+
+// TestParseCreateMarkdown_DefaultStatusIsConfigured covers the second
+// intake shape. Both parsers call applyCreateDefaults, so fixing one and
+// not the other would leave a markdown drop writing the literal.
+func TestParseCreateMarkdown_DefaultStatusIsConfigured(t *testing.T) {
+	withInitialStatus(t, "OPEN", "DOING", "SHIPPED")
+
+	data := []byte("---\ntitle: no status given\n---\nBody.\n")
+	r, err := ParseCreateMarkdown(data)
+	if err != nil {
+		t.Fatalf("markdown create with no status rejected: %v", err)
+	}
+	assertEquals(t, "Status", r.Status, "OPEN")
+}
+
+// TestParseCreateJSON_DefaultStatusFallsBackToBuiltin pins the no-config
+// path. A library consumer that registers no provider must still get a
+// usable status rather than an empty one, so the built-in stays as the
+// fallback rather than the literal being merely deleted.
+func TestParseCreateJSON_DefaultStatusFallsBackToBuiltin(t *testing.T) {
+	core.SetTaskConfigProvider(nil)
+	core.ResetDefaultWorkflow()
+	t.Cleanup(core.ResetDefaultWorkflow)
+
+	data := []byte(`{"title": "no status, no config"}`)
+	r, err := ParseCreateJSON(data)
+	if err != nil {
+		t.Fatalf("create with no status rejected: %v", err)
+	}
+	if r.Status == "" {
+		t.Fatal("default status resolved to empty")
+	}
+	if !core.ValidTaskStatus(core.TaskStatus(r.Status)) {
+		t.Errorf("default status %q is not in the vocabulary", r.Status)
+	}
+}
+
+// withInitialStatus declares a status vocabulary whose FIRST entry
+// carries the initial role, so the configured default is a name the
+// built-in set does not contain.
+func withInitialStatus(t *testing.T, names ...string) {
+	t.Helper()
+	defs := make([]config.StatusDefinition, 0, len(names))
+	for i, n := range names {
+		d := config.StatusDefinition{Name: n}
+		if i == 0 {
+			d.Role = config.RoleInitial
+		}
+		defs = append(defs, d)
+	}
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{Statuses: defs}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+}

@@ -416,3 +416,66 @@ func containsTag(haystack []string, needle string) bool {
 	}
 	return false
 }
+
+// TestClosedTagPolicyAdmitsSeededNeedsAndDomain covers the tags
+// internal/labels seeds for EVERY project type but the composition did
+// not name.
+//
+// `label init` writes `needs:triage` and a `domain:*` set to the forge,
+// and github-sync's mapLabelsToTask sends both back as task tags. A
+// closed policy that omitted them stripped a tag tlc had just told the
+// forge to use — the label survived the mapper's colon check and died one
+// layer later, at this gate.
+func TestClosedTagPolicyAdmitsSeededNeedsAndDomain(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return closedTagConfig("storage")
+	})
+
+	// Driven off the axis itself rather than a retyped copy: a test that
+	// restated the three values would keep passing if the axis lost one.
+	admitted := append([]string(nil), needsTags...)
+	admitted = append(admitted,
+		// `domain:*` is per project TYPE, which core cannot see, so the
+		// axis is opened rather than enumerated. Two values from
+		// different templates, to pin that it is the namespace that is
+		// open and not one template's list.
+		"domain:cli", "domain:terraform",
+	)
+	for _, tag := range admitted {
+		if err := ValidateTags([]string{tag}); err != nil {
+			t.Errorf("seeded label tag %q was rejected: %v", tag, err)
+		}
+	}
+
+	// The opener widens exactly one namespace and no further: a bare
+	// `domain` with nothing after the colon is not a value.
+	if err := ValidateTags([]string{"domain"}); err == nil {
+		t.Error("bare \"domain\" was admitted; the opener is not a value")
+	}
+	if err := ValidateTags([]string{"needs:sleep"}); err == nil {
+		t.Error("needs:* is a literal set, not an open namespace")
+	}
+}
+
+// TestSuggestedTagsOffersSeededNeedsWithoutDomainOpener pins the chooser
+// half of the same composition. `needs:triage` is a value a user should
+// be offered; `domain:*` is an opener, and offering the literal string
+// would seed a tag the policy that declared it rejects.
+func TestSuggestedTagsOffersSeededNeedsWithoutDomainOpener(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return closedTagConfig()
+	})
+
+	suggested := SuggestedTags()
+	joined := strings.Join(suggested, " ")
+	for _, want := range needsTags {
+		if !strings.Contains(joined, want) {
+			t.Errorf("SuggestedTags omitted %q: %v", want, suggested)
+		}
+	}
+	for _, tag := range suggested {
+		if tag == domainTagPrefix {
+			t.Errorf("SuggestedTags offered the wildcard opener %q", tag)
+		}
+	}
+}

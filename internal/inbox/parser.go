@@ -132,11 +132,31 @@ func validateCreate(r *ParseResult) error {
 	return nil
 }
 
-// applyCreateDefaults sets Status to "TODO" when not specified.
+// applyCreateDefaults resolves the status a drop that nominated none
+// lands in.
+//
+// Through core, for the same reason validateCreate above reads
+// core.ValidTaskStatus rather than its own map: `tlc task create`
+// resolves its default through this call, and a literal here would put
+// the two intake paths back into disagreement one line below the gate
+// that was fixed to end it. A project declaring OPEN/DOING/SHIPPED got a
+// file drop whose status was outside its own vocabulary — and, having
+// never been declared, one the state machine had no transition out of.
+//
+// The built-in is the fallback rather than the literal simply being
+// deleted. ValidTaskStatus admits "" by contract, so an unresolved
+// default would pass validation and land a task with no status at all;
+// a library consumer that registers no config provider still needs a
+// usable one.
 func applyCreateDefaults(r *ParseResult) {
-	if r.Status == "" {
-		r.Status = "TODO"
+	if r.Status != "" {
+		return
 	}
+	if configured := core.ConfiguredInitialTaskStatus(); configured != "" {
+		r.Status = configured
+		return
+	}
+	r.Status = string(core.StatusTodo)
 }
 
 // validateTransition checks that id and status are non-empty.

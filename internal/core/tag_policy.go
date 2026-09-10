@@ -82,6 +82,37 @@ var commitTypeTags = []string{
 	"type:breaking",
 }
 
+// needsTags is the `needs:*` axis: the three shapes of "somebody has to
+// look at this before it is work", which internal/labels seeds on
+// `common` for every project type.
+//
+// Duplicated rather than imported for the reason given on commitTypeTags
+// — labels imports core, so the dependency cannot run the other way —
+// and it is the same KIND of axis: `needs:*` mirrors no tlc config
+// surface, so there is nothing to derive it from and nothing for it to
+// drift against except the literal in labels/templates.go.
+var needsTags = []string{
+	"needs:triage",
+	"needs:repro",
+	"needs:decision",
+}
+
+// domainTagPrefix opens the `domain:*` namespace.
+//
+// The one seeded axis that is OPENED rather than enumerated, because its
+// values are chosen per project TYPE — `domain:cli` for a Go binary,
+// `domain:terraform` for infra, `domain:tooling` for a monorepo — and
+// core cannot see the project type; only the detector that picked the
+// template can. Listing every template's values here would admit
+// `domain:k8s` in a React repo, which is a wider vocabulary than opening
+// the namespace and a far more misleading one to print in an error.
+//
+// Opening it stays within the guarantee wildcardSuffix documents: it
+// widens one namespace and cannot widen past its colon, so a config that
+// says `closed` still rejects everything outside the axes tlc itself
+// emits.
+const domainTagPrefix = "domain" + wildcardSuffix
+
 // builtinPriorityTagAlias is the rank-indexed alias the built-in
 // priorities carry on the `priority:*` axis. Mirrors
 // labels.builtinPriorityLabelValue and every sync plugin's
@@ -176,6 +207,15 @@ func buildTagVocabulary(cfg *config.TaskConfig) TagVocabulary {
 	// push and pull it, so a closed policy that rejected it would reject
 	// a tag tlc's own sync writes.
 	generated = append(generated, "status:blocked")
+	// `needs:*` and `domain:*` are seeded by `label init` for every
+	// project type, and github-sync's mapLabelsToTask sends any
+	// unrecognized `dimension:value` label straight to task tags. Omitting
+	// them meant tlc wrote a label to the forge and then rejected its own
+	// tag on the way back: `sync pull` had it stripped by filterAllowedTags
+	// or the write refused outright. The label survived the mapper's colon
+	// check and died one layer later, here.
+	generated = append(generated, needsTags...)
+	generated = append(generated, domainTagPrefix)
 
 	for _, g := range generated {
 		v.add(g)
