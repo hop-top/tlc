@@ -852,6 +852,9 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	}
 
 	statusSet := make(map[string]bool, len(t.Statuses))
+	// terminalSet feeds validateRules, which rejects rules keyed on a
+	// terminal status because the workflow engine can never reach them.
+	terminalSet := make(map[string]bool, len(t.Statuses))
 	markerSet := make(map[string]bool, len(t.Statuses))
 	hasInitial := false
 	hasActive := false
@@ -862,6 +865,9 @@ func (t *TaskConfig) ValidateWorkflow() error {
 			return fmt.Errorf("duplicate status name: %s", s.Name)
 		}
 		statusSet[s.Name] = true
+		if s.IsTerminal {
+			terminalSet[s.Name] = true
+		}
 
 		// Check duplicate TLS markers
 		if s.TLSMarker != "" {
@@ -912,7 +918,7 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	}
 
 	// Validate state machine rules reference defined statuses
-	if err := validateRules(t.StateMachine, statusSet, ""); err != nil {
+	if err := validateRules(t.StateMachine, statusSet, terminalSet, ""); err != nil {
 		return err
 	}
 
@@ -921,7 +927,7 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	// error here — and one the workflow engine would otherwise accept
 	// silently, then refuse every transition for that tag.
 	for _, tag := range slices.Sorted(maps.Keys(t.Workflows)) {
-		if err := validateRules(t.Workflows[tag].StateMachine, statusSet, tag); err != nil {
+		if err := validateRules(t.Workflows[tag].StateMachine, statusSet, terminalSet, tag); err != nil {
 			return err
 		}
 	}
@@ -1177,7 +1183,24 @@ func (t *TaskConfig) validateSchedulingKeys() error {
 // validateRules checks one rule set against the declared status names.
 // tag is the workflow override the rules came from, empty for the base
 // state machine, and only shapes the error message.
-func validateRules(def *WorkflowDefinition, statusSet map[string]bool, tag string) error {
+//
+// terminalSet names the statuses declared terminal. A rule keyed on one
+// is rejected rather than accepted-and-ignored: the workflow engine
+// refuses every transition out of a terminal status BEFORE it consults
+// the rules, so such a rule can never fire. Accepting it silently was
+// the worst of both — the user wrote a rule, validation blessed it, and
+// nothing honored it, with the runtime error pointing at `reopen`
+// rather than at the dead config line.
+//
+// Rejecting rather than honoring keeps ONE way out of a terminal
+// status. `tlc task reopen` is not merely a status change: it requires
+// --note, writes a REOPENED audit entry, and always lands on the
+// workflow's initial status. A rule-driven second path would bypass all
+// three, so a task could leave DONE with no record of why.
+//
+// Only the FROM side is checked. Terminal statuses stay legal as
+// targets, which is how a task reaches DONE at all.
+func validateRules(def *WorkflowDefinition, statusSet, terminalSet map[string]bool, tag string) error {
 	if def == nil {
 		return nil
 	}
@@ -1188,6 +1211,15 @@ func validateRules(def *WorkflowDefinition, statusSet map[string]bool, tag strin
 	for _, from := range slices.Sorted(maps.Keys(def.Rules)) {
 		if !statusSet[from] {
 			return fmt.Errorf("%s rule references unknown status: %s", where, from)
+		}
+		if terminalSet[from] {
+			return fmt.Errorf(
+				"%s rule declares transitions out of terminal status %s, "+
+					"which can never apply: terminal states are immutable and "+
+					"'tlc task reopen <id> --note \"<reason>\"' is the way out — "+
+					"remove the rule, or drop is_terminal from %s",
+				where, from, from,
+			)
 		}
 		for _, to := range def.Rules[from] {
 			if !statusSet[to] {

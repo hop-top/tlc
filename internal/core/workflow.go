@@ -154,6 +154,22 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 	}
 
 	// Terminal statuses cannot transition unless forced.
+	//
+	// This gate deliberately precedes the rule lookup below, so a rule
+	// keyed on a terminal status can never fire. That is not an
+	// oversight to be repaired by consulting the rules first: `tlc task
+	// reopen` is the one sanctioned way out of a terminal status, and it
+	// does more than move the status — it requires --note, writes a
+	// REOPENED audit entry, and lands on the workflow's initial status.
+	// A rule-driven second exit would bypass all three, letting a task
+	// leave DONE with no record of why.
+	//
+	// The cost used to be silence: config validation accepted a
+	// `DONE: [TODO]` rule and the user got no signal it was dead.
+	// validateRules now REJECTS rules whose from-status is terminal, so
+	// the config fails loudly and names the status. Ordering here and
+	// that check are two halves of one decision — reversing this gate
+	// without dropping that check would make the check a lie.
 	if wm.IsTerminal(current) {
 		if force {
 			return nil

@@ -545,3 +545,39 @@ func TestNewWorkflowManager_NilConfig(t *testing.T) {
 		t.Error("expected error for nil config")
 	}
 }
+
+// The terminal gate precedes the rule lookup, so a rule keyed on a
+// terminal status is inert. Pinned here because the ordering is a
+// decision, not an accident: config validation now REJECTS such a rule
+// (see validateRules), and this half is what makes that rejection
+// honest. If someone reorders the gate to consult rules first, this
+// fails and points at the config check that would become a lie.
+func TestValidateTransition_TerminalGatePrecedesRules(t *testing.T) {
+	cfg := defaultTestConfig()
+	// A rule the config layer would refuse, injected directly to reach
+	// the engine and prove the gate — not the rules — is what answers.
+	cfg.StateMachine = &config.WorkflowDefinition{
+		Rules: map[string][]string{
+			"TODO": {"IN_PROGRESS"},
+			"DONE": {"TODO"},
+		},
+	}
+	wm, err := NewWorkflowManager(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating WorkflowManager: %v", err)
+	}
+
+	err = wm.ValidateTransition(StatusDone, StatusTodo, false)
+	if err == nil {
+		t.Fatal("a rule out of a terminal status must stay inert, got nil error")
+	}
+	if !strings.Contains(err.Error(), "terminal") {
+		t.Errorf("rejection must come from the terminal gate, got: %v", err)
+	}
+
+	// --force still bypasses, which is the documented escape hatch and
+	// must not be narrowed by the config-side rejection.
+	if err := wm.ValidateTransition(StatusDone, StatusTodo, true); err != nil {
+		t.Errorf("--force must still bypass the terminal gate, got: %v", err)
+	}
+}
