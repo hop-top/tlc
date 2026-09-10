@@ -302,3 +302,30 @@ func quoteList(values []string) string {
 	}
 	return strings.Join(quoted, ", ")
 }
+
+// SuggestedTags returns the tags a chooser should OFFER, in a stable
+// order, for any policy.
+//
+// TagPolicyFor deliberately returns an empty vocabulary under `open`,
+// because nothing needs to enforce membership there and composing it
+// would be work on the hot path of every write. A chooser is the one
+// caller that wants the set anyway: under `open` there is no wrong
+// answer, but the composed axes are the tags tlc's own `label init` and
+// `sync` emit, so suggesting them is what keeps a hand-typed `type:fix`
+// spelled the same as the one a forge round-trips.
+//
+// Wildcard OPENERS are excluded. A `domain:*` entry widens a namespace;
+// it is not itself a taggable value, and offering the literal string
+// would seed a tag the very policy that declared it rejects.
+func SuggestedTags() []string {
+	vocab := buildTagVocabulary(resolveTaskConfig())
+	all := vocab.Display()
+	out := make([]string, 0, len(all))
+	for _, t := range all {
+		if strings.HasSuffix(t, wildcardSuffix) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}

@@ -89,6 +89,7 @@ func createTaskInteractive(initialTitle string) error {
 		assignee    string
 		tags        []string
 		prio        string
+		effort      string
 		domain      string
 	)
 
@@ -98,16 +99,6 @@ func createTaskInteractive(initialTitle string) error {
 	// contain (the select would then open on no option at all).
 	if initial, err := wm.InitialStatus(); err == nil {
 		status = string(initial)
-	}
-	allStatuses := wm.GetAllStatuses()
-	statusOptions := make([]huh.Option[string], 0, len(allStatuses))
-	for _, s := range allStatuses {
-		def, _ := wm.GetStatusDef(core.TaskStatus(s)) //nolint:errcheck // best-effort label lookup
-		label := s
-		if def != nil && def.Label != "" {
-			label = def.Label
-		}
-		statusOptions = append(statusOptions, huh.NewOption(label, s))
 	}
 
 	form := huh.NewForm(
@@ -131,7 +122,7 @@ func createTaskInteractive(initialTitle string) error {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Status").
-				Options(statusOptions...).
+				Options(interactiveStatusOptions(wm)...).
 				Value(&status),
 
 			huh.NewInput().
@@ -143,24 +134,18 @@ func createTaskInteractive(initialTitle string) error {
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Tags").
-				Options(
-					huh.NewOption("feat", "feat"),
-					huh.NewOption("fix", "fix"),
-					huh.NewOption("chore", "chore"),
-					huh.NewOption("docs", "docs"),
-					huh.NewOption("urgent", "urgent"),
-				).
+				Options(interactiveTagOptions()...).
 				Value(&tags),
 
 			huh.NewSelect[string]().
 				Title("Priority").
-				Options(
-					huh.NewOption("P0 (Critical)", "P0"),
-					huh.NewOption("P1 (High)", "P1"),
-					huh.NewOption("P2 (Medium)", "P2"),
-					huh.NewOption("P3 (Low)", "P3"),
-				).
+				Options(interactivePriorityOptions()...).
 				Value(&prio),
+
+			huh.NewSelect[string]().
+				Title("Effort").
+				Options(interactiveEffortOptions()...).
+				Value(&effort),
 
 			huh.NewInput().
 				Title("Domain").
@@ -178,11 +163,100 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta, nil, nil)
+	err := saveTask(os.Stdout, "", title, description, status, assignee, effort, prio, tags, "", meta, nil, nil)
 	if err != nil {
 		return err
 	}
 	return writeProjectionGlobal()
+}
+
+// The interactive form's option builders.
+//
+// Extracted from the form for two reasons. huh's runner needs a
+// terminal, so what the form OFFERED is otherwise unobservable to a
+// test — and "what was offered" is precisely the contract that broke.
+// And every one of these lists feeds saveTask, which normalises against
+// the CONFIGURED vocabulary, so an option list that does not come from
+// config is not a cosmetic default: under a renamed vocabulary EVERY
+// offered value is rejected on submit and the user's filled-in form is
+// discarded.
+
+// interactiveStatusOptions renders the workflow's statuses, labeled.
+//
+// Takes the WorkflowManager rather than reaching for the singleton so
+// the caller's instance and the offered list cannot disagree.
+func interactiveStatusOptions(wm *core.WorkflowManager) []huh.Option[string] {
+	all := wm.GetAllStatuses()
+	opts := make([]huh.Option[string], 0, len(all))
+	for _, s := range all {
+		def, _ := wm.GetStatusDef(core.TaskStatus(s)) //nolint:errcheck // best-effort label lookup
+		label := s
+		if def != nil && def.Label != "" {
+			label = def.Label
+		}
+		opts = append(opts, huh.NewOption(label, s))
+	}
+	return opts
+}
+
+// interactivePriorityOptions renders the configured priorities in
+// declared order, which IS rank order — most urgent first — so the list
+// must not be sorted.
+//
+// The value is always the configured NAME, because that is what
+// NormalizePriority accepts; the label carries the human gloss the
+// hardcoded "P0 (Critical)" list used to spell out inline.
+func interactivePriorityOptions() []huh.Option[string] {
+	defs := core.ConfiguredPriorityDefinitions()
+	opts := make([]huh.Option[string], 0, len(defs))
+	for _, d := range defs {
+		opts = append(opts, huh.NewOption(vocabOptionLabel(d.Name, d.Label), d.Name))
+	}
+	return opts
+}
+
+// interactiveEffortOptions renders the configured efforts in declared
+// order — smallest first — behind an empty option.
+//
+// Effort is optional, and a select has no other way to express "none":
+// without the empty entry the form would force an estimate the
+// non-interactive path leaves unset.
+func interactiveEffortOptions() []huh.Option[string] {
+	defs := core.ConfiguredEffortDefinitions()
+	opts := make([]huh.Option[string], 0, len(defs)+1)
+	opts = append(opts, huh.NewOption("(none)", ""))
+	for _, d := range defs {
+		opts = append(opts, huh.NewOption(vocabOptionLabel(d.Name, d.Label), d.Name))
+	}
+	return opts
+}
+
+// interactiveTagOptions renders the configured tag vocabulary.
+//
+// Sourced from core.SuggestedTags under BOTH policies, not only closed.
+// Under `closed` the reason is the same as priority's: core.ValidateTags
+// rejects anything outside the vocabulary, so a hardcoded list fails on
+// submit. Under `open` nothing would reject a hardcoded list — but the
+// composed axes are the tags tlc's own `label init` and `sync` emit, so
+// suggesting them keeps a hand-picked tag spelled the way a forge
+// round-trips it, and it is the only source that cannot fall a rename
+// behind the way the bare feat/fix list did.
+func interactiveTagOptions() []huh.Option[string] {
+	tags := core.SuggestedTags()
+	opts := make([]huh.Option[string], 0, len(tags))
+	for _, t := range tags {
+		opts = append(opts, huh.NewOption(t, t))
+	}
+	return opts
+}
+
+// vocabOptionLabel renders "NAME (Label)", or bare NAME when the
+// definition declares no label — never a dangling "NAME ()".
+func vocabOptionLabel(name, label string) string {
+	if label == "" {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", name, label)
 }
 
 func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling) error {
