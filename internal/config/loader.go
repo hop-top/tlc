@@ -48,8 +48,6 @@ func DefaultConfig() *Config {
 			DBPath:  ".tlc/db.sqlite",
 		},
 		UI: UIConfig{
-			Pager:      "auto",
-			DateFormat: "2006-01-02 15:04:05",
 			Timezone:   "local",
 			TableStyle: "unicode",
 		},

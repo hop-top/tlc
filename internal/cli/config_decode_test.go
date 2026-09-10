@@ -123,11 +123,10 @@ tracks:
     min_progress_to_start: 25
 storage:
   db_path: /tmp/custom.sqlite
-git:
-  branch:
-    zero_pad_issue: 6
+  inbox:
+    auto_process: true
 ui:
-  date_format: "2006-01-02"
+  table_style: ascii
   log_sort_direction: desc
 validation:
   create:
@@ -155,8 +154,8 @@ workspaces:
 		{"tracks.health.max_active", cfg.Tracks.Health.MaxActive, 7},
 		{"tracks.health.min_progress_to_start", cfg.Tracks.Health.MinProgressToStart, 25},
 		{"storage.db_path", cfg.Storage.DBPath, "/tmp/custom.sqlite"},
-		{"git.branch.zero_pad_issue", cfg.Git.Branch.ZeroPadIssue, 6},
-		{"ui.date_format", cfg.UI.DateFormat, "2006-01-02"},
+		{"storage.inbox.auto_process", cfg.Storage.Inbox.AutoProcess, true},
+		{"ui.table_style", cfg.UI.TableStyle, "ascii"},
 		{"ui.log_sort_direction", cfg.UI.LogSortDirection, "desc"},
 	}
 	for _, c := range checks {

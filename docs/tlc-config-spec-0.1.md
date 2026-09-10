@@ -677,9 +677,6 @@ plugins:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `pager` | string | `auto` | Pager command: `auto`, `less`, `more`, `none` |
-| `editor` | string | `$EDITOR` | Editor command |
-| `date_format` | string | `2006-01-02 15:04:05` | Date format (Go layout) |
 | `timezone` | string | `local` | Timezone: `local`, `UTC`, or IANA name |
 | `table_style` | enum | `unicode` | Table border: `unicode`, `rounded`, `thick`, `double`, `ascii`, `none` |
 | `theme` | enum | `neon` | Color theme: `neon`, `dark`, `bauhaus` |
@@ -711,9 +708,6 @@ none:     (no border; theme colors retained)
 **Example**:
 ```yaml
 ui:
-  pager: less
-  editor: vim
-  date_format: "2006-01-02 15:04"
   timezone: America/New_York
   table_style: unicode
   theme: neon

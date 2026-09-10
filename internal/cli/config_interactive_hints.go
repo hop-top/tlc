@@ -60,10 +60,9 @@ func defaultGroups() []groupEntry {
 		},
 		{
 			Name:        "ui",
-			Description: "Editor, pager, theme, table style",
+			Description: "Theme, table style, time display",
 			Patterns: []string{
-				"ui.editor", "ui.pager", "ui.theme",
-				"ui.table_style", "ui.date_format", "ui.timezone",
+				"ui.theme", "ui.table_style", "ui.timezone",
 				"ui.log_sort_direction",
 			},
 		},
@@ -102,10 +101,6 @@ func defaultKeyHints() map[string]keyHint {
 		},
 		"output.verbose": {
 			Key: "output.verbose", Description: "Enable verbose logging",
-			IsBool: true,
-		},
-		"output.quiet": {
-			Key: "output.quiet", Description: "Suppress non-essential output",
 			IsBool: true,
 		},
 		"output.log_file": {
@@ -209,18 +204,6 @@ func defaultKeyHints() map[string]keyHint {
 			Key:         "sync.github.import_milestones",
 			Description: "Import milestones from GitHub",
 			IsBool:      true,
-		},
-		"ui.pager": {
-			Key:         "ui.pager",
-			Description: "Pager command (auto, less, more, none)",
-		},
-		"ui.editor": {
-			Key:         "ui.editor",
-			Description: "Editor command for task editing",
-		},
-		"ui.date_format": {
-			Key:         "ui.date_format",
-			Description: "Date format (Go time layout)",
 		},
 		"ui.timezone": {
 			Key:         "ui.timezone",

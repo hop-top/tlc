@@ -100,8 +100,8 @@ func TestResolveMultipleTokens(t *testing.T) {
 	if !sliceContains(keys, "project.id") {
 		t.Error("expected project.id from core group")
 	}
-	if !sliceContains(keys, "ui.editor") {
-		t.Error("expected ui.editor from ui group")
+	if !sliceContains(keys, "ui.theme") {
+		t.Error("expected ui.theme from ui group")
 	}
 
 	// Check dedup — no key should appear twice.

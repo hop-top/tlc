@@ -330,11 +330,14 @@ func InferAdapterFromURI(uri string) string {
 }
 
 // OutputConfig contains output-related configuration.
+//
+// No `quiet` field: --quiet is a flag, read off the command by its one
+// consumer, and no code path reads a `output.quiet` config key. A field
+// here would advertise a setting that does nothing.
 type OutputConfig struct {
 	Format  string `yaml:"format"`
 	Color   bool   `yaml:"color"`
 	Verbose bool   `yaml:"verbose"`
-	Quiet   bool   `yaml:"quiet"`
 	LogFile string `yaml:"log_file"`
 }
 
@@ -1336,10 +1339,14 @@ func (s *StorageConfig) Validate() error {
 }
 
 // UIConfig contains UI-related configuration.
+//
+// Every field here has a reader. `pager`, `editor` and `date_format`
+// were declared and defaulted for years without one: no code paged
+// output, shelled to an editor, or formatted a date through them, so
+// setting any of the three changed nothing. They are gone rather than
+// implemented — the tool already renders dates through ui.timezone and
+// has no paging or editing flow to hang the other two on.
 type UIConfig struct {
-	Pager            string            `yaml:"pager"`
-	Editor           string            `yaml:"editor"`
-	DateFormat       string            `yaml:"date_format"`
 	Timezone         string            `yaml:"timezone"`
 	TableStyle       string            `yaml:"table_style"`
 	TagColors        map[string]string `yaml:"tag_colors"`
