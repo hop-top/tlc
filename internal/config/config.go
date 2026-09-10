@@ -825,66 +825,60 @@ func (t *TaskConfig) Validate() error {
 	return t.ValidatePriorityDerivation()
 }
 
-// ValidateWorkflow validates the parts of the task configuration the
-// workflow engine and the CLI vocabularies are built from: the statuses,
-// their roles and markers, the declared priorities, and the transition
-// rules. A failure here means no coherent workflow can be constructed.
-func (t *TaskConfig) ValidateWorkflow() error {
-	if err := validateRelativePath("task.projection_dir", t.ProjectionDir); err != nil {
-		return err
-	}
-
-	// Apply default stale timeout if not set
+// applyWorkflowDefaults fills the workflow fields a config may leave
+// unset, before any of them is validated.
+//
+// The built-in rules are the default only for the built-in vocabulary.
+// They name TODO and IN_PROGRESS, so substituting them under a custom
+// status set installs a state machine over statuses the user never
+// declared — which validateRules then rejects, turning "I did not
+// configure a state machine" into a hard startup error. Leaving Rules
+// nil instead is not a missing default; it is the accurate answer for a
+// vocabulary the built-ins cannot describe, and the workflow engine
+// reads it as "unruled".
+func (t *TaskConfig) applyWorkflowDefaults() {
 	if t.Stale.DefaultTimeout == 0 {
 		t.Stale.DefaultTimeout = 6 * time.Hour
 	}
-
-	// If no statuses defined, populate with defaults
 	if len(t.Statuses) == 0 {
 		t.Statuses = GetDefaultStatuses()
 	}
-	// The built-in rules are the default only for the built-in
-	// vocabulary. They name TODO and IN_PROGRESS, so substituting them
-	// under a custom status set installs a state machine over statuses
-	// the user never declared — which validateRules below then rejects,
-	// turning "I did not configure a state machine" into a hard startup
-	// error. Leaving Rules nil instead is not a missing default; it is
-	// the accurate answer for a vocabulary the built-ins cannot
-	// describe, and the workflow engine reads it as "unruled".
 	if t.StateMachine == nil {
 		t.StateMachine = &WorkflowDefinition{}
 	}
 	if t.StateMachine.Rules == nil && UsesDefaultStatuses(t.Statuses) {
 		t.StateMachine.Rules = GetDefaultStateMachine().Rules
 	}
+}
 
-	statusSet := make(map[string]bool, len(t.Statuses))
-	// terminalSet feeds validateRules, which rejects rules keyed on a
-	// terminal status because the workflow engine can never reach them.
-	terminalSet := make(map[string]bool, len(t.Statuses))
+// scanStatuses walks the declared statuses once, rejecting duplicate
+// names and duplicate TLS markers and requiring the initial and active
+// roles. It returns the name set and the terminal-name subset, both of
+// which validateRules needs: it rejects a rule keyed on a terminal
+// status because the workflow engine can never reach one.
+func (t *TaskConfig) scanStatuses() (statusSet, terminalSet map[string]bool, err error) {
+	statusSet = make(map[string]bool, len(t.Statuses))
+	terminalSet = make(map[string]bool, len(t.Statuses))
 	markerSet := make(map[string]bool, len(t.Statuses))
 	hasInitial := false
 	hasActive := false
 
 	for _, s := range t.Statuses {
-		// Check duplicate status names
 		if statusSet[s.Name] {
-			return fmt.Errorf("duplicate status name: %s", s.Name)
+			return nil, nil, fmt.Errorf("duplicate status name: %s", s.Name)
 		}
 		statusSet[s.Name] = true
 		if s.IsTerminal {
 			terminalSet[s.Name] = true
 		}
 
-		// Check duplicate TLS markers
 		if s.TLSMarker != "" {
 			if markerSet[s.TLSMarker] {
-				return fmt.Errorf("duplicate TLS marker %q on status %s", s.TLSMarker, s.Name)
+				return nil, nil, fmt.Errorf("duplicate TLS marker %q on status %s", s.TLSMarker, s.Name)
 			}
 			markerSet[s.TLSMarker] = true
 		}
 
-		// Track roles
 		switch s.Role {
 		case RoleInitial:
 			hasInitial = true
@@ -894,10 +888,28 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	}
 
 	if !hasInitial {
-		return fmt.Errorf("at least one status must have role \"initial\"")
+		return nil, nil, fmt.Errorf("at least one status must have role \"initial\"")
 	}
 	if !hasActive {
-		return fmt.Errorf("at least one status must have role \"active\"")
+		return nil, nil, fmt.Errorf("at least one status must have role \"active\"")
+	}
+	return statusSet, terminalSet, nil
+}
+
+// ValidateWorkflow validates the parts of the task configuration the
+// workflow engine and the CLI vocabularies are built from: the statuses,
+// their roles and markers, the declared priorities, and the transition
+// rules. A failure here means no coherent workflow can be constructed.
+func (t *TaskConfig) ValidateWorkflow() error {
+	if err := validateRelativePath("task.projection_dir", t.ProjectionDir); err != nil {
+		return err
+	}
+
+	t.applyWorkflowDefaults()
+
+	statusSet, terminalSet, err := t.scanStatuses()
+	if err != nil {
+		return err
 	}
 
 	// Validate default_status exists and is non-terminal
