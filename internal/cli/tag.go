@@ -119,7 +119,7 @@ func runTagAdd(cmd *cobra.Command, taskID string, newTags []string) error {
 	// spells out — a task already carrying a since-disallowed tag must
 	// stay editable.
 	if err := core.ValidateTags(newTags); err != nil {
-		return err
+		return err //nolint:wrapcheck // policy message names the offending tag; wrapping buries it
 	}
 
 	s, err := getStorage()
