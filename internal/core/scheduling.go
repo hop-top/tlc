@@ -35,11 +35,21 @@ type AgeNudge struct {
 
 // CheckAgeNudges evaluates a task against age-based nudge rules.
 // Returns nil if no nudge is triggered.
+//
+// Finished work is exempt, and TERMINALITY is what "finished" means —
+// asked of the configured workflow, not matched against the built-in
+// DONE/SKIPPED constants. The literal those constants replaced answered
+// for one vocabulary only: a config declaring SHIPPED and CANCELED as
+// its terminal statuses matched neither, so completed tasks kept
+// generating age nudges forever, growing staler with every run. Asking
+// the workflow makes the exemption travel with whatever the user named
+// their terminal statuses, exactly as it does on the track and task
+// update paths.
 func CheckAgeNudges(t *Task, rules []AgeNudgeConfig) *AgeNudge {
 	if t.DueAt != nil { // explicit due → skip age nudges
 		return nil
 	}
-	if t.Status == StatusDone || t.Status == StatusSkipped {
+	if DefaultWorkflow().IsTerminal(t.Status) {
 		return nil
 	}
 

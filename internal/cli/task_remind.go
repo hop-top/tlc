@@ -50,9 +50,16 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 		nowInDisplay := now.In(loc)
 		var overdue, dueToday, upcoming []*core.Task
 
+		// Finished work carries no reminder, and TERMINALITY is what
+		// "finished" means — asked of the configured workflow rather
+		// than matched against the built-in DONE/SKIPPED constants.
+		// The literal answered for one vocabulary only: under a config
+		// naming its terminal statuses SHIPPED and CANCELED, every
+		// completed task with a past due date reported as OVERDUE
+		// forever, and `--check` never returned clean again.
+		wm := core.DefaultWorkflow()
 		for _, t := range tasks {
-			if t.Status == core.StatusDone ||
-				t.Status == core.StatusSkipped {
+			if wm.IsTerminal(t.Status) {
 				continue
 			}
 			if t.DueAt == nil && t.RemindAt == nil &&
