@@ -479,3 +479,105 @@ func TestSuggestedTagsOffersSeededNeedsWithoutDomainOpener(t *testing.T) {
 		}
 	}
 }
+
+// TestDomainWildcardHeldForUnseededConfig is the compatibility half of
+// the wildcard narrowing. A config that declared `closed` before `label
+// init` learned to seed has no `domain:` entry, and must keep admitting
+// the whole namespace: withdrawing the wildcard from it would start
+// rejecting tags it accepted yesterday, on a config its owner never
+// touched.
+func TestDomainWildcardHeldForUnseededConfig(t *testing.T) {
+	vocab := buildTagVocabulary(closedTagConfig("area:billing"))
+
+	for _, tag := range []string{"domain:cli", "domain:strage", "domain:anything"} {
+		if !vocab.Admits(tag) {
+			t.Errorf("unseeded closed config rejected %q; the wildcard must still apply", tag)
+		}
+	}
+}
+
+// TestDomainWildcardWithdrawnOnceEnumerated is the closure half. Once
+// the config names its own domains, the namespace is no longer open: a
+// seeded value is admitted and a typo of one is not. This is the whole
+// point of recording the seeded values.
+func TestDomainWildcardWithdrawnOnceEnumerated(t *testing.T) {
+	vocab := buildTagVocabulary(closedTagConfig(
+		"domain:cli", "domain:core", "domain:storage",
+	))
+
+	for _, tag := range []string{"domain:cli", "domain:core", "domain:storage"} {
+		if !vocab.Admits(tag) {
+			t.Errorf("seeded config rejected its own domain %q", tag)
+		}
+	}
+	for _, tag := range []string{"domain:strage", "domain:k8s", "domain:nope"} {
+		if vocab.Admits(tag) {
+			t.Errorf("seeded config admitted unenumerated %q; closure not regained", tag)
+		}
+	}
+}
+
+// TestExplicitDomainWildcardStillOpensNamespace pins the escape hatch. A
+// user who wrote `domain:*` themselves asked for an open namespace, and
+// the entry carries the wildcard suffix rather than a literal value, so
+// it must not be read as an enumeration that withdraws the opener.
+func TestExplicitDomainWildcardStillOpensNamespace(t *testing.T) {
+	vocab := buildTagVocabulary(closedTagConfig("domain:*"))
+
+	for _, tag := range []string{"domain:cli", "domain:whatever"} {
+		if !vocab.Admits(tag) {
+			t.Errorf("explicit domain:* did not open the namespace for %q", tag)
+		}
+	}
+}
+
+// TestEnumeratedDomainsLeaveOtherAxesAlone guards the blast radius. The
+// narrowing is scoped to the domain axis: withdrawing its opener must
+// not disturb the generated axes or the `needs:*` set, which no config
+// enumerates and every sync plugin writes.
+func TestEnumeratedDomainsLeaveOtherAxesAlone(t *testing.T) {
+	vocab := buildTagVocabulary(closedTagConfig("domain:cli"))
+
+	for _, tag := range []string{
+		"type:feat", "priority:high", "effort:m",
+		"status:in-progress", "status:blocked",
+		"needs:triage", "needs:repro", "needs:decision",
+	} {
+		if !vocab.Admits(tag) {
+			t.Errorf("enumerating domains wrongly rejected %q on another axis", tag)
+		}
+	}
+	if vocab.Admits("wildly:invalid") {
+		t.Error("closed policy admitted a tag outside every axis")
+	}
+}
+
+// TestDeclaresDomainLiterals states the condition directly, so the rule
+// that decides whether the wildcard applies is readable without building
+// a whole vocabulary to infer it.
+func TestDeclaresDomainLiterals(t *testing.T) {
+	cases := []struct {
+		name    string
+		allowed []string
+		want    bool
+	}{
+		{"empty", nil, false},
+		{"unrelated only", []string{"area:billing"}, false},
+		{"wildcard only", []string{"domain:*"}, false},
+		{"literal", []string{"domain:cli"}, true},
+		{"literal beside wildcard", []string{"domain:*", "domain:cli"}, true},
+		{"mixed case literal", []string{"Domain:CLI"}, true},
+		{"padded literal", []string{"  domain:core  "}, true},
+		{"bare axis with no value", []string{"domain:"}, false},
+		{"other axis wildcard", []string{"area:*"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := declaresDomainLiterals(tc.allowed); got != tc.want {
+				t.Errorf("declaresDomainLiterals(%v) = %v, want %v",
+					tc.allowed, got, tc.want)
+			}
+		})
+	}
+}

@@ -1,5 +1,10 @@
 package labels
 
+import (
+	"sort"
+	"strings"
+)
+
 // ProjectType represents a categorized project type.
 type ProjectType string
 
@@ -347,4 +352,44 @@ func GetTemplatesWithConflicts(projectType ProjectType) ([]Label, []LabelConflic
 	}
 
 	return dedupeByName(append(common, domains...))
+}
+
+// DomainTagPrefix is the `domain:` axis prefix, without a wildcard.
+//
+// One spelling of the prefix, so the seeder that reads a template's
+// domain labels and the vocabulary that admits them cannot disagree
+// about where the axis starts.
+const DomainTagPrefix = "domain:"
+
+// DomainTags returns the `domain:*` label names a project type seeds,
+// sorted and de-duplicated.
+//
+// It exists so `label init` can RECORD what it seeded into
+// `task.tags.allowed`. The domain axis is the one axis core cannot
+// enumerate for itself — its values are chosen per project TYPE, and
+// core cannot see the type — so under a closed policy core has to admit
+// the whole namespace by wildcard. Writing the chosen values into the
+// config is what lets a closed policy name them literally instead, and
+// this is the only place that knows which values were chosen.
+//
+// Sorted rather than left in template order: the result is written to a
+// config file, and a file that reordered itself between runs would show
+// a diff on a command that is annotated idempotent.
+func DomainTags(projectType ProjectType) []string {
+	labels := GetTemplates(projectType)
+
+	seen := make(map[string]struct{}, len(labels))
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		if !strings.HasPrefix(l.Name, DomainTagPrefix) {
+			continue
+		}
+		if _, ok := seen[l.Name]; ok {
+			continue
+		}
+		seen[l.Name] = struct{}{}
+		out = append(out, l.Name)
+	}
+	sort.Strings(out)
+	return out
 }
