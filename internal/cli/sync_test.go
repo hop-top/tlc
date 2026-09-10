@@ -22,7 +22,7 @@ func TestSyncCommands(t *testing.T) {
 
 	t.Run("SyncConfig", func(t *testing.T) {
 		viper.Set("sync.github.repo", "google/oss-tlc-cli")
-		viper.Set("sync.github.direction", "bidirectional")
+		viper.Set("sync.github.sync_direction", "bidirectional")
 
 		cmd := newTestCmd()
 		cmd.AddCommand(SyncCmd)
@@ -60,7 +60,7 @@ func TestSyncCommands(t *testing.T) {
 		// If we're in a GitHub repo, config should be set
 		// If not, config should be empty (silent skip)
 		repo := viper.GetString("sync.github.repo")
-		direction := viper.GetString("sync.github.direction")
+		direction := viper.GetString("sync.github.sync_direction")
 
 		// If repo is set, direction should be pull (or bidirectional if already configured)
 		if repo != "" && direction != "pull" && direction != "bidirectional" {
@@ -88,7 +88,7 @@ func TestSyncCommands(t *testing.T) {
 			t.Errorf("initial autoConfigureGitHub failed: %v", err)
 		}
 
-		direction := viper.GetString("sync.github.direction")
+		direction := viper.GetString("sync.github.sync_direction")
 		if direction != "pull" {
 			t.Errorf("expected pull direction, got: %s", direction)
 		}
@@ -99,7 +99,7 @@ func TestSyncCommands(t *testing.T) {
 			t.Errorf("upgrade autoConfigureGitHub failed: %v", err)
 		}
 
-		direction = viper.GetString("sync.github.direction")
+		direction = viper.GetString("sync.github.sync_direction")
 		if direction != "bidirectional" {
 			t.Errorf("expected bidirectional direction after upgrade, got: %s", direction)
 		}
@@ -112,7 +112,7 @@ func TestSyncCommands(t *testing.T) {
 
 		// Set a different repo to simulate already configured
 		viper.Set("sync.github.repo", "different/repo")
-		viper.Set("sync.github.direction", "bidirectional")
+		viper.Set("sync.github.sync_direction", "bidirectional")
 
 		// Try to configure again, should skip due to different repo
 		err := autoConfigureGitHub("pull")
@@ -138,7 +138,7 @@ func TestSyncCommands(t *testing.T) {
 		}
 
 		repo := viper.GetString("sync.github.repo")
-		direction := viper.GetString("sync.github.direction")
+		direction := viper.GetString("sync.github.sync_direction")
 
 		if repo == "" {
 			t.Error("expected repo to be set")
@@ -151,4 +151,31 @@ func TestSyncCommands(t *testing.T) {
 
 	// Note: sync pull/push require external plugins/binaries which might not be available during unit tests.
 	// We would need to mock the RPC client or ensure plugins are built.
+}
+
+// TestAutoConfigureGitHubUsesDocumentedKey pins the direction key to the
+// spelling the config spec documents.
+//
+// The key was written and read as `sync.github.direction` while every
+// doc, the config struct and the interactive hints said
+// `sync.github.sync_direction` — so a user following the spec set a key
+// nothing read, and the key tlc did read appeared nowhere. Reading back
+// through the undocumented spelling must find nothing.
+func TestAutoConfigureGitHubUsesDocumentedKey(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	if err := autoConfigureGitHub("bidirectional"); err != nil {
+		t.Fatalf("autoConfigureGitHub: %v", err)
+	}
+	if viper.GetString("sync.github.repo") == "" {
+		t.Skip("not in a GitHub checkout; nothing was configured")
+	}
+
+	if got := viper.GetString("sync.github.sync_direction"); got == "" {
+		t.Error("sync.github.sync_direction unset; the documented key must be the one written")
+	}
+	if got := viper.GetString("sync.github.direction"); got != "" {
+		t.Errorf("sync.github.direction = %q; the undocumented key must not be written", got)
+	}
 }
