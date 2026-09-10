@@ -480,6 +480,13 @@ type TagsConfig struct {
 	// Allowed lists the project-specific tags a closed policy admits, on
 	// top of the generated axes.
 	//
+	// `label init` SEEDS this key with the chosen template's `domain:*`
+	// values under a closed policy, so the config records which domains
+	// were actually seeded. Listing them literally also withdraws the
+	// `domain:*` opener core would otherwise apply — see
+	// core.declaresDomainLiterals — which is what closes the domain axis
+	// against a typo.
+	//
 	// An entry ending in `:*` admits the whole prefix — `domain:*` admits
 	// `domain:storage` and any other `domain:` tag. The wildcard is
 	// deliberately limited to that one shape: it is anchored to a

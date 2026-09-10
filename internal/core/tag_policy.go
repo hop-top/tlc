@@ -111,6 +111,12 @@ var needsTags = []string{
 // widens one namespace and cannot widen past its colon, so a config that
 // says `closed` still rejects everything outside the axes tlc itself
 // emits.
+//
+// It is a FALLBACK, not a fixture: `label init` records the template's
+// chosen domains in `task.tags.allowed`, and buildTagVocabulary withdraws
+// this opener once the config enumerates any of its own. See
+// declaresDomainLiterals. A config that has never been seeded keeps it,
+// so nothing that was accepted before starts being rejected.
 const domainTagPrefix = "domain" + wildcardSuffix
 
 // builtinPriorityTagAlias is the rank-indexed alias the built-in
@@ -215,7 +221,12 @@ func buildTagVocabulary(cfg *config.TaskConfig) TagVocabulary {
 	// or the write refused outright. The label survived the mapper's colon
 	// check and died one layer later, here.
 	generated = append(generated, needsTags...)
-	generated = append(generated, domainTagPrefix)
+	// The `domain:*` wildcard is withdrawn once the config enumerates its
+	// own domains — see declaresDomainLiterals for why that condition is
+	// the safe one.
+	if !declaresDomainLiterals(cfg.Tags.Allowed) {
+		generated = append(generated, domainTagPrefix)
+	}
 
 	for _, g := range generated {
 		v.add(g)
@@ -229,6 +240,49 @@ func buildTagVocabulary(cfg *config.TaskConfig) TagVocabulary {
 		v.add(a)
 	}
 	return v
+}
+
+// domainTagLiteralPrefix is the `domain:` axis prefix on its own, the
+// shape a seeded entry carries. domainTagPrefix is the same axis plus
+// the wildcard suffix.
+const domainTagLiteralPrefix = "domain:"
+
+// declaresDomainLiterals reports whether the config enumerates any
+// `domain:` value of its own.
+//
+// This is the condition under which the `domain:*` wildcard is
+// WITHDRAWN, and it is deliberately a property of the config rather than
+// a version flag or a new key.
+//
+// The wildcard exists because core cannot see the project type and so
+// cannot know which domains a project chose; opening the namespace was
+// the only honest answer available to it. `label init` now writes those
+// values into `allowed`, which supplies exactly the missing fact. Once
+// the config carries it, keeping the wildcard would make the enumeration
+// decorative: a seeded config would still admit `domain:strage`, and the
+// closed policy would still be open on the one axis its user had just
+// taken the trouble to close.
+//
+// Withdrawing it only when literals are present is what makes this safe
+// for configs that predate seeding. Such a config has `policy: closed`
+// and no `domain:` entry, matches no literal here, and keeps the
+// wildcard — byte-identical behavior to before. A config cannot lose a
+// tag it was accepting yesterday unless it gained a `domain:` entry, and
+// gaining one is the act of declaring which domains are legal. An
+// explicit `domain:*` in `allowed` is likewise honored: it carries the
+// wildcard suffix, not a literal value, so it does not trip this test
+// and the namespace stays open for a user who asked for that.
+func declaresDomainLiterals(allowed []string) bool {
+	for _, a := range allowed {
+		a = strings.ToLower(strings.TrimSpace(a))
+		if strings.HasSuffix(a, wildcardSuffix) {
+			continue
+		}
+		if strings.HasPrefix(a, domainTagLiteralPrefix) && len(a) > len(domainTagLiteralPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // add files one vocabulary entry as either a prefix opener or a literal,
