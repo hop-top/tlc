@@ -17,7 +17,6 @@ const (
 	headerSpacing      = 2
 	searchInputPadding = 10
 	kanbanMinColWidth  = 20
-	kanbanColCount     = 3
 
 	viewDashboard = "dashboard"
 	viewSearch    = "search"
@@ -53,13 +52,6 @@ func (m Model) renderMarkdown(content string) string {
 		return content
 	}
 	return out
-}
-
-var statusOrder = []core.TaskStatus{
-	core.StatusTodo,
-	core.StatusInProgress,
-	core.StatusDone,
-	core.StatusSkipped,
 }
 
 func (m Model) formatStatus(status core.TaskStatus) string {
@@ -279,24 +271,27 @@ func (m Model) kanbanView() string {
 	s.WriteString(m.styles.Title.Render("Kanban Board"))
 	s.WriteString("\n\n")
 
-	kanbanStatusOrder := []core.TaskStatus{
-		core.StatusTodo,
-		core.StatusInProgress,
-		core.StatusDone,
-	}
+	columns := kanbanStatusOrder()
 
 	groups := make(map[core.TaskStatus][]*core.Task)
 	for _, t := range m.tasks {
 		groups[t.Status] = append(groups[t.Status], t)
 	}
 
-	colWidth := (m.width - 4) / kanbanColCount
+	// Width is divided by the ACTUAL column count, not a fixed three:
+	// a vocabulary with five stages must not lay five columns out in
+	// three columns' worth of space.
+	count := len(columns)
+	if count == 0 {
+		count = 1
+	}
+	colWidth := (m.width - 4) / count
 	if colWidth < kanbanMinColWidth {
 		colWidth = kanbanMinColWidth
 	}
 
-	cols := make([]string, 0, len(kanbanStatusOrder))
-	for _, status := range kanbanStatusOrder {
+	cols := make([]string, 0, len(columns))
+	for _, status := range columns {
 		tasks := groups[status]
 
 		// Column header.
