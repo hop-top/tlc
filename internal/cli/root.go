@@ -43,6 +43,11 @@ var (
 	// flag parsing, so initConfig also honors this var when non-empty.
 	cfgFile    string
 	tlcVersion = "dev" // overridden at build time via -ldflags
+
+	// preParsedConfigTokens carries the -c/--config tokens lifted out of
+	// os.Args by preParseConfigTokens, for the initConfig() call Execute()
+	// makes before cobra has parsed argv. See preParseConfigTokens.
+	preParsedConfigTokens []string
 )
 
 // notifyUpgrade indirects upgrade.NotifyIfAvailable so tests can substitute
@@ -630,6 +635,14 @@ func Execute() {
 	// advertising two different sets. Both are idempotent, so Execute
 	// re-running prepareTree is a no-op. initConfig is likewise
 	// idempotent and cobra runs it again for the normal path.
+	//
+	// Lifting -c/--config out of os.Args first is what lets that restamp
+	// see a config file named on the command line: cobra has not parsed
+	// argv yet, so the flag's viper binding is empty and only TLC_CONFIG
+	// would otherwise be visible. Runs after preParseChdir stripped -C
+	// (a relative -c path resolves against the post-chdir cwd, as it does
+	// on the execute path) and before initConfig, which consumes them.
+	preParsedConfigTokens = preParseConfigTokens(os.Args)
 	initConfig()
 	if err := kitRootInstance.Prepare(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -737,6 +750,22 @@ func initConfig() {
 	// here would form an init cycle since kitRootInstance := kitRoot()
 	// and kitRoot() registers OnInitialize(initConfig).
 	rawConfigTokens := viper.GetStringSlice("config")
+	// Before cobra parses argv the viper key is still empty, so the
+	// tokens Execute() lifted out of os.Args stand in. Once cobra HAS
+	// parsed, the bound flag reports the same tokens and the two
+	// collapse to one set.
+	//
+	// De-duplicating rather than appending is housekeeping, not a
+	// correctness guard: re-merging a file replaces keys rather than
+	// accumulating them, so a doubled token resolves to the same config
+	// either way, and no test can pin the difference. It stays because
+	// resolving and re-reading every -c file twice on the normal path is
+	// pure waste — including a shortname token's registry lookup.
+	//
+	// Kept as a package var rather than viper.Set so the flag's own
+	// binding is never shadowed by a higher-precedence override for the
+	// rest of the process.
+	rawConfigTokens = mergeConfigTokens(rawConfigTokens, preParsedConfigTokens)
 	// TLC_CONFIG is the env-equivalent of -c <path>. AutomaticEnv binds
 	// it to the "config" viper key, but viper.GetStringSlice on a
 	// scalar env value returns a one-element slice of the raw string
@@ -1190,6 +1219,76 @@ func preParseChdir(args []string) ([]string, string, bool) {
 		return args, "", false
 	}
 	return out, target, true
+}
+
+// preParseConfigTokens lifts the -c/--config tokens out of args so the
+// initConfig() Execute() runs BEFORE cobra parses argv can see them.
+//
+// Why this exists at all: the flag-enum restamp and the shell-completion
+// bind both need the user's configured vocabulary, and `--help` never
+// reaches PersistentPreRunE — cobra's OnInitialize(initConfig) fires from
+// PersistentPreRun, which the help path skips. So Execute() primes config
+// itself. At that moment cobra has not parsed argv, viper's binding for
+// the "config" key is still empty, and only the env-fed TLC_CONFIG was
+// visible — leaving `--help -c custom.yaml` advertising the built-in
+// vocabulary while the same invocation's validation honoured the custom
+// one.
+//
+// Delegating to a throwaway pflag.FlagSet rather than hand-scanning args
+// is deliberate: -c is a StringArrayP, so it arrives as any of `-c v`,
+// `-c=v`, `-cv`, `-Vc v`, `--config v` or `--config=v`, repeatably, and
+// stops at `--`. pflag already decides all of that, and a second,
+// divergent opinion about argv shape is exactly the kind of drift the
+// help/validation split here was.
+//
+// UnknownFlags whitelisting keeps every other flag in the tree out of the
+// picture, and `help` is registered only so pflag does not abort the scan
+// with ErrHelp on the very invocation this fix targets. Parse errors are
+// swallowed: a malformed argv is cobra's to report, with its own message,
+// once it does the real parse.
+func preParseConfigTokens(args []string) []string {
+	if len(args) <= 1 {
+		return nil
+	}
+	fs := pflag.NewFlagSet("tlc-preparse", pflag.ContinueOnError)
+	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	fs.BoolP("help", "h", false, "")
+	tokens := fs.StringArrayP("config", "c", nil, "")
+	_ = fs.Parse(args[1:])
+	return *tokens
+}
+
+// mergeConfigTokens returns base followed by the tokens of extra that
+// base does not already carry, preserving order.
+//
+// Order matters: -c files merge in argument order and the last one named
+// wins, so the result has to keep the sequence the user typed. The
+// de-duplication covers the case the caller documents — the same tokens
+// arriving twice, once pre-parsed from os.Args and once from the bound
+// flag after cobra parses.
+//
+// Copies rather than appending into base's backing array, so a caller
+// holding that slice never sees it grow underneath them.
+func mergeConfigTokens(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base))
+	for _, t := range base {
+		seen[t] = struct{}{}
+	}
+	out := make([]string, len(base), len(base)+len(extra))
+	copy(out, base)
+	for _, t := range extra {
+		if _, dup := seen[t]; dup {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 // resolvePreChdirTarget expands ~ and converts the target to an absolute
