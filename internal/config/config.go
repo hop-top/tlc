@@ -3,8 +3,10 @@ package config
 import (
 	"fmt"
 	"log"
+	"maps"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -570,19 +572,44 @@ func (t *TaskConfig) Validate() error {
 	}
 
 	// Validate state machine rules reference defined statuses
-	if t.StateMachine != nil {
-		for from, toList := range t.StateMachine.Rules {
-			if !statusSet[from] {
-				return fmt.Errorf("state machine rule references unknown status: %s", from)
-			}
-			for _, to := range toList {
-				if !statusSet[to] {
-					return fmt.Errorf("state machine rule references unknown target status: %s", to)
-				}
-			}
+	if err := validateRules(t.StateMachine, statusSet, ""); err != nil {
+		return err
+	}
+
+	// Per-tag overrides get the same check. They share the base
+	// vocabulary, so a rule naming an undeclared status is the same
+	// error here — and one the workflow engine would otherwise accept
+	// silently, then refuse every transition for that tag.
+	for _, tag := range slices.Sorted(maps.Keys(t.Workflows)) {
+		if err := validateRules(t.Workflows[tag].StateMachine, statusSet, tag); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// validateRules checks one rule set against the declared status names.
+// tag is the workflow override the rules came from, empty for the base
+// state machine, and only shapes the error message.
+func validateRules(def *WorkflowDefinition, statusSet map[string]bool, tag string) error {
+	if def == nil {
+		return nil
+	}
+	where := "state machine"
+	if tag != "" {
+		where = fmt.Sprintf("workflow override for tag %q", tag)
+	}
+	for _, from := range slices.Sorted(maps.Keys(def.Rules)) {
+		if !statusSet[from] {
+			return fmt.Errorf("%s rule references unknown status: %s", where, from)
+		}
+		for _, to := range def.Rules[from] {
+			if !statusSet[to] {
+				return fmt.Errorf("%s rule references unknown target status: %s", where, to)
+			}
+		}
+	}
 	return nil
 }
 

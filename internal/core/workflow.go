@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 
 	"hop.top/tlc/internal/config"
@@ -22,6 +24,15 @@ type WorkflowManager struct {
 	// create default through the same workflow it validates against,
 	// rather than opening a second config channel into internal/core.
 	defaultStatus string
+
+	// overrideTag is the tag this manager was built for, empty on the
+	// base workflow. Carried so error messages can name the override the
+	// user is actually being judged against.
+	overrideTag string
+
+	// base is the workflow an override replaces, nil on the base
+	// workflow itself. Only the stranded-status fallback reads it.
+	base *WorkflowManager
 }
 
 // NewWorkflowManager creates a WorkflowManager from a TaskConfig.
@@ -57,6 +68,13 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 			if err != nil {
 				return nil, fmt.Errorf("workflow override for tag %q: %w", tag, err)
 			}
+			tagWM.defaultStatus = cfg.DefaultStatus
+			tagWM.overrideTag = tag
+			// base is the workflow this override replaces. Kept so a
+			// transition out of a status the override left unruled can
+			// fall back rather than strand the task; see
+			// ValidateTransition.
+			tagWM.base = wm
 			wm.workflows[tag] = tagWM
 		}
 	}
@@ -141,10 +159,29 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 	// Check rules
 	allowed, hasRule := wm.rules[currentStr]
 	if !hasRule {
+		// An override REPLACES the base state machine rather than
+		// merging with it: WorkflowOverride carries only `state_machine`,
+		// so a rule set that lists TODO and omits IN_PROGRESS reads as
+		// "these are the transitions", not "these plus the defaults".
+		//
+		// Replace has one failure mode worth catching, though. A task
+		// already sitting in a status the override left unruled would be
+		// stranded there — every transition out of it rejected, with the
+		// only escape --force — even though the user's base workflow
+		// says exactly where it may go. That is not a rule the user
+		// wrote; it is a gap they left. So the base workflow answers for
+		// statuses the override does not mention, and only for those:
+		// any status the override DOES rule is governed wholly by the
+		// override, including the transitions it deliberately omits.
+		if wm.base != nil {
+			if _, baseHasRule := wm.base.rules[currentStr]; baseHasRule {
+				return wm.base.ValidateTransition(current, next, force)
+			}
+		}
 		return ErrInvalidTransition{
 			From: current,
 			To:   next,
-			Msg:  "no transition rules defined for current status",
+			Msg:  wm.ruleContext("no transition rules defined for current status"),
 		}
 	}
 
@@ -157,9 +194,19 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 	return ErrInvalidTransition{
 		From:    current,
 		To:      next,
-		Msg:     "transition not allowed by state machine",
+		Msg:     wm.ruleContext("transition not allowed by state machine"),
 		Allowed: allowed,
 	}
+}
+
+// ruleContext names the override a rejection came from, so a user whose
+// transition was refused by a tag-specific state machine is not left
+// reading it against the base one.
+func (wm *WorkflowManager) ruleContext(msg string) string {
+	if wm.overrideTag == "" {
+		return msg
+	}
+	return fmt.Sprintf("%s for tag %q", msg, wm.overrideTag)
 }
 
 // GetStatusDef returns the StatusDefinition for a given status.
@@ -271,18 +318,83 @@ func (wm *WorkflowManager) StatusForTLSMarker(marker string) (TaskStatus, bool) 
 	return TaskStatus(name), true
 }
 
-// GetWorkflowForTags returns a tag-specific WorkflowManager if one matches,
-// otherwise returns the receiver.
-func (wm *WorkflowManager) GetWorkflowForTags(tags []string) *WorkflowManager {
-	if wm.workflows == nil {
-		return wm
+// ErrAmbiguousWorkflow reports a task whose tags match more than one
+// `task.workflows` override, so no single state machine can be said to
+// govern it.
+type ErrAmbiguousWorkflow struct {
+	// Tags are the matching tags, sorted, so the message is stable.
+	Tags []string
+}
+
+func (e ErrAmbiguousWorkflow) Error() string {
+	return fmt.Sprintf(
+		"task tags match %d workflow overrides (%s); a task may carry at "+
+			"most one tag declared under task.workflows — remove all but "+
+			"one from the task, or drop the surplus override from config",
+		len(e.Tags), strings.Join(e.Tags, ", "),
+	)
+}
+
+// GetWorkflowForTags returns the workflow that governs a task carrying
+// these tags: the override for its single matching tag, or the receiver
+// when no tag matches.
+//
+// Matching MORE than one override is an error rather than a pick.
+//
+// The alternative rules all reduce to choosing a winner the user never
+// nominated. First-match is what this used to do, and it was not even
+// deterministic: a task's tags are rebuilt by ranging a map, so a task
+// tagged both `hotfix` and `experimental` got either workflow depending
+// on the run. Declaration order is unavailable — the decoder lands
+// config in a Go map, which has none. Lexicographic order is stable but
+// meaningless: `alpha` beating `hotfix` encodes nothing the user
+// intended. Refusing keeps the property that matters — the workflow a
+// task is validated against is one the user can point at in config — and
+// says exactly which tags to disambiguate.
+//
+// Tags matching no override are ignored, so the common case (one
+// workflow tag plus any number of ordinary labels) is unaffected.
+func (wm *WorkflowManager) GetWorkflowForTags(tags []string) (*WorkflowManager, error) {
+	if len(wm.workflows) == 0 {
+		return wm, nil
 	}
+
+	var matched []string
 	for _, tag := range tags {
-		if override, ok := wm.workflows[tag]; ok {
-			return override
+		if _, ok := wm.workflows[tag]; ok {
+			matched = append(matched, tag)
 		}
 	}
-	return wm
+
+	// Dedupe: a task carrying the same tag twice is not ambiguous.
+	slices.Sort(matched)
+	matched = slices.Compact(matched)
+
+	switch len(matched) {
+	case 0:
+		return wm, nil
+	case 1:
+		return wm.workflows[matched[0]], nil
+	default:
+		return nil, ErrAmbiguousWorkflow{Tags: matched}
+	}
+}
+
+// WorkflowForTask returns the workflow governing one task, resolved from
+// its tags. The single entry point transition sites use, so per-tag
+// overrides cannot be honored on some paths and skipped on others.
+func (wm *WorkflowManager) WorkflowForTask(t *Task) (*WorkflowManager, error) {
+	if t == nil {
+		return wm, nil
+	}
+	return wm.GetWorkflowForTags(t.Tags)
+}
+
+// OverrideTag reports the tag whose override produced this workflow, and
+// whether one did at all. Callers use it to name the state machine a
+// rejection came from.
+func (wm *WorkflowManager) OverrideTag() (string, bool) {
+	return wm.overrideTag, wm.overrideTag != ""
 }
 
 var (
