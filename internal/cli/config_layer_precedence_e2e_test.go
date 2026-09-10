@@ -249,10 +249,10 @@ task:
 // match its own label text and pass regardless of the cascade.
 //
 // task.default_status is the cascade probe throughout the tests below
-// because it is genuinely consumed by the workflow engine. The obvious
-// alternative, task.id_format, is NOT usable: internal/core/parseref.go
-// hardcodes fmt.Sprintf("T-%04d", seq) and never consults the config, so
-// that key reads identically whether the cascade works or not.
+// because it is genuinely consumed by the workflow engine. The task ID
+// is NOT a usable probe: the durable identity is a TypeID and the
+// T-NNNN display alias is rendered by core.FormatTaskSeq with a fixed
+// grammar, so it reads identically whether the cascade works or not.
 func statusOfNewTask(t *testing.T, bin, cwd, id string, env []string, args ...string) string {
 	t.Helper()
 	runTLCOK(t, bin, cwd, env, append([]string{"task", "create", "cascade probe"}, args...)...)

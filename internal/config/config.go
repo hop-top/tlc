@@ -476,7 +476,6 @@ type SchedulingConfig struct {
 // TaskConfig contains task-related configuration.
 type TaskConfig struct {
 	DefaultStatus    string                      `yaml:"default_status"`
-	IDFormat         string                      `yaml:"id_format"`
 	AutoAssign       bool                        `yaml:"auto_assign"`
 	RequireReference bool                        `yaml:"require_reference"`
 	TodoFile         string                      `yaml:"todo_file"`

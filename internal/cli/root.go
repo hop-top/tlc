@@ -1073,7 +1073,6 @@ func setDefaults() {
 	// `default_status "TODO" does not match any defined status`. Left
 	// unset, the key means what it says — "the user nominated one" — and
 	// an omitted one resolves to the initial-role status instead.
-	viper.SetDefault("task.id_format", "T-{seq:04d}")
 	viper.SetDefault("task.auto_assign", false)
 	viper.SetDefault("task.require_reference", true)
 	viper.SetDefault("task.archive_threshold", 7*24*time.Hour)

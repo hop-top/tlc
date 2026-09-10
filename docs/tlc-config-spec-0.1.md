@@ -77,7 +77,6 @@ output:
 # Task defaults
 task:
   default_status: TODO
-  id_format: "T-{seq:04d}"
   auto_assign: false
 
 # Git integration
@@ -182,21 +181,22 @@ project:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `default_status` | enum | `TODO` | Initial status for new tasks |
-| `id_format` | string | `T-{seq:04d}` | Task ID format template |
 | `auto_assign` | bool | `false` | Auto-assign to current user on create |
 | `require_reference` | bool | `true` | Require reference on creation |
 | `archive_threshold` | duration | `168h` (7d) | Auto-archive DONE/SKIPPED tasks after this duration |
 
-**ID Format Template Syntax**:
-- `{seq}` — Sequential number
-- `{seq:04d}` — Zero-padded to 4 digits
-- `{date:YYYYMMDD}` — Date prefix
-- `{random:8}` — Random alphanumeric (8 chars)
+**Task identity is not configurable**. A task's durable identity is a
+TypeID (`task_01h455vbqkfsn02nk084ksn02q`) assigned at creation. The
+familiar `T-0042` is a *display alias* rendered on demand from the
+per-project sequence number, never stored as the identity. The alias
+shape is fixed at `T-` plus at-least-4-digit zero padding because it is
+parsed back by independent readers — plan `blocked_by` refs,
+cross-project `<org/project>#T-NNNN` refs, the todo.txt round trip, and
+URI normalisation — each of which hardcodes that grammar.
 
 **Examples**:
 ```yaml
 task:
-  id_format: "T-{seq:04d}"        # T-0001, T-0042
   archive_threshold: 48h          # Archive after 2 days
 ```
 
@@ -853,7 +853,7 @@ Project ID fallback chain (first non-empty wins):
 ```yaml
 # Detects Go binary project (go.mod exists)
 task:
-  id_format: "T-{seq:04d}"
+  default_status: TODO
 
 # Auto-suggests domain labels for Go projects
 # (see github-label-convention-0.1.md)
@@ -964,7 +964,7 @@ tlc config validate
 # Or with errors
 ✗ Config invalid
   - sync.github.repo: required when enabled=true
-  - task.id_format: invalid template syntax
+  - task.default_status: not among defined statuses
 ```
 
 ---
@@ -1028,7 +1028,6 @@ output:
 
 task:
   default_status: TODO
-  id_format: "T-{seq:04d}"
 
 git:
   worktree:
