@@ -117,6 +117,14 @@ func skipRoleStatus(wm *core.WorkflowManager) (core.TaskStatus, bool) {
 // visible. Surfacing "terminal states are immutable" as an error banner
 // on a rotate keypress would be noise: the user pressed a cycle key,
 // not a reopen command.
+//
+// That drops the ring's old third step, DONE -> TODO, on the BUILT-IN
+// vocabulary too. It is not a capability being removed: DONE is
+// terminal, the terminal gate precedes the rule lookup, and the service
+// validates against the same workflow — so that step was already
+// rejected on every config, default included. The ring closed on paper
+// and never closed in practice. What changes is the symptom, from an
+// error banner to nothing at all; reopen remains the way back.
 func nextRotationStatus(task *core.Task) (core.TaskStatus, bool) {
 	if task == nil {
 		return "", false
