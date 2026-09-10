@@ -45,9 +45,23 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// strayConfigNames are the config filenames viper writes when no explicit
+// strayConfigNames are the config paths viper writes when no explicit
 // config file is set, relative to the working directory.
-var strayConfigNames = []string{".tlc.yaml", ".tlc.yml", ".tlc.json"}
+//
+// ".tlc/config.yaml" is the dangerous one: ".tlc/" is gitignored
+// repo-wide, so a file written there is invisible to git status. Which
+// path a leak takes depends on whether the directory already exists, so
+// two checkouts of the same commit can behave differently — one absorbs
+// the write silently, the other leaves a visible ".tlc.yaml". Both are
+// checked so neither shape can hide a regression.
+var strayConfigNames = []string{
+	".tlc.yaml",
+	".tlc.yml",
+	".tlc.json",
+	filepath.Join(".tlc", "config.yaml"),
+	filepath.Join(".tlc", "config.yml"),
+	filepath.Join(".tlc", "config.json"),
+}
 
 // checkNoStrayConfig reports any config file a test left behind in dir.
 // It removes the file so a single offending run does not poison every
@@ -64,7 +78,10 @@ func checkNoStrayConfig(dir string) error {
 		return fmt.Errorf("test wrote a config file into the package directory: %s\n"+
 			"A test reached viper.WriteConfig without a config file set, so viper fell back to the\n"+
 			"working directory. Chdir into t.TempDir() and call viper.SetConfigFile with a path\n"+
-			"inside it — see setupSyncConfigTest in sync_test.go. The stray file has been removed.", path)
+			"inside it — see setupSyncConfigTest in sync_test.go. Production code must route the\n"+
+			"write through config.PrepareViperForWrite, which never falls back to the working\n"+
+			"directory. Note that a leak under .tlc/ is gitignored and so invisible to git status.\n"+
+			"The stray file has been removed.", path)
 	}
 	return nil
 }
