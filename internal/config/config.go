@@ -836,8 +836,19 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	if len(t.Statuses) == 0 {
 		t.Statuses = GetDefaultStatuses()
 	}
+	// The built-in rules are the default only for the built-in
+	// vocabulary. They name TODO and IN_PROGRESS, so substituting them
+	// under a custom status set installs a state machine over statuses
+	// the user never declared — which validateRules below then rejects,
+	// turning "I did not configure a state machine" into a hard startup
+	// error. Leaving Rules nil instead is not a missing default; it is
+	// the accurate answer for a vocabulary the built-ins cannot
+	// describe, and the workflow engine reads it as "unruled".
 	if t.StateMachine == nil {
-		t.StateMachine = GetDefaultStateMachine()
+		t.StateMachine = &WorkflowDefinition{}
+	}
+	if t.StateMachine.Rules == nil && UsesDefaultStatuses(t.Statuses) {
+		t.StateMachine.Rules = GetDefaultStateMachine().Rules
 	}
 
 	statusSet := make(map[string]bool, len(t.Statuses))
@@ -916,6 +927,34 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	}
 
 	return nil
+}
+
+// UsesDefaultStatuses reports whether statuses are exactly the built-in
+// set, by name — the only vocabulary GetDefaultStateMachine describes
+// correctly. Callers substitute those rules for an absent rule set only
+// when this holds; substituting them under a custom vocabulary installs
+// a state machine over statuses the user never declared.
+//
+// The check is on names alone: the built-in rules key off nothing else,
+// so a config that renames nothing but recolours DONE is still a
+// vocabulary they describe correctly. Call with statuses already
+// defaulted, so a config declaring none answers true and keeps the
+// built-in workflow whole.
+func UsesDefaultStatuses(statuses []StatusDefinition) bool {
+	defaults := GetDefaultStatuses()
+	if len(statuses) != len(defaults) {
+		return false
+	}
+	declared := make(map[string]bool, len(statuses))
+	for _, s := range statuses {
+		declared[s.Name] = true
+	}
+	for _, d := range defaults {
+		if !declared[d.Name] {
+			return false
+		}
+	}
+	return true
 }
 
 // EffectivePriorities returns the priority vocabulary this config
