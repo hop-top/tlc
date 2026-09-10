@@ -663,8 +663,8 @@ type PriorityDerivationConfig struct {
 // nobody automatically and requires no external reference, whatever
 // either key said.
 type TaskConfig struct {
-	DefaultStatus string                      `yaml:"default_status"`
-	TodoFile      string                      `yaml:"todo_file"`
+	DefaultStatus    string                      `yaml:"default_status"`
+	TodoFile         string                      `yaml:"todo_file"`
 	ProjectionDir    string                      `yaml:"projection_dir,omitempty"`
 	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
