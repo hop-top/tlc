@@ -33,7 +33,7 @@ import (
 // project's lines update another's same-ID tasks. A line with no
 // project_id is skipped outright, so a fixture that omits the token
 // ingests nothing at all and every assertion below would fail on an
-// empty list rather than on the behaviour under test.
+// empty list rather than on the behavior under test.
 const tlsVocabProjectID = "tls-vocab-e2e"
 
 // tlsSeedSuffix is the tail every seeded line carries: the project_id the
@@ -139,7 +139,7 @@ func onlyIngested(t *testing.T, bin, home string, env []string) ingestedTask {
 
 // TestTLSIngestClassifiesFullVocabulary is the headline regression. Every
 // axis token on the line must reach its field or its tag, and NONE of
-// them may reach the title — a token the parser does not recognise is not
+// them may reach the title — a token the parser does not recognize is not
 // merely ignored, it becomes part of the task's name, which is the harm
 // that survives into every later read.
 func TestTLSIngestClassifiesFullVocabulary(t *testing.T) {
@@ -152,7 +152,7 @@ func TestTLSIngestClassifiesFullVocabulary(t *testing.T) {
 	got := onlyIngested(t, bin, home, env)
 
 	if got.Title != "Rewrite the parser" {
-		t.Errorf("title = %q, want %q; an unrecognised token leaked into it",
+		t.Errorf("title = %q, want %q; an unrecognized token leaked into it",
 			got.Title, "Rewrite the parser")
 	}
 	if got.Priority != "P1" {

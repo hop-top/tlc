@@ -25,7 +25,7 @@ import (
 // noted here so these fixtures do not read as superstition.
 
 // wontfixConfig is the spec's own "Full Custom Statuses" shape: the skip
-// analogue is called WONTFIX. It carries `role: skipped`, which is the
+// analog is called WONTFIX. It carries `role: skipped`, which is the
 // declaration this command is built to read. Nothing here is named
 // SKIPPED, so the name fallback cannot rescue a hardcoded lookup.
 const wontfixConfig = `storage:

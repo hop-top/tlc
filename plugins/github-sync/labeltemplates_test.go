@@ -33,7 +33,7 @@ func templateGitHubLabels(pt labels.ProjectType) ([]*github.Label, []string) {
 }
 
 // TestSeededLabelsSurviveClassification is the acceptance property: every
-// label `label init` seeds must be recognised by the pull-direction
+// label `label init` seeds must be recognized by the pull-direction
 // classifier as SOMETHING — a priority, an effort, a status, or a tag.
 // A label that reaches none of those buckets was dropped by the colon
 // check and can never come back from the forge.
@@ -46,7 +46,7 @@ func TestSeededLabelsSurviveClassification(t *testing.T) {
 	for _, pt := range labels.AllProjectTypes() {
 		t.Run(string(pt), func(t *testing.T) {
 			// One label at a time: feeding the whole set at once would
-			// let a single recognised label mask every dropped one,
+			// let a single recognized label mask every dropped one,
 			// because priority/effort/status are scalar sinks.
 			for _, name := range namesFor(pt) {
 				task := &Task{Meta: map[string]interface{}{}}
@@ -98,7 +98,7 @@ func TestSeededPriorityLabelsMapToPriorities(t *testing.T) {
 
 // TestSeededEffortLabelsMapToEfforts is the effort counterpart: the
 // plugin has emitted and consumed effort:* all along while no template
-// defined them, so pushes created them with an arbitrary forge colour.
+// defined them, so pushes created them with an arbitrary forge color.
 func TestSeededEffortLabelsMapToEfforts(t *testing.T) {
 	seen := map[string]bool{}
 	for _, name := range namesFor(labels.TypeGeneric) {
@@ -124,7 +124,7 @@ func TestSeededEffortLabelsMapToEfforts(t *testing.T) {
 // TestPushedLabelsAreSeeded closes the loop the other way: every label
 // buildPushLabels can put on an issue should be one `label init` already
 // created, so the forge is not silently accumulating labels with default
-// colours.
+// colors.
 func TestPushedLabelsAreSeeded(t *testing.T) {
 	seeded := map[string]bool{}
 	for _, name := range namesFor(labels.TypeGeneric) {

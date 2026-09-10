@@ -88,7 +88,7 @@ func ConfiguredInitialTaskStatus() string {
 // the built-in set when config declares none.
 //
 // Resolved lazily on every call rather than cached in a package-level var,
-// because config is read long after package init: a var initialised at
+// because config is read long after package init: a var initialized at
 // init time would pin the built-ins forever. It reads through the same
 // taskConfigProvider hook DefaultWorkflow uses, so the vocabulary the CLI
 // accepts and the vocabulary the workflow enforces cannot disagree —
@@ -111,7 +111,7 @@ func ConfiguredTaskStatusStrings() []string {
 }
 
 // ConfiguredTaskStatusDefinitions returns the effective task statuses as
-// full definitions — name, label, description, colour, role, terminality —
+// full definitions — name, label, description, color, role, terminality —
 // rather than bare names.
 //
 // ConfiguredTaskStatusStrings answers "which names are legal"; this
@@ -119,7 +119,7 @@ func ConfiguredTaskStatusStrings() []string {
 // it must decide per status rather than merely validate one. The label
 // templates are the first such consumer: they pick which statuses deserve
 // a `status:*` label from role and is_terminal, and take the swatch from
-// the configured colour, so neither the selection nor the palette can
+// the configured color, so neither the selection nor the palette can
 // drift from config the way a retyped list does.
 //
 // Resolved lazily through the provider, NOT through DefaultWorkflow*, for
@@ -184,7 +184,7 @@ func ConfiguredPriorityDefinitions() []config.PriorityDefinition {
 // renamed vocabulary (DOING for IN_PROGRESS) then just works, and a
 // vocabulary with a second active status (IN_REVIEW alongside DOING)
 // shows it by default, which is what "unfinished" means to the user who
-// declared it. Matching on names could only ever recognise names this
+// declared it. Matching on names could only ever recognize names this
 // package happens to know.
 //
 // ALL active-role statuses, not merely the first: WorkflowManager's
@@ -322,7 +322,7 @@ func EffortStrings() []string {
 //
 // Resolved lazily on every call rather than cached in a package-level
 // var, for the same two reasons ConfiguredPriorityStrings is: a var
-// initialised at package-init time predates any config file and could
+// initialized at package-init time predates any config file and could
 // only ever hold the built-ins, and reading the provider directly rather
 // than through the memoising DefaultWorkflow* singleton keeps pre-argv
 // callers (help rendering, flag usage, completion) from freezing config
@@ -453,7 +453,7 @@ func PriorityStrings() []string {
 //
 // Resolved lazily on every call rather than cached in a package-level
 // var, for the same two reasons ConfiguredTaskStatusStrings is: a var
-// initialised at package-init time predates any config file and could
+// initialized at package-init time predates any config file and could
 // only ever hold the built-ins, and reading the provider directly rather
 // than through the memoising DefaultWorkflow* singleton keeps pre-argv
 // callers (help rendering, flag usage) from freezing config before

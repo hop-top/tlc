@@ -329,7 +329,7 @@ func TestDuplicateIDStrategyResolution(t *testing.T) {
 	}{
 		{name: "flag wins over config", flag: "unique", cfg: "share", want: "unique"},
 		{name: "config used when flag empty", flag: "", cfg: "unique", want: "unique"},
-		{name: "config prompt honoured", flag: "", cfg: "prompt", want: "prompt"},
+		{name: "config prompt honored", flag: "", cfg: "prompt", want: "prompt"},
 		{name: "default when neither set", flag: "", cfg: "", want: strategyShare},
 		{name: "flag wins over empty config", flag: "prompt", cfg: "", want: "prompt"},
 	}

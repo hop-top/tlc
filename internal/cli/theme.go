@@ -54,7 +54,7 @@ func tableBorders() map[string]lipgloss.Border {
 }
 
 // sortedNameList renders a name set for an error message, so the same bad
-// value always reports the same list (Go map order is randomised).
+// value always reports the same list (Go map order is randomized).
 func sortedNameList[V any](m map[string]V) string {
 	names := make([]string, 0, len(m))
 	for k := range m {
@@ -67,7 +67,7 @@ func sortedNameList[V any](m map[string]V) string {
 // resolveTheme returns the palette named by theme.
 //
 // An empty name keeps kit's default, so a config that says nothing about
-// theming behaves exactly as it did before this key was honoured.
+// theming behaves exactly as it did before this key was honored.
 func resolveTheme(theme string) (kitcli.Palette, bool, error) {
 	name := strings.ToLower(strings.TrimSpace(theme))
 	if name == "" {

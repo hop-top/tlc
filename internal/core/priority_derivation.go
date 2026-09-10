@@ -364,7 +364,7 @@ func (d *PriorityDeriver) Derive(t *Task, deps DependentCounts) DerivationResult
 	}
 	// The criterion that matters most. Checked AFTER the status guards
 	// only because those are cheaper; checked before any rule is
-	// evaluated, so no rule can even see a manually-prioritised task.
+	// evaluated, so no rule can even see a manually-prioritized task.
 	if PrioritySource(t) == PrioritySourceManual {
 		res.Outcome = OutcomeSkippedManual
 		return res
@@ -493,7 +493,7 @@ func (d *PriorityDeriver) DeriveForCreate(t *Task) DerivationResult {
 	return d.Apply(t, nil)
 }
 
-// DerivationReport summarises a whole reprioritise pass.
+// DerivationReport summarizes a whole reprioritise pass.
 type DerivationReport struct {
 	Results []DerivationResult
 }

@@ -335,7 +335,7 @@ const (
 //
 // Note what is deliberately NOT in the chain: "any terminal status that
 // is not the completed one". That would silently elect WONTFIX, or
-// CANCELLED, or whichever terminal status happened to be declared
+// CANCELED, or whichever terminal status happened to be declared
 // second, and a command that skips a task into a status the user never
 // nominated is worse than a command that refuses. When both rules miss,
 // this returns SkippedUnresolved and the caller errors with instructions

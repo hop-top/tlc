@@ -27,7 +27,7 @@ func TestDetectProjectType(t *testing.T) {
 			// through to returning TypeGoBinary again, on the way to a
 			// go-socket split that never arrived. Both spellings must
 			// keep answering the same, or removing the dead branch
-			// changed behaviour.
+			// changed behavior.
 			name:     "Go project with cmd",
 			files:    []string{"go.mod", "cmd/tool/main.go"},
 			expected: TypeGoBinary,
@@ -276,7 +276,7 @@ func TestDetectionContention(t *testing.T) {
 	}
 }
 
-// TestBareGoModIsALibrary states the one behaviour change detection
+// TestBareGoModIsALibrary states the one behavior change detection
 // makes to an already-detected shape, so it is a decision on the record
 // rather than a side effect.
 //
@@ -294,7 +294,7 @@ func TestBareGoModIsALibrary(t *testing.T) {
 	}
 }
 
-// writeFixture materialises a fixture file list under dir, creating
+// writeFixture materializes a fixture file list under dir, creating
 // parent directories so a case can name "cmd/tool/main.go" directly.
 func writeFixture(t *testing.T, dir string, files []string) {
 	t.Helper()

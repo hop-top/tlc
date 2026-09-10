@@ -228,7 +228,7 @@ func withEfforts(t *testing.T, names ...string) {
 	})
 }
 
-// TestParseCreateJSON_ConfiguredEffortAccepted pins that intake honours
+// TestParseCreateJSON_ConfiguredEffortAccepted pins that intake honors
 // the user's declared vocabulary. The inbox gate is a separate call site
 // from the CLI's normaliser, so a size the CLI accepts must not be
 // rejected on the way in from a file drop.
@@ -334,7 +334,7 @@ func TestParseCreateMarkdown_ConfiguredStatusAccepted(t *testing.T) {
 // TestParseTransitionJSON_ConfiguredStatusAccepted covers the SECOND
 // status gate. Create and transition validated through separate copies of
 // the same hardcoded map, so a fix applied to one of them would leave a
-// declared status creatable but not transitionable.
+// declared status creatable but not transitional.
 func TestParseTransitionJSON_ConfiguredStatusAccepted(t *testing.T) {
 	withStatuses(t, "TODO", "IN_REVIEW", "DONE")
 

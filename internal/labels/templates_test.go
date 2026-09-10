@@ -7,7 +7,7 @@ import (
 )
 
 // allProjectTypes is every type `label init --type` documents plus an
-// unrecognised one, so a case that only holds for go-binary cannot pass
+// unrecognized one, so a case that only holds for go-binary cannot pass
 // by accident and the free-string fallback stays covered.
 var allProjectTypes = append(AllProjectTypes(), ProjectType("not-a-real-type"))
 
@@ -59,7 +59,7 @@ func TestTypeAxisCoversConventionalCommits(t *testing.T) {
 
 // TestEffortAxisPresent covers the axis all four sync plugins already
 // both emit and consume while no template defined it — so `sync push`
-// created effort:* labels with whatever colour the forge picked.
+// created effort:* labels with whatever color the forge picked.
 func TestEffortAxisPresent(t *testing.T) {
 	got := namesOf(GetTemplates(TypeGeneric))
 	for _, w := range []string{"effort:xs", "effort:s", "effort:m", "effort:l", "effort:xl"} {
@@ -73,8 +73,8 @@ func TestEffortAxisPresent(t *testing.T) {
 // prose across the move from a hardcoded presentation map to
 // config-derived definitions.
 //
-// Colour is not cosmetic here: `sync push` writes it to the forge, so a
-// swatch that moved re-colours every issue carrying that label. The
+// Color is not cosmetic here: `sync push` writes it to the forge, so a
+// swatch that moved re-colors every issue carrying that label. The
 // descriptions are pinned for the same reason.
 func TestEffortAxisColoursUnchanged(t *testing.T) {
 	want := map[string]struct{ color, desc string }{
@@ -90,7 +90,7 @@ func TestEffortAxisColoursUnchanged(t *testing.T) {
 			continue
 		}
 		if l.Color != w.color {
-			t.Errorf("%s colour = %q, want %q", l.Name, l.Color, w.color)
+			t.Errorf("%s color = %q, want %q", l.Name, l.Color, w.color)
 		}
 		if l.Description != w.desc {
 			t.Errorf("%s description = %q, want %q", l.Name, l.Description, w.desc)
@@ -115,14 +115,14 @@ func TestPriorityAxisMatchesPluginNames(t *testing.T) {
 }
 
 // TestLabelColoursAreHex guards the seam between config and the forge.
-// Config declares colours by NAME ("red", "blue"); a GitHub label needs
+// Config declares colors by NAME ("red", "blue"); a GitHub label needs
 // six hex digits. Generation reads the former and must emit the latter,
 // so a name leaking through unresolved is a real failure mode.
 func TestLabelColoursAreHex(t *testing.T) {
 	for _, pt := range allProjectTypes {
 		for _, l := range GetTemplates(pt) {
 			if !hexRe.MatchString(l.Color) {
-				t.Errorf("%s: label %q colour %q is not a 6-digit hex", pt, l.Name, l.Color)
+				t.Errorf("%s: label %q color %q is not a 6-digit hex", pt, l.Name, l.Color)
 			}
 		}
 	}
@@ -289,7 +289,7 @@ func TestUnknownTypeMatchesGeneric(t *testing.T) {
 // labels, so a type that falls through to `default` reports the user's
 // choice back to them while ignoring it. There is no output that
 // distinguishes "python-mvc has these domains" from "python-mvc was not
-// recognised" — which is why an advertised type producing generic's set
+// recognized" — which is why an advertised type producing generic's set
 // is worse than no such type at all.
 //
 // Generic is excluded because generic IS the default set.

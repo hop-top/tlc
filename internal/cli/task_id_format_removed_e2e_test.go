@@ -32,7 +32,7 @@ import (
 	"testing"
 )
 
-// writeIDFormatConfig materialises a project config at
+// writeIDFormatConfig materializes a project config at
 // <dir>/.tlc/config.yaml with the DB pinned, optionally carrying a
 // leftover task.id_format key.
 func writeIDFormatConfig(t *testing.T, dir, dbPath, idFormat string) {
@@ -61,7 +61,7 @@ task:
 // task.id_format is accepted, and that the key has no effect: the alias
 // of the first task is "T-0001" whether the key is absent, set to the
 // old default, or set to something that would be unmistakable if it
-// were ever honoured.
+// were ever honored.
 func TestRemovedIDFormatKeyIsIgnored(t *testing.T) {
 	bin := buildTLCBinary(t)
 

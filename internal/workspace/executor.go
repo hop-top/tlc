@@ -160,6 +160,52 @@ func sortTasks(tasks []*core.Task, sortBy, direction string, priorityOrder, effo
 	})
 }
 
+// compareRanked orders two vocabulary values by their declared RANK
+// rather than by text: a priority vocabulary of URGENT/NORMAL/LATER
+// compares backwards as text, and the built-in effort XS, S, M, L, XL
+// compares to L, M, S, XL, XS.
+//
+// With no vocabulary supplied there is no rank to read, so both values
+// fall back to a text compare — which for these fields previously
+// dropped through to created_at entirely.
+//
+// A non-empty value the vocabulary does not declare — one written
+// before the vocabulary was renamed — ranks len(order): after every
+// declared value, ahead of unset. That is the SQL path's contract (see
+// vocabRankOrder in internal/storage), and the two must agree; ranking
+// it 0 instead would collapse it silently onto the first declared
+// value, and comparing it as TEXT sorted it wherever its spelling fell,
+// so a legacy CRITICAL led a P0..P3 vocabulary.
+//
+// Unset is NOT handled here: it is pinned last in both directions by
+// the separate leading pass in sortTasks, which short-circuits before
+// this compare ever sees it.
+func compareRanked(va, vb string, order []string) int {
+	if len(order) == 0 {
+		return strings.Compare(va, vb)
+	}
+	ra, oka := vocabRank(va, order)
+	rb, okb := vocabRank(vb, order)
+	// Two unranked values share rank len(order), so text is the only
+	// thing left to separate them by.
+	if !oka && !okb {
+		return strings.Compare(va, vb)
+	}
+	if !oka {
+		ra = len(order)
+	}
+	if !okb {
+		rb = len(order)
+	}
+	switch {
+	case ra < rb:
+		return -1
+	case ra > rb:
+		return 1
+	}
+	return 0
+}
+
 // compareTasks returns -1, 0, or 1.
 func compareTasks(a, b *core.Task, field string, priorityOrder, effortOrder []string) int {
 	switch field {
@@ -170,55 +216,11 @@ func compareTasks(a, b *core.Task, field string, priorityOrder, effortOrder []st
 	case "status":
 		return strings.Compare(string(a.Status), string(b.Status))
 	case "priority", "effort":
-		// Rank order, not text order: a priority vocabulary of
-		// URGENT/NORMAL/LATER compares backwards as text, and the
-		// built-in effort XS, S, M, L, XL compares to L, M, S, XL, XS.
-		// With no vocabulary supplied there is no rank to read, so fall
-		// back to a text compare — which for these fields previously
-		// dropped through to created_at entirely.
 		order := priorityOrder
 		if field == "effort" {
 			order = effortOrder
 		}
-		va, vb := rankedField(a, field), rankedField(b, field)
-		// With no vocabulary supplied there is no rank to read at all,
-		// so both values fall back to a text compare — which for these
-		// fields previously dropped through to created_at entirely.
-		if len(order) == 0 {
-			return strings.Compare(va, vb)
-		}
-		ra, oka := vocabRank(va, order)
-		rb, okb := vocabRank(vb, order)
-		// A non-empty value the vocabulary does not declare — one
-		// written before the vocabulary was renamed — ranks len(order):
-		// after every declared value, ahead of unset. That is the SQL
-		// path's contract (see vocabRankOrder in internal/storage), and
-		// the two must agree; ranking it 0 instead would collapse it
-		// silently onto the first declared value, and comparing it as
-		// TEXT — what this did — sorted it wherever its spelling fell,
-		// so a legacy CRITICAL led a P0..P3 vocabulary.
-		//
-		// Unset is NOT handled here: it is pinned last in both
-		// directions by the separate leading pass in sortTasks, which
-		// short-circuits before this compare ever sees it.
-		if !oka {
-			ra = len(order)
-		}
-		if !okb {
-			rb = len(order)
-		}
-		// Two unranked values share rank len(order), so text is the only
-		// thing left to separate them by.
-		if !oka && !okb {
-			return strings.Compare(va, vb)
-		}
-		switch {
-		case ra < rb:
-			return -1
-		case ra > rb:
-			return 1
-		}
-		return 0
+		return compareRanked(rankedField(a, field), rankedField(b, field), order)
 	case "updated_at":
 		if a.UpdatedAt.Before(b.UpdatedAt) {
 			return -1

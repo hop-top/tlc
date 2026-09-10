@@ -67,7 +67,7 @@ type Query struct {
 	//
 	// Tasks with no priority always sort last regardless of direction:
 	// "not triaged" is not a rank, and a task the user never
-	// prioritised must not outrank one they deliberately marked lowest.
+	// prioritized must not outrank one they deliberately marked lowest.
 	PriorityOrder []string
 
 	// EffortOrder is the effort vocabulary in rank order, smallest

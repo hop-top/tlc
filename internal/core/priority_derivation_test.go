@@ -3,7 +3,7 @@ package core
 // Unit coverage for the derivation engine itself, with a PINNED clock.
 //
 // The e2e suite drives the real binary through a real config file and is
-// the authority on behaviour; these cover the cases a subprocess cannot
+// the authority on behavior; these cover the cases a subprocess cannot
 // reach cheaply — a task aged 30 days, a boundary crossed by one second —
 // without making the test suite wait for either.
 

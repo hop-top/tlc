@@ -17,8 +17,8 @@ import (
 )
 
 // This test exists because a config field with no reader is invisible to
-// behavioural tests BY CONSTRUCTION. Mutating such a field changes no
-// observable behaviour, so every assertion in the suite still passes --
+// behavioral tests BY CONSTRUCTION. Mutating such a field changes no
+// observable behavior, so every assertion in the suite still passes --
 // the survival of the mutation IS the proof the field is dead. Two
 // separate dead keys on this codebase demonstrated exactly that, and a
 // later audit found dozens more that had accumulated the same way.
@@ -140,7 +140,7 @@ var allowedUnreadPaths = map[string]string{
 // green while they await removal, and TestConfigKnownDeadPathsAreStillDead
 // keeps the list honest in both directions.
 //
-// Removing a field is a behaviour change (the key stops being accepted),
+// Removing a field is a behavior change (the key stops being accepted),
 // so it belongs in its own change rather than riding along with the
 // guard that found it.
 var knownDeadPaths = map[string]string{
@@ -194,7 +194,7 @@ func TestConfigFieldsHaveReaders(t *testing.T) {
 
 A config key with no reader is a promise the tool does not keep: it
 appears in docs and in `+"`tlc config`"+`, accepts a value, and changes
-nothing. It is also invisible to every behavioural test, which is why
+nothing. It is also invisible to every behavioral test, which is why
 this reflective check exists.
 
 %s
@@ -350,7 +350,7 @@ func walkConfigLeaves(t *testing.T, typ reflect.Type, yamlPrefix, goPrefix strin
 const configPkgPath = "hop.top/tlc/internal/config"
 
 func deref(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t
@@ -495,7 +495,7 @@ func configImportAlias(file *ast.File) string {
 }
 
 // importedPackageNames returns the local names of every package a file
-// imports, so a selector on one of them can be recognised as a
+// imports, so a selector on one of them can be recognized as a
 // qualified reference rather than a field read.
 func importedPackageNames(file *ast.File) map[string]bool {
 	names := make(map[string]bool, len(file.Imports))

@@ -211,7 +211,7 @@ type derivationRow struct {
 	RuleName string `json:"rule,omitempty"`
 }
 
-// renderDerivationReport writes the run's verdicts, honouring the
+// renderDerivationReport writes the run's verdicts, honoring the
 // configured output format.
 func renderDerivationReport(w io.Writer, rep *core.DerivationReport, dryRun bool) error {
 	if viper.GetString("output.format") == "json" {

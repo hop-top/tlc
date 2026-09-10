@@ -293,7 +293,7 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	// it can assert a shape but never membership, and its message would
 	// name a pattern rather than the offending tag.
 	if err := core.ValidateTags(tags); err != nil {
-		return err
+		return err //nolint:wrapcheck // policy message names the offending tag; wrapping buries it
 	}
 
 	// Config-driven validation for create.
