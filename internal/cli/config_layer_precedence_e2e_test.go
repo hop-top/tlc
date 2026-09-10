@@ -112,10 +112,13 @@ func vocabularyOf(t *testing.T, bin, cwd string, env []string, args ...string) s
 const nonsenseStatus = "ZZZNOSUCHSTATUS"
 
 // helpVocabularyOf reports the vocabulary stamped onto the --status flag
-// enum in help output. This is a DIFFERENT resolution path from
-// vocabularyOf: Execute() runs initConfig before cobra parses argv, so
-// the help restamp sees only the layers reachable without argv — files
-// on disk and TLC_CONFIG from the environment, but not -c tokens.
+// enum in help output. This is a different RESOLUTION PATH from
+// vocabularyOf, reaching the same answer: Execute() runs initConfig
+// before cobra parses argv, so the help restamp sees the files on disk
+// and TLC_CONFIG directly, plus the -c tokens Execute() lifts out of
+// os.Args first (preParseConfigTokens). Asserting both paths is what
+// keeps them from drifting — they did, on the -c layer, until the
+// pre-parse landed.
 func helpVocabularyOf(t *testing.T, bin, cwd string, env []string, args ...string) string {
 	t.Helper()
 	full := append([]string{"task", "update", "--help"}, args...)
@@ -534,27 +537,25 @@ func TestLayerUserAndSystemAreAlternatives(t *testing.T) {
 	}
 }
 
-// TestLayerExplicitConfigFileMissesHelpRestamp pins a real inconsistency
-// in the cascade rather than a contract anyone designed.
+// TestLayerExplicitConfigFileReachesHelpRestamp pins the agreement
+// between the two resolution paths on the -c layer.
 //
-// -c <file> reaches the EXECUTE path, where it correctly overrides the
-// project config. It does NOT reach the --help restamp: Execute() calls
-// initConfig() before cobra has parsed argv, so viper.GetStringSlice
-// ("config") is still empty at that point and the -c token is invisible.
-// TLC_CONFIG, documented as the env equivalent of -c, arrives through
-// AutomaticEnv and so IS visible there.
-//
-// The result is that one invocation can describe two different
-// vocabularies: `tlc task update --help -c custom.yaml` advertises the
+// The two used to disagree. Execute() primes config by calling
+// initConfig() itself — `--help` never reaches PersistentPreRunE, since
+// cobra's OnInitialize(initConfig) fires from PersistentPreRun and the
+// help path skips it — and at that moment cobra had not parsed argv, so
+// viper.GetStringSlice("config") was empty and the -c token invisible.
+// TLC_CONFIG, the documented env equivalent, arrived through AutomaticEnv
+// and so WAS visible. One invocation could therefore describe two
+// vocabularies: `tlc task update --help -c custom.yaml` advertised the
 // built-in set while `tlc task update --status X -c custom.yaml` in the
-// same shell validates against the custom one. That is the exact failure
-// shape TestConfiguredStatusInHelpAndCompletion was written to prevent,
-// surviving on the -c path.
+// same shell validated against the custom one.
 //
-// Asserted as-is so a fix flips this test rather than passing unnoticed.
-// When the restamp learns to pre-parse -c, replace the body with the
-// equality both halves should satisfy.
-func TestLayerExplicitConfigFileMissesHelpRestamp(t *testing.T) {
+// Execute() now lifts the -c tokens out of os.Args before priming config
+// (preParseConfigTokens), so both paths resolve the same cascade. The
+// assertion is the equality the two halves should satisfy, plus the
+// TLC_CONFIG route, which must keep agreeing with both.
+func TestLayerExplicitConfigFileReachesHelpRestamp(t *testing.T) {
 	bin := buildTLCBinary(t)
 	home := t.TempDir()
 	work := filepath.Join(home, "work")
@@ -564,32 +565,116 @@ func TestLayerExplicitConfigFileMissesHelpRestamp(t *testing.T) {
 		t.Fatalf("mkdir work: %v", err)
 	}
 
-	flagCfg := filepath.Join(t.TempDir(), "explicit.yaml")
-	writeLayerConfig(t, flagCfg, layerVocabTemplate("EXPLICIT", dbPath))
+	// A private copy per invocation: a run rewrites the file it resolves.
+	flagCfg := func() string {
+		p := filepath.Join(t.TempDir(), "explicit.yaml")
+		writeLayerConfig(t, p, layerVocabTemplate("EXPLICIT", dbPath))
+		return p
+	}
 
 	// Execute path honours it.
-	assertVocabulary(t, vocabularyOf(t, bin, work, env, "-c", flagCfg),
-		"EXPLICIT", "IN_PROGRESS", "SKIPPED")
+	gotExec := vocabularyOf(t, bin, work, env, "-c", flagCfg())
+	assertVocabulary(t, gotExec, "EXPLICIT", "IN_PROGRESS", "SKIPPED")
 
-	// Help path does not — it still advertises the built-in four.
-	gotHelp := helpVocabularyOf(t, bin, work, env, "-c", flagCfg)
-	if strings.Contains(gotHelp, "EXPLICIT") {
-		t.Fatalf("help restamp now honours -c <file>; the two paths agree. "+
-			"Replace this test with an equality assertion between "+
-			"vocabularyOf and helpVocabularyOf. Got: %s", gotHelp)
+	// Help path honours it too, and names the same set. Comparing the two
+	// rather than only asserting the marker is what keeps the paths from
+	// drifting apart again in some way the marker alone would not catch.
+	gotHelp := helpVocabularyOf(t, bin, work, env, "-c", flagCfg())
+	assertVocabulary(t, gotHelp, "EXPLICIT", "IN_PROGRESS", "SKIPPED")
+	if gotHelp != gotExec {
+		t.Errorf("help and execute paths disagree on the -c vocabulary:\n  help:    %q\n  execute: %q",
+			gotHelp, gotExec)
 	}
-	for _, want := range []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"} {
-		if !strings.Contains(gotHelp, want) {
-			t.Errorf("help vocabulary %q should still show the built-in %q", gotHelp, want)
+
+	// TLC_CONFIG, the documented env equivalent of -c, resolves to the
+	// same place. The asymmetry between the two was the bug's tell.
+	envCfg := filepath.Join(t.TempDir(), "viaenv.yaml")
+	writeLayerConfig(t, envCfg, layerVocabTemplate("EXPLICIT", dbPath))
+	envWithCfg := append(layerEnv(t, home, dbPath), "TLC_CONFIG="+envCfg)
+	gotEnv := helpVocabularyOf(t, bin, work, envWithCfg)
+	if gotEnv != gotHelp {
+		t.Errorf("-c and TLC_CONFIG routes disagree in help:\n  -c:         %q\n  TLC_CONFIG: %q",
+			gotHelp, gotEnv)
+	}
+}
+
+// TestLayerExplicitConfigReachesHelpForEveryConfiguredEnum extends the
+// -c/help agreement past --status to every flag the restamp table drives.
+//
+// --priority is the one that makes this worth its own test: the restamp
+// was generalised from a status-only copy to a table, and a regression
+// that reverted it would leave --status correct and --priority stamped
+// with the hardcoded canon — invisible to every assertion above.
+//
+// The key=value token shape is covered here too. It travels a different
+// branch of initConfig than a bare path (viper.Set after the cascade
+// rather than a MergeInConfig), so a pre-parse that reached files alone
+// would still pass the file-only assertions.
+func TestLayerExplicitConfigReachesHelpForEveryConfiguredEnum(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	work := filepath.Join(home, "work")
+	dbPath := filepath.Join(home, "tasks.db")
+	env := layerEnv(t, home, dbPath)
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatalf("mkdir work: %v", err)
+	}
+
+	// --priority via a -c file.
+	prioCfg := filepath.Join(t.TempDir(), "prio.yaml")
+	writeLayerConfig(t, prioCfg, "storage:\n  db_path: "+dbPath+
+		"\ntask:\n  priorities:\n    - name: URGENTX\n      label: Urgent\n"+
+		"    - name: LATERX\n      label: Later\n")
+	gotPrio := helpFlagEnumOf(t, bin, work, env, "priority", "-c", prioCfg)
+	if !strings.Contains(gotPrio, "URGENTX") || !strings.Contains(gotPrio, "LATERX") {
+		t.Errorf("--priority help %q should name the configured vocabulary", gotPrio)
+	}
+	for _, builtin := range []string{"P0", "P3"} {
+		if strings.Contains(gotPrio, builtin) {
+			t.Errorf("--priority help %q leaked the built-in %q", gotPrio, builtin)
 		}
 	}
 
-	// TLC_CONFIG, the documented env equivalent of -c, DOES reach the
-	// restamp. Pinning the asymmetry is what makes it a bug report
-	// rather than an accepted limitation of naming a config at all.
-	envCfg := filepath.Join(t.TempDir(), "viaenv.yaml")
-	writeLayerConfig(t, envCfg, layerVocabTemplate("VIAENV", dbPath))
-	envWithCfg := append(layerEnv(t, home, dbPath), "TLC_CONFIG="+envCfg)
-	assertVocabulary(t, helpVocabularyOf(t, bin, work, envWithCfg),
-		"VIAENV", "IN_PROGRESS", "SKIPPED")
+	// --status via a -c key=value override rather than a file.
+	gotKV := helpFlagEnumOf(t, bin, work, env, "status", "-c", kvStatusOverride)
+	assertVocabulary(t, gotKV, "KVMARK", "IN_PROGRESS", "SKIPPED")
+
+	// Exactly one enum suffix. kit re-appends its "(one of: ...)" from
+	// the enum registry on every prepareTree, so a restamp that rewrote
+	// the flag annotation alone would leave the flag advertising two
+	// contradictory sets rather than replacing the stale one.
+	line := helpFlagLineOf(t, bin, work, env, "status", "-c", kvStatusOverride)
+	if n := strings.Count(line, "(one of:"); n != 1 {
+		t.Errorf("--status help line carries %d enum suffixes, want exactly 1: %q", n, line)
+	}
+}
+
+// helpFlagLineOf returns the --help line describing the named flag.
+func helpFlagLineOf(t *testing.T, bin, cwd string, env []string, flag string, args ...string) string {
+	t.Helper()
+	full := append([]string{"task", "update", "--help"}, args...)
+	out := runTLCOK(t, bin, cwd, env, full...)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "--"+flag) {
+			return line
+		}
+	}
+	t.Fatalf("no --%s line in help output:\n%s", flag, out)
+	return ""
+}
+
+// helpFlagEnumOf returns the "(one of: ...)" set stamped onto the named
+// flag in help. helpVocabularyOf is the --status-only special case of it.
+func helpFlagEnumOf(t *testing.T, bin, cwd string, env []string, flag string, args ...string) string {
+	t.Helper()
+	line := helpFlagLineOf(t, bin, cwd, env, flag, args...)
+	i := strings.Index(line, "one of:")
+	if i < 0 {
+		t.Fatalf("no enum on the --%s help line: %q", flag, line)
+	}
+	rest := line[i+len("one of:"):]
+	if j := strings.Index(rest, ")"); j >= 0 {
+		rest = rest[:j]
+	}
+	return strings.TrimSpace(rest)
 }
