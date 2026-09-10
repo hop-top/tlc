@@ -227,6 +227,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	params := map[string]interface{}{
 		"repo":         viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
 		"last_sync_at": lastSyncAt,
+		"vocabulary":   buildSyncVocabulary(),
 	}
 
 	var result struct {
@@ -488,8 +489,9 @@ Example:
 		defer func() { _ = client.Close() }()
 
 		params := map[string]interface{}{
-			"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
-			"tasks": tasks,
+			"repo":       viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
+			"tasks":      tasks,
+			"vocabulary": buildSyncVocabulary(),
 		}
 
 		var result struct {

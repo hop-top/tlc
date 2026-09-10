@@ -25,14 +25,16 @@ type Request struct {
 
 // SyncPullParams for sync.pull.
 type SyncPullParams struct {
-	Repo       string `json:"repo"`
-	LastSyncAt string `json:"last_sync_at,omitempty"`
+	Repo       string      `json:"repo"`
+	LastSyncAt string      `json:"last_sync_at,omitempty"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 // SyncPushParams for sync.push.
 type SyncPushParams struct {
-	Repo  string `json:"repo"`
-	Tasks []Task `json:"tasks"`
+	Repo       string      `json:"repo"`
+	Tasks      []Task      `json:"tasks"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 // SyncDeleteParams for sync.delete.
@@ -150,7 +152,7 @@ func handleSyncPull(req Request) Response {
 		return errResponse(req.ID, -32602, "Invalid params")
 	}
 
-	tasks, err := fetchGiteaIssues(params.Repo, params.LastSyncAt)
+	tasks, err := fetchGiteaIssues(params.Repo, params.LastSyncAt, params.Vocabulary)
 	if err != nil {
 		return errResponse(req.ID, -32603, fmt.Sprintf("fetch issues: %v", err))
 	}
@@ -166,7 +168,7 @@ func handleSyncPull(req Request) Response {
 	}
 }
 
-func fetchGiteaIssues(repoFull, lastSyncAt string) ([]*Task, error) {
+func fetchGiteaIssues(repoFull, lastSyncAt string, vocab *Vocabulary) ([]*Task, error) {
 	owner, repo, err := splitRepo(repoFull)
 	if err != nil {
 		return nil, err
@@ -197,7 +199,7 @@ func fetchGiteaIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 
 		for i := range issues {
 			deps := fetchDependencies(owner, repo, issues[i].Index)
-			tasks = append(tasks, MapGiteaIssueToTask(&issues[i], deps))
+			tasks = append(tasks, MapGiteaIssueToTaskWith(&issues[i], deps, vocab))
 		}
 
 		page++
@@ -250,9 +252,9 @@ func handleSyncPush(req Request) Response {
 		originID, _ := task.Meta["origin_id"].(string)
 
 		if originID == "" {
-			err = createGiteaIssue(owner, repo, task)
+			err = createGiteaIssue(owner, repo, task, params.Vocabulary)
 		} else {
-			err = updateGiteaIssue(owner, repo, task)
+			err = updateGiteaIssue(owner, repo, task, params.Vocabulary)
 		}
 
 		if err != nil {
@@ -272,8 +274,8 @@ func handleSyncPush(req Request) Response {
 	}
 }
 
-func createGiteaIssue(owner, repo string, task *Task) error {
-	issueData := MapTaskToGiteaIssue(task)
+func createGiteaIssue(owner, repo string, task *Task, vocab *Vocabulary) error {
+	issueData := MapTaskToGiteaIssueWith(task, vocab)
 	path := fmt.Sprintf("/repos/%s/%s/issues", owner, repo)
 
 	resp, err := giteaRequest("POST", path, issueData)
@@ -299,14 +301,14 @@ func createGiteaIssue(owner, repo string, task *Task) error {
 	return nil
 }
 
-func updateGiteaIssue(owner, repo string, task *Task) error {
+func updateGiteaIssue(owner, repo string, task *Task, vocab *Vocabulary) error {
 	originIDStr, _ := task.Meta["origin_id"].(string)
 	index, err := strconv.ParseInt(originIDStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid origin_id %q: %w", originIDStr, err)
 	}
 
-	issueData := MapTaskToGiteaIssue(task)
+	issueData := MapTaskToGiteaIssueWith(task, vocab)
 	path := fmt.Sprintf("/repos/%s/%s/issues/%d", owner, repo, index)
 
 	resp, err := giteaRequest("PATCH", path, issueData)
