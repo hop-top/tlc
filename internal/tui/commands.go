@@ -111,16 +111,15 @@ func (m Model) unclaimTask(id string) tea.Cmd {
 func (m Model) rotateStatus(task *core.Task) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var next core.TaskStatus
-		switch task.Status {
-		case core.StatusTodo:
-			next = core.StatusInProgress
-		case core.StatusInProgress:
-			next = core.StatusDone
-		case core.StatusDone:
-			next = core.StatusTodo
-		default:
-			next = core.StatusTodo
+
+		// nextRotationStatus offers only targets the task's workflow
+		// accepts, so the transition below cannot be one the service
+		// then refuses. No offer means no legal move out of this
+		// status (every terminal status): do nothing visible rather
+		// than raise a banner on a cycle keypress.
+		next, ok := nextRotationStatus(task)
+		if !ok {
+			return nil
 		}
 
 		err := m.service.TransitionStatus(ctx, task.ID, next, core.GetCurrentUser(), "Rotated via TUI")
@@ -201,11 +200,22 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 		// URIs embed the TypeID so they survive renames.
 		id := core.NewTaskID()
 
+		// The create default is the workflow's initial status, not a
+		// hardcoded TODO. Same resolution the CLI create path and the
+		// HTTP route use: a task created into a status the config never
+		// declared can never be transitioned out of it.
+		initial, err := core.DefaultWorkflow().InitialStatus()
+		if err != nil {
+			return fmt.Errorf(
+				"no initial status to create into: %w; "+
+					"set task.default_status or give a status role \"initial\"", err)
+		}
+
 		task := &core.Task{
 			ID:          id,
 			Title:       title,
 			Description: description,
-			Status:      core.StatusTodo,
+			Status:      initial,
 			Reference:   fmt.Sprintf("tlc:///%s", id),
 			CreatedAt:   now,
 			UpdatedAt:   now,
