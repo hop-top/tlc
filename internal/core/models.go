@@ -2,6 +2,8 @@ package core
 
 import (
 	"time"
+
+	"hop.top/tlc/internal/config"
 )
 
 type TaskStatus string
@@ -41,6 +43,44 @@ func TaskStatuses() []TaskStatus {
 // that render or register the set (error messages, flag enums, completion).
 func TaskStatusStrings() []string {
 	return enumStrings(taskStatuses)
+}
+
+// ConfiguredInitialTaskStatus returns the status a new task lands in when
+// the caller nominates none: `task.default_status` when it names a
+// declared status, else the status carrying role "initial".
+//
+// Resolved lazily on every call, like ConfiguredTaskStatusStrings and for
+// the same reason — but here the caching matters more than convention.
+// DefaultWorkflowE memoises its answer in a sync.Once, so calling it from
+// any code path that runs BEFORE argv is parsed (help rendering, flag
+// usage) would pin the process to whatever config existed at that moment
+// and silently discard later `-c key=value` overrides. Reading the
+// provider directly keeps those paths override-safe.
+//
+// Returns "" when no status can be resolved; callers decide whether that
+// is an error or simply a help string they leave generic.
+func ConfiguredInitialTaskStatus() string {
+	cfg := resolveTaskConfig()
+	if cfg == nil {
+		return ""
+	}
+	statuses := cfg.Statuses
+	if len(statuses) == 0 {
+		statuses = config.GetDefaultStatuses()
+	}
+	if cfg.DefaultStatus != "" {
+		for _, s := range statuses {
+			if s.Name == cfg.DefaultStatus {
+				return s.Name
+			}
+		}
+	}
+	for _, s := range statuses {
+		if s.Role == config.RoleInitial {
+			return s.Name
+		}
+	}
+	return ""
 }
 
 // ConfiguredTaskStatusStrings returns the effective task-status vocabulary:

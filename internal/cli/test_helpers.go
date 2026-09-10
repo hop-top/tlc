@@ -365,7 +365,7 @@ func resetTaskFlags() {
 	ResetCreateFlags()
 	taskID = ""
 	taskDescription = ""
-	taskStatus = "TODO"
+	taskStatus = ""
 	taskAssignedTo = ""
 	taskEffort = ""
 	taskPriority = ""

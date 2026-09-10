@@ -245,6 +245,7 @@ func kitRoot() *kitcli.Root {
 		// configured status vocabulary is finally readable. Overwrite the
 		// built-in flag enum kit stamped before argv was parsed.
 		restampConfiguredStatusEnum(root)
+		refreshCreateStatusUsage()
 
 		offline := viper.GetBool("runtime.offline")
 		if c.Name() != "upgrade" && !offline {
@@ -586,6 +587,7 @@ func Execute() {
 		os.Exit(exitCodeFor(err))
 	}
 	restampConfiguredStatusEnum(kitRootInstance)
+	refreshCreateStatusUsage()
 
 	defer func() {
 		closePolicy()
@@ -976,7 +978,12 @@ func setDefaults() {
 	viper.SetDefault("output.log_file", filepath.Join(dataDir, "tlc.log"))
 	viper.SetDefault("storage.db_path", filepath.Join(dataDir, "db.sqlite"))
 
-	viper.SetDefault("task.default_status", "TODO")
+	// No task.default_status default. Seeding "TODO" made the key present
+	// in every merged config, so a user who renamed the vocabulary and
+	// never wrote the key still failed validation with
+	// `default_status "TODO" does not match any defined status`. Left
+	// unset, the key means what it says — "the user nominated one" — and
+	// an omitted one resolves to the initial-role status instead.
 	viper.SetDefault("task.id_format", "T-{seq:04d}")
 	viper.SetDefault("task.auto_assign", false)
 	viper.SetDefault("task.require_reference", true)

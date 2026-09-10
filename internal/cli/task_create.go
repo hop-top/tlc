@@ -68,7 +68,12 @@ Each invocation creates a fresh task, so the operation is not idempotent.`,
 			return err
 		}
 
-		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched)
+		status, err := resolveInitialStatus(taskStatus)
+		if err != nil {
+			return err
+		}
+
+		err = saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, status, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched)
 		if err != nil {
 			return err
 		}
@@ -80,7 +85,7 @@ func createTaskInteractive(initialTitle string) error {
 	var (
 		title       = initialTitle
 		description string
-		status      = "TODO"
+		status      string
 		assignee    string
 		tags        []string
 		prio        string
@@ -88,6 +93,12 @@ func createTaskInteractive(initialTitle string) error {
 	)
 
 	wm := core.DefaultWorkflow()
+	// Preselect the same status the non-interactive path would choose,
+	// rather than a hardcoded TODO that a renamed vocabulary does not
+	// contain (the select would then open on no option at all).
+	if initial, err := wm.InitialStatus(); err == nil {
+		status = string(initial)
+	}
 	allStatuses := wm.GetAllStatuses()
 	statusOptions := make([]huh.Option[string], 0, len(allStatuses))
 	for _, s := range allStatuses {
@@ -365,6 +376,84 @@ func buildTaskReference(taskID string, proj *core.ProjectDetection) string {
 	return fmt.Sprintf("tlc:///%s", taskID)
 }
 
+// resolveInitialStatus returns the status a create lands in.
+//
+// An explicit --status passes through untouched, so scripts naming a
+// status keep working and an invalid one is still rejected downstream by
+// saveTask's normaliser (which names the configured vocabulary).
+//
+// Empty means the user nominated nothing, and the answer comes from the
+// workflow: task.default_status when set, else the initial-role status.
+// Both live in the same TaskConfig the workflow already validates
+// against, so create cannot disagree with the config that gates it.
+func resolveInitialStatus(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	wm, err := core.DefaultWorkflowE()
+	if err != nil {
+		return "", fmt.Errorf("invalid task workflow configuration: %w", err)
+	}
+	status, err := wm.InitialStatus()
+	if err != nil {
+		return "", fmt.Errorf(
+			"no initial status to create into: %w; "+
+				"set task.default_status or give a status role \"initial\"", err,
+		)
+	}
+	return string(status), nil
+}
+
+// initialStatusFlagUsageDefault is the usage string the flag carries at
+// registration time.
+//
+// It names no status on purpose. Registration runs from init(), long
+// before any config file is read, and DefaultWorkflowE caches its answer
+// in a sync.Once — so resolving a concrete status here would permanently
+// pin the process to the BUILT-IN vocabulary and defeat the whole fix.
+// refreshCreateStatusUsage fills in the real one after initConfig.
+const initialStatusFlagUsageDefault = "Initial status (default: configured task.default_status)"
+
+// initialStatusFlagUsage renders --status help that stays true under a
+// renamed vocabulary. The flag default is empty, so cobra prints no
+// "(default ...)" of its own; naming the resolved status here keeps help
+// from implying that omitting the flag leaves the status unset.
+//
+// Reads the config provider directly rather than going through
+// DefaultWorkflowE. This runs from the help path, which fires BEFORE
+// argv's `-c key=value` overrides are merged; DefaultWorkflowE memoises
+// its answer in a sync.Once, so resolving through it here would pin the
+// process to the pre-override config and silently drop those overrides
+// for every later caller.
+func initialStatusFlagUsage() string {
+	status := core.ConfiguredInitialTaskStatus()
+	if status == "" {
+		return initialStatusFlagUsageDefault
+	}
+	return fmt.Sprintf("Initial status (default %s)", status)
+}
+
+// refreshCreateStatusUsage re-renders the --status usage string against
+// the now-loaded config. Called from the same post-initConfig points as
+// restampConfiguredStatusEnum, for the same reason: the flag is
+// registered before the config file is read.
+//
+// Only the leading prose is replaced. kit appends its own "(one of:
+// ...)" enum suffix to the same Usage string, and restampConfiguredStatusEnum
+// rewrites that half; overwriting the whole string here would drop the
+// vocabulary list from help.
+func refreshCreateStatusUsage() {
+	f := TaskCreateCmd.Flags().Lookup("status")
+	if f == nil {
+		return
+	}
+	suffix := ""
+	if i := strings.Index(f.Usage, "(one of:"); i >= 0 {
+		suffix = " " + f.Usage[i:]
+	}
+	f.Usage = initialStatusFlagUsage() + suffix
+}
+
 // ResetCreateFlags clears all flag state on TaskCreateCmd using
 // cobra's built-in ResetFlags, then re-registers with fresh defaults.
 // Call before Execute() to prevent stale state from a prior
@@ -378,7 +467,12 @@ func ResetCreateFlags() {
 func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
 	cmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
-	cmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
+	// Empty, not "TODO": a hardcoded default is supplied on every run and
+	// so outranks task.default_status, which under a renamed vocabulary
+	// means create is rejected by the user's own config. Empty keeps "not
+	// specified" distinguishable from an explicit choice; resolveInitialStatus
+	// fills it in.
+	cmd.Flags().StringVarP(&taskStatus, "status", "s", "", initialStatusFlagUsageDefault)
 	cmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
 	cmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate")
 	cmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority")

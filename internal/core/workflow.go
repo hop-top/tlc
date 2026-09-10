@@ -16,6 +16,12 @@ type WorkflowManager struct {
 	workflows   map[string]*WorkflowManager
 	roleIndex   map[string]string // role -> first status name with that role
 	markerIndex map[string]string // TLS marker -> status name
+
+	// defaultStatus is the user's `task.default_status`, empty when
+	// unset. Read by InitialStatus; carried here so the CLI resolves the
+	// create default through the same workflow it validates against,
+	// rather than opening a second config channel into internal/core.
+	defaultStatus string
 }
 
 // NewWorkflowManager creates a WorkflowManager from a TaskConfig.
@@ -38,6 +44,7 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	wm.defaultStatus = cfg.DefaultStatus
 
 	// Build per-tag workflow overrides
 	if len(cfg.Workflows) > 0 {
@@ -187,6 +194,27 @@ func (wm *WorkflowManager) StatusForRole(role string) (TaskStatus, error) {
 		return "", fmt.Errorf("no status found for role: %s", role)
 	}
 	return TaskStatus(name), nil
+}
+
+// InitialStatus resolves the status a newly created task lands in when
+// the caller nominated none.
+//
+// Order is `task.default_status` first, the `initial`-role status second.
+// The config value wins because it is the only way a user can pick
+// between two statuses that both declare role "initial"; the role is the
+// fallback because `default_status` is optional and most configs omit it.
+//
+// A default_status naming an undeclared status is ignored rather than
+// honored: config validation already warns about it, and resolving to a
+// status the workflow does not know would fail later with a message
+// pointing at create rather than at the config.
+func (wm *WorkflowManager) InitialStatus() (TaskStatus, error) {
+	if wm.defaultStatus != "" {
+		if _, ok := wm.statuses[wm.defaultStatus]; ok {
+			return TaskStatus(wm.defaultStatus), nil
+		}
+	}
+	return wm.StatusForRole(config.RoleInitial)
 }
 
 // SkippedResolution reports HOW SkippedStatus found its target, so the
