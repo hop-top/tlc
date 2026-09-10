@@ -1,10 +1,10 @@
 package config_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"hop.top/tlc/internal/config"
 )
@@ -43,36 +43,31 @@ func TestStaleConfig_HookCommands(t *testing.T) {
 	}
 }
 
-// TestStaleConfig_LoadFromYAML is an integration test that loads a real config
-// YAML containing a task.stale section and verifies defaults apply correctly.
-func TestStaleConfig_LoadFromYAML(t *testing.T) {
-	tmpDir := t.TempDir()
-	projectRoot := filepath.Join(tmpDir, "project")
-	if err := os.MkdirAll(filepath.Join(projectRoot, ".tlc"), 0o755); err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
+// decodeConfigYAML decodes config YAML the way the runtime does: struct
+// tags first, then Validate() to apply post-decode defaults.
+func decodeConfigYAML(t *testing.T, data string) *config.Config {
+	t.Helper()
+	var cfg config.Config
+	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
+		t.Fatalf("yaml.Unmarshal() error: %v", err)
 	}
+	if err := cfg.Task.Validate(); err != nil {
+		t.Fatalf("Validate() error: %v", err)
+	}
+	return &cfg
+}
 
-	// Write config with explicit stale section
-	configData := `
+// TestStaleConfig_LoadFromYAML decodes a real config YAML containing a
+// task.stale section and verifies values survive decode + validate.
+func TestStaleConfig_LoadFromYAML(t *testing.T) {
+	cfg := decodeConfigYAML(t, `
 task:
   stale:
     default_timeout: 2h
     hooks:
       - command: 'echo "stale: {{.ID}}"'
       - command: 'notify-send "Task stale"'
-`
-	if err := os.WriteFile(
-		filepath.Join(projectRoot, ".tlc", "config.yaml"),
-		[]byte(configData),
-		0o644,
-	); err != nil {
-		t.Fatalf("failed to write config: %v", err)
-	}
-
-	cfg, err := config.LoadConfig(projectRoot)
-	if err != nil {
-		t.Fatalf("LoadConfig() error: %v", err)
-	}
+`)
 
 	if cfg.Task.Stale.DefaultTimeout != 2*time.Hour {
 		t.Fatalf("expected 2h, got %v", cfg.Task.Stale.DefaultTimeout)
@@ -86,31 +81,12 @@ task:
 }
 
 // TestStaleConfig_LoadFromYAML_DefaultApplied verifies that when the stale
-// section is absent from config, the 6h default is applied after load.
+// section is absent from config, the 6h default is applied after decode.
 func TestStaleConfig_LoadFromYAML_DefaultApplied(t *testing.T) {
-	tmpDir := t.TempDir()
-	projectRoot := filepath.Join(tmpDir, "project")
-	if err := os.MkdirAll(filepath.Join(projectRoot, ".tlc"), 0o755); err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-
-	// Minimal config with no stale section
-	configData := `
+	cfg := decodeConfigYAML(t, `
 task:
   default_status: TODO
-`
-	if err := os.WriteFile(
-		filepath.Join(projectRoot, ".tlc", "config.yaml"),
-		[]byte(configData),
-		0o644,
-	); err != nil {
-		t.Fatalf("failed to write config: %v", err)
-	}
-
-	cfg, err := config.LoadConfig(projectRoot)
-	if err != nil {
-		t.Fatalf("LoadConfig() error: %v", err)
-	}
+`)
 
 	if cfg.Task.Stale.DefaultTimeout != 6*time.Hour {
 		t.Fatalf("expected 6h default, got %v", cfg.Task.Stale.DefaultTimeout)

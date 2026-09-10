@@ -9,15 +9,15 @@ import (
 )
 
 // The config structs in internal/config carry `yaml` tags only, because
-// they are also decoded straight from YAML by config.LoadConfig via
-// kit/config. mapstructure — the decoder viper uses — defaults to its own
+// config files on disk are YAML and those tags name the on-disk keys.
+// mapstructure — the decoder viper uses — defaults to its own
 // `mapstructure` tag and, finding none, falls back to case-insensitive
 // matching on the Go FIELD NAME. Single-word keys survive that fallback by
 // coincidence (Statuses↔statuses); every snake_case key does not
 // (DefaultTimeout vs default_timeout), and is silently dropped.
 //
-// Pointing the decoder at the `yaml` tag makes viper agree with the YAML
-// loader on one spelling of every key. Route every viper decode of a
+// Pointing the decoder at the `yaml` tag makes viper agree with the
+// on-disk YAML on one spelling of every key. Route every viper decode of a
 // config struct through the helpers below so a new call site cannot
 // reintroduce the drop by forgetting the option.
 //
