@@ -81,15 +81,7 @@ task:
 
 # Git integration
 git:
-  worktree:
-    directory: .worktrees
-    auto_create: true
-  branch:
-    prefix_from_type: true
-    zero_pad_issue: 4
-  commit:
-    auto_generate: true
-    template: "{type}: {description} (closes #{issue})"
+  track: true
 
 # External system sync
 sync:
@@ -410,63 +402,20 @@ task:
 
 ### `git` — Git Integration
 
-#### `git.worktree`
-
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `directory` | path | `.worktrees` | Worktree directory relative to repo root |
-| `auto_create` | bool | `true` | Auto-create worktrees for parent tasks |
-| `auto_remove` | bool | `false` | Auto-remove worktrees on task completion |
+| `track` | bool | `false` | Track the `.tlc` directory in git |
 
 **Example**:
 ```yaml
 git:
-  worktree:
-    directory: .work
-    auto_create: true
-    auto_remove: false
+  track: true
 ```
 
-#### `git.branch`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `prefix_from_type` | bool | `true` | Use task type as branch prefix |
-| `zero_pad_issue` | int | `4` | Zero-pad issue numbers in branches |
-| `separator` | string | `/` | Separator between prefix and name |
-
-**Example**:
-```yaml
-git:
-  branch:
-    prefix_from_type: true
-    zero_pad_issue: 4
-    separator: /
-
-# Generates: feat/0042-api-rate-limiting
-```
-
-#### `git.commit`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `auto_generate` | bool | `true` | Auto-generate commit messages from branch |
-| `template` | string | `{type}: {description} (closes #{issue})` | Commit message template |
-| `co_author` | string | - | Optional co-author trailer appended to commit message |
-
-**Template Variables**:
-- `{type}` — Branch/task type (feat, fix, etc.)
-- `{description}` — Branch purpose or task title
-- `{issue}` — Issue number (without padding)
-- `{task_id}` — Full task ID
-
-**Example**:
-```yaml
-git:
-  commit:
-    auto_generate: true
-    template: "{type}: {description} (closes #{issue})"
-```
+tlc neither names branches nor writes commit messages, so it has no
+branch, commit, or worktree settings. Earlier drafts of this spec
+documented `git.branch.*`, `git.commit.*` and `git.worktree.*`; no
+release ever read them.
 
 ---
 
@@ -1113,11 +1062,7 @@ task:
   auto_assign: false
 
 git:
-  worktree:
-    directory: .worktrees
-    auto_create: true
-  commit:
-    auto_generate: true
+  track: true
 
 sync:
   enabled: true

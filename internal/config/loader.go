@@ -27,15 +27,7 @@ func DefaultConfig() *Config {
 			StateMachine:     GetDefaultStateMachine(),
 		},
 		Git: GitConfig{
-			Branch: GitBranchConfig{
-				PrefixFromType: true,
-				ZeroPadIssue:   4,
-				Separator:      "/",
-			},
-			Commit: GitCommitConfig{
-				AutoGenerate: true,
-				Template:     "{type}: {description} (closes #{issue})",
-			},
+			Track: false,
 		},
 		Sync: SyncConfig{
 			Enabled:          true,

@@ -68,10 +68,8 @@ func defaultGroups() []groupEntry {
 		},
 		{
 			Name:        "git",
-			Description: "Git tracking and branch/commit config",
-			Patterns: []string{
-				"git.track", "git.branch.*", "git.commit.*",
-			},
+			Description: "Git tracking",
+			Patterns:    []string{"git.track"},
 		},
 		{
 			Name:        "sync",
@@ -122,32 +120,6 @@ func defaultKeyHints() map[string]keyHint {
 		"git.track": {
 			Key: "git.track", Description: "Enable git integration",
 			IsBool: true,
-		},
-		"git.branch.prefix_from_type": {
-			Key:         "git.branch.prefix_from_type",
-			Description: "Derive branch prefix from task type",
-			IsBool:      true,
-		},
-		"git.branch.zero_pad_issue": {
-			Key:         "git.branch.zero_pad_issue",
-			Description: "Zero-pad width for issue numbers in branch names",
-		},
-		"git.branch.separator": {
-			Key:         "git.branch.separator",
-			Description: "Separator between branch name components",
-		},
-		"git.commit.auto_generate": {
-			Key:         "git.commit.auto_generate",
-			Description: "Auto-generate commit messages",
-			IsBool:      true,
-		},
-		"git.commit.template": {
-			Key:         "git.commit.template",
-			Description: "Commit message template",
-		},
-		"git.commit.co_author": {
-			Key:         "git.commit.co_author",
-			Description: "Co-author line for generated commits",
 		},
 		"task.default_status": {
 			Key:         "task.default_status",

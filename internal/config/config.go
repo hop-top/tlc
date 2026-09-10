@@ -1139,24 +1139,15 @@ func validateRules(def *WorkflowDefinition, statusSet map[string]bool, tag strin
 }
 
 // GitConfig contains git-related configuration.
+//
+// `track` is the whole of it. The `branch` and `commit` subtrees —
+// prefix_from_type, zero_pad_issue, separator, auto_generate, template,
+// co_author — were declared, defaulted and documented without a single
+// reader: tlc names no branches and writes no commit messages, so there
+// was nothing for them to configure. Should tlc grow either behaviour,
+// the keys come back attached to the code that honours them.
 type GitConfig struct {
-	Track  bool            `yaml:"track"`
-	Branch GitBranchConfig `yaml:"branch"`
-	Commit GitCommitConfig `yaml:"commit"`
-}
-
-// GitBranchConfig contains git branch configuration.
-type GitBranchConfig struct {
-	PrefixFromType bool   `yaml:"prefix_from_type"`
-	ZeroPadIssue   int    `yaml:"zero_pad_issue"`
-	Separator      string `yaml:"separator"`
-}
-
-// GitCommitConfig contains git commit configuration.
-type GitCommitConfig struct {
-	AutoGenerate bool   `yaml:"auto_generate"`
-	Template     string `yaml:"template"`
-	CoAuthor     string `yaml:"co_author"`
+	Track bool `yaml:"track"`
 }
 
 // SyncConfig contains synchronization configuration.
