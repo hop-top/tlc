@@ -12,11 +12,18 @@ import (
 )
 
 // ProjectConfig contains project-specific configuration.
+//
+// No `workspace` field: workspaces are selected by name through the
+// workspace commands and the `workspaces` list, never by a project-level
+// pointer. The key was declared and never read.
 type ProjectConfig struct {
-	ID                  string `yaml:"id"`
-	FallbackMode        string `yaml:"fallback_mode"`
+	ID           string `yaml:"id"`
+	FallbackMode string `yaml:"fallback_mode"`
+
+	// DuplicateIDStrategy is "share", "unique" or "prompt". Written by
+	// `tlc init` and read back by it on a later run when
+	// --duplicate-id-strategy is absent.
 	DuplicateIDStrategy string `yaml:"duplicate_id_strategy"`
-	Workspace           string `yaml:"workspace,omitempty"`
 }
 
 // WorkspaceConfig contains workspace configuration.
@@ -650,11 +657,14 @@ type PriorityDerivationConfig struct {
 }
 
 // TaskConfig contains task-related configuration.
+//
+// No `auto_assign` or `require_reference`: both were declared,
+// defaulted and documented without a reader. `task create` assigns
+// nobody automatically and requires no external reference, whatever
+// either key said.
 type TaskConfig struct {
-	DefaultStatus    string                      `yaml:"default_status"`
-	AutoAssign       bool                        `yaml:"auto_assign"`
-	RequireReference bool                        `yaml:"require_reference"`
-	TodoFile         string                      `yaml:"todo_file"`
+	DefaultStatus string                      `yaml:"default_status"`
+	TodoFile      string                      `yaml:"todo_file"`
 	ProjectionDir    string                      `yaml:"projection_dir,omitempty"`
 	ArchiveThreshold time.Duration               `yaml:"archive_threshold"`
 	Statuses         []StatusDefinition          `yaml:"statuses,omitempty"`
@@ -1223,12 +1233,15 @@ func (ic *InboxConfig) InboxDir() string {
 }
 
 // StorageConfig contains storage configuration.
+//
+// No `connection_string`: the postgres backend it was declared for is
+// accepted by Validate but not implemented, and nothing ever read the
+// key. It comes back with the backend that needs it.
 type StorageConfig struct {
-	Backend          string           `yaml:"backend"`
-	DBPath           string           `yaml:"db_path"`
-	ConnectionString string           `yaml:"connection_string"`
-	Filesystem       FilesystemConfig `yaml:"filesystem"`
-	Inbox            InboxConfig      `yaml:"inbox"`
+	Backend    string           `yaml:"backend"`
+	DBPath     string           `yaml:"db_path"`
+	Filesystem FilesystemConfig `yaml:"filesystem"`
+	Inbox      InboxConfig      `yaml:"inbox"`
 }
 
 // DBFilePath returns the configured database path or the default "db.sqlite".

@@ -77,7 +77,6 @@ output:
 # Task defaults
 task:
   default_status: TODO
-  auto_assign: false
 
 # Git integration
 git:
@@ -161,8 +160,6 @@ project:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `default_status` | enum | `TODO` | Initial status for new tasks |
-| `auto_assign` | bool | `false` | Auto-assign to current user on create |
-| `require_reference` | bool | `true` | Require reference on creation |
 | `archive_threshold` | duration | `168h` (7d) | Auto-archive DONE/SKIPPED tasks after this duration |
 
 **Task identity is not configurable**. A task's durable identity is a
@@ -453,9 +450,11 @@ environment (for example `JIRA_EMAIL` / `JIRA_TOKEN`), not through
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `backend` | enum | `sqlite` | Storage backend: `sqlite`, `postgres`, `local` |
-| `db_path` | path | `.tlc/db.sqlite` | Database file path (sqlite only) |
-| `connection_string` | string | - | Database connection string (postgres) |
+| `backend` | enum | `sqlite` | Storage backend: `sqlite`, `local` |
+| `db_path` | path | `.tlc/db.sqlite` | Database file path |
+
+`postgres` is still accepted by config validation but is not
+implemented; there is no connection-string key to go with it.
 
 **Two databases**: TLC maintains two distinct SQLite files:
 - **Project DB** — `.tlc/db.sqlite` (or `.hop/tlc/db.sqlite` in hop mode); stores tasks,
@@ -471,13 +470,6 @@ The `storage.db_path` config key refers to the project DB only.
 storage:
   backend: sqlite
   db_path: .tlc/tasks.db
-```
-
-**Example (PostgreSQL)**:
-```yaml
-storage:
-  backend: postgres
-  connection_string: postgresql://user:pass@localhost/tlc
 ```
 
 ---
@@ -739,8 +731,8 @@ TLC_<SECTION>_<KEY>=value
 
 Nested keys use underscores:
 ```
-TLC_GIT_WORKTREE_DIRECTORY=.work
 TLC_SYNC_GITHUB_REPO=org/repo
+TLC_TASK_STALE_DEFAULT_TIMEOUT=6h
 ```
 
 ### Common Variables
@@ -752,10 +744,10 @@ TLC_SYNC_GITHUB_REPO=org/repo
 | `TLC_NO_COLOR` | `output.color=false` | `1` |
 | `TLC_VERBOSE` | `output.verbose` | `true` |
 | `TLC_TASK_DEFAULT_STATUS` | `task.default_status` | `IN_PROGRESS` |
-| `TLC_GIT_WORKTREE_DIRECTORY` | `git.worktree.directory` | `.work` |
-| `TLC_SYNC_ENABLED` | `sync.enabled` | `false` |
-| `TLC_SYNC_INTERVAL` | `sync.interval` | `10m` |
-| `TLC_STORAGE_BACKEND` | `storage.backend` | `postgres` |
+| `TLC_GIT_TRACK` | `git.track` | `true` |
+| `TLC_SYNC_GITHUB_REPO` | `sync.github.repo` | `org/repo` |
+| `TLC_UI_TIMEZONE` | `ui.timezone` | `UTC` |
+| `TLC_STORAGE_BACKEND` | `storage.backend` | `sqlite` |
 
 ### Credential Variables
 
@@ -835,7 +827,7 @@ tlc config get sync.github.repo
 tlc config set output.format json
 
 # Set user-level
-tlc config set --global ui.editor vim
+tlc config set --global ui.theme dark
 
 # Set nested value
 tlc config set sync.github.repo myorg/myrepo

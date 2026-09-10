@@ -16,11 +16,9 @@ func DefaultConfig() *Config {
 			Verbose: false,
 		},
 		Task: TaskConfig{
-			DefaultStatus:    "TODO",
-			AutoAssign:       false,
-			RequireReference: true,
-			Statuses:         GetDefaultStatuses(),
-			StateMachine:     GetDefaultStateMachine(),
+			DefaultStatus: "TODO",
+			Statuses:      GetDefaultStatuses(),
+			StateMachine:  GetDefaultStateMachine(),
 		},
 		Git: GitConfig{
 			Track: false,

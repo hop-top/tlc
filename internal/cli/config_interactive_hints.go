@@ -125,15 +125,6 @@ func defaultKeyHints() map[string]keyHint {
 			Key:         "task.default_status",
 			Description: "Default status for new tasks",
 		},
-		"task.auto_assign": {
-			Key: "task.auto_assign", Description: "Auto-assign tasks on create",
-			IsBool: true,
-		},
-		"task.require_reference": {
-			Key:         "task.require_reference",
-			Description: "Require external reference on task create",
-			IsBool:      true,
-		},
 		"task.archive_threshold": {
 			Key:         "task.archive_threshold",
 			Description: "Auto-archive completed tasks after this duration",
