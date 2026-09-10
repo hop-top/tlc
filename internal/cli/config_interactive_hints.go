@@ -158,10 +158,6 @@ func defaultKeyHints() map[string]keyHint {
 			Key:         "task.default_status",
 			Description: "Default status for new tasks",
 		},
-		"task.id_format": {
-			Key:         "task.id_format",
-			Description: "Task ID format template (e.g. T-{seq:04d})",
-		},
 		"task.auto_assign": {
 			Key: "task.auto_assign", Description: "Auto-assign tasks on create",
 			IsBool: true,

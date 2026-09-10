@@ -112,7 +112,7 @@ project:
   duplicate_id_strategy: unique
 task:
   default_status: TODO
-  id_format: "T-{seq:04d}"
+  todo_file: custom/todo.txt
   require_reference: true
   stale:
     default_timeout: 90m
@@ -148,7 +148,7 @@ workspaces:
 	}{
 		{"project.fallback_mode", cfg.Project.FallbackMode, "detected"},
 		{"project.duplicate_id_strategy", cfg.Project.DuplicateIDStrategy, "unique"},
-		{"task.id_format", cfg.Task.IDFormat, "T-{seq:04d}"},
+		{"task.todo_file", cfg.Task.TodoFile, "custom/todo.txt"},
 		{"task.require_reference", cfg.Task.RequireReference, true},
 		{"task.stale.default_timeout", cfg.Task.Stale.DefaultTimeout, 90 * time.Minute},
 		{"tracks.stale_threshold", cfg.Tracks.StaleThreshold, 12 * time.Hour},

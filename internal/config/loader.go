@@ -19,7 +19,6 @@ func DefaultConfig() *Config {
 		},
 		Task: TaskConfig{
 			DefaultStatus:    "TODO",
-			IDFormat:         "T-{seq:04d}",
 			AutoAssign:       false,
 			RequireReference: true,
 			Statuses:         GetDefaultStatuses(),
