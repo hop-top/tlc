@@ -242,7 +242,7 @@ free-text reason set by 'tlc task block'. To drop a dependency edge use
 unblocking carries its own explanation in a way blocking does not.
 Re-running on an unblocked task converges.`,
 	Annotations: map[string]string{
-		"kit/side-effect": "destructive-local",
+		"kit/side-effect": "write-local",
 		"kit/idempotent":  "yes",
 	},
 	Args: cobra.MinimumNArgs(1),

@@ -306,12 +306,13 @@ func TestBlockUnblockThroughRealBinary(t *testing.T) {
 		t.Errorf("block must not change status:\n%s", shown)
 	}
 
-	// unblock is annotated destructive-local, exactly like its sibling
-	// clear-commands unclaim and unassign, so the kit policy gate refuses
-	// it in a non-TTY without an explicit --confirm. Scripts pass the
-	// flag; this test is a script.
-	if out, code := runTLC(t, bin, home, env, "task", "unblock", "T-0001", "--confirm", "yes"); code != 0 {
-		t.Fatalf("task unblock failed (exit %d):\n%s", code, out)
+	// unblock is annotated write-local, NOT destructive-local: it clears a
+	// single blocked-reason string that the audit log already preserves,
+	// and the flag it supersedes (task update --unblock) carries no gate.
+	// A guard scripts route around protects nothing, so unblock must run
+	// unprompted in a non-TTY. This test is a script: no --confirm.
+	if out, code := runTLC(t, bin, home, env, "task", "unblock", "T-0001"); code != 0 {
+		t.Fatalf("task unblock failed without --confirm (exit %d):\n%s", code, out)
 	}
 	cleared := runTLCOK(t, bin, home, env, "task", "show", "T-0001")
 	if strings.Contains(cleared, "Blocked Reason:") {
