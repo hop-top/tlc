@@ -130,6 +130,38 @@ func inferLabel(projectID string) string {
 	return parts[len(parts)-1]
 }
 
+// ensureGitignoreEntry ensures dir has a .gitignore when dir is a git
+// worktree, and appends entry to it when addEntry is set and the entry
+// is not already present.
+//
+// The file is created even when addEntry is false: `init --no-track`
+// still expects a .gitignore to exist, and callers read it back.
+//
+// The entry stays a RELATIVE name — an absolute path matches nothing git
+// evaluates — while the file it is written into is pinned to dir, the
+// invocation directory, alongside every other write this command makes.
+//
+// Every failure is advisory: a missing or unwritable .gitignore must not
+// fail an init that has already written its config.
+func ensureGitignoreEntry(dir, entry string, addEntry bool) {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return
+	}
+	path := filepath.Join(dir, ".gitignore")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	content, _ := os.ReadFile(path) //nolint:errcheck // file may not exist yet
+	if !addEntry || strings.Contains(string(content), entry) {
+		return
+	}
+	if _, err := f.WriteString(entry + "\n"); err != nil {
+		log.Warn("Failed to update .gitignore", "error", err)
+	}
+}
+
 func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *bool, fallbackMode *string, duplicateIDStrategy *string) error {
 	mode := config.DetectMode()
 
@@ -297,22 +329,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	// would not match anything git evaluates — while the .gitignore
 	// FILE it is written into is pinned to the invocation directory
 	// alongside every other write.
-	gitignoreEntry := configDirName + "/"
-	gitignorePath := filepath.Join(cwd, ".gitignore")
-	if _, err := os.Stat(filepath.Join(cwd, ".git")); err == nil {
-		f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err == nil {
-			defer func() { _ = f.Close() }()
-			content, _ := os.ReadFile(gitignorePath) //nolint:errcheck // file may not exist yet
-			contentStr := string(content)
-
-			if track && !strings.Contains(contentStr, gitignoreEntry) {
-				if _, err := f.WriteString(gitignoreEntry + "\n"); err != nil {
-					log.Warn("Failed to update .gitignore", "error", err)
-				}
-			}
-		}
-	}
+	ensureGitignoreEntry(cwd, configDirName+"/", track)
 
 	// Ensure tasks/ is in the config dir's .gitignore so projected task
 	// files are never tracked, even when the user commits .tlc/ itself.
