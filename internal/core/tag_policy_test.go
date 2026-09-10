@@ -337,3 +337,82 @@ func TestCreateTasksFromPlanAcceptsAllowedTags(t *testing.T) {
 		})
 	}
 }
+
+// TestSuggestedTagsComposesUnderOpenPolicy pins the deliberate
+// difference from TagPolicyFor, which returns an EMPTY vocabulary under
+// `open` because nothing enforces membership there. A chooser wants the
+// set anyway: they are the tags `label init` and `sync` emit.
+func TestSuggestedTagsComposesUnderOpenPolicy(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return builtinTaskConfig()
+	})
+
+	_, vocab := TagPolicyFor()
+	if len(vocab.Display()) != 0 {
+		t.Fatalf("precondition: open policy should build no vocabulary, got %v",
+			vocab.Display())
+	}
+
+	got := SuggestedTags()
+	if len(got) == 0 {
+		t.Fatal("SuggestedTags returned nothing under an open policy")
+	}
+	for _, want := range []string{"type:feat", "status:todo", "priority:p0"} {
+		if !containsTag(got, want) {
+			t.Errorf("composed axis %q missing: %v", want, got)
+		}
+	}
+}
+
+// TestSuggestedTagsExcludesWildcardOpeners: `domain:*` widens a
+// namespace, it is not a taggable value. Offering the literal would
+// seed a tag the policy that declared it rejects.
+func TestSuggestedTagsExcludesWildcardOpeners(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return closedTagConfig("domain:*", "storage")
+	})
+
+	got := SuggestedTags()
+	if containsTag(got, "domain:*") {
+		t.Errorf("wildcard opener suggested as a literal tag: %v", got)
+	}
+	if !containsTag(got, "storage") {
+		t.Errorf("declared literal missing: %v", got)
+	}
+	if err := ValidateTags(got); err != nil {
+		t.Errorf("every suggestion must pass the gate it was built from: %v", err)
+	}
+}
+
+// TestSuggestedTagsFollowsRenamedVocabulary proves composition rather
+// than a second hardcoded list one rename behind.
+func TestSuggestedTagsFollowsRenamedVocabulary(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return &config.TaskConfig{
+			Statuses:     config.GetDefaultStatuses(),
+			StateMachine: config.GetDefaultStateMachine(),
+			Priorities: []config.PriorityDefinition{
+				{Name: "URGENT"}, {Name: "NORMAL"}, {Name: "LATER"},
+			},
+		}
+	})
+
+	got := SuggestedTags()
+	for _, want := range []string{"priority:urgent", "priority:normal", "priority:later"} {
+		if !containsTag(got, want) {
+			t.Errorf("renamed priority axis %q missing: %v", want, got)
+		}
+	}
+	if containsTag(got, "priority:p0") {
+		t.Errorf("built-in priority axis leaked under a renamed vocabulary: %v", got)
+	}
+}
+
+func containsTag(haystack []string, needle string) bool {
+	for _, h := range haystack {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
