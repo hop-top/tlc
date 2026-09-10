@@ -168,12 +168,28 @@ func ConfiguredPriorityDefinitions() []config.PriorityDefinition {
 }
 
 // ValidTaskStatus reports whether s is a recognized task status (or empty).
+//
+// "Recognized" means the EFFECTIVE vocabulary, not the built-in set: a
+// user who declares IN_REVIEW in `task.statuses` means it here too. It
+// reads ConfiguredTaskStatusStrings for that, so this helper and the flag
+// enums, fuzzy normalisation and completion cannot disagree about which
+// names are legal. Validating against the built-in taskStatuses slice
+// instead would silently reject every configured status.
+//
+// Resolved through the provider rather than the memoising DefaultWorkflow*
+// singleton, for the reason spelled out on ConfiguredPriorityStrings: a
+// pre-argv caller (help rendering, flag usage) would otherwise freeze
+// config before `-c key=value` overrides have merged.
+//
+// Empty is valid, matching the pre-existing contract and ValidPriority:
+// callers use "" to mean "no status nominated", and the empty case is
+// checked before the vocabulary rather than folded into it.
 func ValidTaskStatus(s TaskStatus) bool {
 	if s == "" {
 		return true
 	}
-	for _, v := range taskStatuses {
-		if s == v {
+	for _, v := range ConfiguredTaskStatusStrings() {
+		if string(s) == v {
 			return true
 		}
 	}
