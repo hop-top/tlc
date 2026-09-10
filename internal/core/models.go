@@ -110,6 +110,63 @@ func ConfiguredTaskStatusStrings() []string {
 	return out
 }
 
+// ConfiguredTaskStatusDefinitions returns the effective task statuses as
+// full definitions — name, label, description, colour, role, terminality —
+// rather than bare names.
+//
+// ConfiguredTaskStatusStrings answers "which names are legal"; this
+// answers "what does each one MEAN", which is what a consumer needs when
+// it must decide per status rather than merely validate one. The label
+// templates are the first such consumer: they pick which statuses deserve
+// a `status:*` label from role and is_terminal, and take the swatch from
+// the configured colour, so neither the selection nor the palette can
+// drift from config the way a retyped list does.
+//
+// Resolved lazily through the provider, NOT through DefaultWorkflow*, for
+// the reason spelled out on ConfiguredPriorityStrings: the memoising
+// singleton would freeze config before `-c key=value` overrides merge if
+// any pre-argv path (help, usage, completion) ever reached it.
+func ConfiguredTaskStatusDefinitions() []config.StatusDefinition {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Statuses) == 0 {
+		return config.GetDefaultStatuses()
+	}
+	out := make([]config.StatusDefinition, 0, len(cfg.Statuses))
+	for _, s := range cfg.Statuses {
+		if s.Name != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return config.GetDefaultStatuses()
+	}
+	return out
+}
+
+// ConfiguredPriorityDefinitions returns the effective priority vocabulary
+// as full definitions, in declared order — which IS rank order, most
+// urgent first (see config.PriorityDefinition).
+//
+// The definition-level counterpart to ConfiguredPriorityStrings, and the
+// same contract: callers must not sort the result, because sorting it
+// would destroy the only expression of rank the schema has.
+func ConfiguredPriorityDefinitions() []config.PriorityDefinition {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Priorities) == 0 {
+		return config.GetDefaultPriorities()
+	}
+	out := make([]config.PriorityDefinition, 0, len(cfg.Priorities))
+	for _, p := range cfg.Priorities {
+		if p.Name != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return config.GetDefaultPriorities()
+	}
+	return out
+}
+
 // ValidTaskStatus reports whether s is a recognized task status (or empty).
 func ValidTaskStatus(s TaskStatus) bool {
 	if s == "" {

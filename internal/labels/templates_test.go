@@ -1,7 +1,6 @@
 package labels
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -87,8 +86,6 @@ func TestPriorityAxisMatchesPluginNames(t *testing.T) {
 		}
 	}
 }
-
-var hexRe = regexp.MustCompile(`^[0-9A-Fa-f]{6}$`)
 
 // TestLabelColoursAreHex guards the seam between config and the forge.
 // Config declares colours by NAME ("red", "blue"); a GitHub label needs

@@ -50,26 +50,20 @@ var typeLabels = []Label{
 }
 
 // GetTemplates returns suggested labels for a project type.
+//
+// The shared axes are two different kinds of thing, and the split is the
+// point of this file. `type:*` mirrors Conventional Commits — a spec, not
+// a tlc config surface — so it is a literal above, readable against the
+// spec it tracks. Priority, effort and status mirror vocabularies the
+// user CONFIGURES, so they are generated from the effective config
+// (see axes.go) and cannot drift from it, which is exactly what they had
+// done: the old literals named P0-P3's aliases and a fixed
+// TODO/IN_PROGRESS/DONE/SKIPPED regardless of what the user declared.
 func GetTemplates(projectType ProjectType) []Label {
-	common := make([]Label, 0, len(typeLabels)+16)
+	generated := generatedAxes()
+	common := make([]Label, 0, len(typeLabels)+len(generated))
 	common = append(common, typeLabels...)
-	common = append(common,
-		Label{Name: "priority:critical", Color: "B60205", Description: "P0 — critical priority"},
-		Label{Name: "priority:high", Color: "D93F0B", Description: "P1 — high priority"},
-		Label{Name: "priority:medium", Color: "FBCA04", Description: "P2 — medium priority"},
-		Label{Name: "priority:low", Color: "0E8A16", Description: "P3 — low priority"},
-	)
-	common = append(common,
-		Label{Name: "effort:xs", Color: "C2E0C6", Description: "XS — extra small"},
-		Label{Name: "effort:s", Color: "9EDAB0", Description: "S — small"},
-		Label{Name: "effort:m", Color: "7BC99B", Description: "M — medium"},
-		Label{Name: "effort:l", Color: "4FA97F", Description: "L — large"},
-		Label{Name: "effort:xl", Color: "2E8B62", Description: "XL — extra large"},
-	)
-	common = append(common,
-		Label{Name: "status:in-progress", Color: "1D76DB", Description: "IN_PROGRESS — actively worked"},
-		Label{Name: "status:blocked", Color: "D93F0B", Description: "Blocked — task carries a blocked reason"},
-	)
+	common = append(common, generated...)
 
 	var domains []Label
 	switch projectType {
