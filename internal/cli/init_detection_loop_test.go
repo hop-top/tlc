@@ -33,13 +33,45 @@ func TestInitCmd_DetectionLoopWithGitRemote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
 
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Chdir: %v", err)
 	}
-	defer os.Chdir(origDir)
+
+	// The command under test runs on its own goroutine so the detection
+	// loop this test guards against can be caught by a timeout rather
+	// than hanging the suite. That goroutine writes its config through
+	// paths relative to the process working directory (runInit's
+	// config.LocalConfigDir, and CreateConfigWithInferredID on the
+	// detection path). Restoring the working directory or deleting the
+	// sandbox while it is still running therefore redirects those writes
+	// into whatever directory the process has moved to — the package
+	// directory — where they are invisible to git because .tlc/ is
+	// gitignored.
+	//
+	// Both cleanups are gated on no goroutine being able to write any
+	// more — either because it finished or because it never started.
+	// On the timeout path it is still live, so the working directory
+	// stays on the sandbox and the sandbox stays on disk: the orphan
+	// keeps writing where it was told to, the test still fails, and
+	// nothing escapes into the source tree. Leaking a temp dir on an
+	// already-failing run is the cheaper of the two outcomes.
+	finished := make(chan struct{})
+	started := false
+	t.Cleanup(func() {
+		if started {
+			select {
+			case <-finished:
+			default:
+				// Orphan still running: it owns the working directory
+				// and the sandbox until the process exits.
+				return
+			}
+		}
+		_ = os.Chdir(origDir)
+		_ = os.RemoveAll(tmpDir)
+	})
 
 	// Set up a real git repo with a GitHub remote.
 	for _, args := range [][]string{
@@ -83,8 +115,16 @@ func TestInitCmd_DetectionLoopWithGitRemote(t *testing.T) {
 
 	// Build a root command with PersistentPreRunE that triggers project
 	// detection, mirroring the production root command (root.go:121).
-	done := make(chan error, 1)
+	// execErr is written before finished is closed and read only after
+	// that close is observed, so the close alone orders the handoff.
+	var execErr error
+	started = true
 	go func() {
+		// Closing last makes "finished is closed" mean "this goroutine
+		// will not touch the filesystem again", which is exactly the
+		// condition the cleanup above waits for.
+		defer close(finished)
+
 		root := newTestCmd()
 		root.PersistentPreRunE = func(c *cobra.Command, args []string) error {
 			// Production PersistentPreRunE calls getStorage() which
@@ -103,13 +143,13 @@ func TestInitCmd_DetectionLoopWithGitRemote(t *testing.T) {
 		root.SetErr(buf)
 		root.SetArgs([]string{"init", "--no-track"})
 
-		done <- root.Execute()
+		execErr = root.Execute()
 	}()
 
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("init should succeed in a git repo with remote (GH-1): %v", err)
+	case <-finished:
+		if execErr != nil {
+			t.Fatalf("init should succeed in a git repo with remote (GH-1): %v", execErr)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("init did not complete within 5s — stuck in detection loop (GH-1)")
