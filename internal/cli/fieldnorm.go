@@ -228,6 +228,38 @@ func effortAliases() map[string]string {
 	return buildAliases(effortCanonical(), builtinEffortAliases)
 }
 
+// dimensionAxisPrefixes returns the `dimension:` prefixes of the label
+// axes, in the order internal/labels emits them.
+//
+// This is the single answer to "which prefixes name an axis", and it
+// exists so that the TLS parser cannot go deaf to an axis the way it had
+// to `type:`, `status:` and `priority:`. Derived from
+// core.DimensionAxes rather than retyped, so a fifth axis reaches the
+// parser without anyone remembering to widen a second list.
+func dimensionAxisPrefixes() []string {
+	axes := core.DimensionAxes()
+	out := make([]string, 0, len(axes))
+	for _, a := range axes {
+		out = append(out, a+":")
+	}
+	return out
+}
+
+// resolveAxisValue maps the value half of a `dimension:value` token onto
+// the canonical vocabulary name, using EXACT alias resolution only.
+//
+// Fuzzy matching is deliberately not used here, unlike the --priority
+// and --status flags. A flag value is typed by a human who benefits from
+// "prioroty" resolving, and who sees the result on their own terminal. A
+// TLS token is written by a machine — formatTLS, `label init`, a sync
+// plugin — and read on the hot path of every storage open, with no user
+// watching. Fuzzy there would silently coerce an unrecognised value onto
+// whatever scored highest instead of leaving it as the tag it is.
+func resolveAxisValue(aliases map[string]string, value string) (string, bool) {
+	v, ok := aliases[strings.ToLower(strings.TrimSpace(value))]
+	return v, ok
+}
+
 // unknownStatusError renders the rejection for a status the normaliser
 // could not resolve, naming the legal set. Every caller — task list, task
 // create, task update, the HTTP surface — formats through this one helper,

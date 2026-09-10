@@ -151,6 +151,11 @@ func importFromProjection(s *storage.SQLiteStorage) error {
 	ctx := context.Background()
 	scanner := bufio.NewScanner(f)
 
+	// Resolved once for the whole file rather than per line: see
+	// tlsVocabulary. This runs on every storage open, so the alias
+	// tables must not be rebuilt per line, let alone per token.
+	vocab := newTLSVocabulary()
+
 	// skippedExistingIDs counts TLS lines whose ID already lives in the
 	// DB under a different project_id bucket. The pre-T-1234 code path
 	// attempted INSERT for these and surfaced one "Warning: failed to
@@ -166,7 +171,7 @@ func importFromProjection(s *storage.SQLiteStorage) error {
 			continue
 		}
 
-		task, err := parseTLS(line)
+		task, err := parseTLSWith(vocab, line)
 		if err != nil {
 			fmt.Printf("Warning: failed to parse line: %s (%v)\n", line, err)
 			continue
@@ -328,7 +333,16 @@ func isUniqueIDConflict(err error) bool {
 }
 
 // parseTLS is a basic parser for Task Line Syntax.
+//
+// Resolves the vocabulary for this one line. Callers parsing many lines
+// should resolve it once and use parseTLSWith instead — see
+// tlsVocabulary for why that matters on the ingest path.
 func parseTLS(line string) (*core.Task, error) {
+	return parseTLSWith(newTLSVocabulary(), line)
+}
+
+// parseTLSWith is parseTLS against an already-resolved vocabulary.
+func parseTLSWith(vocab tlsVocabulary, line string) (*core.Task, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "[") {
 		return nil, fmt.Errorf("invalid TLS format: missing status bracket")
@@ -396,7 +410,7 @@ func parseTLS(line string) (*core.Task, error) {
 		// Unquoted (legacy): split into title vs metadata by token prefix.
 		var titleParts []string
 		for _, token := range tokens[1:] {
-			if isMetaToken(token) {
+			if vocab.isMetaToken(token) {
 				metaTokens = append(metaTokens, token)
 			} else {
 				titleParts = append(titleParts, token)
@@ -413,9 +427,42 @@ func parseTLS(line string) (*core.Task, error) {
 		} else if strings.HasPrefix(token, "#") {
 			task.Tags = append(task.Tags, strings.TrimPrefix(token, "#"))
 		} else if strings.HasPrefix(token, "effort:") {
-			task.Effort = core.Effort(strings.TrimPrefix(token, "effort:"))
+			vocab.applyAxisToken(task, "effort", strings.TrimPrefix(token, "effort:"))
+		} else if strings.HasPrefix(token, "priority:") {
+			vocab.applyAxisToken(task, "priority", strings.TrimPrefix(token, "priority:"))
 		} else if strings.HasPrefix(token, "prio:") {
+			// The original spelling of the priority axis. Parsed raw, NOT
+			// through applyAxisToken, because that is what it has always
+			// done and formatTLS still emits `prio:`+the canonical name:
+			// routing it through resolution would newly reject a value a
+			// user had put in their own todo.txt by hand under an older
+			// vocabulary, turning a tolerated oddity into a tag.
 			task.Priority = core.Priority(strings.TrimPrefix(token, "prio:"))
+		} else if strings.HasPrefix(token, "status:") {
+			// Status is NOT set from the token. The TLS line already
+			// carries status, in the leading `[x]` bracket marker that
+			// parseTLS resolved above — exactly as a GitHub issue carries
+			// it in open/closed, which is why github-sync's
+			// mapLabelsToTask captures status labels as flags and never
+			// lets one set the field. Two sources for one fact is two
+			// sources that can disagree, and the bracket is the one the
+			// writer controls.
+			//
+			// It does become a tag, which is where this differs from
+			// mapLabelsToTask: a forge keeps the label whether or not tlc
+			// reads it, so dropping it there loses nothing. todo.txt has
+			// no store but the line, so dropping it here would delete the
+			// token outright on the next projection write.
+			task.Tags = append(task.Tags, token)
+		} else if strings.HasPrefix(token, "type:") {
+			// `type:*` mirrors Conventional Commits, a spec rather than a
+			// tlc field — core.Task has no Type — so it lands as a tag,
+			// which is what core.TagVocabulary already admits it as by
+			// construction and what github-sync does with any
+			// unrecognised `dimension:value` label. Stored WHOLE, prefix
+			// included, so the tag a todo.txt round trip produces is
+			// spelt the same as the one the tag policy validates.
+			task.Tags = append(task.Tags, token)
 		} else if strings.HasPrefix(token, "domain:") {
 			task.Meta["domain"] = strings.TrimPrefix(token, "domain:")
 		} else if strings.Contains(token, "=") {
@@ -504,16 +551,121 @@ func trimMatchingQuotes(s string) string {
 	return s
 }
 
+// tlsVocabulary is everything parseTLS needs to read out of the user's
+// effective config, resolved ONCE.
+//
+// It exists for cost, not for tidiness. The alias tables are built, not
+// stored: priorityAliases() walks the vocabulary and derives four
+// spelling variants per entry on every call. Reaching for them per TOKEN
+// — which the first version of this did — made parsing one line 17x
+// slower and allocated 48x as much, and importFromProjection runs from
+// ensureDBSynced on every storage open, including read-only commands, so
+// that cost lands on `task list` and `track show` for every line of
+// todo.txt. Resolved per ingest instead, it is three map builds for the
+// whole file.
+//
+// Resolution still goes through the non-caching core.Configured*
+// accessors underneath. Nothing here is memoised across calls: the
+// memoising DefaultWorkflow* singleton freezes config at first touch and
+// would discard every later `-c key=value` override process-wide, so the
+// saving has to come from calling the accessors once per file rather
+// than from caching their answer beyond it.
+type tlsVocabulary struct {
+	// prefixes are the `dimension:` strings that mark a token as
+	// metadata rather than title text.
+	prefixes []string
+	priority map[string]string
+	effort   map[string]string
+}
+
+// newTLSVocabulary resolves the effective vocabulary.
+//
+// The axis prefixes are DERIVED, not retyped, and that is the whole
+// point. They come from dimensionAxisPrefixes, which reads the same
+// generation internal/labels and core.TagVocabulary read; the three
+// remaining entries are TLS-only serialisation shapes that formatTLS
+// emits and no label axis has ever carried, so there is nothing to
+// derive them from.
+//
+// The hardcoded list this replaced named `effort:`, `prio:`, `domain:`
+// and `ref:`, and had gone quietly deaf to `type:`, `status:` and
+// `priority:` — the three axes `label init` seeds and every sync plugin
+// emits. A token on a deaf prefix does not merely lose its meaning, it
+// lands in the task TITLE, so `label init`'s own vocabulary could not
+// survive a local todo.txt round trip. Deriving the axis half is what
+// makes that failure unrepeatable when a fifth axis appears.
+func newTLSVocabulary() tlsVocabulary {
+	axes := dimensionAxisPrefixes()
+	prefixes := make([]string, 0, len(axes)+3)
+	prefixes = append(prefixes, axes...)
+	// TLS-only shapes.
+	//
+	// `prio:` is the priority axis under its ORIGINAL spelling and is
+	// kept as a live alias, not deprecated: formatTLS still emits it, so
+	// every todo.txt tlc has ever written uses it, and dropping it would
+	// send `prio:P1` into the title of every one of those lines. The
+	// asymmetry is deliberate — acceptance widens to `priority:` while
+	// emission stays on `prio:` — because widening what is READ is
+	// backward compatible and changing what is WRITTEN is not.
+	//
+	// `domain:` and `ref:` mirror no axis at all: `ref:` is
+	// Task.Reference and `domain:` is a Meta key, both TLS
+	// serialisation choices that predate the label vocabulary.
+	prefixes = append(prefixes, "prio:", "domain:", "ref:")
+
+	return tlsVocabulary{
+		prefixes: prefixes,
+		priority: priorityAliases(),
+		effort:   effortAliases(),
+	}
+}
+
+// applyAxisToken sets the typed field an axis token names, resolving the
+// value half through the same alias table the corresponding flag uses.
+//
+// Resolution is what makes `priority:high` and `prio:P1` the same fact.
+// The axis spells its value the way a forge label does — lowercase,
+// hyphenated, and for the built-in priorities under the rank alias
+// `critical`..`low` that every sync plugin's priorityToLabel emits — while
+// the field holds the canonical config name. buildAliases already carries
+// both halves of that mapping, including the mechanical variants that let
+// a renamed vocabulary's `priority:urgent` reach URGENT, so resolving
+// through it means the parser cannot spell a vocabulary differently from
+// the flags that write it.
+//
+// An unresolvable value becomes a TAG rather than being forced into the
+// field or dropped. Forcing it would put a value outside the vocabulary
+// into a typed field, which is the state every other write path exists to
+// prevent; dropping it would silently delete a token the user can see in
+// their file. As a tag it survives, it is visible, and the tag policy
+// gets the final say on it — under a closed policy filterAllowedTags
+// drops it exactly as it drops any other tag outside the vocabulary.
+func (v tlsVocabulary) applyAxisToken(task *core.Task, axis, value string) {
+	switch axis {
+	case "priority":
+		if resolved, ok := resolveAxisValue(v.priority, value); ok {
+			task.Priority = core.Priority(resolved)
+			return
+		}
+	case "effort":
+		if resolved, ok := resolveAxisValue(v.effort, value); ok {
+			task.Effort = core.Effort(resolved)
+			return
+		}
+	}
+	task.Tags = append(task.Tags, axis+":"+value)
+}
+
 // isMetaToken returns true if the token looks like a TLS metadata
-// marker (@assignee, #tag, key:value, key=value, ref:...).
-func isMetaToken(token string) bool {
-	if strings.HasPrefix(token, "@") ||
-		strings.HasPrefix(token, "#") ||
-		strings.HasPrefix(token, "effort:") ||
-		strings.HasPrefix(token, "prio:") ||
-		strings.HasPrefix(token, "domain:") ||
-		strings.HasPrefix(token, "ref:") {
+// marker (@assignee, #tag, dimension:value, key=value, ref:...).
+func (v tlsVocabulary) isMetaToken(token string) bool {
+	if strings.HasPrefix(token, "@") || strings.HasPrefix(token, "#") {
 		return true
+	}
+	for _, p := range v.prefixes {
+		if strings.HasPrefix(token, p) {
+			return true
+		}
 	}
 	return strings.Contains(token, "=")
 }
