@@ -15,10 +15,36 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// closedStatuses are the statuses that take a task out of the overdue
-// population: a finished task is not late. Shared by the Overdue predicate
-// so every caller of "overdue" means the same rows.
-var closedStatuses = []core.TaskStatus{core.StatusDone, core.StatusSkipped}
+// closedStatuses returns the statuses that take a task out of the
+// overdue population: a finished task is not late.
+//
+// Derived from the CONFIGURED vocabulary, not from the built-in
+// DONE/SKIPPED constants. The literal it replaces answered for one
+// vocabulary only — a config declaring SHIPPED and CANCELED as its
+// terminal statuses matched neither, so finished work stayed overdue
+// forever, and in all four consumers of the shared WHERE fragment at
+// once.
+//
+// A VALUE rather than a per-row IsTerminal call, because this feeds a
+// SQL `status NOT IN (...)` predicate: the exclusion has to be a set of
+// names bound as args before any row is read. is_terminal is the same
+// property WorkflowManager.IsTerminal reports, read off the same
+// definitions, so the SQL and the in-process checks cannot disagree.
+//
+// Resolved per call rather than cached in a package var, for the reason
+// spelled out on core.ConfiguredTaskStatusStrings: a var initialized at
+// init time would pin the built-ins before config — and any
+// `-c key=value` override — had loaded.
+func closedStatuses() []string {
+	defs := core.ConfiguredTaskStatusDefinitions()
+	out := make([]string, 0, len(defs))
+	for _, d := range defs {
+		if d.Name != "" && d.IsTerminal {
+			out = append(out, d.Name)
+		}
+	}
+	return out
+}
 
 // buildTaskWhereClauses assembles the WHERE fragment shared by the task
 // list and task count queries: caller filters, full-text search, implicit
@@ -86,18 +112,33 @@ func buildTaskTimeClauses(query core.Query) (clauses []string, args []any) {
 	// would merge into the OR-joined status group and widen the result
 	// set instead of narrowing it.
 	if query.Overdue != nil {
-		placeholders := make([]string, len(closedStatuses))
-		for i := range closedStatuses {
+		// The terminal set is config-derived, so its length varies:
+		// the placeholder count and the args appended below are both
+		// driven off this one slice, never off a remembered count.
+		closed := closedStatuses()
+		placeholders := make([]string, len(closed))
+		for i := range closed {
 			placeholders[i] = "?"
 		}
+		// A vocabulary declaring no terminal status excludes nothing.
+		// `NOT IN ()` is not valid SQLite, so the exclusion is dropped
+		// rather than rendered empty — which is also the right answer:
+		// nothing is finished, so nothing leaves the overdue set.
+		statusExclusion := ""
+		if len(closed) > 0 {
+			statusExclusion = fmt.Sprintf(" AND status NOT IN (%s)",
+				strings.Join(placeholders, ","))
+		}
 		clauses = append(clauses,
-			fmt.Sprintf("due_at IS NOT NULL AND due_at < ? AND status NOT IN (%s)",
-				strings.Join(placeholders, ",")))
+			"due_at IS NOT NULL AND due_at < ?"+statusExclusion)
 		// Args follow placeholder order within the clause: the due_at
-		// bound first, then the excluded statuses.
+		// bound first, then the excluded statuses. Appending the
+		// statuses first would bind the timestamp as a status name and
+		// a status name as the due_at bound, silently changing which
+		// rows match rather than erroring.
 		args = append(args, query.Overdue.UTC().Format(time.RFC3339))
-		for _, st := range closedStatuses {
-			args = append(args, string(st))
+		for _, st := range closed {
+			args = append(args, st)
 		}
 	}
 
