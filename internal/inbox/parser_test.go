@@ -265,6 +265,189 @@ func TestParseCreateJSON_UnknownEffortNamesConfiguredSet(t *testing.T) {
 	}
 }
 
+// --- status vocabulary ---
+
+// withStatuses declares a task-status vocabulary for one test.
+func withStatuses(t *testing.T, names ...string) {
+	t.Helper()
+	defs := make([]config.StatusDefinition, 0, len(names))
+	for _, n := range names {
+		defs = append(defs, config.StatusDefinition{Name: n})
+	}
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{Statuses: defs}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+}
+
+// TestParseCreateJSON_ConfiguredStatusAccepted pins the create gate to the
+// declared vocabulary. The inbox kept its own hardcoded status map long
+// after core.ValidTaskStatus became config-aware, so a project declaring
+// IN_REVIEW had the CLI accept the status and the file drop reject it.
+func TestParseCreateJSON_ConfiguredStatusAccepted(t *testing.T) {
+	withStatuses(t, "TODO", "IN_REVIEW", "DONE")
+
+	data := []byte(`{"title": "reviewed", "status": "IN_REVIEW"}`)
+	r, err := ParseCreateJSON(data)
+	if err != nil {
+		t.Fatalf("declared status rejected: %v", err)
+	}
+	assertEquals(t, "Status", r.Status, "IN_REVIEW")
+}
+
+// TestParseCreateJSON_UnknownStatusNamesConfiguredSet pins the create
+// rejection message to the configured vocabulary rather than the literal
+// "TODO, IN_PROGRESS, DONE, SKIPPED" it used to retype.
+func TestParseCreateJSON_UnknownStatusNamesConfiguredSet(t *testing.T) {
+	withStatuses(t, "TODO", "IN_REVIEW", "DONE")
+
+	data := []byte(`{"title": "x", "status": "SKIPPED"}`)
+	_, err := ParseCreateJSON(data)
+	if err == nil {
+		t.Fatal("expected an undeclared status to be rejected")
+	}
+	if !strings.Contains(err.Error(), "IN_REVIEW") {
+		t.Errorf("error should name the configured set, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "IN_PROGRESS") {
+		t.Errorf("error leaked the built-in set: %v", err)
+	}
+}
+
+// TestParseCreateMarkdown_ConfiguredStatusAccepted covers the markdown
+// intake, which reaches the same gate by a different route.
+func TestParseCreateMarkdown_ConfiguredStatusAccepted(t *testing.T) {
+	withStatuses(t, "TODO", "IN_REVIEW", "DONE")
+
+	data := []byte("---\ntitle: reviewed\nstatus: IN_REVIEW\n---\nbody\n")
+	r, err := ParseCreateMarkdown(data)
+	if err != nil {
+		t.Fatalf("declared status rejected: %v", err)
+	}
+	assertEquals(t, "Status", r.Status, "IN_REVIEW")
+}
+
+// TestParseTransitionJSON_ConfiguredStatusAccepted covers the SECOND
+// status gate. Create and transition validated through separate copies of
+// the same hardcoded map, so a fix applied to one of them would leave a
+// declared status creatable but not transitionable.
+func TestParseTransitionJSON_ConfiguredStatusAccepted(t *testing.T) {
+	withStatuses(t, "TODO", "IN_REVIEW", "DONE")
+
+	data := []byte(`{"id": "T-0042", "status": "IN_REVIEW"}`)
+	tr, err := ParseTransitionJSON(data)
+	if err != nil {
+		t.Fatalf("declared status rejected: %v", err)
+	}
+	assertEquals(t, "Status", tr.Status, "IN_REVIEW")
+}
+
+// TestParseTransitionJSON_UnknownStatusNamesConfiguredSet pins the
+// transition rejection message to the configured vocabulary.
+func TestParseTransitionJSON_UnknownStatusNamesConfiguredSet(t *testing.T) {
+	withStatuses(t, "TODO", "IN_REVIEW", "DONE")
+
+	data := []byte(`{"id": "T-0042", "status": "IN_PROGRESS"}`)
+	_, err := ParseTransitionJSON(data)
+	if err == nil {
+		t.Fatal("expected an undeclared status to be rejected")
+	}
+	if !strings.Contains(err.Error(), "IN_REVIEW") {
+		t.Errorf("error should name the configured set, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "SKIPPED") {
+		t.Errorf("error leaked the built-in set: %v", err)
+	}
+}
+
+// TestStatusErrorsUnderDefaultConfig pins that a config declaring no
+// statuses is indistinguishable from before this became config-driven:
+// the built-in four accepted, and named verbatim in both rejections.
+func TestStatusErrorsUnderDefaultConfig(t *testing.T) {
+	const builtins = "TODO, IN_PROGRESS, DONE, SKIPPED"
+
+	for _, s := range []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"} {
+		if _, err := ParseCreateJSON(
+			[]byte(`{"title": "x", "status": "` + s + `"}`),
+		); err != nil {
+			t.Errorf("built-in status %q rejected: %v", s, err)
+		}
+		if _, err := ParseTransitionJSON(
+			[]byte(`{"id": "T-1", "status": "` + s + `"}`),
+		); err != nil {
+			t.Errorf("built-in status %q rejected on transition: %v", s, err)
+		}
+	}
+
+	_, err := ParseCreateJSON([]byte(`{"title": "x", "status": "NOPE"}`))
+	if err == nil || !strings.Contains(err.Error(), builtins) {
+		t.Errorf("create error should read %q, got: %v", builtins, err)
+	}
+	_, err = ParseTransitionJSON([]byte(`{"id": "T-1", "status": "NOPE"}`))
+	if err == nil || !strings.Contains(err.Error(), builtins) {
+		t.Errorf("transition error should read %q, got: %v", builtins, err)
+	}
+}
+
+// --- priority vocabulary ---
+
+// withPriorities declares a priority vocabulary for one test.
+func withPriorities(t *testing.T, names ...string) {
+	t.Helper()
+	defs := make([]config.PriorityDefinition, 0, len(names))
+	for _, n := range names {
+		defs = append(defs, config.PriorityDefinition{Name: n})
+	}
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{Priorities: defs}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+}
+
+// TestParseCreateJSON_UnknownPriorityNamesConfiguredSet pins the priority
+// rejection to the configured vocabulary. Validation here was already
+// correct — core.ValidPriority reads config — but the message retyped the
+// set beside it, so the two could disagree.
+func TestParseCreateJSON_UnknownPriorityNamesConfiguredSet(t *testing.T) {
+	withPriorities(t, "URGENT", "NORMAL", "LATER")
+
+	data := []byte(`{"title": "x", "priority": "P1"}`)
+	_, err := ParseCreateJSON(data)
+	if err == nil {
+		t.Fatal("expected an undeclared priority to be rejected")
+	}
+	for _, want := range []string{"URGENT", "NORMAL", "LATER"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should name %q, got: %v", want, err)
+		}
+	}
+}
+
+// TestPriorityErrorNeverMentionsP4 pins the typo that shipped
+// independently of any config work: the literal read "P0, P1, P2, P3, P4"
+// and tlc has never had a P4.
+func TestPriorityErrorNeverMentionsP4(t *testing.T) {
+	_, err := ParseCreateJSON([]byte(`{"title": "x", "priority": "P9"}`))
+	if err == nil {
+		t.Fatal("expected an invalid priority to be rejected")
+	}
+	if strings.Contains(err.Error(), "P4") {
+		t.Errorf("error still advertises the nonexistent P4: %v", err)
+	}
+	const builtins = "P0, P1, P2, P3"
+	if !strings.Contains(err.Error(), builtins) {
+		t.Errorf("error should read %q, got: %v", builtins, err)
+	}
+}
+
 // --- helpers ---
 
 func assertEquals(t *testing.T, field, got, want string) {

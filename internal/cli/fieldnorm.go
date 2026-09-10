@@ -257,8 +257,13 @@ func unknownEffortError(input string) error {
 
 // enumList renders a canonical set the way the error messages and the
 // flag-enum help suffix both spell it: comma-separated, declaration order.
+//
+// Delegates to core rather than re-joining here. internal/inbox gates the
+// same vocabularies and cannot import internal/cli, so the rendering had
+// to move somewhere both can reach; leaving a second Join behind would
+// reintroduce exactly the drift this helper exists to prevent.
 func enumList(values []string) string {
-	return strings.Join(values, ", ")
+	return core.VocabularyList(values)
 }
 
 // NormalizeStatus resolves input to a canonical status string.

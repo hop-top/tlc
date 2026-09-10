@@ -93,14 +93,6 @@ func ParseTransitionJSON(data []byte) (*TransitionIntent, error) {
 	return &t, nil
 }
 
-// validStatuses enumerates accepted task status values.
-var validStatuses = map[string]bool{
-	"TODO":        true,
-	"IN_PROGRESS": true,
-	"DONE":        true,
-	"SKIPPED":     true,
-}
-
 // validateCreate checks title is non-empty and enums are valid.
 func validateCreate(r *ParseResult) error {
 	if strings.TrimSpace(r.Title) == "" {
@@ -109,33 +101,32 @@ func validateCreate(r *ParseResult) error {
 				"add a non-empty title field",
 		)
 	}
-	if r.Status != "" && !validStatuses[r.Status] {
+	// Each gate below validates through core and names its allowed set
+	// from the same effective vocabulary, rather than keeping the inbox's
+	// own copy. The status map that used to live here predated any
+	// trustworthy shared helper; keeping it meant a project declaring
+	// IN_REVIEW had the CLI accept the status and the inbox reject it.
+	// The retyped priority list is the same defect caught in the act — it
+	// read "P0, P1, P2, P3, P4", and P4 has never been a tlc priority.
+	if !core.ValidTaskStatus(core.TaskStatus(r.Status)) {
 		return fmt.Errorf(
-			"inbox create: invalid status %q; "+
-				"allowed: TODO, IN_PROGRESS, DONE, SKIPPED",
+			"inbox create: invalid status %q; allowed: %s",
 			r.Status,
+			core.TaskStatusVocabularyList(),
 		)
 	}
-	if r.Priority != "" && !core.ValidPriority(
-		core.Priority(r.Priority),
-	) {
+	if !core.ValidPriority(core.Priority(r.Priority)) {
 		return fmt.Errorf(
-			"inbox create: invalid priority %q; "+
-				"allowed: P0, P1, P2, P3, P4",
+			"inbox create: invalid priority %q; allowed: %s",
 			r.Priority,
+			core.PriorityVocabularyList(),
 		)
 	}
-	if r.Effort != "" && !core.ValidEffort(
-		core.Effort(r.Effort),
-	) {
-		// The allowed set is read from the effective vocabulary rather
-		// than retyped: a user who declared their own `task.efforts`
-		// must be told which sizes THEY have, not the built-in five
-		// they replaced.
+	if !core.ValidEffort(core.Effort(r.Effort)) {
 		return fmt.Errorf(
 			"inbox create: invalid effort %q; allowed: %s",
 			r.Effort,
-			strings.Join(core.ConfiguredEffortStrings(), ", "),
+			core.EffortVocabularyList(),
 		)
 	}
 	return nil
@@ -161,11 +152,14 @@ func validateTransition(t *TransitionIntent) error {
 				"add a non-empty status field",
 		)
 	}
-	if !validStatuses[t.Status] {
+	// The second status gate, and it has to read the same vocabulary as
+	// the create gate above. Fixing only one leaves a config-declared
+	// status that can be created but never transitioned to.
+	if !core.ValidTaskStatus(core.TaskStatus(t.Status)) {
 		return fmt.Errorf(
-			"inbox transition: invalid status %q; "+
-				"allowed: TODO, IN_PROGRESS, DONE, SKIPPED",
+			"inbox transition: invalid status %q; allowed: %s",
 			t.Status,
+			core.TaskStatusVocabularyList(),
 		)
 	}
 	return nil
