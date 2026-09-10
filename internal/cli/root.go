@@ -640,8 +640,21 @@ func init() {
 	// Install kit-themed TableStyle so renderStyledList forwards it to
 	// output.WithTableStyle. The styled path activates only on TTY writers;
 	// non-TTY writers (pipes, tests) keep the plain tabwriter renderer.
+	//
+	// This is the pre-config style. initConfig re-derives it once
+	// ui.theme / ui.table_style are readable; until then a command that
+	// renders before config load still has a style rather than none.
 	setTableStyle(kitRootInstance.TableStyle())
+
+	// Hand initConfig the root without letting it name kitRootInstance,
+	// which would close an initialization cycle.
+	themeTarget = kitRootInstance
 }
+
+// themeTarget is the kit Root that applyUITheme themes from initConfig.
+// Assigned in init(); nil only in tests that never ran it, which
+// applyUITheme tolerates.
+var themeTarget *kitcli.Root
 
 // Execute runs the root command and handles any errors.
 // Alias expansion is applied to os.Args before cobra parses them.
@@ -958,6 +971,17 @@ func initConfig() {
 			log.Warn("Invalid configuration", "error", err)
 		}
 	}
+
+	// Apply ui.theme / ui.table_style now that the merged config is
+	// readable. It cannot happen in kitRoot(): kitRootInstance is a
+	// package var, so kitcli.New has already run by the time cobra
+	// calls initConfig.
+	//
+	// Reached through themeTarget rather than kitRootInstance directly:
+	// naming the var here would close the init cycle
+	// kitRootInstance → kitRoot → initConfig → kitRootInstance that the
+	// RunE wiring below already sidesteps. init() fills it in.
+	applyUITheme(themeTarget, viper.GetString("ui.theme"), viper.GetString("ui.table_style"))
 
 	setupLogging()
 }

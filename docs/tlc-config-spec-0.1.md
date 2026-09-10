@@ -681,7 +681,15 @@ plugins:
 | `editor` | string | `$EDITOR` | Editor command |
 | `date_format` | string | `2006-01-02 15:04:05` | Date format (Go layout) |
 | `timezone` | string | `local` | Timezone: `local`, `UTC`, or IANA name |
-| `table_style` | enum | `unicode` | Table style: `unicode`, `ascii`, `simple` |
+| `table_style` | enum | `unicode` | Table border: `unicode`, `rounded`, `thick`, `double`, `ascii`, `none` |
+| `theme` | enum | `neon` | Color theme: `neon`, `dark`, `bauhaus` |
+
+Both keys style output only. An unrecognised value warns and is ignored
+rather than aborting the command.
+
+Styled table rendering activates on terminals only. When output is piped
+or redirected, tables render as plain columns and `table_style` has no
+visible effect.
 
 **Table Styles**:
 ```
@@ -689,12 +697,15 @@ unicode:  ┌───┬───┐
           │ A │ B │
           ├───┼───┤
 
+rounded:  ╭───┬───╮
+          │ A │ B │
+          ├───┼───┤
+
 ascii:    +---+---+
           | A | B |
           +---+---+
 
-simple:   A   B
-          ─────────
+none:     (no border; theme colors retained)
 ```
 
 **Example**:
@@ -705,6 +716,7 @@ ui:
   date_format: "2006-01-02 15:04"
   timezone: America/New_York
   table_style: unicode
+  theme: neon
 ```
 
 ---

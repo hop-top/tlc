@@ -228,7 +228,10 @@ func defaultKeyHints() map[string]keyHint {
 		},
 		"ui.table_style": {
 			Key:         "ui.table_style",
-			Description: "Table rendering style",
+			Description: "Table border style",
+			Enum: []string{
+				"unicode", "rounded", "thick", "double", "ascii", "none",
+			},
 		},
 		"ui.tag_colors": {
 			Key: "ui.tag_colors", Description: "Tag color map",
@@ -241,6 +244,7 @@ func defaultKeyHints() map[string]keyHint {
 		"ui.theme": {
 			Key:         "ui.theme",
 			Description: "UI color theme",
+			Enum:        []string{"neon", "dark", "bauhaus"},
 		},
 		"prompt.llm_provider": {
 			Key:         "prompt.llm_provider",
