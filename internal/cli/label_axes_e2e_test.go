@@ -282,10 +282,14 @@ func TestLabelInitDomainSetsPerType(t *testing.T) {
 	bin, home, env := statusVocabFixture(t, defaultLabelConfig)
 
 	cases := map[string][]string{
-		"go-binary":      {"domain:cli", "domain:core", "domain:config", "domain:io"},
-		"react-frontend": {"domain:frontend", "domain:components", "domain:hooks"},
+		"go-binary":      {"domain:cli", "domain:core", "domain:config", "domain:io", "domain:storage"},
+		"node-backend":   {"domain:api", "domain:db", "domain:auth", "domain:jobs"},
+		"react-frontend": {"domain:frontend", "domain:components", "domain:state", "domain:api"},
 		"python-mvc":     {"domain:models", "domain:views", "domain:api", "domain:migrations"},
-		"generic":        {"domain:core", "domain:api"},
+		"library":        {"domain:api", "domain:internal", "domain:docs"},
+		"monorepo":       {"domain:tooling", "domain:release", "domain:deps"},
+		"infra":          {"domain:terraform", "domain:k8s", "domain:network", "domain:secrets"},
+		"generic":        {"domain:core", "domain:api", "domain:docs", "domain:ci"},
 	}
 	for pType, want := range cases {
 		out := runTLCOK(t, bin, home, env, "label", "init", "--type", pType)
@@ -324,10 +328,20 @@ func TestLabelInitTypeIsNotIgnored(t *testing.T) {
 	}
 
 	generic := domainsFor("generic")
-	for _, pType := range []string{"go-binary", "react-frontend", "python-mvc"} {
+	for _, pType := range []string{
+		"go-binary", "node-backend", "react-frontend", "python-mvc",
+		"library", "monorepo", "infra",
+	} {
 		if got := domainsFor(pType); slices.Equal(got, generic) {
 			t.Errorf("--type %s emitted generic's domains %v; the flag was accepted and ignored", pType, got)
 		}
+	}
+
+	// An unrecognised value must emit generic's set EXACTLY, not merely
+	// something. --type is a free string, so this is the arm a typo
+	// reaches, and it is documented as equivalent to generic.
+	if got := domainsFor("not-a-real-type"); !slices.Equal(got, generic) {
+		t.Errorf("--type not-a-real-type emitted %v; want generic's %v", got, generic)
 	}
 }
 
@@ -341,7 +355,10 @@ func TestLabelInitHelpNamesOnlyWorkingTypes(t *testing.T) {
 	bin, home, env := statusVocabFixture(t, defaultLabelConfig)
 	out := runTLCOK(t, bin, home, env, "label", "init", "--help")
 
-	for _, want := range []string{"go-binary", "react-frontend", "python-mvc", "generic"} {
+	for _, want := range []string{
+		"go-binary", "node-backend", "react-frontend", "python-mvc",
+		"library", "monorepo", "infra", "generic",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("label init --help does not name working type %q:\n%s", want, out)
 		}
@@ -361,10 +378,13 @@ func TestLabelTemplatesListsEveryType(t *testing.T) {
 	out := runTLCOK(t, bin, home, env, "label", "templates")
 
 	for _, want := range []string{
-		"[go-binary]", "[react-frontend]", "[python-mvc]", "[generic]",
+		"[go-binary]", "[node-backend]", "[react-frontend]", "[python-mvc]",
+		"[library]", "[monorepo]", "[infra]", "[generic]",
 		"domain:cli", "domain:frontend", "domain:models", "domain:migrations",
+		"domain:jobs", "domain:internal", "domain:tooling", "domain:terraform",
 		"type:feat", "effort:xl",
 		"priority:critical", "status:in-progress",
+		"needs:triage", "needs:decision",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("label templates output missing %q:\n%s", want, out)

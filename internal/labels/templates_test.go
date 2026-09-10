@@ -142,12 +142,20 @@ func TestNoDuplicateLabelNames(t *testing.T) {
 	}
 }
 
-// TestDomainSetsUnchanged pins the pre-existing per-type domain sets, so
-// reworking the shared axes cannot quietly drop them.
+// TestDomainSetsUnchanged pins the per-type domain labels that must
+// survive any later rework of the shared axes.
+//
+// `domain:hooks` is gone from the react-frontend row on purpose rather
+// than by omission: it was replaced by `domain:state` because it named
+// one framework's spelling of a concern every UI framework has, so
+// pinning it here would pin the thing the replacement removed.
+// TestDomainSetsPerType below is the exact-set assertion that proves the
+// removal, and TestReplacedDomainsAreGone proves it is not merely
+// unpinned.
 func TestDomainSetsUnchanged(t *testing.T) {
 	cases := map[ProjectType][]string{
 		TypeGoBinary:      {"domain:cli", "domain:core", "domain:config", "domain:io"},
-		TypeReactFrontend: {"domain:frontend", "domain:components", "domain:hooks"},
+		TypeReactFrontend: {"domain:frontend", "domain:components"},
 		TypeGeneric:       {"domain:core", "domain:api"},
 	}
 	for pt, want := range cases {
@@ -169,16 +177,108 @@ func TestDomainSetsUnchanged(t *testing.T) {
 // makes the phantom visible.
 func TestDomainSetsPerType(t *testing.T) {
 	want := map[ProjectType][]string{
-		TypeGoBinary:      {"domain:cli", "domain:core", "domain:config", "domain:io"},
-		TypeReactFrontend: {"domain:frontend", "domain:components", "domain:hooks"},
+		TypeGoBinary:      {"domain:cli", "domain:core", "domain:config", "domain:io", "domain:storage"},
+		TypeNodeBackend:   {"domain:api", "domain:db", "domain:auth", "domain:jobs"},
+		TypeReactFrontend: {"domain:frontend", "domain:components", "domain:state", "domain:api"},
 		TypePythonMVC:     {"domain:models", "domain:views", "domain:api", "domain:migrations"},
-		TypeGeneric:       {"domain:core", "domain:api"},
+		TypeLibrary:       {"domain:api", "domain:internal", "domain:docs"},
+		TypeMonorepo:      {"domain:tooling", "domain:release", "domain:deps"},
+		TypeInfra:         {"domain:terraform", "domain:k8s", "domain:network", "domain:secrets"},
+		TypeGeneric:       {"domain:core", "domain:api", "domain:docs", "domain:ci"},
+	}
+	// Every advertised type must appear above. Without this, adding a
+	// type to AllProjectTypes and forgetting the row here would leave
+	// the new type's exact set unpinned — and an exact-set test that
+	// silently skips the type it was added for is worse than no test.
+	for _, pt := range AllProjectTypes() {
+		if _, ok := want[pt]; !ok {
+			t.Errorf("%s is advertised but its exact domain set is not pinned here", pt)
+		}
 	}
 	for pt, w := range want {
 		got := domainsOf(GetTemplates(pt))
 		if !slices.Equal(got, w) {
 			t.Errorf("%s domains = %v, want %v", pt, got, w)
 		}
+	}
+}
+
+// TestReplacedDomainsAreGone proves a replaced label was removed rather
+// than merely joined by its replacement.
+//
+// Dropping `domain:hooks` from the pinned sets makes the exact-set test
+// pass either way is not true — slices.Equal would catch a leftover — but
+// only for as long as react-frontend keeps an exact-set row. This states
+// the removal as its own property so it survives independently, and
+// names the reason: `label init` seeds what it lists, so a leftover
+// label is one a user's forge keeps carrying after the vocabulary moved.
+func TestReplacedDomainsAreGone(t *testing.T) {
+	for _, pt := range allProjectTypes {
+		got := namesOf(GetTemplates(pt))
+		if got["domain:hooks"] {
+			t.Errorf("%s still seeds domain:hooks; it was replaced by domain:state", pt)
+		}
+	}
+}
+
+// TestNeedsAxisPresentOnEveryType pins the `needs:*` axis to every type,
+// new and old.
+//
+// It is asserted across all types rather than on generic alone because
+// being project-shape-independent is the REASON it sits on `common`
+// instead of in a switch case: "nobody has triaged this" is a fact about
+// a task, not about a repo. Adding it to one type's domains would be the
+// same mistake in a new place.
+func TestNeedsAxisPresentOnEveryType(t *testing.T) {
+	for _, pt := range allProjectTypes {
+		got := namesOf(GetTemplates(pt))
+		for _, w := range []string{"needs:triage", "needs:repro", "needs:decision"} {
+			if !got[w] {
+				t.Errorf("%s: missing %q", pt, w)
+			}
+		}
+	}
+}
+
+// TestNeedsIsNotAStatus guards the boundary that justifies the axis
+// existing at all.
+//
+// `needs:*` was added because `status:blocked` means blocked-by-TASK —
+// it is generated from Task.BlockedReason, which tlc fills from task
+// dependencies — while `needs:decision` means blocked-on-HUMAN. If a
+// `needs:` value were ever also spelled as a status, the two would be
+// two labels for one state and a triager would have no rule for picking
+// between them.
+func TestNeedsIsNotAStatus(t *testing.T) {
+	for _, pt := range allProjectTypes {
+		for _, l := range GetTemplates(pt) {
+			if !strings.HasPrefix(l.Name, "needs:") {
+				continue
+			}
+			twin := "status:" + strings.TrimPrefix(l.Name, "needs:")
+			if namesOf(GetTemplates(pt))[twin] {
+				t.Errorf("%s: %q duplicates %q; needs:* is blocked-on-human, status:* is blocked-by-task",
+					pt, l.Name, twin)
+			}
+		}
+	}
+}
+
+// TestUnknownTypeMatchesGeneric pins the free-string fallback to
+// generic's set EXACTLY.
+//
+// `--type` is a free string, so a typo arrives here as a ProjectType and
+// gets the default arm. That arm used to be a second copy of generic's
+// literal, and this test exists because adding to generic while
+// forgetting the copy would give a typo a smaller set than the generic
+// it is documented to equal — a difference nothing else here would
+// notice, since every other assertion about the fallback is a
+// subset check.
+func TestUnknownTypeMatchesGeneric(t *testing.T) {
+	generic := domainsOf(GetTemplates(TypeGeneric))
+	got := domainsOf(GetTemplates(ProjectType("not-a-real-type")))
+	if !slices.Equal(got, generic) {
+		t.Errorf("unknown type domains = %v, want generic's %v", got, generic)
 	}
 }
 
