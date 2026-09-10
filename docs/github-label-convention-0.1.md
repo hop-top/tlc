@@ -104,7 +104,7 @@ Track issue lifecycle. This axis is deliberately small, because an issue's open/
 | Label | Color | Description |
 |-------|-------|-------------|
 | `status:in-progress` | `#1D76DB` | Actively being worked on |
-| `status:blocked` | `#D93F0B` | Blocked — task carries a blocked reason |
+| `status:blocked` | `#5C1A00` | Blocked — task carries a blocked reason |
 
 A status label is generated only for a workflow status that is neither terminal nor initial. A terminal status is a closed issue and the initial status is an open issue nobody has touched, so labelling either would restate what the issue state already says — and the two could then disagree after an edit on the forge. With the built-in vocabulary that leaves `IN_PROGRESS` alone; a vocabulary that adds `IN_REVIEW` yields `status:in-review` as well.
 
@@ -121,8 +121,8 @@ What the issue is waiting on from a PERSON, as opposed to from another task:
 
 | Label | Color | Description |
 |-------|-------|-------------|
-| `needs:triage` | `#FBCA04` | Unreviewed — needs a first pass |
-| `needs:repro` | `#D93F0B` | Cannot reproduce — needs steps or a case |
+| `needs:triage` | `#B08800` | Unreviewed — needs a first pass |
+| `needs:repro` | `#8E6A3F` | Cannot reproduce — needs steps or a case |
 | `needs:decision` | `#5319E7` | Blocked on a human decision, not on a task |
 
 `status:blocked` means blocked-by-task. Nothing on that axis can say "this is open because a human has not answered yet", which is the gap these three fill.

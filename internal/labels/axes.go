@@ -27,9 +27,21 @@ import (
 // hexRe matches the six hex digits a forge label colour must be.
 var hexRe = regexp.MustCompile(`^[0-9A-Fa-f]{6}$`)
 
-// Colour of the two labels that exist outside any configured vocabulary.
+// Color of the two labels that exist outside any configured vocabulary.
+//
+// blockedLabelColor is deliberately NOT priority:high's D93F0B, which it
+// shared — along with needs:repro — until this was pinned. All three sit
+// on the strip a triager reads at a glance on one issue, so an exact
+// match there is not a palette preference but a badge that cannot be
+// told apart from a different axis's.
+//
+// It stays in the warning family rather than moving to an unrelated hue:
+// the label has always read as a stop signal, and a user whose forge
+// already carries it should see it darken, not change meaning. The
+// darker end is what buys separation from both D93F0B and
+// priority:critical's B60205.
 const (
-	blockedLabelColor = "D93F0B"
+	blockedLabelColor = "5C1A00"
 	fallbackColor     = "EDEDED"
 )
 

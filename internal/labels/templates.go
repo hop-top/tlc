@@ -107,9 +107,18 @@ var typeLabels = []Label{
 // The values round-trip: github-sync's mapLabelsToTask sends any
 // unrecognised `dimension:value` label to task tags, so a `needs:*`
 // label pulled from a forge survives as a tag rather than being dropped.
+//
+// The swatches moved off the priority axis's. `needs:repro` shared
+// D93F0B with priority:high and status:blocked, and `needs:triage`
+// shared FBCA04 with priority:medium — and `needs:*` is read on the same
+// issue as both, so each pair rendered as one badge. Priority and effort
+// could not give way (their colors are pinned; `sync push` re-colors
+// live issues), so `needs:*` moved: triage to a darker gold, repro to a
+// muted brown that reads as a question rather than as an alarm, which is
+// what "cannot reproduce" actually is.
 var needsLabels = []Label{
-	{Name: "needs:triage", Color: "FBCA04", Description: "Unreviewed — needs a first pass"},
-	{Name: "needs:repro", Color: "D93F0B", Description: "Cannot reproduce — needs steps or a case"},
+	{Name: "needs:triage", Color: "B08800", Description: "Unreviewed — needs a first pass"},
+	{Name: "needs:repro", Color: "8E6A3F", Description: "Cannot reproduce — needs steps or a case"},
 	{Name: "needs:decision", Color: "5319E7", Description: "Blocked on a human decision, not on a task"},
 }
 
