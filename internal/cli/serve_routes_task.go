@@ -221,6 +221,14 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 			Meta:        meta,
 		}
 
+		// A priority supplied over the API is a human's value just as
+		// much as one typed at `-p`, and derivation must not overwrite
+		// it. Marking here rather than only in the CLI keeps the two
+		// create paths from disagreeing about provenance.
+		if task.Priority != "" {
+			core.MarkPriorityManual(task)
+		}
+
 		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {
 			task.ProjectID = &proj.ProjectID
 		}
