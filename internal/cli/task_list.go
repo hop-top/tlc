@@ -23,9 +23,10 @@ var TaskListCmd = &cobra.Command{
 	Long: `List tasks across the active project (or all projects with --all),
 filtered by status, assignee, tag, priority, track, due/overdue, and more.
 
-Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
---archived is explicitly set. Supports temporal filters (--due-before,
---due-after, --overdue, --no-due) and aps profile / squad resolution.`,
+Defaults to unfinished work — every status your config gives the
+"initial" or "active" role — unless --status or --archived is explicitly
+set. Supports temporal filters (--due-before, --due-after, --overdue,
+--no-due) and aps profile / squad resolution.`,
 	Annotations: map[string]string{
 		"kit/side-effect": "read",
 	},
@@ -105,9 +106,15 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		statusFlags := taskListStatus
 		statusProvided := cmd.Flags().Changed("status") || fromConfig["status"]
 		defaultStatusFilter := !statusProvided && !cmd.Flags().Changed("archived") && !fromConfig["archived"]
+		// The default filter is "not-yet-finished work", derived from the
+		// effective vocabulary's ROLES rather than named. Naming it — the
+		// IN_PROGRESS + TODO literal this replaces — made bare `task list`
+		// fail outright on any project whose `task.statuses` declares no
+		// IN_PROGRESS: the default filter was invalid under the very
+		// config it was filtering.
 		if defaultStatusFilter {
-			statusFlags = []string{string(core.StatusInProgress), string(core.StatusTodo)}
-			query.StatusPriority = string(core.StatusInProgress)
+			statusFlags = core.UnfinishedTaskStatuses()
+			query.StatusPriority = core.PrimaryActiveTaskStatus()
 		}
 		for _, st := range statusFlags {
 			normalized, ok := NormalizeStatus(st)

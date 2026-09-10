@@ -167,6 +167,90 @@ func ConfiguredPriorityDefinitions() []config.PriorityDefinition {
 	return out
 }
 
+// UnfinishedTaskStatuses returns the statuses that mean "not yet finished
+// work": every status carrying role "initial" or role "active", in
+// declared order.
+//
+// This is the vocabulary-derived spelling of the default `task list` /
+// `task graph` filter. The literal it replaces — IN_PROGRESS + TODO —
+// was config-blind: a project whose `task.statuses` declares no
+// IN_PROGRESS got a default filter naming a status its own vocabulary
+// rejects, so bare `task list` failed with `unknown status
+// "IN_PROGRESS"`. The tool argued with its own config, and the user had
+// to type nothing at all to hit it.
+//
+// ROLE, not name, is the derivation, because role is the only thing in
+// the schema that carries the MEANING the default is reaching for. A
+// renamed vocabulary (DOING for IN_PROGRESS) then just works, and a
+// vocabulary with a second active status (IN_REVIEW alongside DOING)
+// shows it by default, which is what "unfinished" means to the user who
+// declared it. Matching on names could only ever recognise names this
+// package happens to know.
+//
+// ALL active-role statuses, not merely the first: WorkflowManager's
+// roleIndex keeps only the first status per role, which is right when
+// picking a single TARGET to transition into (`task claim` needs one
+// destination) and wrong when describing a SET to filter by. A user who
+// declares two active statuses is telling us both are work in flight;
+// hiding the second by default would be the same class of bug as the
+// literal, one config edit further along.
+//
+// Terminality is deliberately not consulted. Role is what the two
+// consumers already reason about, and a status could carry role "active"
+// while some future config marks it terminal; role is the declared
+// intent and is_terminal is a rendering/transition concern.
+//
+// Resolved lazily through the provider rather than the memoising
+// DefaultWorkflow* singleton, for the reason spelled out on
+// ConfiguredPriorityStrings: a caller running before argv is parsed
+// would pin config in a sync.Once and silently discard later
+// `-c key=value` overrides for the rest of the process.
+//
+// Config validation requires at least one "initial" and one "active"
+// status, so a valid config never yields an empty slice. An invalid one
+// might; callers treat empty as "no default filter" rather than
+// substituting a literal, because substituting is how the config-blind
+// default got here.
+func UnfinishedTaskStatuses() []string {
+	defs := ConfiguredTaskStatusDefinitions()
+	out := make([]string, 0, len(defs))
+	for _, s := range defs {
+		if s.Name == "" {
+			continue
+		}
+		if s.Role == config.RoleInitial || s.Role == config.RoleActive {
+			out = append(out, s.Name)
+		}
+	}
+	return out
+}
+
+// PrimaryActiveTaskStatus returns the status that sorts first in the
+// default listing — the FIRST status carrying role "active", in declared
+// order — or "" when the vocabulary declares none.
+//
+// The companion to UnfinishedTaskStatuses, and deliberately a single
+// value rather than a set: Query.StatusPriority is one status, rendered
+// by the store as `CASE WHEN status = ? THEN 0 ELSE 1 END`, so "sort
+// these first" has room for exactly one answer.
+//
+// FIRST in declared order is that answer because declaration order is
+// lifecycle order everywhere else in this schema — it is literally the
+// rank order for priorities and efforts — so the earliest active status
+// is the one nearest "being worked on right now". With the built-in
+// vocabulary this resolves to IN_PROGRESS, which is what the literal it
+// replaces hardcoded, so default output is unchanged.
+//
+// Same provider-not-singleton resolution as UnfinishedTaskStatuses.
+func PrimaryActiveTaskStatus() string {
+	for _, s := range ConfiguredTaskStatusDefinitions() {
+		if s.Name != "" && s.Role == config.RoleActive {
+			return s.Name
+		}
+	}
+	return ""
+}
+
 // ValidTaskStatus reports whether s is a recognized task status (or empty).
 //
 // "Recognized" means the EFFECTIVE vocabulary, not the built-in set: a
