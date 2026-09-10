@@ -197,14 +197,12 @@ func TestClosedTagPolicyRejectsOnUpdate(t *testing.T) {
 // the third CLI write path and the most direct one — it writes tags
 // without going through applyTaskFieldChanges at all.
 //
-// Only the rejection is asserted, not the accepted write. That is not an
-// omission: this command resolves its task through uri.NewResolver, which
-// does not do the project-scoped seq lookup `task show` does, so a
-// T-NNNN-addressed invocation fails NOT_FOUND before any tag is written —
-// under the default open policy too, so it is a pre-existing defect
-// rather than one this change introduced. The gate therefore runs BEFORE
-// resolution, which is what makes the rejection reachable at all, and is
-// what this pins.
+// The gate runs BEFORE resolution: the policy is a statement about the
+// tags, and nothing about the task can make a disallowed tag allowed.
+// That ordering has to survive the resolution fix, which is why the
+// rejection is asserted here on the same T-NNNN form that now resolves —
+// a gate that had quietly become reachable only via the resolver would
+// still pass a test that never resolved anything.
 func TestClosedTagPolicyRejectsOnTagCommand(t *testing.T) {
 	bin, home, env := tagPolicyFixture(t, closedTagConfig)
 
@@ -220,12 +218,14 @@ func TestClosedTagPolicyRejectsOnTagCommand(t *testing.T) {
 		t.Errorf("the rejected tag landed anyway: %v", got)
 	}
 
-	// A listed tag must NOT be rejected by the policy. It still fails —
-	// on the pre-existing resolution defect above — so what is asserted
-	// is that the failure is no longer the policy's.
-	allowed, code := runTLC(t, bin, home, env, "tag", "T-0001", "storage")
-	if code != 0 && strings.Contains(allowed, "not allowed under tag policy") {
-		t.Errorf("a listed tag was rejected by the policy:\n%s", allowed)
+	// A listed tag must go all the way through on the same path. This
+	// used to be assertable only as "the failure is no longer the
+	// policy's", because the command could not resolve a T-NNNN alias at
+	// all; now the write is expected to land, so the positive case is
+	// pinned directly.
+	runTLCOK(t, bin, home, env, "tag", "T-0001", "storage")
+	if got := showTags(t, bin, home, env, "T-0001"); !hasTag(got, "storage") {
+		t.Errorf("a listed tag was not applied by `tlc tag`: %v", got)
 	}
 }
 

@@ -13,12 +13,22 @@ import (
 	"hop.top/tlc/internal/uri"
 )
 
-// taskIDPattern matches IDs like T-0001, T-42, abc/T-0001, tlc:// URIs.
-var taskIDPattern = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*/)?[A-Z]-\d+$|^tlc://`)
+// taskIDPattern matches display-alias forms: T-0001, T-42, abc/T-0001,
+// and tlc:// URIs. Case-insensitive on the alias so `t-0001` routes like
+// `T-0001` — every other task-argument command accepts that spelling, and
+// routing it to filter mode instead produced "no tasks tagged t-0001".
+var taskIDPattern = regexp.MustCompile(`(?i)^([a-z][a-z0-9_-]*/)?[a-z]-\d+$|^tlc://`)
 
 // looksLikeTaskID returns true if s appears to be a task identifier.
+//
+// This is a ROUTER, not a validator: it decides whether `tlc tag X …`
+// means "add tags to task X" or "filter by tags X …". It therefore has to
+// recognise every form a user may address a task by, including the
+// durable TypeID — which the alias pattern above cannot match, and which
+// was consequently misrouted into filter mode and answered with an empty
+// result rather than tagging the task.
 func looksLikeTaskID(s string) bool {
-	return taskIDPattern.MatchString(s)
+	return core.IsTaskID(s) || taskIDPattern.MatchString(s)
 }
 
 // TagCmd is the top-level `tlc tag` command group.
@@ -99,13 +109,11 @@ func runTagAdd(cmd *cobra.Command, taskID string, newTags []string) error {
 	// most direct tag write in the tool and would otherwise be the hole
 	// the policy leaks through.
 	//
-	// BEFORE the task is resolved, unlike task update's gate, because
-	// this command's resolver cannot resolve a T-NNNN alias at all — it
-	// goes through uri.NewResolver, which does not do the project-scoped
-	// seq lookup `task show` does, so every alias-addressed invocation
-	// fails NOT_FOUND before any tag is examined. That is a pre-existing
-	// defect and not this change's to fix, but gating after it would
-	// make the policy unenforceable on the exact form users type.
+	// BEFORE the task is resolved, deliberately: the gate is a statement
+	// about the TAGS, and nothing about the task can make a disallowed
+	// tag allowed. Rejecting on the tag before spending a lookup is both
+	// cheaper and a better message — "this tag is not permitted" rather
+	// than a not-found for a task the user addressed correctly.
 	//
 	// Only the NEW tags are checked, for the reason applyTaskFieldChanges
 	// spells out — a task already carrying a since-disallowed tag must
@@ -121,7 +129,23 @@ func runTagAdd(cmd *cobra.Command, taskID string, newTags []string) error {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-	res, err := uri.NewResolver(s).ResolveTask(ctx, taskID)
+
+	// Resolve through the same path `task show` and every other
+	// task-argument command uses. T-NNNN is a DISPLAY ALIAS rendered on
+	// demand from (project_id, seq) and never stored; the durable
+	// identity is the TypeID. uri.Resolver looks up stored identifiers
+	// only, so calling it directly — as this command used to — could not
+	// find the one form users actually type, and `tlc tag T-0001 x`
+	// returned NOT_FOUND for a task that plainly existed.
+	//
+	// parseTaskRefForCLI does the project-scoped seq lookup and returns
+	// the input unchanged when it is not a short form, so URI and
+	// cross-project refs still fall through to the resolver untouched.
+	canonical, err := parseTaskRefForCLI(ctx, s, taskID)
+	if err != nil {
+		return err
+	}
+	res, err := uri.NewResolver(s).ResolveTask(ctx, canonical)
 	if err != nil {
 		return err
 	}
