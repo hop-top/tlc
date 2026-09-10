@@ -51,14 +51,14 @@ func TestResolveKeys_Substring(t *testing.T) {
 	setTestViperDefaults(t)
 	hints := defaultKeyHints()
 
-	got := resolveKeys("editor", hints)
+	got := resolveKeys("theme", hints)
 	if len(got) == 0 {
-		t.Fatal("expected keys containing 'editor'")
+		t.Fatal("expected keys containing 'theme'")
 	}
 
 	for _, h := range got {
-		if !strings.Contains(h.Key, "editor") {
-			t.Errorf("expected key containing 'editor', got %q", h.Key)
+		if !strings.Contains(h.Key, "theme") {
+			t.Errorf("expected key containing 'theme', got %q", h.Key)
 		}
 	}
 }

@@ -1172,6 +1172,12 @@ func setDefaults() {
 	viper.SetDefault("storage.backend", backendSQLite)
 	viper.SetDefault("ui.timezone", "local")
 	viper.SetDefault("ui.table_style", "unicode")
+	// Seeded for discoverability as much as for the value: the
+	// interactive config search walks viper.AllKeys(), so a key with no
+	// default cannot be found by name there. "neon" is the palette kit
+	// already defaults to, so this seeds the behaviour that was in
+	// effect anyway.
+	viper.SetDefault("ui.theme", "neon")
 }
 
 var dbSyncOnce sync.Once

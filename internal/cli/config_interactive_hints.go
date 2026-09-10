@@ -35,7 +35,7 @@ type keyHint struct {
 type groupEntry struct {
 	Name        string
 	Description string
-	Patterns    []string // exact keys or globs (e.g. "git.branch.*")
+	Patterns    []string // exact keys or globs (e.g. "sync.github.*")
 }
 
 // defaultGroups returns the named group registry.
@@ -201,7 +201,7 @@ func defaultKeyHints() map[string]keyHint {
 	}
 }
 
-// expandGlob expands a pattern like "git.branch.*" against viper's key set.
+// expandGlob expands a pattern like "sync.github.*" against viper's key set.
 func expandGlob(pattern string, allKeys []string) []string {
 	if !strings.Contains(pattern, "*") {
 		return []string{pattern}
