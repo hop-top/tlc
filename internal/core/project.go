@@ -47,12 +47,37 @@ func ResetDetectionCache() {
 	cachedDetection = nil
 }
 
+// loadConfigLayer folds path into the global viper WITHOUT discarding the
+// map already assembled there, and leaves it as the active config file so
+// ConfigFileUsed and WriteConfig keep targeting it.
+//
+// viper.ReadInConfig REPLACES the config layer with the single file it
+// reads; MergeInConfig layers on top. Detection runs after the CLI's
+// initConfig has merged every project config root-most-to-closest, so a
+// replace here would throw the whole cascade away and leave the process
+// honouring the closest file alone — a setting a user puts at a repo root
+// would reach --help (which never re-reads) and nothing else.
+func loadConfigLayer(path string) error {
+	prev := viper.ConfigFileUsed()
+	viper.SetConfigFile(path)
+	viper.SetConfigType("yaml")
+	if err := viper.MergeInConfig(); err != nil {
+		if prev != "" {
+			viper.SetConfigFile(prev)
+		}
+		return fmt.Errorf("merge config %s: %w", path, err)
+	}
+	return nil
+}
+
 func detectProjectOnce() *ProjectDetection {
+	// A scalar `config` key means TLC_CONFIG named a single path; the -c
+	// flag is a StringArray, on which GetString returns "". The CLI's
+	// initConfig already merged that path, so this only matters for
+	// callers that reach detection without going through it.
 	checkConfigPath := viper.GetString("config")
 	if checkConfigPath != "" {
-		viper.SetConfigFile(checkConfigPath)
-		viper.SetConfigType("yaml")
-		_ = viper.ReadInConfig() //nolint:errcheck // best-effort config load
+		_ = loadConfigLayer(checkConfigPath) //nolint:errcheck // best-effort config load
 	}
 
 	configPath := viper.ConfigFileUsed()
@@ -68,13 +93,43 @@ func detectProjectOnce() *ProjectDetection {
 		return handleFallbackMode()
 	}
 
-	viper.SetConfigFile(tlcConfigPath)
-	viper.SetConfigType("yaml")
-	if err := viper.ReadInConfig(); err != nil {
+	// Readability probe on an ISOLATED viper. The parse still has to be
+	// validated — an unreadable project config means "not in a project" —
+	// but the validation must not be a side effect on the global map.
+	//
+	// ReadInConfig here is what caused the discarded-ancestor bug. The
+	// nearest alternative, MergeInConfig, would re-promote this file above
+	// an explicit -c <file> that initConfig deliberately merged on top of
+	// it. That ordering is currently unobservable, because detection runs
+	// late (touchProjectIfNeeded, after storage is open and after the
+	// memoised workflow singleton has resolved its config), but it is
+	// latent: move detection any earlier and MergeInConfig starts
+	// inverting the -c precedence. An isolated probe has neither hazard,
+	// and the global map already holds this file's keys whenever the
+	// cascade ran.
+	probe := viper.New()
+	probe.SetConfigFile(tlcConfigPath)
+	probe.SetConfigType("yaml")
+	if err := probe.ReadInConfig(); err != nil {
 		return &ProjectDetection{
 			InProject: false,
 		}
 	}
+
+	// Only fold the file into the global map when the cascade has not
+	// already done so — i.e. ConfigFileUsed pointed at a flat-file
+	// variant, or a caller reached detection outside the CLI entrypoint.
+	if configPath != tlcConfigPath {
+		if err := loadConfigLayer(tlcConfigPath); err != nil {
+			return &ProjectDetection{
+				InProject: false,
+			}
+		}
+	}
+	// Keep the closest project config as the active file so
+	// ConfigFileUsed() names it and the WriteConfig below targets it.
+	viper.SetConfigFile(tlcConfigPath)
+	viper.SetConfigType("yaml")
 
 	projectID := viper.GetString("project.id")
 	if projectID == "" {

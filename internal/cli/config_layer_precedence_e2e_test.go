@@ -23,6 +23,7 @@ package cli
 //     a config file back after a run.
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,11 +179,11 @@ func TestLayerProjectConfigBeatsBuiltinDefaults(t *testing.T) {
 // overwrites; reverse that loop and an ancestor's vocabulary silently
 // governs a nested directory.
 //
-// Both resolution paths are asserted deliberately. The help path is the
-// one that actually observes the merge loop's ordering — see
-// TestLayerAncestorConfigDiscardedOnExecutePath for why the execute path
-// cannot, and reverse the loop at root.go's `for i := len(configs) - 1`
-// to watch the help half of this test go red.
+// Both resolution paths are asserted deliberately: reverse the loop at
+// root.go's `for i := len(configs) - 1` and both halves go red. The
+// execute path only observes the ordering because project detection no
+// longer re-reads the closest file over the assembled map — see
+// TestLayerAncestorConfigSurvivesExecutePath.
 func TestLayerClosestProjectConfigBeatsAncestor(t *testing.T) {
 	bin := buildTLCBinary(t)
 	home := t.TempDir()
@@ -209,25 +210,92 @@ func TestLayerClosestProjectConfigBeatsAncestor(t *testing.T) {
 	assertVocabulary(t, helpVocabularyOf(t, bin, root, env), "ANCESTOR", "CLOSEST")
 }
 
-// TestLayerAncestorConfigDiscardedOnExecutePath pins the second defect
-// the layering investigation turned up, and explains why the merge loop's
-// ordering is invisible to the execute path.
+// layerVocabNoDefault renders the same TODO -> <marker> -> DONE vocabulary
+// as layerVocabTemplate but declares NO task.default_status, leaving that
+// key for another layer to supply. The `initial`-role status (TODO) is the
+// fallback when nobody declares one, so a config built from this template
+// alone creates tasks in TODO.
+func layerVocabNoDefault(marker, dbPath string) string {
+	return `storage:
+  db_path: ` + dbPath + `
+task:
+  statuses:
+    - name: TODO
+      label: To Do
+      role: initial
+    - name: ` + marker + `
+      label: Marker ` + marker + `
+      role: active
+    - name: DONE
+      label: Done
+      is_terminal: true
+      role: completed
+  state_machine:
+    rules:
+      TODO: [` + marker + `]
+      ` + marker + `: [DONE]
+`
+}
+
+// statusOfNewTask creates a task and reports the status the CLI assigned
+// it, read back as JSON.
+//
+// --format json matters: the human renderer prints a status's LABEL ("To
+// Do"), while the layering question is about which layer's status NAME
+// ("TODO") won. Asserting against the label would make a marker like MARK
+// match its own label text and pass regardless of the cascade.
+//
+// task.default_status is the cascade probe throughout the tests below
+// because it is genuinely consumed by the workflow engine. The obvious
+// alternative, task.id_format, is NOT usable: internal/core/parseref.go
+// hardcodes fmt.Sprintf("T-%04d", seq) and never consults the config, so
+// that key reads identically whether the cascade works or not.
+func statusOfNewTask(t *testing.T, bin, cwd, id string, env []string, args ...string) string {
+	t.Helper()
+	runTLCOK(t, bin, cwd, env, append([]string{"task", "create", "cascade probe"}, args...)...)
+	out := runTLCOK(t, bin, cwd, env,
+		append([]string{"task", "show", id, "--format", "json"}, args...)...)
+
+	var payload struct {
+		Task struct {
+			Status string `json:"status"`
+		} `json:"task"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("decode task show JSON: %v\nraw:\n%s", err, out)
+	}
+	if payload.Task.Status == "" {
+		t.Fatalf("task show JSON carried no status:\n%s", out)
+	}
+	return payload.Task.Status
+}
+
+// assertStatus fails unless the resolved default status is exactly want.
+// Exact equality rather than a substring test: the losing layer's marker
+// is often a prefix or suffix of the winner's in these fixtures.
+func assertStatus(t *testing.T, got, want, msg string) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("%s: resolved default status %q, want %q", msg, got, want)
+	}
+}
+
+// TestLayerAncestorConfigSurvivesExecutePath pins the multi-level half of
+// the project cascade on the path that actually runs commands.
 //
 // initConfig merges every project config from root-most to closest and
-// then calls viper.SetConfigFile(configs[0]) so ConfigFileUsed() names
-// the closest one. Later, core.detectProjectOnce takes that filename and
-// calls viper.ReadInConfig() on it (internal/core/project.go). ReadInConfig
-// REPLACES viper's config map with that single file rather than merging
-// into it — so every ancestor layer the cascade just assembled is thrown
-// away, and the execute path ends up honouring the closest file alone.
+// then calls viper.SetConfigFile(configs[0]) so ConfigFileUsed() names the
+// closest one. core.detectProjectOnce picks that filename up again, and
+// used to call viper.ReadInConfig() on it. ReadInConfig REPLACES viper's
+// config map with that single file rather than merging into it, so every
+// ancestor layer the cascade had just assembled was thrown away: the
+// execute path honoured the closest file alone while --help, which never
+// re-reads, saw the whole cascade.
 //
-// The visible consequence: a key an ancestor declares and the closest
-// config does not mention reaches --help but not the command itself. A
-// user who sets task.id_format once at a repo root gets it in help text
-// and the built-in default everywhere it matters.
-//
-// Asserted as-is so a fix flips this test rather than passing unnoticed.
-func TestLayerAncestorConfigDiscardedOnExecutePath(t *testing.T) {
+// The probe is a key the ancestor declares and the closest config never
+// mentions. A real merge lets the ancestor's value through; a replace
+// falls back to the initial-role status instead.
+func TestLayerAncestorConfigSurvivesExecutePath(t *testing.T) {
 	bin := buildTLCBinary(t)
 	home := t.TempDir()
 	root := filepath.Join(home, "work")
@@ -235,23 +303,119 @@ func TestLayerAncestorConfigDiscardedOnExecutePath(t *testing.T) {
 	dbPath := filepath.Join(home, "tasks.db")
 	env := layerEnv(t, home, dbPath)
 
-	// The ancestor declares a custom id format; the closest config is
-	// silent about it, so a true cascade would let the ancestor's value
-	// through.
+	// The ancestor names ANCMARK as the default status; the closest config
+	// declares the same vocabulary but is silent about the default.
 	writeLayerConfig(t, filepath.Join(root, ".tlc", "config.yaml"),
-		"storage:\n  db_path: "+dbPath+"\ntask:\n  id_format: ANC-{seq:04d}\n")
+		layerVocabNoDefault("ANCMARK", dbPath)+"  default_status: ANCMARK\n")
 	writeLayerConfig(t, filepath.Join(nested, ".tlc", "config.yaml"),
-		"storage:\n  db_path: "+dbPath+"\n")
+		layerVocabNoDefault("ANCMARK", dbPath))
 
-	out := runTLCOK(t, bin, nested, env, "task", "create", "cascade probe")
-	if strings.Contains(out, "ANC-") {
-		t.Fatalf("ancestor config now survives to the execute path; the "+
-			"cascade is a real merge. Delete this test and assert the "+
-			"ancestor's key reaches the command instead. Got:\n%s", out)
-	}
-	if !strings.Contains(out, "T-") {
-		t.Fatalf("expected the built-in T- id format, got:\n%s", out)
-	}
+	// TODO here would mean the fallback to the initial-role status, i.e.
+	// the ancestor layer was discarded.
+	assertStatus(t, statusOfNewTask(t, bin, nested, "T-0001", env), "ANCMARK",
+		"ancestor's task.default_status must reach the execute path")
+}
+
+// TestLayerClosestBeatsAncestorOnSharedKeyExecutePath guards the other
+// side of that fix: making ancestors survive must not invert the order.
+// Both files declare task.default_status here, so the closest one has to
+// win on the execute path exactly as it does in help.
+func TestLayerClosestBeatsAncestorOnSharedKeyExecutePath(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	root := filepath.Join(home, "work")
+	nested := filepath.Join(root, "a", "b")
+	dbPath := filepath.Join(home, "tasks.db")
+	env := layerEnv(t, home, dbPath)
+
+	// Same vocabulary in both files; only the declared default differs, so
+	// the status list cannot be what decides the outcome.
+	writeLayerConfig(t, filepath.Join(root, ".tlc", "config.yaml"),
+		layerVocabNoDefault("MARK", dbPath)+"  default_status: MARK\n")
+	writeLayerConfig(t, filepath.Join(nested, ".tlc", "config.yaml"),
+		layerVocabNoDefault("MARK", dbPath)+"  default_status: TODO\n")
+
+	assertStatus(t, statusOfNewTask(t, bin, nested, "T-0001", env), "TODO",
+		"closest config's task.default_status must govern the nested dir")
+}
+
+// TestLayerSingleConfigProjectUnaffected is the no-ancestor control: a
+// project holding exactly one config must resolve its keys the way it
+// always did, so the cases above cannot be hiding a regression that only
+// shows up without a cascade to merge.
+func TestLayerSingleConfigProjectUnaffected(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	work := filepath.Join(home, "work")
+	dbPath := filepath.Join(home, "tasks.db")
+	env := layerEnv(t, home, dbPath)
+
+	writeLayerConfig(t, filepath.Join(work, ".tlc", "config.yaml"),
+		layerVocabNoDefault("SOLOMARK", dbPath)+"  default_status: SOLOMARK\n")
+
+	assertStatus(t, statusOfNewTask(t, bin, work, "T-0001", env), "SOLOMARK",
+		"single-config project must honour its own default_status")
+}
+
+// TestLayerExplicitConfigFileBeatsAncestorCascade pins the -c layers
+// against a MULTI-LEVEL project cascade specifically.
+//
+// TestLayerExplicitConfigFileBeatsProjectConfig already covers -c over a
+// SINGLE project config. This case adds the ancestor, because that is what
+// makes project detection re-open a config file at all: detection derives
+// its path from ConfigFileUsed(), which the cascade only sets when it found
+// project configs to merge.
+//
+// Honest note on its strength: swapping the isolated readability probe in
+// core.detectProjectOnce for an unconditional MergeInConfig into the global
+// viper does NOT turn this test red. Detection runs late — from
+// touchProjectIfNeeded, after storage is open and after the memoised
+// workflow singleton has already resolved the config — so by then a re-merge
+// changes nothing any consumer reads. The test stands as a precedence
+// regression guard on the -c layers, not as a kill for that mutation.
+func TestLayerExplicitConfigFileBeatsAncestorCascade(t *testing.T) {
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	root := filepath.Join(home, "work")
+	nested := filepath.Join(root, "a", "b")
+	dbPath := filepath.Join(home, "tasks.db")
+	env := layerEnv(t, home, dbPath)
+
+	writeLayerConfig(t, filepath.Join(root, ".tlc", "config.yaml"),
+		layerVocabNoDefault("MARK", dbPath)+"  default_status: MARK\n")
+	writeLayerConfig(t, filepath.Join(nested, ".tlc", "config.yaml"),
+		layerVocabNoDefault("MARK", dbPath)+"  default_status: TODO\n")
+
+	// A private copy per invocation: every run rewrites the file it
+	// resolves, so a shared fixture would be a different file by the
+	// second assertion.
+	// The -c file reuses the SAME vocabulary as the project configs and
+	// differs only in default_status. Declaring its own marker instead
+	// would leave the project files' state_machine.rules entry for MARK
+	// merged in alongside — viper merges that map key-wise, it does not
+	// replace it — and the run would be rejected for referencing an
+	// undeclared status before the layering question could be asked.
+	flagCfg := filepath.Join(t.TempDir(), "explicit.yaml")
+	writeLayerConfig(t, flagCfg,
+		layerVocabNoDefault("MARK", dbPath)+"  default_status: MARK\n")
+
+	// The nested config says TODO and the -c file says MARK, so MARK
+	// winning can only mean the -c layer outranked the project cascade.
+	assertStatus(t, statusOfNewTask(t, bin, nested, "T-0001", env, "-c", flagCfg),
+		"MARK", "-c <file> must outrank every project config layer")
+
+	// And -c key=value still tops the -c file.
+	kvCfg := filepath.Join(t.TempDir(), "explicit.yaml")
+	writeLayerConfig(t, kvCfg,
+		layerVocabNoDefault("MARK", dbPath)+"  default_status: MARK\n")
+	// TODO, not DONE: config validation rejects a terminal status as a
+	// default, so the override has to name a non-terminal one to reach
+	// the layering question at all.
+	assertStatus(t,
+		statusOfNewTask(t, bin, nested, "T-0002", env, "-c", kvCfg,
+			"-c", "task.default_status=TODO"),
+		"TODO",
+		"-c key=value must outrank -c <file> and every project config layer")
 }
 
 // TestLayerClosestProjectConfigBeatsAncestorStateMachine is the same
