@@ -25,17 +25,15 @@ func (m Model) fetchTasks() tea.Msg {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	// Sort tasks by status order
-	statusOrder := map[core.TaskStatus]int{
-		core.StatusTodo:       0,
-		core.StatusInProgress: 1,
-		core.StatusDone:       2,
-		core.StatusSkipped:    3,
-	}
+	// Sort tasks by the CONFIGURED status order. Declaration order is
+	// rank order, so the ranks come from the vocabulary rather than a
+	// literal map of the built-in four — which ranked every custom
+	// status 0 and collapsed the grouping to ID order.
+	ranks := statusRanks()
 
 	sort.Slice(tasks, func(i, j int) bool {
 		if tasks[i].Status != tasks[j].Status {
-			return statusOrder[tasks[i].Status] < statusOrder[tasks[j].Status]
+			return ranks[tasks[i].Status] < ranks[tasks[j].Status]
 		}
 		return tasks[i].ID < tasks[j].ID
 	})
@@ -136,14 +134,12 @@ func (m Model) rotateStatus(task *core.Task) tea.Cmd {
 func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		statusOrder := []core.TaskStatus{
-			core.StatusTodo,
-			core.StatusInProgress,
-			core.StatusDone,
-		}
+		// The board's own columns, so a left/right move lands on a
+		// column the user can actually see.
+		columns := kanbanStatusOrder()
 
 		currentIdx := -1
-		for i, s := range statusOrder {
+		for i, s := range columns {
 			if s == task.Status {
 				currentIdx = i
 				break
@@ -155,11 +151,11 @@ func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 		}
 
 		newIdx := currentIdx + dir
-		if newIdx < 0 || newIdx >= len(statusOrder) {
+		if newIdx < 0 || newIdx >= len(columns) {
 			return nil
 		}
 
-		next := statusOrder[newIdx]
+		next := columns[newIdx]
 		err := m.service.TransitionStatus(ctx, task.ID, next, core.GetCurrentUser(), "Moved via Kanban")
 		if err != nil {
 			return fmt.Errorf("failed to move task: %w", err)
