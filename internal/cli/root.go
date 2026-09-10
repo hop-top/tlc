@@ -613,7 +613,7 @@ func initConfig() {
 
 	// Validate merged configuration
 	var cfg config.Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := unmarshalConfig(&cfg); err != nil {
 		log.Warn("Failed to unmarshal config for validation", "error", err)
 	} else {
 		if err := cfg.Validate(); err != nil {

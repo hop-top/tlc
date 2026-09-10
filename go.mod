@@ -12,6 +12,7 @@ require (
 	github.com/andygrunwald/go-jira v1.17.0
 	github.com/creack/pty v1.1.24
 	github.com/dustin/go-humanize v1.0.1
+	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/go-github/v69 v69.2.0
 	github.com/google/uuid v1.6.0
 	github.com/machinebox/graphql v0.2.2
@@ -76,7 +77,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid/v5 v5.2.0 // indirect

@@ -225,7 +225,7 @@ func checkConfigYAMLValid(_ bool) checkResult {
 
 func checkConfigValidates(_ bool) checkResult {
 	var cfg config.Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := unmarshalConfig(&cfg); err != nil {
 		return checkResult{
 			name:     "config validates",
 			category: "Config",

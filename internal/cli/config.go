@@ -30,7 +30,7 @@ and reports any errors. Exits non-zero on failure.`,
 	},
 	RunE: func(_ *cobra.Command, _ []string) error {
 		var cfg config.Config
-		if err := viper.Unmarshal(&cfg); err != nil {
+		if err := unmarshalConfig(&cfg); err != nil {
 			return fmt.Errorf("failed to unmarshal config: %w", err)
 		}
 		if err := cfg.Validate(); err != nil {

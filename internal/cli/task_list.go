@@ -264,7 +264,7 @@ func runTaskListWorkspace(
 	cmd *cobra.Command, ctx context.Context, query core.Query, aggregate string,
 ) error {
 	var workspaces []config.WorkspaceConfig
-	if err := viper.UnmarshalKey("workspaces", &workspaces); err != nil {
+	if err := unmarshalConfigKey("workspaces", &workspaces); err != nil {
 		return fmt.Errorf("failed to read workspace config: %w", err)
 	}
 
