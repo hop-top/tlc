@@ -46,12 +46,20 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 		statuses = config.GetDefaultStatuses()
 	}
 
+	// Mirrors TaskConfig.ValidateWorkflow: the built-in rules are the
+	// default only for the built-in vocabulary, so a config on custom
+	// statuses that declares none stays unruled rather than inheriting
+	// a state machine written for status names it does not have.
 	sm := cfg.StateMachine
 	if sm == nil {
-		sm = config.GetDefaultStateMachine()
+		sm = &config.WorkflowDefinition{}
+	}
+	rules := sm.Rules
+	if rules == nil && config.UsesDefaultStatuses(statuses) {
+		rules = config.GetDefaultStateMachine().Rules
 	}
 
-	wm, err := newWorkflowManagerFromRules(statuses, sm.Rules)
+	wm, err := newWorkflowManagerFromRules(statuses, rules)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +72,20 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 			if override.StateMachine == nil {
 				continue
 			}
-			tagWM, err := newWorkflowManagerFromRules(statuses, override.StateMachine.Rules)
+			// An override with no rules of its own has nothing to
+			// replace the base with, so it inherits the base rule set
+			// outright rather than being built unruled and leaning on
+			// the stranded-status fallback below. The fallback is a
+			// per-status carve-out and cannot answer for a whole empty
+			// override: on the built-in vocabulary a leaked built-in
+			// rule set would match the current status, the fallback
+			// would never fire, and the tag would be judged against
+			// rules the user wrote nowhere.
+			overrideRules := override.StateMachine.Rules
+			if overrideRules == nil {
+				overrideRules = wm.rules
+			}
+			tagWM, err := newWorkflowManagerFromRules(statuses, overrideRules)
 			if err != nil {
 				return nil, fmt.Errorf("workflow override for tag %q: %w", tag, err)
 			}
@@ -107,19 +128,7 @@ func newWorkflowManagerFromRules(statuses []config.StatusDefinition, rules map[s
 		}
 	}
 
-	if wm.rules == nil {
-		wm.rules = defaultRules()
-	}
-
 	return wm, nil
-}
-
-// defaultRules returns the built-in transition rules.
-func defaultRules() map[string][]string {
-	return map[string][]string{
-		"TODO":        {"IN_PROGRESS", "SKIPPED"},
-		"IN_PROGRESS": {"DONE", "TODO", "SKIPPED"},
-	}
 }
 
 // ValidateTransition checks if a status transition is allowed.
@@ -153,6 +162,18 @@ func (wm *WorkflowManager) ValidateTransition(current, next TaskStatus, force bo
 	}
 
 	if force {
+		return nil
+	}
+
+	// A workflow with no rules at all is unconfigured, not
+	// all-forbidden. Terminal statuses are already immutable above, so
+	// the remaining transitions are between non-terminal statuses the
+	// user declared and never constrained; refusing them would freeze
+	// every task in its creation status behind --force on the strength
+	// of a rule set the user did not write. A rule set that names even
+	// one status is a deliberate constraint and keeps governing, gap
+	// included.
+	if len(wm.rules) == 0 {
 		return nil
 	}
 
