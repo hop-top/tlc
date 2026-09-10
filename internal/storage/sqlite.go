@@ -699,39 +699,65 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 	return entries, nil
 }
 
-// priorityRankOrder builds the ORDER BY fragment that sorts by priority
-// RANK rather than by the column's text, plus its bind args. Returns an
+// rankedSortColumns maps a SortBy field to the vocabulary carried on the
+// query for it. A table rather than a branch per field: the ORDER BY
+// construction below is identical for both, and the version of this that
+// existed for priority alone is why "sort by effort" stayed a text sort.
+//
+// Both columns hold a value from a user-declared vocabulary whose
+// declaration order is its rank order; any future such column joins by
+// adding a row here.
+var rankedSortColumns = map[string]func(core.Query) []string{
+	"priority": func(q core.Query) []string { return q.PriorityOrder },
+	"effort":   func(q core.Query) []string { return q.EffortOrder },
+}
+
+// vocabRankOrder builds the ORDER BY fragment that sorts a vocabulary
+// column by RANK rather than by its text, plus its bind args. Returns an
 // empty expression when it does not apply, leaving the caller on the
 // plain column sort.
 //
-// It applies only for SortBy=="priority" with a PriorityOrder supplied.
-// A vocabulary of URGENT/NORMAL/LATER sorts to LATER, NORMAL, URGENT as
-// text — exactly backwards — while the built-in P0..P3 sorts correctly
-// by accident, which is why the plain column sort survived this long.
+// It applies only when SortBy names a ranked column and the matching
+// vocabulary is supplied. A priority vocabulary of URGENT/NORMAL/LATER
+// sorts to LATER, NORMAL, URGENT as text — exactly backwards — while the
+// built-in P0..P3 sorts correctly by accident, which is why the plain
+// column sort survived this long. Effort had no such accident: the
+// built-in XS, S, M, L, XL sorts to L, M, S, XL, XS as text.
 //
-// Unset priority is pinned last in BOTH directions by a separate leading
+// The unset value is pinned last in BOTH directions by a separate leading
 // term, so reversing the direction reverses the ranked tasks without
-// promoting the untriaged ones to the top. Ranks are bound as parameters
+// promoting the un-set ones to the top. Ranks are bound as parameters
 // rather than interpolated: the values come from a user's config file.
-func priorityRankOrder(query core.Query, order string) (string, []any) {
-	if query.SortBy != "priority" || len(query.PriorityOrder) == 0 {
+// The COLUMN name is interpolated, but only ever from the keys of
+// rankedSortColumns, never from the caller's string.
+func vocabRankOrder(query core.Query, order string) (string, []any) {
+	vocabFor, ok := rankedSortColumns[query.SortBy]
+	if !ok {
 		return "", nil
 	}
+	vocab := vocabFor(query)
+	if len(vocab) == 0 {
+		return "", nil
+	}
+	col := query.SortBy
+
 	var b strings.Builder
-	args := make([]any, 0, len(query.PriorityOrder)+1)
+	args := make([]any, 0, len(vocab)+1)
 
 	// Unset last, regardless of direction.
-	b.WriteString("CASE WHEN priority IS NULL OR priority = '' THEN 1 ELSE 0 END ASC, CASE priority")
-	for i, name := range query.PriorityOrder {
+	fmt.Fprintf(&b,
+		"CASE WHEN %s IS NULL OR %s = '' THEN 1 ELSE 0 END ASC, CASE %s",
+		col, col, col)
+	for i, name := range vocab {
 		b.WriteString(" WHEN ? THEN ?")
 		args = append(args, name, i)
 	}
-	// Unranked but non-empty values (a priority written before the
+	// Unranked but non-empty values (a value written before the
 	// vocabulary was renamed) sort after every ranked one, ahead of
 	// unset, and stay visible rather than silently collapsing into
-	// rank 0 alongside the most urgent.
+	// rank 0 alongside the first declared value.
 	b.WriteString(" ELSE ? END ")
-	args = append(args, len(query.PriorityOrder))
+	args = append(args, len(vocab))
 	b.WriteString(order)
 	return b.String(), args
 }
@@ -757,7 +783,7 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		if strings.ToLower(query.SortDirection) == "desc" {
 			order = sqlOrderDESC
 		}
-		if expr, exprArgs := priorityRankOrder(query, order); expr != "" {
+		if expr, exprArgs := vocabRankOrder(query, order); expr != "" {
 			orderParts = append(orderParts, expr)
 			args = append(args, exprArgs...)
 		} else {

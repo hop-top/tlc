@@ -128,10 +128,14 @@ func validateCreate(r *ParseResult) error {
 	if r.Effort != "" && !core.ValidEffort(
 		core.Effort(r.Effort),
 	) {
+		// The allowed set is read from the effective vocabulary rather
+		// than retyped: a user who declared their own `task.efforts`
+		// must be told which sizes THEY have, not the built-in five
+		// they replaced.
 		return fmt.Errorf(
-			"inbox create: invalid effort %q; "+
-				"allowed: XS, S, M, L, XL",
+			"inbox create: invalid effort %q; allowed: %s",
 			r.Effort,
+			strings.Join(core.ConfiguredEffortStrings(), ", "),
 		)
 	}
 	return nil

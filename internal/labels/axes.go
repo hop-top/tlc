@@ -222,34 +222,35 @@ func priorityDescription(p config.PriorityDefinition) string {
 	return fmt.Sprintf("%s priority", p.Name)
 }
 
-// effortLabelMeta carries the swatch and prose for each built-in effort.
-// Effort is a closed Go enum rather than a config surface — core.Efforts
-// has no configured counterpart — so the presentation lives here. The
-// SET still comes from core.Efforts(), so adding a value there adds a
-// label without a second edit.
-var effortLabelMeta = map[core.Effort]struct{ color, desc string }{
-	core.EffortXS: {"C2E0C6", "XS — extra small"},
-	core.EffortS:  {"9EDAB0", "S — small"},
-	core.EffortM:  {"7BC99B", "M — medium"},
-	core.EffortL:  {"4FA97F", "L — large"},
-	core.EffortXL: {"2E8B62", "XL — extra large"},
-}
-
-func effortAxis(efforts []core.Effort) []Label {
-	out := make([]Label, 0, len(efforts))
-	for _, e := range efforts {
-		meta, ok := effortLabelMeta[e]
-		if !ok {
-			meta.color = fallbackColor
-			meta.desc = string(e) + " effort"
-		}
+// effortAxis renders one `effort:*` label per declared effort, taking the
+// swatch and prose from the definition rather than from a table keyed by
+// the built-in constants.
+//
+// The built-in five carry their historic colours and descriptions on
+// config.GetDefaultEfforts, so a config declaring no efforts produces
+// byte-identical labels to the hardcoded map this replaced.
+func effortAxis(defs []config.EffortDefinition) []Label {
+	out := make([]Label, 0, len(defs))
+	for _, e := range defs {
 		out = append(out, Label{
-			Name:        "effort:" + labelValue(string(e)),
-			Color:       meta.color,
-			Description: meta.desc,
+			Name:        "effort:" + labelValue(e.Name),
+			Color:       resolveColor(e.Color),
+			Description: effortDescription(e),
 		})
 	}
 	return out
+}
+
+// effortDescription mirrors priorityDescription: an explicit description
+// wins, else one is composed from the label, else from the name alone.
+func effortDescription(e config.EffortDefinition) string {
+	if e.Description != "" {
+		return e.Description
+	}
+	if e.Label != "" {
+		return fmt.Sprintf("%s — %s", e.Name, e.Label)
+	}
+	return fmt.Sprintf("%s effort", e.Name)
 }
 
 // generatedAxes returns every config-derived axis, in the order
@@ -267,7 +268,7 @@ func effortAxis(efforts []core.Effort) []Label {
 func generatedAxes() []Label {
 	out := make([]Label, 0, 16)
 	out = append(out, priorityAxis(core.ConfiguredPriorityDefinitions())...)
-	out = append(out, effortAxis(core.Efforts())...)
+	out = append(out, effortAxis(core.ConfiguredEffortDefinitions())...)
 	out = append(out, statusAxis(core.ConfiguredTaskStatusDefinitions())...)
 	return out
 }

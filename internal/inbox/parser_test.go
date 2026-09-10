@@ -3,6 +3,9 @@ package inbox
 import (
 	"strings"
 	"testing"
+
+	"hop.top/tlc/internal/config"
+	"hop.top/tlc/internal/core"
 )
 
 // --- ParseCreateJSON tests ---
@@ -203,6 +206,62 @@ func TestParseTransitionJSON_MissingStatus(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "status is required") {
 		t.Errorf("error should mention status: %v", err)
+	}
+}
+
+// --- effort vocabulary ---
+
+// withEfforts declares an effort vocabulary for the duration of one test.
+func withEfforts(t *testing.T, names ...string) {
+	t.Helper()
+	defs := make([]config.EffortDefinition, 0, len(names))
+	for _, n := range names {
+		defs = append(defs, config.EffortDefinition{Name: n})
+	}
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{Efforts: defs}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+}
+
+// TestParseCreateJSON_ConfiguredEffortAccepted pins that intake honours
+// the user's declared vocabulary. The inbox gate is a separate call site
+// from the CLI's normaliser, so a size the CLI accepts must not be
+// rejected on the way in from a file drop.
+func TestParseCreateJSON_ConfiguredEffortAccepted(t *testing.T) {
+	withEfforts(t, "TINY", "SMALL", "BIG")
+
+	data := []byte(`{"title": "sized", "effort": "TINY"}`)
+	r, err := ParseCreateJSON(data)
+	if err != nil {
+		t.Fatalf("declared effort rejected: %v", err)
+	}
+	assertEquals(t, "Effort", r.Effort, "TINY")
+}
+
+// TestParseCreateJSON_UnknownEffortNamesConfiguredSet pins the rejection
+// message to the configured vocabulary. It used to retype "XS, S, M, L,
+// XL" as a literal, which would tell a user with TINY declared that the
+// sizes they replaced are the only legal ones.
+func TestParseCreateJSON_UnknownEffortNamesConfiguredSet(t *testing.T) {
+	withEfforts(t, "TINY", "SMALL", "BIG")
+
+	data := []byte(`{"title": "sized", "effort": "XS"}`)
+	_, err := ParseCreateJSON(data)
+	if err == nil {
+		t.Fatal("expected an undeclared effort to be rejected")
+	}
+	for _, want := range []string{"TINY", "SMALL", "BIG"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should name %q, got: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "XL") {
+		t.Errorf("error leaked the built-in set: %v", err)
 	}
 }
 
