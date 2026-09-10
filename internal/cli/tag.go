@@ -165,13 +165,18 @@ func runTagFilter(cmd *cobra.Command, args []string) error {
 		SortDirection: "desc",
 	}
 
-	// Default: show IN_PROGRESS + TODO unless --all-statuses.
+	// Default: unfinished work only, unless --all-statuses.
+	//
+	// Role-derived rather than named, matching `task list`. The literals
+	// this replaces were RAW STRINGS — not even the core constants — so
+	// they were config-blind twice over, and silently: on a vocabulary
+	// declaring neither name the filter matched nothing and the command
+	// printed an empty result at exit 0.
 	if !tagFilterAllStatuses {
-		query.Filters = append(
-			query.Filters,
-			core.FieldFilter{Field: "status", Value: "IN_PROGRESS"},
-			core.FieldFilter{Field: "status", Value: "TODO"},
-		)
+		for _, st := range core.UnfinishedTaskStatuses() {
+			query.Filters = append(query.Filters,
+				core.FieldFilter{Field: "status", Value: st})
+		}
 	}
 
 	// Parse OR-groups from args.
@@ -261,8 +266,15 @@ func filterTasksByTagGroups(tasks []*core.Task, groups [][]string) []*core.Task 
 var tagFilterAllStatuses bool
 
 func init() {
+	// Worded, not named. This runs at package init — long before any
+	// config file is read — so naming the default's statuses here can
+	// only ever name the ones this package happens to know, and a help
+	// string listing statuses the user's config does not declare is its
+	// own small lie. Reading config to fill it in would be worse: a
+	// pre-argv config read pins the memoising DefaultWorkflow* singleton
+	// and silently discards later `-c key=value` overrides.
 	TagCmd.PersistentFlags().BoolVar(&tagFilterAllStatuses, "all-statuses", false,
-		"Include tasks of all statuses (default: IN_PROGRESS + TODO only)")
+		"Include tasks of all statuses (default: unfinished work only)")
 
 	TagCmd.AddCommand(TagListCmd)
 

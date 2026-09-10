@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -24,9 +25,9 @@ var StatusCmd = &cobra.Command{
 	Short: "Show project + caller status snapshot",
 	Long: `Show a short status snapshot for the current scope.
 
-Reports the detected project, the caller's identity, counts of
-in-progress + TODO tasks assigned to the caller, and overdue items.
-Read-only; never mutates storage.`,
+Reports the detected project, the caller's identity, counts of the
+caller's unfinished tasks split by active and initial role, and overdue
+items. Read-only; never mutates storage.`,
 	Annotations: map[string]string{
 		"kit/side-effect":    "read",
 		"kit/idempotent":     "yes",
@@ -123,8 +124,26 @@ func collectStatusSnapshot(ctx context.Context, s statusReader, user string) (st
 	if err != nil {
 		return snap, fmt.Errorf("count assigned tasks: %w; retry, or check the store with 'tlc task list'", err)
 	}
-	snap.inProgress = mineCounts[string(core.StatusInProgress)]
-	snap.todo = mineCounts[string(core.StatusTodo)]
+	// Bucket the per-status counts by ROLE rather than by name. The
+	// literals this replaces — mineCounts["IN_PROGRESS"] / ["TODO"] —
+	// were config-blind, and silently so: on a vocabulary declaring
+	// neither name both lookups missed, and `tlc status` reported
+	// "0 in progress, 0 todo" over a store full of open work. A zero
+	// printed as fact is read as fact.
+	//
+	// Every active-role status feeds "in progress" and every
+	// initial-role status feeds "todo", so a vocabulary with two active
+	// statuses has both counted rather than one silently dropped —
+	// the same set-not-first-match reasoning as UnfinishedTaskStatuses.
+	// Under the built-in vocabulary this is exactly the two literals.
+	for _, def := range core.ConfiguredTaskStatusDefinitions() {
+		switch def.Role {
+		case config.RoleActive:
+			snap.inProgress += mineCounts[def.Name]
+		case config.RoleInitial:
+			snap.todo += mineCounts[def.Name]
+		}
+	}
 
 	// Overdue across the project. core.Query.Overdue carries the whole
 	// definition — due_at in the past AND the task still open — so this
@@ -137,12 +156,22 @@ func collectStatusSnapshot(ctx context.Context, s statusReader, user string) (st
 
 	// The inline list is a preview, so it stays paginated — unlike the
 	// counts above, a capped list is self-evident.
+	//
+	// Filtered by the same active-role set the count above sums, so the
+	// "In progress:" rows and the "N in progress" number cannot disagree.
+	// The literal here was the same silent config-blindness: a
+	// vocabulary without IN_PROGRESS got an empty preview under a
+	// non-zero count once the count was fixed.
+	previewFilters := []core.FieldFilter{{Field: "assigned_to", Value: user}}
+	for _, def := range core.ConfiguredTaskStatusDefinitions() {
+		if def.Role == config.RoleActive {
+			previewFilters = append(previewFilters,
+				core.FieldFilter{Field: "status", Value: def.Name})
+		}
+	}
 	snap.inProgressTasks, err = s.ListTasks(ctx, core.Query{
-		Filters: []core.FieldFilter{
-			{Field: "assigned_to", Value: user},
-			{Field: "status", Value: string(core.StatusInProgress)},
-		},
-		Limit: 50,
+		Filters: previewFilters,
+		Limit:   50,
 	})
 	if err != nil {
 		return snap, fmt.Errorf("list in-progress tasks: %w; retry, or check the store with 'tlc task list'", err)
