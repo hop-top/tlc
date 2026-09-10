@@ -391,8 +391,14 @@ func init() {
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")
-	TaskUpdateCmd.Flags().StringVar(&taskUpdateBlocked, "blocked", "", "Set blocked reason")
-	TaskUpdateCmd.Flags().BoolVar(&taskUpdateUnblock, "unblock", false, "Clear blocked reason")
+	// --blocked / --unblock predate 'task block' / 'task unblock' and
+	// stay supported verbatim: scripts depend on them, and removing an
+	// escape hatch is not part of adding a command. They write the same
+	// field the commands do, through the same taskFieldChanges path, so
+	// the two can never diverge in behaviour — only in ergonomics, which
+	// is what the help text below points at.
+	TaskUpdateCmd.Flags().StringVar(&taskUpdateBlocked, "blocked", "", "Set blocked reason (see also: tlc task block)")
+	TaskUpdateCmd.Flags().BoolVar(&taskUpdateUnblock, "unblock", false, "Clear blocked reason (see also: tlc task unblock)")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateTimeout, "timeout", "", "Stale timeout (e.g. 2h, 30m)")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateTrack, "track", "", "Link to track ID (use '-' to unlink)")
 	TaskUpdateCmd.Flags().StringVar(&taskUpdateDue, "due", "", "Due date (tomorrow, in 3d, 2025-05-01)")

@@ -436,6 +436,12 @@ func resetTaskFlags() {
 	taskUnclaimNote = ""
 	taskAssignNote = ""
 	taskCompleteNote = ""
+	taskReopenNote = ""
+	taskUnassignNote = ""
+	taskSkipNote = ""
+	taskSkipNoVerify = false
+	taskBlockNote = ""
+	taskUnblockNote = ""
 	taskUpdateForce = false
 	taskNoPrompt = false
 

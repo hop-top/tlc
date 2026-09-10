@@ -189,6 +189,51 @@ func (wm *WorkflowManager) StatusForRole(role string) (TaskStatus, error) {
 	return TaskStatus(name), nil
 }
 
+// SkippedResolution reports HOW SkippedStatus found its target, so the
+// caller can tell the user when the answer came from a fallback rather
+// than from their config.
+type SkippedResolution int
+
+const (
+	// SkippedByRole: a status declares role "skipped". The only
+	// unambiguous answer, and the one the built-in vocabulary gives.
+	SkippedByRole SkippedResolution = iota
+	// SkippedByName: no status declares the role, but a status is
+	// literally named SKIPPED. Covers configs written against the
+	// pre-role default set, which declared SKIPPED as role "completed".
+	SkippedByName
+	// SkippedUnresolved: neither, so there is no skip target.
+	SkippedUnresolved
+)
+
+// SkippedStatus resolves the status that `tlc task skip` targets, and
+// reports which rule produced it.
+//
+// Resolution is deliberately a short, ordered, DECLARED-INTENT-FIRST
+// chain rather than a guess:
+//
+//  1. role "skipped" — the config-level concept. Preferred always.
+//  2. a status literally named SKIPPED — a named fallback, and an
+//     explicit one: it exists solely so configs predating the role keep
+//     working, and callers surface it rather than applying it silently.
+//
+// Note what is deliberately NOT in the chain: "any terminal status that
+// is not the completed one". That would silently elect WONTFIX, or
+// CANCELLED, or whichever terminal status happened to be declared
+// second, and a command that skips a task into a status the user never
+// nominated is worse than a command that refuses. When both rules miss,
+// this returns SkippedUnresolved and the caller errors with instructions
+// to declare the role.
+func (wm *WorkflowManager) SkippedStatus() (TaskStatus, SkippedResolution) {
+	if name, ok := wm.roleIndex[config.RoleSkipped]; ok {
+		return TaskStatus(name), SkippedByRole
+	}
+	if _, ok := wm.statuses[string(StatusSkipped)]; ok {
+		return StatusSkipped, SkippedByName
+	}
+	return "", SkippedUnresolved
+}
+
 // StatusForTLSMarker returns the status name for a TLS marker character.
 func (wm *WorkflowManager) StatusForTLSMarker(marker string) (TaskStatus, bool) {
 	name, ok := wm.markerIndex[marker]

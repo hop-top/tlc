@@ -347,13 +347,37 @@ func (o *OutputConfig) Validate() error {
 }
 
 // StatusDefinition defines a single task status.
+// Semantic status roles. A role names what a status MEANS to the
+// lifecycle commands, so those commands never have to spell a status
+// name: `claim` targets RoleActive, `complete` targets RoleCompleted,
+// and so on. This is what lets a user rename their whole vocabulary
+// without any command losing its target.
+//
+// Roles are advisory, not an enum: `role` may hold any string, and an
+// unrecognised one simply indexes a role nothing asks for. Only
+// RoleInitial and RoleActive are required (see TaskConfig.Validate).
+//
+// RoleSkipped distinguishes "finished, not done" from "finished, done".
+// Both are terminal, so IsTerminal cannot tell them apart, and both
+// historically carried RoleCompleted — which made the skip target
+// unreachable by role, because the role index keeps the FIRST status
+// declaring a role and DONE is declared first. Declaring the skip
+// status separately is additive: configs that omit it keep working
+// through the documented fallback in WorkflowManager.SkippedStatus.
+const (
+	RoleInitial   = "initial"
+	RoleActive    = "active"
+	RoleCompleted = "completed"
+	RoleSkipped   = "skipped"
+)
+
 type StatusDefinition struct {
 	Name        string `yaml:"name"`
 	Label       string `yaml:"label"`
 	Description string `yaml:"description,omitempty"`
 	IsTerminal  bool   `yaml:"is_terminal"`
 	Color       string `yaml:"color,omitempty"`
-	Role        string `yaml:"role,omitempty"`       // "initial", "active", "completed"
+	Role        string `yaml:"role,omitempty"`       // see Role* constants
 	TLSMarker   string `yaml:"tls_marker,omitempty"` // Single char for TLS format
 }
 
@@ -438,7 +462,7 @@ func GetDefaultStatuses() []StatusDefinition {
 			Label:      "To Do",
 			IsTerminal: false,
 			Color:      "yellow",
-			Role:       "initial",
+			Role:       RoleInitial,
 			TLSMarker:  " ",
 		},
 		{
@@ -446,7 +470,7 @@ func GetDefaultStatuses() []StatusDefinition {
 			Label:      "In Progress",
 			IsTerminal: false,
 			Color:      "blue",
-			Role:       "active",
+			Role:       RoleActive,
 			TLSMarker:  ">",
 		},
 		{
@@ -454,7 +478,7 @@ func GetDefaultStatuses() []StatusDefinition {
 			Label:      "Done",
 			IsTerminal: true,
 			Color:      "green",
-			Role:       "completed",
+			Role:       RoleCompleted,
 			TLSMarker:  "x",
 		},
 		{
@@ -462,7 +486,7 @@ func GetDefaultStatuses() []StatusDefinition {
 			Label:      "Skipped",
 			IsTerminal: true,
 			Color:      "gray",
-			Role:       "completed",
+			Role:       RoleSkipped,
 			TLSMarker:  "-",
 		},
 	}
@@ -519,9 +543,9 @@ func (t *TaskConfig) Validate() error {
 
 		// Track roles
 		switch s.Role {
-		case "initial":
+		case RoleInitial:
 			hasInitial = true
-		case "active":
+		case RoleActive:
 			hasActive = true
 		}
 	}
