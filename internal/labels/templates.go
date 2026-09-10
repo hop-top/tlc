@@ -74,7 +74,7 @@ type Label struct {
 var typeLabels = []Label{
 	{Name: "type:feat", Color: "0052CC", Description: "New feature"},
 	{Name: "type:fix", Color: "D73A4A", Description: "Bug fix"},
-	{Name: "type:refactor", Color: "5319E7", Description: "Behaviour-preserving restructure"},
+	{Name: "type:refactor", Color: "5319E7", Description: "Behavior-preserving restructure"},
 	{Name: "type:docs", Color: "0075CA", Description: "Documentation only"},
 	{Name: "type:test", Color: "0E8A16", Description: "Tests only"},
 	{Name: "type:chore", Color: "CFD3D7", Description: "Maintenance, no src or test change"},
