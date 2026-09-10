@@ -430,3 +430,157 @@ func TestOverrideRuleUnknownStatusRejectedAtConfig(t *testing.T) {
 		t.Errorf("error should name the override it came from, got:\n%s", out)
 	}
 }
+
+// mixedCaseOverrideConfig is tagOverrideConfig with the override key
+// written in the case a human writes it. Every rule is identical, so
+// any behavioral difference between the two fixtures is the CASE of
+// the key and nothing else.
+const mixedCaseOverrideConfig = `storage:
+  db_path: %s
+task:
+  default_status: TODO
+  statuses:
+    - name: TODO
+      label: To Do
+      role: initial
+      tls_marker: " "
+    - name: IN_PROGRESS
+      label: In Progress
+      role: active
+      tls_marker: ">"
+    - name: DONE
+      label: Done
+      is_terminal: true
+      role: completed
+      tls_marker: "x"
+    - name: SKIPPED
+      label: Skipped
+      is_terminal: true
+      role: skipped
+      tls_marker: "-"
+  state_machine:
+    rules:
+      TODO: [IN_PROGRESS]
+      IN_PROGRESS: [DONE, TODO, SKIPPED]
+  workflows:
+    Hotfix:
+      state_machine:
+        rules:
+          TODO: [DONE]
+`
+
+// TestOverrideTagMatchesRegardlessOfCase is the case-folding criterion,
+// and it is deliberately two-sided for the same reason the lowercase
+// pair above is. An override declared `Hotfix` that simply FAILS to
+// match a task tagged `Hotfix` would be a miss; what actually happens
+// when the key and the tag disagree about case is an INVERSION — the
+// task falls through to the base machine, so the transition the
+// override grants (TODO -> DONE) is refused and the one it withholds
+// (TODO -> IN_PROGRESS) succeeds. Asserting only the allowed half would
+// leave the inverted half to chance.
+//
+// The three spellings run against the one declared key because a tag is
+// free-form user data: `Hotfix`, `hotfix` and `HOTFIX` are one tag
+// everywhere else in the tool (TagVocabulary.Admits folds case), and an
+// override that honored only the spelling the config happened to use
+// would put the two tag subsystems into disagreement.
+func TestOverrideTagMatchesRegardlessOfCase(t *testing.T) {
+	for _, tag := range []string{"Hotfix", "hotfix", "HOTFIX"} {
+		t.Run(tag, func(t *testing.T) {
+			bin, home, env := statusVocabFixture(t, mixedCaseOverrideConfig)
+
+			// Allowed half: the override grants TODO -> DONE, which the
+			// base machine has no edge for.
+			runTLCOK(t, bin, home, env, "task", "create", "urgent fix", "--tag", tag)
+			out, code := runTLC(t, bin, home, env, "task", "update", "T-0001", "--status", "DONE")
+			if code != 0 {
+				t.Fatalf("tag %q must match the `Hotfix` override, which allows TODO -> DONE (exit %d):\n%s",
+					tag, code, out)
+			}
+			if shown := showStatus(t, bin, home, env, "T-0001"); !strings.Contains(shown, "DONE") &&
+				!strings.Contains(shown, "Done") {
+				t.Errorf("task did not land in DONE:\n%s", shown)
+			}
+
+			// Forbidden half: the override replaces the base rules for
+			// TODO, so the base's TODO -> IN_PROGRESS edge is gone.
+			runTLCOK(t, bin, home, env, "task", "create", "second fix", "--tag", tag)
+			out, code = runTLC(t, bin, home, env, "task", "update", "T-0002", "--status", "IN_PROGRESS")
+			if code == 0 {
+				t.Fatalf("tag %q matched the override, so TODO -> IN_PROGRESS must be refused:\n%s",
+					tag, out)
+			}
+			if shown := showStatus(t, bin, home, env, "T-0002"); strings.Contains(shown, "In Progress") {
+				t.Errorf("rejected transition must leave the task alone:\n%s", shown)
+			}
+		})
+	}
+}
+
+// TestDistinctOverrideTagsDoNotCollide is the guard on the fix. Folding
+// case to match `Hotfix` against `hotfix` must not fold two tags that
+// differ by more than case into one another: `hotfix` and `hot-fix` are
+// separate keys with contradictory rules, and a task carrying one must
+// never be judged by the other.
+func TestDistinctOverrideTagsDoNotCollide(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, collidingTagConfig)
+
+	// `Hotfix` allows TODO -> DONE and nothing else.
+	runTLCOK(t, bin, home, env, "task", "create", "one", "--tag", "hotfix")
+	if out, code := runTLC(t, bin, home, env, "task", "update", "T-0001", "--status", "SKIPPED"); code == 0 {
+		t.Fatalf("`hot-fix` rules must not govern a task tagged `hotfix`:\n%s", out)
+	}
+	if out, code := runTLC(t, bin, home, env, "task", "update", "T-0001", "--status", "DONE"); code != 0 {
+		t.Fatalf("`Hotfix` allows TODO -> DONE (exit %d):\n%s", code, out)
+	}
+
+	// `hot-fix` allows TODO -> SKIPPED and nothing else.
+	runTLCOK(t, bin, home, env, "task", "create", "two", "--tag", "hot-fix")
+	if out, code := runTLC(t, bin, home, env, "task", "update", "T-0002", "--status", "DONE"); code == 0 {
+		t.Fatalf("`Hotfix` rules must not govern a task tagged `hot-fix`:\n%s", out)
+	}
+	if out, code := runTLC(t, bin, home, env, "task", "update", "T-0002", "--status", "SKIPPED"); code != 0 {
+		t.Fatalf("`hot-fix` allows TODO -> SKIPPED (exit %d):\n%s", code, out)
+	}
+}
+
+// collidingTagConfig declares two tags that share a prefix and differ by
+// a separator as well as by case, with contradictory rules so which one
+// governs is observable.
+const collidingTagConfig = `storage:
+  db_path: %s
+task:
+  default_status: TODO
+  statuses:
+    - name: TODO
+      label: To Do
+      role: initial
+      tls_marker: " "
+    - name: IN_PROGRESS
+      label: In Progress
+      role: active
+      tls_marker: ">"
+    - name: DONE
+      label: Done
+      is_terminal: true
+      role: completed
+      tls_marker: "x"
+    - name: SKIPPED
+      label: Skipped
+      is_terminal: true
+      role: skipped
+      tls_marker: "-"
+  state_machine:
+    rules:
+      TODO: [IN_PROGRESS]
+      IN_PROGRESS: [DONE, TODO, SKIPPED]
+  workflows:
+    Hotfix:
+      state_machine:
+        rules:
+          TODO: [DONE]
+    hot-fix:
+      state_machine:
+        rules:
+          TODO: [SKIPPED]
+`

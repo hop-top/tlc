@@ -69,13 +69,17 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 				return nil, fmt.Errorf("workflow override for tag %q: %w", tag, err)
 			}
 			tagWM.defaultStatus = cfg.DefaultStatus
+			// overrideTag keeps the spelling the config author wrote,
+			// because it is what error messages quote back at them; the
+			// MAP key is folded, because it is what tags are matched
+			// against.
 			tagWM.overrideTag = tag
 			// base is the workflow this override replaces. Kept so a
 			// transition out of a status the override left unruled can
 			// fall back rather than strand the task; see
 			// ValidateTransition.
 			tagWM.base = wm
-			wm.workflows[tag] = tagWM
+			wm.workflows[workflowTagKey(tag)] = tagWM
 		}
 	}
 
@@ -335,6 +339,31 @@ func (e ErrAmbiguousWorkflow) Error() string {
 	)
 }
 
+// workflowTagKey folds one tag to the spelling `task.workflows` is
+// keyed and looked up by.
+//
+// Case-insensitive, because that is what a tag already means everywhere
+// else: TagVocabulary.Admits lowercases before matching, so a project
+// with a closed policy accepts `Hotfix`, `hotfix` and `HOTFIX` as the
+// one tag. An override keyed by exact spelling would have made the two
+// tag subsystems disagree — a tag the policy admits, silently governed
+// by no workflow.
+//
+// This cannot be done at decode time instead. viper lowercases map keys
+// on its own, so a `Hotfix:` override arrives here as `hotfix` with the
+// author's casing already gone and nothing to re-case it against: unlike
+// statuses and priorities, tags are free-form user data with no declared
+// vocabulary. Folding at the map boundary also covers the callers that
+// never touch viper — NewWorkflowManager is exported and takes a
+// TaskConfig built by hand.
+//
+// Folding is the only transformation: `hotfix` and `hot-fix` stay two
+// distinct keys, so this collapses spellings of one tag and never two
+// different tags.
+func workflowTagKey(tag string) string {
+	return strings.ToLower(strings.TrimSpace(tag))
+}
+
 // GetWorkflowForTags returns the workflow that governs a task carrying
 // these tags: the override for its single matching tag, or the receiver
 // when no tag matches.
@@ -361,8 +390,8 @@ func (wm *WorkflowManager) GetWorkflowForTags(tags []string) (*WorkflowManager, 
 
 	var matched []string
 	for _, tag := range tags {
-		if _, ok := wm.workflows[tag]; ok {
-			matched = append(matched, tag)
+		if _, ok := wm.workflows[workflowTagKey(tag)]; ok {
+			matched = append(matched, workflowTagKey(tag))
 		}
 	}
 
