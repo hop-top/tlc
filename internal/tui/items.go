@@ -177,22 +177,6 @@ func (ki *kanbanCardItem) Render(_ int) string {
 	return style.Render(b.String())
 }
 
-// formatStatusWithStyles renders a task status icon using the given styles.
-func formatStatusWithStyles(status core.TaskStatus, s *styles.Styles) string {
-	switch status {
-	case core.StatusTodo:
-		return s.Todo.Render("[ ]")
-	case core.StatusInProgress:
-		return s.InProgress.Render("[~]")
-	case core.StatusDone:
-		return s.Done.Render("[x]")
-	case core.StatusSkipped:
-		return s.Skipped.Render("[-]")
-	default:
-		return string(status)
-	}
-}
-
 // displayAlias renders a task's human-side reference. Prefers the
 // FormatTaskAlias (T-NNNN, derived from Seq) and falls back to the
 // durable id when Seq is unset (e.g. legacy or unseeded test data).
