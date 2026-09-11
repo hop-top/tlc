@@ -250,7 +250,7 @@ func formatFlowRuns(cmd *cobra.Command, runs []*core.FlowRun, format string) {
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
-		_ = output.Render(out, format, runs) //nolint:errcheck // best-effort output
+		_ = output.Render(out, format, normalizeEmptySlices(runs)) //nolint:errcheck // best-effort output
 	default:
 		if len(runs) == 0 {
 			_, _ = fmt.Fprintln(out, "No flow runs found")
