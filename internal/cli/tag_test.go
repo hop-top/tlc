@@ -356,7 +356,8 @@ func TestTagFilter(t *testing.T) {
 	})
 }
 
-// TestLooksLikeTaskID verifies the task-ID heuristic.
+// TestLooksLikeTaskID verifies the task-ID heuristic that routes
+// `tlc tag X …` between add mode and filter mode.
 func TestLooksLikeTaskID(t *testing.T) {
 	cases := []struct {
 		input string
@@ -367,9 +368,26 @@ func TestLooksLikeTaskID(t *testing.T) {
 		{"X-999", true},
 		{"hop/T-0001", true},
 		{"tlc://T-0001", true},
+		// The durable identity. Not matched by the alias pattern, so
+		// without an explicit TypeID check it routed to filter mode and
+		// answered an empty listing instead of tagging the task.
+		{"task_01h455vb4pex5vsknk084sn02q", true},
+		// Lower case is the same reference. This case previously
+		// asserted false, "not a task ID by convention" — but the
+		// convention is contradicted by the tool itself: `task show
+		// t-0001` and `task update t-0001` both resolve, and
+		// uri.NormalizeTaskID upper-cases the prefix precisely so they
+		// can. The assertion pinned an inconsistency rather than a
+		// requirement, and it made `tlc tag` the one command that
+		// answered a spelling every sibling accepts with a silent empty
+		// filter result.
+		{"t-0001", true},
 		{"feat", false},
 		{"auth,bug", false},
-		{"t-0001", false}, // lower-case prefix → not a task ID by convention
+		// A bare number stays a tag. It is far likelier to be one than a
+		// task reference, and routing it to add mode would break
+		// filtering on numeric tags to serve a form nothing documents.
+		{"42", false},
 		{"", false},
 	}
 	for _, tc := range cases {

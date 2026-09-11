@@ -1,6 +1,94 @@
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"hop.top/tlc/internal/config"
+)
+
+// effortVocab installs a provider declaring the given effort names, in
+// order, for the duration of one test.
+func effortVocab(t *testing.T, names ...string) {
+	t.Helper()
+	defs := make([]config.EffortDefinition, 0, len(names))
+	for _, n := range names {
+		defs = append(defs, config.EffortDefinition{Name: n})
+	}
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return &config.TaskConfig{Efforts: defs}
+	})
+}
+
+// TestValidEffort_ConfiguredVocabulary pins the write-path gate to the
+// DECLARED vocabulary.
+//
+// This is the gate the importers use — internal/vtodo drops an effort it
+// considers invalid, and internal/inbox rejects the row — so a gate still
+// reading the built-ins would silently discard a user's own sizes on
+// every import while the CLI accepted them.
+func TestValidEffort_ConfiguredVocabulary(t *testing.T) {
+	effortVocab(t, "TINY", "SMALL", "BIG")
+
+	for _, e := range []Effort{"TINY", "SMALL", "BIG"} {
+		if !ValidEffort(e) {
+			t.Errorf("declared effort %q rejected", e)
+		}
+	}
+	// The built-ins are not declared here, so they are not legal.
+	for _, e := range []Effort{EffortXS, EffortXL} {
+		if ValidEffort(e) {
+			t.Errorf("built-in %q accepted under a renamed vocabulary", e)
+		}
+	}
+	// Effort stays optional regardless of vocabulary.
+	if !ValidEffort("") {
+		t.Error("empty effort must stay valid: effort is optional")
+	}
+}
+
+// TestConfiguredEffortStrings_FallsBackToBuiltins pins that a config
+// declaring no efforts is indistinguishable from today.
+func TestConfiguredEffortStrings_FallsBackToBuiltins(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return &config.TaskConfig{}
+	})
+
+	got := ConfiguredEffortStrings()
+	want := []string{"XS", "S", "M", "L", "XL"}
+	if len(got) != len(want) {
+		t.Fatalf("vocabulary = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("vocabulary = %v, want %v", got, want)
+		}
+	}
+}
+
+// TestEffortRank pins that rank is the DECLARATION index, and that the
+// unset effort is outside the vocabulary rather than ranked first.
+func TestEffortRank(t *testing.T) {
+	effortVocab(t, "TINY", "SMALL", "BIG")
+
+	for i, name := range []string{"TINY", "SMALL", "BIG"} {
+		got, ok := EffortRank(Effort(name))
+		if !ok {
+			t.Fatalf("EffortRank(%q) not found", name)
+		}
+		if got != i {
+			t.Errorf("EffortRank(%q) = %d, want %d", name, got, i)
+		}
+	}
+
+	// Unset is not a size: callers order it last, which they can only do
+	// if it reports as absent rather than as rank 0.
+	if _, ok := EffortRank(""); ok {
+		t.Error("empty effort must report as unranked, not as rank 0")
+	}
+	if _, ok := EffortRank("XS"); ok {
+		t.Error("an undeclared effort must report as unranked")
+	}
+}
 
 func TestValidEffort(t *testing.T) {
 	valid := []Effort{"", EffortXS, EffortS, EffortM, EffortL, EffortXL}
@@ -28,6 +116,57 @@ func TestValidPriority(t *testing.T) {
 	for _, p := range invalid {
 		if ValidPriority(p) {
 			t.Errorf("expected %q to be invalid", p)
+		}
+	}
+}
+
+// TestValidTaskStatus_HonoursConfiguredVocabulary proves the helper
+// validates against the EFFECTIVE vocabulary rather than the built-in
+// taskStatuses slice. Driven through the config provider — the same hook
+// the CLI registers — rather than by reaching into package state, so the
+// test exercises the path a real configured status travels.
+//
+// SKIPPED is the load-bearing negative: it is a built-in, so a
+// built-in-only implementation accepts it here even though this config
+// never declares it.
+func TestValidTaskStatus_HonoursConfiguredVocabulary(t *testing.T) {
+	withTaskConfigProvider(t, func() *config.TaskConfig {
+		return &config.TaskConfig{
+			Statuses: []config.StatusDefinition{
+				{Name: "TODO", Label: "To Do", Role: "initial"},
+				{Name: "IN_PROGRESS", Label: "In Progress", Role: "active"},
+				{Name: "IN_REVIEW", Label: "In Review", Role: "active"},
+				{Name: "DONE", Label: "Done", IsTerminal: true, Role: "completed"},
+			},
+		}
+	})
+
+	for _, s := range []TaskStatus{"", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"} {
+		if !ValidTaskStatus(s) {
+			t.Errorf("configured status %q should be valid", s)
+		}
+	}
+	for _, s := range []TaskStatus{"SKIPPED", "in_review", "NOPE"} {
+		if ValidTaskStatus(s) {
+			t.Errorf("undeclared status %q should be invalid", s)
+		}
+	}
+}
+
+// TestValidTaskStatus_NilProviderUsesBuiltins keeps library consumers and
+// unit tests on the built-in four-status set when config declares none.
+func TestValidTaskStatus_NilProviderUsesBuiltins(t *testing.T) {
+	withTaskConfigProvider(t, nil)
+
+	valid := []TaskStatus{"", StatusTodo, StatusInProgress, StatusDone, StatusSkipped}
+	for _, s := range valid {
+		if !ValidTaskStatus(s) {
+			t.Errorf("built-in status %q should be valid", s)
+		}
+	}
+	for _, s := range []TaskStatus{"IN_REVIEW", "todo", "1"} {
+		if ValidTaskStatus(s) {
+			t.Errorf("status %q should be invalid", s)
 		}
 	}
 }

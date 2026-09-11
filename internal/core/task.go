@@ -33,7 +33,21 @@ func ValidateTransition(current, next TaskStatus) error {
 
 // TransitionWithWorkflow transitions the task using the given WorkflowManager
 // and records a log entry. Set force=true to bypass transition rules.
+//
+// The workflow the task is actually validated against is resolved from
+// the task's own tags, so a `task.workflows` override reaches every
+// transition site through this one call rather than each caller
+// remembering to consult it.
+//
+// Resolution happens even when force is set. --force bypasses the RULES,
+// not the question of which rules apply, and a task whose tags match two
+// overrides has no workflow to force past — reporting that is better than
+// silently forcing under an arbitrary one.
 func (t *Task) TransitionWithWorkflow(next TaskStatus, by string, note string, wm *WorkflowManager, force bool) (*LogEntry, error) {
+	wm, err := wm.WorkflowForTask(t)
+	if err != nil {
+		return nil, err
+	}
 	if err := wm.ValidateTransition(t.Status, next, force); err != nil {
 		return nil, err
 	}

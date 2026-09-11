@@ -312,6 +312,43 @@ func TestInitCmd_WithDuplicateIDStrategy(t *testing.T) {
 	}
 }
 
+// TestDuplicateIDStrategyResolution pins the precedence that makes
+// `project.duplicate_id_strategy` mean anything: flag, then the config
+// key init itself writes, then the built-in default.
+//
+// The config step is the one under test. The flag is registered with
+// StringVar and never bound to viper, so the recorded strategy used to
+// be written, validated and prompted for and then never read back — a
+// re-run silently reverted to "share" whatever the file said.
+func TestDuplicateIDStrategyResolution(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+		cfg  string
+		want string
+	}{
+		{name: "flag wins over config", flag: "unique", cfg: "share", want: "unique"},
+		{name: "config used when flag empty", flag: "", cfg: "unique", want: "unique"},
+		{name: "config prompt honored", flag: "", cfg: "prompt", want: "prompt"},
+		{name: "default when neither set", flag: "", cfg: "", want: strategyShare},
+		{name: "flag wins over empty config", flag: "prompt", cfg: "", want: "prompt"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			if tt.cfg != "" {
+				viper.Set("project.duplicate_id_strategy", tt.cfg)
+			}
+
+			if strategy := resolveDuplicateIDStrategy(tt.flag); strategy != tt.want {
+				t.Errorf("strategy = %q, want %q", strategy, tt.want)
+			}
+		})
+	}
+}
+
 // TestInitCmd_ConfigStructureWithProject tests config includes project section
 // Verifies project.id, project.fallback_mode, and project.duplicate_id_strategy exist.
 func TestInitCmd_ConfigStructureWithProject(t *testing.T) {

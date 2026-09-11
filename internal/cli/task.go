@@ -75,6 +75,10 @@ var (
 	taskCompleteNote     string
 	taskCompleteNoVerify bool
 	taskReopenNote       string
+	taskSkipNote         string
+	taskSkipNoVerify     bool
+	taskBlockNote        string
+	taskUnblockNote      string
 	taskUnassignNote     string
 	taskUpdateForce      bool
 	taskListSummary      bool
@@ -422,6 +426,10 @@ func init() {
 	TaskCmd.AddCommand(TaskUnassignCmd)
 	TaskCmd.AddCommand(TaskCompleteCmd)
 	TaskCmd.AddCommand(TaskReopenCmd)
+	TaskCmd.AddCommand(TaskSkipCmd)
+	TaskCmd.AddCommand(TaskBlockCmd)
+	TaskCmd.AddCommand(TaskUnblockCmd)
+	TaskCmd.AddCommand(TaskReprioritiseCmd)
 
 	TaskCmd.PersistentFlags().BoolVar(&taskNoPrompt, "no-prompt", false, "Skip confirmation prompts")
 

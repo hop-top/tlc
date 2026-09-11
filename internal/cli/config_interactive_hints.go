@@ -35,7 +35,7 @@ type keyHint struct {
 type groupEntry struct {
 	Name        string
 	Description string
-	Patterns    []string // exact keys or globs (e.g. "git.branch.*")
+	Patterns    []string // exact keys or globs (e.g. "sync.github.*")
 }
 
 // defaultGroups returns the named group registry.
@@ -60,24 +60,21 @@ func defaultGroups() []groupEntry {
 		},
 		{
 			Name:        "ui",
-			Description: "Editor, pager, theme, table style",
+			Description: "Theme, table style, time display",
 			Patterns: []string{
-				"ui.editor", "ui.pager", "ui.theme",
-				"ui.table_style", "ui.date_format", "ui.timezone",
+				"ui.theme", "ui.table_style", "ui.timezone",
 				"ui.log_sort_direction",
 			},
 		},
 		{
 			Name:        "git",
-			Description: "Git tracking and branch/commit config",
-			Patterns: []string{
-				"git.track", "git.branch.*", "git.commit.*",
-			},
+			Description: "Git tracking",
+			Patterns:    []string{"git.track"},
 		},
 		{
 			Name:        "sync",
-			Description: "Sync and GitHub integration",
-			Patterns:    []string{"sync.enabled", "sync.github.*"},
+			Description: "GitHub sync integration",
+			Patterns:    []string{"sync.github.*"},
 		},
 	}
 }
@@ -104,10 +101,6 @@ func defaultKeyHints() map[string]keyHint {
 			Key: "output.verbose", Description: "Enable verbose logging",
 			IsBool: true,
 		},
-		"output.quiet": {
-			Key: "output.quiet", Description: "Suppress non-essential output",
-			IsBool: true,
-		},
 		"output.log_file": {
 			Key: "output.log_file", Description: "Path to log file",
 		},
@@ -128,73 +121,14 @@ func defaultKeyHints() map[string]keyHint {
 			Key: "git.track", Description: "Enable git integration",
 			IsBool: true,
 		},
-		"git.branch.prefix_from_type": {
-			Key:         "git.branch.prefix_from_type",
-			Description: "Derive branch prefix from task type",
-			IsBool:      true,
-		},
-		"git.branch.zero_pad_issue": {
-			Key:         "git.branch.zero_pad_issue",
-			Description: "Zero-pad width for issue numbers in branch names",
-		},
-		"git.branch.separator": {
-			Key:         "git.branch.separator",
-			Description: "Separator between branch name components",
-		},
-		"git.commit.auto_generate": {
-			Key:         "git.commit.auto_generate",
-			Description: "Auto-generate commit messages",
-			IsBool:      true,
-		},
-		"git.commit.template": {
-			Key:         "git.commit.template",
-			Description: "Commit message template",
-		},
-		"git.commit.co_author": {
-			Key:         "git.commit.co_author",
-			Description: "Co-author line for generated commits",
-		},
 		"task.default_status": {
 			Key:         "task.default_status",
 			Description: "Default status for new tasks",
-		},
-		"task.id_format": {
-			Key:         "task.id_format",
-			Description: "Task ID format template (e.g. T-{seq:04d})",
-		},
-		"task.auto_assign": {
-			Key: "task.auto_assign", Description: "Auto-assign tasks on create",
-			IsBool: true,
-		},
-		"task.require_reference": {
-			Key:         "task.require_reference",
-			Description: "Require external reference on task create",
-			IsBool:      true,
 		},
 		"task.archive_threshold": {
 			Key:         "task.archive_threshold",
 			Description: "Auto-archive completed tasks after this duration",
 			IsDuration:  true,
-		},
-		"sync.enabled": {
-			Key: "sync.enabled", Description: "Enable sync",
-			IsBool: true,
-		},
-		"sync.auto_push": {
-			Key: "sync.auto_push", Description: "Auto-push after sync",
-			IsBool: true,
-		},
-		"sync.interval": {
-			Key: "sync.interval", Description: "Sync interval",
-			IsDuration: true,
-		},
-		"sync.conflict_strategy": {
-			Key:         "sync.conflict_strategy",
-			Description: "How to resolve sync conflicts",
-		},
-		"sync.github.enabled": {
-			Key: "sync.github.enabled", Description: "Enable GitHub sync",
-			IsBool: true,
 		},
 		"sync.github.repo": {
 			Key:         "sync.github.repo",
@@ -203,28 +137,7 @@ func defaultKeyHints() map[string]keyHint {
 		"sync.github.sync_direction": {
 			Key:         "sync.github.sync_direction",
 			Description: "Sync direction for GitHub",
-		},
-		"sync.github.import_labels": {
-			Key:         "sync.github.import_labels",
-			Description: "Import labels from GitHub",
-			IsBool:      true,
-		},
-		"sync.github.import_milestones": {
-			Key:         "sync.github.import_milestones",
-			Description: "Import milestones from GitHub",
-			IsBool:      true,
-		},
-		"ui.pager": {
-			Key:         "ui.pager",
-			Description: "Pager command (auto, less, more, none)",
-		},
-		"ui.editor": {
-			Key:         "ui.editor",
-			Description: "Editor command for task editing",
-		},
-		"ui.date_format": {
-			Key:         "ui.date_format",
-			Description: "Date format (Go time layout)",
+			Enum:        []string{"pull", "push", "bidirectional"},
 		},
 		"ui.timezone": {
 			Key:         "ui.timezone",
@@ -232,7 +145,10 @@ func defaultKeyHints() map[string]keyHint {
 		},
 		"ui.table_style": {
 			Key:         "ui.table_style",
-			Description: "Table rendering style",
+			Description: "Table border style",
+			Enum: []string{
+				"unicode", "rounded", "thick", "double", "ascii", "none",
+			},
 		},
 		"ui.tag_colors": {
 			Key: "ui.tag_colors", Description: "Tag color map",
@@ -245,6 +161,7 @@ func defaultKeyHints() map[string]keyHint {
 		"ui.theme": {
 			Key:         "ui.theme",
 			Description: "UI color theme",
+			Enum:        []string{"neon", "dark", "bauhaus"},
 		},
 		"prompt.llm_provider": {
 			Key:         "prompt.llm_provider",
@@ -284,7 +201,7 @@ func defaultKeyHints() map[string]keyHint {
 	}
 }
 
-// expandGlob expands a pattern like "git.branch.*" against viper's key set.
+// expandGlob expands a pattern like "sync.github.*" against viper's key set.
 func expandGlob(pattern string, allKeys []string) []string {
 	if !strings.Contains(pattern, "*") {
 		return []string{pattern}

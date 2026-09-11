@@ -184,7 +184,7 @@ func totalProjectCounts(byProject map[string]map[string]int) int {
 // (StaleFiredAt == nil guards re-fire), persisting the timestamp.
 func applyStaleDefaults(ctx context.Context, s taskStaleUpdater, tasks []*core.Task) {
 	var taskCfg config.TaskConfig
-	_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
+	_ = unmarshalConfigKey("task", &taskCfg) //nolint:errcheck // best-effort config load
 	_ = taskCfg.Validate()                   //nolint:errcheck // best-effort validation
 
 	for _, t := range tasks {

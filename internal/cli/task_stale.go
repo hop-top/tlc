@@ -35,7 +35,16 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 
 		format := viper.GetString("output.format")
 
-		// Query IN_PROGRESS + TODO tasks (stale detection only makes sense for active tasks).
+		// Scan unfinished work only — staleness is a statement about work
+		// that has not finished, so a DONE task cannot be stale.
+		//
+		// Derived from the vocabulary's ROLES, not named. The literal this
+		// replaces — IN_PROGRESS + TODO — was config-blind, and here it
+		// failed SILENTLY: a project whose `task.statuses` declares no
+		// IN_PROGRESS got a filter matching nothing, so the command exited
+		// 0 and printed "No stale tasks." while stale work sat in the
+		// store. An empty result the user believes is worse than an error.
+		//
 		// Staleness is decided in Go, so the store cannot pre-filter it;
 		// the cap bounds the scan for list output. Aggregate formats
 		// count the match set rather than a page of it, so the cap is
@@ -44,12 +53,13 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 		if aggregateFormatValue(format) != "" {
 			limit = 0
 		}
+		filters := []core.FieldFilter{}
+		for _, st := range core.UnfinishedTaskStatuses() {
+			filters = append(filters, core.FieldFilter{Field: "status", Value: st})
+		}
 		tasks, err := s.ListTasks(ctx, core.Query{
-			Filters: []core.FieldFilter{
-				{Field: "status", Value: string(core.StatusInProgress)},
-				{Field: "status", Value: string(core.StatusTodo)},
-			},
-			Limit: limit,
+			Filters: filters,
+			Limit:   limit,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to list tasks: %w", err)
@@ -57,7 +67,7 @@ Use --run-hooks to fire hook commands for each stale task and record StaleFiredA
 
 		// Load stale config; apply project default_timeout to tasks with nil StaleTimeout.
 		var taskCfg config.TaskConfig
-		_ = viper.UnmarshalKey("task", &taskCfg) //nolint:errcheck // best-effort config load
+		_ = unmarshalConfigKey("task", &taskCfg) //nolint:errcheck // best-effort config load
 		_ = taskCfg.Validate()                   //nolint:errcheck // best-effort validation
 
 		stale := make([]*core.Task, 0, len(tasks))

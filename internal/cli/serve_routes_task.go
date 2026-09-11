@@ -146,13 +146,21 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 			return
 		}
 
-		status := req.Status
-		if status == "" {
-			status = string(core.StatusTodo)
+		// Same resolution the CLI's create goes through: an omitted
+		// status comes from the configured workflow (task.default_status,
+		// else the initial-role status), never from a built-in literal.
+		// Defaulting to core.StatusTodo here made the two create paths
+		// disagree on one store — under a renamed vocabulary the HTTP
+		// route 422'd on a status the config never declared while the
+		// CLI resolved it correctly.
+		status, err := resolveInitialStatus(req.Status)
+		if err != nil {
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "%v", err)
+			return
 		}
 		normalizedStatus, ok := NormalizeStatus(status)
 		if !ok {
-			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "unknown status %q", status)
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status", "%v", unknownStatusError(status))
 			return
 		}
 		effort := req.Effort
@@ -172,6 +180,14 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 				return
 			}
 			priority = normalized
+		}
+
+		// Same tag vocabulary gate the CLI's saveTask applies. A policy
+		// enforced only on the CLI is not a policy: the HTTP surface
+		// writes to the same store.
+		if err := core.ValidateTags(req.Tags); err != nil {
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_tags", "%v", err)
+			return
 		}
 
 		// Same config-driven validation the CLI's saveTask applies.
@@ -219,6 +235,14 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			Meta:        meta,
+		}
+
+		// A priority supplied over the API is a human's value just as
+		// much as one typed at `-p`, and derivation must not overwrite
+		// it. Marking here rather than only in the CLI keeps the two
+		// create paths from disagreeing about provenance.
+		if task.Priority != "" {
+			core.MarkPriorityManual(task)
 		}
 
 		if proj := core.DetectProject(); proj != nil && proj.ProjectID != "" {

@@ -2,6 +2,8 @@ package core
 
 import (
 	"time"
+
+	"hop.top/tlc/internal/config"
 )
 
 type TaskStatus string
@@ -13,10 +15,17 @@ const (
 	StatusSkipped    TaskStatus = "SKIPPED"
 )
 
-// taskStatuses is the closed set of task statuses in lifecycle order. The
-// single source of truth: validation messages, the CLI's flag-enum
-// registration, fuzzy normalisation, and shell completion all read it, so
-// adding or removing a status here reaches every consumer at once.
+// taskStatuses is the BUILT-IN set of task statuses in lifecycle order,
+// used when the user's config declares no `task.statuses` of its own.
+//
+// It is no longer the whole story: `task.statuses` is a documented,
+// validated config surface, and a user who declares IN_REVIEW there means
+// it for the CLI too, not only for the workflow engine. Consumers that
+// render or accept a status vocabulary — validation messages, the flag
+// enums, fuzzy normalisation, shell completion — read
+// ConfiguredTaskStatusStrings, which falls back to this slice. This slice
+// remains the fallback and the compile-time home of the Status* constants
+// the code refers to by name.
 var taskStatuses = []TaskStatus{
 	StatusTodo,
 	StatusInProgress,
@@ -36,13 +45,235 @@ func TaskStatusStrings() []string {
 	return enumStrings(taskStatuses)
 }
 
+// ConfiguredInitialTaskStatus returns the status a new task lands in when
+// the caller nominates none: `task.default_status` when it names a
+// declared status, else the status carrying role "initial".
+//
+// Resolved lazily on every call, like ConfiguredTaskStatusStrings and for
+// the same reason — but here the caching matters more than convention.
+// DefaultWorkflowE memoises its answer in a sync.Once, so calling it from
+// any code path that runs BEFORE argv is parsed (help rendering, flag
+// usage) would pin the process to whatever config existed at that moment
+// and silently discard later `-c key=value` overrides. Reading the
+// provider directly keeps those paths override-safe.
+//
+// Returns "" when no status can be resolved; callers decide whether that
+// is an error or simply a help string they leave generic.
+func ConfiguredInitialTaskStatus() string {
+	cfg := resolveTaskConfig()
+	if cfg == nil {
+		return ""
+	}
+	statuses := cfg.Statuses
+	if len(statuses) == 0 {
+		statuses = config.GetDefaultStatuses()
+	}
+	if cfg.DefaultStatus != "" {
+		for _, s := range statuses {
+			if s.Name == cfg.DefaultStatus {
+				return s.Name
+			}
+		}
+	}
+	for _, s := range statuses {
+		if s.Role == config.RoleInitial {
+			return s.Name
+		}
+	}
+	return ""
+}
+
+// ConfiguredTaskStatusStrings returns the effective task-status vocabulary:
+// the names declared in the user's `task.statuses`, in declared order, or
+// the built-in set when config declares none.
+//
+// Resolved lazily on every call rather than cached in a package-level var,
+// because config is read long after package init: a var initialized at
+// init time would pin the built-ins forever. It reads through the same
+// taskConfigProvider hook DefaultWorkflow uses, so the vocabulary the CLI
+// accepts and the vocabulary the workflow enforces cannot disagree —
+// internal/core stays free of any dependency on viper or internal/cli.
+func ConfiguredTaskStatusStrings() []string {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Statuses) == 0 {
+		return TaskStatusStrings()
+	}
+	out := make([]string, 0, len(cfg.Statuses))
+	for _, s := range cfg.Statuses {
+		if s.Name != "" {
+			out = append(out, s.Name)
+		}
+	}
+	if len(out) == 0 {
+		return TaskStatusStrings()
+	}
+	return out
+}
+
+// ConfiguredTaskStatusDefinitions returns the effective task statuses as
+// full definitions — name, label, description, color, role, terminality —
+// rather than bare names.
+//
+// ConfiguredTaskStatusStrings answers "which names are legal"; this
+// answers "what does each one MEAN", which is what a consumer needs when
+// it must decide per status rather than merely validate one. The label
+// templates are the first such consumer: they pick which statuses deserve
+// a `status:*` label from role and is_terminal, and take the swatch from
+// the configured color, so neither the selection nor the palette can
+// drift from config the way a retyped list does.
+//
+// Resolved lazily through the provider, NOT through DefaultWorkflow*, for
+// the reason spelled out on ConfiguredPriorityStrings: the memoising
+// singleton would freeze config before `-c key=value` overrides merge if
+// any pre-argv path (help, usage, completion) ever reached it.
+func ConfiguredTaskStatusDefinitions() []config.StatusDefinition {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Statuses) == 0 {
+		return config.GetDefaultStatuses()
+	}
+	out := make([]config.StatusDefinition, 0, len(cfg.Statuses))
+	for _, s := range cfg.Statuses {
+		if s.Name != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return config.GetDefaultStatuses()
+	}
+	return out
+}
+
+// ConfiguredPriorityDefinitions returns the effective priority vocabulary
+// as full definitions, in declared order — which IS rank order, most
+// urgent first (see config.PriorityDefinition).
+//
+// The definition-level counterpart to ConfiguredPriorityStrings, and the
+// same contract: callers must not sort the result, because sorting it
+// would destroy the only expression of rank the schema has.
+func ConfiguredPriorityDefinitions() []config.PriorityDefinition {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Priorities) == 0 {
+		return config.GetDefaultPriorities()
+	}
+	out := make([]config.PriorityDefinition, 0, len(cfg.Priorities))
+	for _, p := range cfg.Priorities {
+		if p.Name != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return config.GetDefaultPriorities()
+	}
+	return out
+}
+
+// UnfinishedTaskStatuses returns the statuses that mean "not yet finished
+// work": every status carrying role "initial" or role "active", in
+// declared order.
+//
+// This is the vocabulary-derived spelling of the default `task list` /
+// `task graph` filter. The literal it replaces — IN_PROGRESS + TODO —
+// was config-blind: a project whose `task.statuses` declares no
+// IN_PROGRESS got a default filter naming a status its own vocabulary
+// rejects, so bare `task list` failed with `unknown status
+// "IN_PROGRESS"`. The tool argued with its own config, and the user had
+// to type nothing at all to hit it.
+//
+// ROLE, not name, is the derivation, because role is the only thing in
+// the schema that carries the MEANING the default is reaching for. A
+// renamed vocabulary (DOING for IN_PROGRESS) then just works, and a
+// vocabulary with a second active status (IN_REVIEW alongside DOING)
+// shows it by default, which is what "unfinished" means to the user who
+// declared it. Matching on names could only ever recognize names this
+// package happens to know.
+//
+// ALL active-role statuses, not merely the first: WorkflowManager's
+// roleIndex keeps only the first status per role, which is right when
+// picking a single TARGET to transition into (`task claim` needs one
+// destination) and wrong when describing a SET to filter by. A user who
+// declares two active statuses is telling us both are work in flight;
+// hiding the second by default would be the same class of bug as the
+// literal, one config edit further along.
+//
+// Terminality is deliberately not consulted. Role is what the two
+// consumers already reason about, and a status could carry role "active"
+// while some future config marks it terminal; role is the declared
+// intent and is_terminal is a rendering/transition concern.
+//
+// Resolved lazily through the provider rather than the memoising
+// DefaultWorkflow* singleton, for the reason spelled out on
+// ConfiguredPriorityStrings: a caller running before argv is parsed
+// would pin config in a sync.Once and silently discard later
+// `-c key=value` overrides for the rest of the process.
+//
+// Config validation requires at least one "initial" and one "active"
+// status, so a valid config never yields an empty slice. An invalid one
+// might; callers treat empty as "no default filter" rather than
+// substituting a literal, because substituting is how the config-blind
+// default got here.
+func UnfinishedTaskStatuses() []string {
+	defs := ConfiguredTaskStatusDefinitions()
+	out := make([]string, 0, len(defs))
+	for _, s := range defs {
+		if s.Name == "" {
+			continue
+		}
+		if s.Role == config.RoleInitial || s.Role == config.RoleActive {
+			out = append(out, s.Name)
+		}
+	}
+	return out
+}
+
+// PrimaryActiveTaskStatus returns the status that sorts first in the
+// default listing — the FIRST status carrying role "active", in declared
+// order — or "" when the vocabulary declares none.
+//
+// The companion to UnfinishedTaskStatuses, and deliberately a single
+// value rather than a set: Query.StatusPriority is one status, rendered
+// by the store as `CASE WHEN status = ? THEN 0 ELSE 1 END`, so "sort
+// these first" has room for exactly one answer.
+//
+// FIRST in declared order is that answer because declaration order is
+// lifecycle order everywhere else in this schema — it is literally the
+// rank order for priorities and efforts — so the earliest active status
+// is the one nearest "being worked on right now". With the built-in
+// vocabulary this resolves to IN_PROGRESS, which is what the literal it
+// replaces hardcoded, so default output is unchanged.
+//
+// Same provider-not-singleton resolution as UnfinishedTaskStatuses.
+func PrimaryActiveTaskStatus() string {
+	for _, s := range ConfiguredTaskStatusDefinitions() {
+		if s.Name != "" && s.Role == config.RoleActive {
+			return s.Name
+		}
+	}
+	return ""
+}
+
 // ValidTaskStatus reports whether s is a recognized task status (or empty).
+//
+// "Recognized" means the EFFECTIVE vocabulary, not the built-in set: a
+// user who declares IN_REVIEW in `task.statuses` means it here too. It
+// reads ConfiguredTaskStatusStrings for that, so this helper and the flag
+// enums, fuzzy normalisation and completion cannot disagree about which
+// names are legal. Validating against the built-in taskStatuses slice
+// instead would silently reject every configured status.
+//
+// Resolved through the provider rather than the memoising DefaultWorkflow*
+// singleton, for the reason spelled out on ConfiguredPriorityStrings: a
+// pre-argv caller (help rendering, flag usage) would otherwise freeze
+// config before `-c key=value` overrides have merged.
+//
+// Empty is valid, matching the pre-existing contract and ValidPriority:
+// callers use "" to mean "no status nominated", and the empty case is
+// checked before the vocabulary rather than folded into it.
 func ValidTaskStatus(s TaskStatus) bool {
 	if s == "" {
 		return true
 	}
-	for _, v := range taskStatuses {
-		if s == v {
+	for _, v := range ConfiguredTaskStatusStrings() {
+		if string(s) == v {
 			return true
 		}
 	}
@@ -60,12 +291,18 @@ const (
 	EffortXL Effort = "XL"
 )
 
-// efforts is the closed set of effort values in ascending size order.
-// Same contract as taskStatuses: one declaration, every consumer reads it.
+// efforts is the BUILT-IN set of effort values in ascending size order,
+// used when the user's config declares no `task.efforts`.
+//
+// Same contract as priorities: this is the fallback and the compile-time
+// home of the Effort* constants, not the whole story. Consumers that
+// render or accept an effort vocabulary — the CLI normaliser, flag-enum
+// help, completion, effort-ordered sorting — read
+// ConfiguredEffortStrings, which falls back to this slice.
 var efforts = []Effort{EffortXS, EffortS, EffortM, EffortL, EffortXL}
 
-// Efforts returns the closed set of effort values in ascending size order.
-// The returned slice is a copy.
+// Efforts returns the built-in set of effort values in ascending size
+// order. The returned slice is a copy.
 func Efforts() []Effort {
 	return append([]Effort(nil), efforts...)
 }
@@ -75,13 +312,99 @@ func EffortStrings() []string {
 	return enumStrings(efforts)
 }
 
+// ConfiguredEffortStrings returns the effective effort vocabulary: the
+// names declared in the user's `task.efforts`, in declared order
+// (smallest first), or the built-in set when config declares none.
+//
+// Declaration order is rank order — see config.EffortDefinition — so the
+// returned slice is also the sort key for effort-ordered listing, and
+// callers must not sort it.
+//
+// Resolved lazily on every call rather than cached in a package-level
+// var, for the same two reasons ConfiguredPriorityStrings is: a var
+// initialized at package-init time predates any config file and could
+// only ever hold the built-ins, and reading the provider directly rather
+// than through the memoising DefaultWorkflow* singleton keeps pre-argv
+// callers (help rendering, flag usage, completion) from freezing config
+// before `-c key=value` overrides have merged.
+func ConfiguredEffortStrings() []string {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Efforts) == 0 {
+		return EffortStrings()
+	}
+	out := make([]string, 0, len(cfg.Efforts))
+	for _, e := range cfg.Efforts {
+		if e.Name != "" {
+			out = append(out, e.Name)
+		}
+	}
+	if len(out) == 0 {
+		return EffortStrings()
+	}
+	return out
+}
+
+// ConfiguredEffortDefinitions returns the effective effort vocabulary as
+// full definitions, in declared order — which IS rank order, smallest
+// first.
+//
+// The definition-level counterpart to ConfiguredEffortStrings, and the
+// same contract: callers must not sort the result, because sorting it
+// would destroy the only expression of rank the schema has.
+func ConfiguredEffortDefinitions() []config.EffortDefinition {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Efforts) == 0 {
+		return config.GetDefaultEfforts()
+	}
+	out := make([]config.EffortDefinition, 0, len(cfg.Efforts))
+	for _, e := range cfg.Efforts {
+		if e.Name != "" {
+			out = append(out, e)
+		}
+	}
+	if len(out) == 0 {
+		return config.GetDefaultEfforts()
+	}
+	return out
+}
+
+// EffortRank returns the ordinal of e within the effective effort
+// vocabulary — 0 for the smallest — and whether e is in it.
+//
+// This is what makes "sort by effort" mean size rather than alphabet.
+// Unlike priority, where P0..P3 sorts correctly as text by accident, the
+// built-in XS, S, M, L, XL never did: as text it sorts to L, M, S, XL,
+// XS. So this is a fix for the default vocabulary too, not only for
+// renamed ones.
+//
+// The empty effort is not in any vocabulary and gets ok=false. Callers
+// order it last: "no effort estimated" is not the same fact as "the
+// smallest effort", and an unestimated task must not sort ahead of one
+// the user deliberately sized XS.
+func EffortRank(e Effort) (int, bool) {
+	if e == "" {
+		return 0, false
+	}
+	for i, name := range ConfiguredEffortStrings() {
+		if string(e) == name {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ValidEffort returns true if e is a recognised effort value (or empty).
+//
+// Empty is valid: effort is optional, like priority and unlike status.
+// Every caller depends on that — it is how a task created without -e
+// passes validation — so the empty case is checked before the
+// vocabulary, not folded into it.
 func ValidEffort(e Effort) bool {
 	if e == "" {
 		return true
 	}
-	for _, v := range efforts {
-		if e == v {
+	for _, v := range ConfiguredEffortStrings() {
+		if string(e) == v {
 			return true
 		}
 	}
@@ -98,8 +421,15 @@ const (
 	PriorityP3 Priority = "P3"
 )
 
-// priorities is the closed set of priorities in descending urgency order.
-// Same contract as taskStatuses: one declaration, every consumer reads it.
+// priorities is the BUILT-IN set of priorities in descending urgency
+// order, used when the user's config declares no `task.priorities`.
+//
+// Same contract, and the same caveat, as taskStatuses: it is the
+// fallback and the compile-time home of the Priority* constants, not the
+// whole story. Consumers that render or accept a priority vocabulary —
+// validation messages, the flag enums, fuzzy normalisation, shell
+// completion, priority-ordered sorting — read
+// ConfiguredPriorityStrings, which falls back to this slice.
 var priorities = []Priority{PriorityP0, PriorityP1, PriorityP2, PriorityP3}
 
 // Priorities returns the closed set of priorities in descending urgency
@@ -113,13 +443,76 @@ func PriorityStrings() []string {
 	return enumStrings(priorities)
 }
 
+// ConfiguredPriorityStrings returns the effective priority vocabulary:
+// the names declared in the user's `task.priorities`, in declared order
+// (most urgent first), or the built-in set when config declares none.
+//
+// Declaration order is rank order — see config.PriorityDefinition — so
+// the returned slice is also the sort key for priority-ordered listing,
+// and callers must not sort it.
+//
+// Resolved lazily on every call rather than cached in a package-level
+// var, for the same two reasons ConfiguredTaskStatusStrings is: a var
+// initialized at package-init time predates any config file and could
+// only ever hold the built-ins, and reading the provider directly rather
+// than through the memoising DefaultWorkflow* singleton keeps pre-argv
+// callers (help rendering, flag usage) from freezing config before
+// `-c key=value` overrides have merged.
+func ConfiguredPriorityStrings() []string {
+	cfg := resolveTaskConfig()
+	if cfg == nil || len(cfg.Priorities) == 0 {
+		return PriorityStrings()
+	}
+	out := make([]string, 0, len(cfg.Priorities))
+	for _, p := range cfg.Priorities {
+		if p.Name != "" {
+			out = append(out, p.Name)
+		}
+	}
+	if len(out) == 0 {
+		return PriorityStrings()
+	}
+	return out
+}
+
+// PriorityRank returns the ordinal of p within the effective priority
+// vocabulary — 0 for the most urgent — and whether p is in it.
+//
+// This is what makes "sort by priority" mean urgency rather than
+// alphabet. With the built-in P0..P3 the two coincide by accident:
+// lexicographic order over "P0".."P3" happens to be rank order, which is
+// why nothing needed this before. A vocabulary of
+// URGENT/NORMAL/LATER sorts to LATER, NORMAL, URGENT lexicographically —
+// exactly backwards.
+//
+// The empty priority is not in any vocabulary and gets ok=false.
+// Callers order it last: "no priority set" is not the same fact as "the
+// least urgent priority", and a task the user never triaged must not
+// outrank one they deliberately marked lowest.
+func PriorityRank(p Priority) (int, bool) {
+	if p == "" {
+		return 0, false
+	}
+	for i, name := range ConfiguredPriorityStrings() {
+		if string(p) == name {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ValidPriority returns true if p is a recognised priority value (or empty).
+//
+// Empty is valid: priority is optional, unlike status. Every caller
+// depends on that — it is how a task created without -p passes
+// validation — so the empty case is checked before the vocabulary, not
+// folded into it.
 func ValidPriority(p Priority) bool {
 	if p == "" {
 		return true
 	}
-	for _, v := range priorities {
-		if p == v {
+	for _, v := range ConfiguredPriorityStrings() {
+		if string(p) == v {
 			return true
 		}
 	}

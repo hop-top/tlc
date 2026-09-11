@@ -68,7 +68,12 @@ Each invocation creates a fresh task, so the operation is not idempotent.`,
 			return err
 		}
 
-		err := saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, taskStatus, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched)
+		status, err := resolveInitialStatus(taskStatus)
+		if err != nil {
+			return err
+		}
+
+		err = saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, status, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched)
 		if err != nil {
 			return err
 		}
@@ -80,23 +85,20 @@ func createTaskInteractive(initialTitle string) error {
 	var (
 		title       = initialTitle
 		description string
-		status      = "TODO"
+		status      string
 		assignee    string
 		tags        []string
 		prio        string
+		effort      string
 		domain      string
 	)
 
 	wm := core.DefaultWorkflow()
-	allStatuses := wm.GetAllStatuses()
-	statusOptions := make([]huh.Option[string], 0, len(allStatuses))
-	for _, s := range allStatuses {
-		def, _ := wm.GetStatusDef(core.TaskStatus(s)) //nolint:errcheck // best-effort label lookup
-		label := s
-		if def != nil && def.Label != "" {
-			label = def.Label
-		}
-		statusOptions = append(statusOptions, huh.NewOption(label, s))
+	// Preselect the same status the non-interactive path would choose,
+	// rather than a hardcoded TODO that a renamed vocabulary does not
+	// contain (the select would then open on no option at all).
+	if initial, err := wm.InitialStatus(); err == nil {
+		status = string(initial)
 	}
 
 	form := huh.NewForm(
@@ -120,7 +122,7 @@ func createTaskInteractive(initialTitle string) error {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Status").
-				Options(statusOptions...).
+				Options(interactiveStatusOptions(wm)...).
 				Value(&status),
 
 			huh.NewInput().
@@ -132,24 +134,18 @@ func createTaskInteractive(initialTitle string) error {
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Tags").
-				Options(
-					huh.NewOption("feat", "feat"),
-					huh.NewOption("fix", "fix"),
-					huh.NewOption("chore", "chore"),
-					huh.NewOption("docs", "docs"),
-					huh.NewOption("urgent", "urgent"),
-				).
+				Options(interactiveTagOptions()...).
 				Value(&tags),
 
 			huh.NewSelect[string]().
 				Title("Priority").
-				Options(
-					huh.NewOption("P0 (Critical)", "P0"),
-					huh.NewOption("P1 (High)", "P1"),
-					huh.NewOption("P2 (Medium)", "P2"),
-					huh.NewOption("P3 (Low)", "P3"),
-				).
+				Options(interactivePriorityOptions()...).
 				Value(&prio),
+
+			huh.NewSelect[string]().
+				Title("Effort").
+				Options(interactiveEffortOptions()...).
+				Value(&effort),
 
 			huh.NewInput().
 				Title("Domain").
@@ -167,11 +163,100 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	err := saveTask(os.Stdout, "", title, description, status, assignee, "", prio, tags, "", meta, nil, nil)
+	err := saveTask(os.Stdout, "", title, description, status, assignee, effort, prio, tags, "", meta, nil, nil)
 	if err != nil {
 		return err
 	}
 	return writeProjectionGlobal()
+}
+
+// The interactive form's option builders.
+//
+// Extracted from the form for two reasons. huh's runner needs a
+// terminal, so what the form OFFERED is otherwise unobservable to a
+// test — and "what was offered" is precisely the contract that broke.
+// And every one of these lists feeds saveTask, which normalises against
+// the CONFIGURED vocabulary, so an option list that does not come from
+// config is not a cosmetic default: under a renamed vocabulary EVERY
+// offered value is rejected on submit and the user's filled-in form is
+// discarded.
+
+// interactiveStatusOptions renders the workflow's statuses, labeled.
+//
+// Takes the WorkflowManager rather than reaching for the singleton so
+// the caller's instance and the offered list cannot disagree.
+func interactiveStatusOptions(wm *core.WorkflowManager) []huh.Option[string] {
+	all := wm.GetAllStatuses()
+	opts := make([]huh.Option[string], 0, len(all))
+	for _, s := range all {
+		def, _ := wm.GetStatusDef(core.TaskStatus(s)) //nolint:errcheck // best-effort label lookup
+		label := s
+		if def != nil && def.Label != "" {
+			label = def.Label
+		}
+		opts = append(opts, huh.NewOption(label, s))
+	}
+	return opts
+}
+
+// interactivePriorityOptions renders the configured priorities in
+// declared order, which IS rank order — most urgent first — so the list
+// must not be sorted.
+//
+// The value is always the configured NAME, because that is what
+// NormalizePriority accepts; the label carries the human gloss the
+// hardcoded "P0 (Critical)" list used to spell out inline.
+func interactivePriorityOptions() []huh.Option[string] {
+	defs := core.ConfiguredPriorityDefinitions()
+	opts := make([]huh.Option[string], 0, len(defs))
+	for _, d := range defs {
+		opts = append(opts, huh.NewOption(vocabOptionLabel(d.Name, d.Label), d.Name))
+	}
+	return opts
+}
+
+// interactiveEffortOptions renders the configured efforts in declared
+// order — smallest first — behind an empty option.
+//
+// Effort is optional, and a select has no other way to express "none":
+// without the empty entry the form would force an estimate the
+// non-interactive path leaves unset.
+func interactiveEffortOptions() []huh.Option[string] {
+	defs := core.ConfiguredEffortDefinitions()
+	opts := make([]huh.Option[string], 0, len(defs)+1)
+	opts = append(opts, huh.NewOption("(none)", ""))
+	for _, d := range defs {
+		opts = append(opts, huh.NewOption(vocabOptionLabel(d.Name, d.Label), d.Name))
+	}
+	return opts
+}
+
+// interactiveTagOptions renders the configured tag vocabulary.
+//
+// Sourced from core.SuggestedTags under BOTH policies, not only closed.
+// Under `closed` the reason is the same as priority's: core.ValidateTags
+// rejects anything outside the vocabulary, so a hardcoded list fails on
+// submit. Under `open` nothing would reject a hardcoded list — but the
+// composed axes are the tags tlc's own `label init` and `sync` emit, so
+// suggesting them keeps a hand-picked tag spelled the way a forge
+// round-trips it, and it is the only source that cannot fall a rename
+// behind the way the bare feat/fix list did.
+func interactiveTagOptions() []huh.Option[string] {
+	tags := core.SuggestedTags()
+	opts := make([]huh.Option[string], 0, len(tags))
+	for _, t := range tags {
+		opts = append(opts, huh.NewOption(t, t))
+	}
+	return opts
+}
+
+// vocabOptionLabel renders "NAME (Label)", or bare NAME when the
+// definition declares no label — never a dangling "NAME ()".
+func vocabOptionLabel(name, label string) string {
+	if label == "" {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", name, label)
 }
 
 func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling) error {
@@ -201,6 +286,14 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 			return invalidPriorityError(priority)
 		}
 		priority = normalized
+	}
+
+	// The tag vocabulary gate. Before the regex rules below, not after:
+	// ValidationConfig can only see tags as one comma-joined string, so
+	// it can assert a shape but never membership, and its message would
+	// name a pattern rather than the offending tag.
+	if err := core.ValidateTags(tags); err != nil {
+		return err //nolint:wrapcheck // policy message names the offending tag; wrapping buries it
 	}
 
 	// Config-driven validation for create.
@@ -268,6 +361,22 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		task.RemindAt = sched.remindAt
 		task.RRule = sched.rrule
 		task.NoAutoRemind = sched.noAutoRemind
+	}
+
+	// Provenance first, then derivation, then the priority-keyed
+	// scheduling defaults — in that order, because each reads what the
+	// previous one settled.
+	//
+	// A -p on create is a human's value, so it is marked manual here and
+	// no rule will ever overwrite it. A task created WITHOUT -p gets a
+	// derived one only when the user opted in via
+	// `task.priority_derivation.on_create`; with that off, or with no
+	// rules declared at all, this whole block is a no-op and the task is
+	// stored exactly as it was before.
+	if task.Priority != "" {
+		core.MarkPriorityManual(task)
+	} else if err := deriveTaskPriorityOnCreate(w, task); err != nil {
+		return err
 	}
 
 	// Apply priority-based scheduling defaults from config.
@@ -365,6 +474,84 @@ func buildTaskReference(taskID string, proj *core.ProjectDetection) string {
 	return fmt.Sprintf("tlc:///%s", taskID)
 }
 
+// resolveInitialStatus returns the status a create lands in.
+//
+// An explicit --status passes through untouched, so scripts naming a
+// status keep working and an invalid one is still rejected downstream by
+// saveTask's normaliser (which names the configured vocabulary).
+//
+// Empty means the user nominated nothing, and the answer comes from the
+// workflow: task.default_status when set, else the initial-role status.
+// Both live in the same TaskConfig the workflow already validates
+// against, so create cannot disagree with the config that gates it.
+func resolveInitialStatus(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	wm, err := core.DefaultWorkflowE()
+	if err != nil {
+		return "", fmt.Errorf("invalid task workflow configuration: %w", err)
+	}
+	status, err := wm.InitialStatus()
+	if err != nil {
+		return "", fmt.Errorf(
+			"no initial status to create into: %w; "+
+				"set task.default_status or give a status role \"initial\"", err,
+		)
+	}
+	return string(status), nil
+}
+
+// initialStatusFlagUsageDefault is the usage string the flag carries at
+// registration time.
+//
+// It names no status on purpose. Registration runs from init(), long
+// before any config file is read, and DefaultWorkflowE caches its answer
+// in a sync.Once — so resolving a concrete status here would permanently
+// pin the process to the BUILT-IN vocabulary and defeat the whole fix.
+// refreshCreateStatusUsage fills in the real one after initConfig.
+const initialStatusFlagUsageDefault = "Initial status (default: configured task.default_status)"
+
+// initialStatusFlagUsage renders --status help that stays true under a
+// renamed vocabulary. The flag default is empty, so cobra prints no
+// "(default ...)" of its own; naming the resolved status here keeps help
+// from implying that omitting the flag leaves the status unset.
+//
+// Reads the config provider directly rather than going through
+// DefaultWorkflowE. This runs from the help path, which fires BEFORE
+// argv's `-c key=value` overrides are merged; DefaultWorkflowE memoises
+// its answer in a sync.Once, so resolving through it here would pin the
+// process to the pre-override config and silently drop those overrides
+// for every later caller.
+func initialStatusFlagUsage() string {
+	status := core.ConfiguredInitialTaskStatus()
+	if status == "" {
+		return initialStatusFlagUsageDefault
+	}
+	return fmt.Sprintf("Initial status (default %s)", status)
+}
+
+// refreshCreateStatusUsage re-renders the --status usage string against
+// the now-loaded config. Called from the same post-initConfig points as
+// restampConfiguredStatusEnum, for the same reason: the flag is
+// registered before the config file is read.
+//
+// Only the leading prose is replaced. kit appends its own "(one of:
+// ...)" enum suffix to the same Usage string, and restampConfiguredStatusEnum
+// rewrites that half; overwriting the whole string here would drop the
+// vocabulary list from help.
+func refreshCreateStatusUsage() {
+	f := TaskCreateCmd.Flags().Lookup("status")
+	if f == nil {
+		return
+	}
+	suffix := ""
+	if i := strings.Index(f.Usage, "(one of:"); i >= 0 {
+		suffix = " " + f.Usage[i:]
+	}
+	f.Usage = initialStatusFlagUsage() + suffix
+}
+
 // ResetCreateFlags clears all flag state on TaskCreateCmd using
 // cobra's built-in ResetFlags, then re-registers with fresh defaults.
 // Call before Execute() to prevent stale state from a prior
@@ -378,7 +565,12 @@ func ResetCreateFlags() {
 func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&taskID, "id", "", "Task ID (e.g. T-0042)")
 	cmd.Flags().StringVarP(&taskDescription, "description", "d", "", "Task description")
-	cmd.Flags().StringVarP(&taskStatus, "status", "s", "TODO", "Initial status")
+	// Empty, not "TODO": a hardcoded default is supplied on every run and
+	// so outranks task.default_status, which under a renamed vocabulary
+	// means create is rejected by the user's own config. Empty keeps "not
+	// specified" distinguishable from an explicit choice; resolveInitialStatus
+	// fills it in.
+	cmd.Flags().StringVarP(&taskStatus, "status", "s", "", initialStatusFlagUsageDefault)
 	cmd.Flags().StringVarP(&taskAssignedTo, "assigned-to", "a", "", "Assignee username")
 	cmd.Flags().StringVarP(&taskEffort, "effort", "e", "", "Effort estimate")
 	cmd.Flags().StringVarP(&taskPriority, "priority", "p", "", "Priority")

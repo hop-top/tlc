@@ -22,14 +22,16 @@ type Request struct {
 
 // SyncPullParams holds parameters for the sync.pull method.
 type SyncPullParams struct {
-	Repo       string `json:"repo"`
-	LastSyncAt string `json:"last_sync_at,omitempty"`
+	Repo       string      `json:"repo"`
+	LastSyncAt string      `json:"last_sync_at,omitempty"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 // SyncPushParams holds parameters for the sync.push method.
 type SyncPushParams struct {
-	Repo  string `json:"repo"`
-	Tasks []Task `json:"tasks"`
+	Repo       string      `json:"repo"`
+	Tasks      []Task      `json:"tasks"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 // SyncDeleteParams holds parameters for the sync.delete method.
@@ -89,7 +91,7 @@ func handleSyncPull(req Request) Response {
 		return errResp(req.ID, -32602, "Invalid params")
 	}
 
-	tasks, err := fetchGitLabIssues(params.Repo, params.LastSyncAt)
+	tasks, err := fetchGitLabIssues(params.Repo, params.LastSyncAt, params.Vocabulary)
 	if err != nil {
 		return errResp(req.ID, -32603, fmt.Sprintf("Failed to fetch issues: %v", err))
 	}
@@ -122,9 +124,9 @@ func handleSyncPush(req Request) Response {
 		var opErr error
 		originID, ok := task.Meta["origin_id"].(string)
 		if !ok || originID == "" {
-			opErr = createGitLabIssue(client, params.Repo, &task)
+			opErr = createGitLabIssue(client, params.Repo, &task, params.Vocabulary)
 		} else {
-			opErr = updateGitLabIssue(client, params.Repo, &task)
+			opErr = updateGitLabIssue(client, params.Repo, &task, params.Vocabulary)
 		}
 
 		if opErr != nil {
@@ -219,7 +221,7 @@ func parseRepo(repoFull string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func fetchGitLabIssues(repoFull, lastSyncAt string) ([]interface{}, error) {
+func fetchGitLabIssues(repoFull, lastSyncAt string, vocab *Vocabulary) ([]interface{}, error) {
 	client, err := newGitLabClient()
 	if err != nil {
 		return nil, err
@@ -248,7 +250,7 @@ func fetchGitLabIssues(repoFull, lastSyncAt string) ([]interface{}, error) {
 		}
 
 		for _, issue := range issues {
-			task := MapGitLabIssueToTask(issue)
+			task := MapGitLabIssueToTaskWith(issue, vocab)
 			fetchBlockingLinks(client, pid, issue.IID, task)
 			tasks = append(tasks, task)
 		}
@@ -282,9 +284,9 @@ func fetchBlockingLinks(
 	}
 }
 
-func createGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error {
+func createGitLabIssue(client *gitlab.Client, repoFull string, task *Task, vocab *Vocabulary) error {
 	pid := repoFull
-	data := MapTaskToGitLabIssueData(task)
+	data := MapTaskToGitLabIssueDataWith(task, vocab)
 
 	opts := &gitlab.CreateIssueOptions{
 		Title:       &data.Title,
@@ -316,14 +318,14 @@ func createGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error
 	return nil
 }
 
-func updateGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error {
+func updateGitLabIssue(client *gitlab.Client, repoFull string, task *Task, vocab *Vocabulary) error {
 	pid := repoFull
 	iid, err := extractIID(task)
 	if err != nil {
 		return err
 	}
 
-	data := MapTaskToGitLabIssueData(task)
+	data := MapTaskToGitLabIssueDataWith(task, vocab)
 	opts := &gitlab.UpdateIssueOptions{
 		Title:       &data.Title,
 		Description: &data.Description,

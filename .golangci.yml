@@ -113,6 +113,16 @@ linters:
       - path: cmd/tlc/main\.go
         linters:
           - wrapcheck
+      # Declarative vocabulary and palette tables. goconst counts string
+      # equality, but an equal hex or axis name in two entries is two
+      # independent declarations, not one constant used twice: axes.go
+      # already documents why status:blocked must NOT reuse
+      # priority:high's D93F0B, and tag_policy.go rejects sharing the
+      # commit-type literals it mirrors from a published spec. Extracting
+      # would couple entries that are meant to move separately.
+      - path: internal/(labels/(axes|templates|detector)|core/tag_policy|config/loader|storage/sqlite|workspace/executor)\.go
+        linters:
+          - goconst
     paths:
       - ".*\\.pb\\.go$"
       - vendor

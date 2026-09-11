@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"hop.top/kit/go/core/util"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -47,28 +48,34 @@ func (s *taskScheduling) parse(
 
 // applySchedulingConfig applies priority-based scheduling defaults
 // from config. Does not override explicit values.
+//
+// The lookup goes through the decoded TaskConfig rather than
+// viper.GetStringMap on an interpolated key path. The interpolated form
+// composed "task.scheduling.by_priority." with the task's CANONICAL
+// priority ("P0"), while viper lower-cases every map key it stores
+// ("p0"), so the two never met and the rule silently no-opped for every
+// priority not already spelled in lower case. Decoding re-cases those
+// keys (see normalizeSchedulingKeys), so an exact match here is a real
+// match.
 func applySchedulingConfig(task *core.Task) {
 	p := string(task.Priority)
 	if p == "" {
 		return
 	}
 
-	key := fmt.Sprintf("task.scheduling.by_priority.%s", p)
-	sub := viper.GetStringMap(key)
-	if len(sub) == 0 {
+	var cfg config.TaskConfig
+	if err := unmarshalConfigKey("task", &cfg); err != nil {
+		return
+	}
+	rule, ok := cfg.Scheduling.ByPriority[p]
+	if !ok {
 		return
 	}
 
-	var defaults core.ScheduleDefaults
-	if v, ok := sub["due"]; ok {
-		if d, err := time.ParseDuration(fmt.Sprint(v)); err == nil {
-			defaults.Due = d
-		}
-	}
-	if v, ok := sub["rrule"]; ok {
-		rule := fmt.Sprint(v)
-		if err := core.ValidateRRule(rule); err == nil {
-			defaults.RRule = rule
+	defaults := core.ScheduleDefaults{Due: rule.Due}
+	if rule.RRule != "" {
+		if err := core.ValidateRRule(rule.RRule); err == nil {
+			defaults.RRule = rule.RRule
 		}
 	}
 	core.ApplySchedulingDefaults(task, &defaults)

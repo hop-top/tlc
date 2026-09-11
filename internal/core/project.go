@@ -47,18 +47,54 @@ func ResetDetectionCache() {
 	cachedDetection = nil
 }
 
+// loadConfigLayer folds path into the global viper WITHOUT discarding the
+// map already assembled there, and leaves it as the active config file so
+// ConfigFileUsed and WriteConfig keep targeting it.
+//
+// viper.ReadInConfig REPLACES the config layer with the single file it
+// reads; MergeInConfig layers on top. Detection runs after the CLI's
+// initConfig has merged every project config root-most-to-closest, so a
+// replace here would throw the whole cascade away and leave the process
+// honoring the closest file alone — a setting a user puts at a repo root
+// would reach --help (which never re-reads) and nothing else.
+func loadConfigLayer(path string) error {
+	prev := viper.ConfigFileUsed()
+	viper.SetConfigFile(path)
+	viper.SetConfigType("yaml")
+	if err := viper.MergeInConfig(); err != nil {
+		if prev != "" {
+			viper.SetConfigFile(prev)
+		}
+		return fmt.Errorf("merge config %s: %w", path, err)
+	}
+	return nil
+}
+
 func detectProjectOnce() *ProjectDetection {
+	// A scalar `config` key means TLC_CONFIG named a single path; the -c
+	// flag is a StringArray, on which GetString returns "". The CLI's
+	// initConfig already merged that path, so this only matters for
+	// callers that reach detection without going through it.
 	checkConfigPath := viper.GetString("config")
 	if checkConfigPath != "" {
-		viper.SetConfigFile(checkConfigPath)
-		viper.SetConfigType("yaml")
-		_ = viper.ReadInConfig() //nolint:errcheck // best-effort config load
+		_ = loadConfigLayer(checkConfigPath) //nolint:errcheck // best-effort config load
 	}
 
 	configPath := viper.ConfigFileUsed()
 
 	if configPath == "" {
 		return handleFallbackMode()
+	}
+
+	// Absolutize before deriving anything from it. viper stores whatever
+	// path it was handed verbatim, so a relative ConfigFileUsed() makes
+	// the WriteConfig below resolve against the working directory AT
+	// WRITE TIME — the same late-resolution defect the config-dir
+	// writers had. Pinning it here means the file this function reads
+	// and the file it writes back are the same file, whatever the
+	// process does to its working directory in between.
+	if abs, absErr := filepath.Abs(configPath); absErr == nil {
+		configPath = abs
 	}
 
 	dotTlcDir := filepath.Dir(configPath)
@@ -68,13 +104,43 @@ func detectProjectOnce() *ProjectDetection {
 		return handleFallbackMode()
 	}
 
-	viper.SetConfigFile(tlcConfigPath)
-	viper.SetConfigType("yaml")
-	if err := viper.ReadInConfig(); err != nil {
+	// Readability probe on an ISOLATED viper. The parse still has to be
+	// validated — an unreadable project config means "not in a project" —
+	// but the validation must not be a side effect on the global map.
+	//
+	// ReadInConfig here is what caused the discarded-ancestor bug. The
+	// nearest alternative, MergeInConfig, would re-promote this file above
+	// an explicit -c <file> that initConfig deliberately merged on top of
+	// it. That ordering is currently unobservable, because detection runs
+	// late (touchProjectIfNeeded, after storage is open and after the
+	// memoised workflow singleton has resolved its config), but it is
+	// latent: move detection any earlier and MergeInConfig starts
+	// inverting the -c precedence. An isolated probe has neither hazard,
+	// and the global map already holds this file's keys whenever the
+	// cascade ran.
+	probe := viper.New()
+	probe.SetConfigFile(tlcConfigPath)
+	probe.SetConfigType("yaml")
+	if err := probe.ReadInConfig(); err != nil {
 		return &ProjectDetection{
 			InProject: false,
 		}
 	}
+
+	// Only fold the file into the global map when the cascade has not
+	// already done so — i.e. ConfigFileUsed pointed at a flat-file
+	// variant, or a caller reached detection outside the CLI entrypoint.
+	if configPath != tlcConfigPath {
+		if err := loadConfigLayer(tlcConfigPath); err != nil {
+			return &ProjectDetection{
+				InProject: false,
+			}
+		}
+	}
+	// Keep the closest project config as the active file so
+	// ConfigFileUsed() names it and the WriteConfig below targets it.
+	viper.SetConfigFile(tlcConfigPath)
+	viper.SetConfigType("yaml")
 
 	projectID := viper.GetString("project.id")
 	if projectID == "" {
@@ -183,11 +249,18 @@ func handleFallbackMode() *ProjectDetection {
 	}
 
 	entryMode := config.DetectMode()
-	configPath := filepath.Join(config.LocalConfigDir(entryMode), "config.yaml")
+	// Pin the directory here, at the detection entry point, so the
+	// reported path and the write below agree even if something moves
+	// the process before the write lands.
+	baseDir, err := os.Getwd()
+	if err != nil {
+		baseDir = ""
+	}
+	configPath := filepath.Join(config.LocalConfigDirAt(baseDir, entryMode), "config.yaml")
 
 	switch mode {
 	case fallbackModeAuto:
-		if err := CreateConfigWithInferredID(inferredID); err == nil {
+		if err := CreateConfigWithInferredIDAt(baseDir, inferredID); err == nil {
 			return &ProjectDetection{
 				ProjectID:  inferredID,
 				ConfigPath: configPath,
@@ -291,9 +364,29 @@ func canonicalConfigClaimsProject(projectID string) bool {
 	}
 }
 
+// CreateConfigWithInferredID creates the project-local config in the
+// current working directory. Prefer CreateConfigWithInferredIDAt from
+// any caller that does work between resolving its directory and this
+// write.
 func CreateConfigWithInferredID(projectID string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("determine working directory: %w", err)
+	}
+	return CreateConfigWithInferredIDAt(cwd, projectID)
+}
+
+// CreateConfigWithInferredIDAt creates the project-local config under
+// baseDir, which the caller captures at entry.
+//
+// Pinning the destination matters because this runs on the project
+// detection path, reached from a PersistentPreRunE long before the
+// write completes. Resolving the config directory at write time instead
+// would place the file wherever the process had moved to — and .tlc/ is
+// gitignored, so the misplaced file would be invisible to git status.
+func CreateConfigWithInferredIDAt(baseDir string, projectID string) error {
 	mode := config.DetectMode()
-	configDir := config.LocalConfigDir(mode)
+	configDir := config.LocalConfigDirAt(baseDir, mode)
 	configPath := filepath.Join(configDir, "config.yaml")
 
 	// Skip rewrite if any ancestor already has a config claiming this
@@ -308,7 +401,7 @@ func CreateConfigWithInferredID(projectID string) error {
 	}
 
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
-		return fmt.Errorf("failed to create %s directory: %w", configDir, err)
+		return fmt.Errorf("failed to create %s directory: %w", config.LocalConfigDir(mode), err)
 	}
 
 	cfg := map[string]interface{}{
@@ -352,4 +445,14 @@ func promptFallbackMode(projectID string) (string, error) {
 		return "", fmt.Errorf("failed to run fallback mode prompt: %w", err)
 	}
 	return choice, nil
+}
+
+// CanonicalConfigClaimsProjectForTest exposes the ancestor walk-up that
+// suppresses CreateConfigWithInferredID, so a test can assert it is NOT
+// suppressed before exercising the writer. A developer checkout under a
+// hop root always has a claiming ancestor and a CI checkout does not,
+// which is why the writer's misdirection reproduces only on CI unless a
+// test states the premise explicitly.
+func CanonicalConfigClaimsProjectForTest(projectID string) bool {
+	return canonicalConfigClaimsProject(projectID)
 }

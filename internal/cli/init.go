@@ -76,15 +76,13 @@ const (
 	strategyShare = "share"
 )
 
-// localProjectDBPath returns the absolute path to the project's local
-// SQLite database, respecting the current entry mode.
-func localProjectDBPath() string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
-	}
+// localProjectDBPathAt returns the absolute path to the project's local
+// SQLite database, respecting the current entry mode, resolved against
+// baseDir. Callers capture baseDir at command entry so a later chdir
+// cannot move the path that gets recorded in the project registry.
+func localProjectDBPathAt(baseDir string) string {
 	mode := config.DetectMode()
-	return filepath.Join(cwd, config.LocalConfigDir(mode), dbFileName())
+	return filepath.Join(config.LocalConfigDirAt(baseDir, mode), dbFileName())
 }
 
 // inferSpaceURI detects the workspace space URI from the directory
@@ -132,15 +130,56 @@ func inferLabel(projectID string) string {
 	return parts[len(parts)-1]
 }
 
+// ensureGitignoreEntry ensures dir has a .gitignore when dir is a git
+// worktree, and appends entry to it when addEntry is set and the entry
+// is not already present.
+//
+// The file is created even when addEntry is false: `init --no-track`
+// still expects a .gitignore to exist, and callers read it back.
+//
+// The entry stays a RELATIVE name — an absolute path matches nothing git
+// evaluates — while the file it is written into is pinned to dir, the
+// invocation directory, alongside every other write this command makes.
+//
+// Every failure is advisory: a missing or unwritable .gitignore must not
+// fail an init that has already written its config.
+func ensureGitignoreEntry(dir, entry string, addEntry bool) {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return
+	}
+	path := filepath.Join(dir, ".gitignore")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	content, _ := os.ReadFile(path) //nolint:errcheck // file may not exist yet
+	if !addEntry || strings.Contains(string(content), entry) {
+		return
+	}
+	if _, err := f.WriteString(entry + "\n"); err != nil {
+		log.Warn("Failed to update .gitignore", "error", err)
+	}
+}
+
 func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *bool, fallbackMode *string, duplicateIDStrategy *string) error {
 	mode := config.DetectMode()
-	configDir := config.LocalConfigDir(mode)
+
+	// Pin every path this command writes to the directory the command
+	// was invoked from, recorded by Execute before any command body
+	// ran. runInit does substantial work between here and its writes —
+	// storage access, prompts, project registration — and anything that
+	// moves the process in that window would otherwise redirect those
+	// writes to wherever the process ended up. That failure is silent,
+	// because .tlc/ is gitignored.
+	cwd := InvocationDir()
+	configDir := config.LocalConfigDirAt(cwd, mode)
+	// The relative layout name, captured before the local `config` map
+	// below shadows the package. Used for messages and the .gitignore
+	// entry, where the absolute path would be wrong.
+	configDirName := config.LocalConfigDir(mode)
 
 	// Refuse to init if the other mode's config already exists.
-	cwd, _ := os.Getwd() //nolint:errcheck // fallback to "." below
-	if cwd == "" {
-		cwd = "."
-	}
 	if conflictErr := config.CheckConfigConflict(cwd); conflictErr != nil && !*force {
 		return conflictErr
 	}
@@ -150,12 +189,13 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		// fallback_mode=auto (GH-1). Auto-created configs are minimal
 		// (no storage section); a full init overwrites them.
 		if !isAutoCreatedConfig(configDir) {
-			return fmt.Errorf("%s directory already exists. Use --force to overwrite", configDir)
+			return fmt.Errorf("%s directory already exists. Use --force to overwrite",
+				configDirName)
 		}
 	}
 
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
-		return fmt.Errorf("failed to create %s directory: %w", configDir, err)
+		return fmt.Errorf("failed to create %s directory: %w", configDirName, err)
 	}
 
 	config := make(map[string]interface{})
@@ -180,10 +220,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 			Limit:   1,
 		})
 		if err == nil && len(existingTasks) > 0 {
-			strategy := *duplicateIDStrategy
-			if strategy == "" {
-				strategy = strategyShare
-			}
+			strategy := resolveDuplicateIDStrategy(*duplicateIDStrategy)
 
 			switch strategy {
 			case strategyShare:
@@ -220,7 +257,7 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		}
 
 		// Register or reconnect the project in the global projects table.
-		projDBPath := localProjectDBPath()
+		projDBPath := localProjectDBPathAt(cwd)
 		spaceURI := inferSpaceURI()
 		label := inferLabel(finalProjectID)
 
@@ -288,21 +325,11 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 		return fmt.Errorf("failed to write config.yaml: %w", err)
 	}
 
-	gitignoreEntry := configDir + "/"
-	if _, err := os.Stat(".git"); err == nil {
-		f, err := os.OpenFile(".gitignore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err == nil {
-			defer func() { _ = f.Close() }()
-			content, _ := os.ReadFile(".gitignore") //nolint:errcheck // file may not exist yet
-			contentStr := string(content)
-
-			if track && !strings.Contains(contentStr, gitignoreEntry) {
-				if _, err := f.WriteString(gitignoreEntry + "\n"); err != nil {
-					log.Warn("Failed to update .gitignore", "error", err)
-				}
-			}
-		}
-	}
+	// The .gitignore ENTRY stays the relative name — an absolute path
+	// would not match anything git evaluates — while the .gitignore
+	// FILE it is written into is pinned to the invocation directory
+	// alongside every other write.
+	ensureGitignoreEntry(cwd, configDirName+"/", track)
 
 	// Ensure tasks/ is in the config dir's .gitignore so projected task
 	// files are never tracked, even when the user commits .tlc/ itself.
@@ -356,6 +383,26 @@ func generateUniqueProjectID(ctx context.Context, s *storage.SQLiteStorage, base
 
 	ts := time.Now().Format("20060102")
 	return fmt.Sprintf("%s-%s", baseID, ts)
+}
+
+// resolveDuplicateIDStrategy picks the duplicate-ID strategy: the
+// --duplicate-id-strategy flag, else the `project.duplicate_id_strategy`
+// config key, else the built-in default.
+//
+// The config step is what makes that key mean anything. `tlc init`
+// writes it, ProjectConfig.Validate rejects a bad value, and the
+// interactive setup prompts for it — but the flag is registered with
+// StringVar and never bound to viper, so nothing read the recorded
+// answer back. Re-running init in the same project silently reverted to
+// "share" no matter what the file said.
+func resolveDuplicateIDStrategy(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if fromConfig := viper.GetString("project.duplicate_id_strategy"); fromConfig != "" {
+		return fromConfig
+	}
+	return strategyShare
 }
 
 func promptDuplicateIDStrategy(projectID string, taskCount int) (string, error) {

@@ -10,8 +10,16 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// statusAliases maps lowercase alias/variant → canonical uppercase value.
-var statusAliases = map[string]string{
+// builtinStatusAliases maps lowercase alias/variant → canonical uppercase
+// value for the BUILT-IN statuses. These are hand-written conveniences
+// ("wip", "complete") that no rule could derive, so they stay declared.
+//
+// They apply only to the status they name: an entry survives into the
+// effective alias table only when its target is in the effective
+// vocabulary. A config that keeps the built-in four therefore keeps every
+// alias exactly as before, while a config that drops DONE does not leave
+// "complete" resolving to a status the user no longer has.
+var builtinStatusAliases = map[string]string{
 	// canonical (lowercased)
 	"todo":        "TODO",
 	"in_progress": "IN_PROGRESS",
@@ -30,13 +38,89 @@ var statusAliases = map[string]string{
 	"skip":        "SKIPPED",
 }
 
-// statusCanonical is the ordered list for fuzzy matching, read from the
-// domain canon so a status added there reaches normalisation, the error
-// messages, the flag enums, and completion without a second edit.
-var statusCanonical = core.TaskStatusStrings()
+// statusCanonical returns the effective status vocabulary: the user's
+// `task.statuses` when declared, else the built-in set.
+//
+// A function, not the package-level var it replaced. The var was
+// initialized at package-init time — long before any config file is
+// read — so it could only ever hold the built-ins. Resolution has to
+// happen per call, once config is loaded.
+func statusCanonical() []string {
+	return core.ConfiguredTaskStatusStrings()
+}
 
-// priorityAliases maps lowercase alias/variant → canonical uppercase value.
-var priorityAliases = map[string]string{
+// statusAliases returns the effective alias table for the current
+// vocabulary: the hand-written built-in aliases whose target is still a
+// declared status, plus trivial spelling variants derived for EVERY
+// declared status.
+//
+// See buildAliases for the derivation rules and the built-ins-win
+// precedence that keeps an unchanged vocabulary resolving precisely as it
+// did before this became config-driven.
+func statusAliases() map[string]string {
+	return buildAliases(statusCanonical(), builtinStatusAliases)
+}
+
+// buildAliases is the shared alias-table construction for a
+// config-driven vocabulary: mechanical spelling variants derived for
+// every declared value, then the hand-written built-ins layered on top
+// but only where their target is still declared.
+//
+// One implementation rather than one per field. The status and priority
+// versions were character-for-character identical apart from the two
+// inputs, and a second copy is a second place for the built-ins-win
+// precedence — the part that makes an unchanged config behave exactly as
+// before — to be changed in only one of them.
+//
+// Derivation is deliberately limited to LOWERCASE and
+// underscore/hyphen/removed separators. A user-declared value should not
+// be a second-class citizen — IN_REVIEW earns "in_review", "in-review"
+// and "inreview" for the same reason IN_PROGRESS has them — but nothing
+// semantic is invented, because guessing a meaning the user never
+// declared is how a typo silently resolves to the wrong value.
+func buildAliases(canon []string, builtins map[string]string) map[string]string {
+	aliases := make(map[string]string, len(canon)*4+len(builtins))
+
+	for _, name := range canon {
+		lower := strings.ToLower(name)
+		aliases[lower] = name
+		aliases[strings.ReplaceAll(lower, "_", "-")] = name
+		aliases[strings.ReplaceAll(lower, "-", "_")] = name
+		aliases[strings.NewReplacer("_", "", "-", "").Replace(lower)] = name
+	}
+
+	declared := make(map[string]bool, len(canon))
+	for _, name := range canon {
+		declared[name] = true
+	}
+	for alias, target := range builtins {
+		if declared[target] {
+			aliases[alias] = target
+		}
+	}
+	return aliases
+}
+
+// builtinPriorityAliases maps lowercase alias/variant → canonical value
+// for the BUILT-IN priorities.
+//
+// Every entry here is SEMANTIC ("critical" → P0) or positional ("0" →
+// P0): meanings a rule could not derive from the spelling of "P0", so
+// they stay declared. Like builtinStatusAliases they are gated on their
+// target still being declared, so a config that keeps the built-in four
+// keeps every shorthand exactly as before, while a config that drops P3
+// does not leave "low" resolving to a priority the user no longer has.
+//
+// Deliberately NOT extended by derivation: a custom vocabulary gets the
+// mechanical spelling variants of its own names (see priorityAliases)
+// and nothing else. Guessing that a user's "LATER" means "low" — or that
+// "1" should now mean the second of THEIR priorities rather than P1 — is
+// how a typo silently lands on the wrong urgency. The numeric shorthands
+// in particular are positions in the built-in vocabulary, not positions
+// in an arbitrary one; re-pointing them at whatever sits at index N of a
+// renamed list would make `-p 0` mean different things in different
+// projects with no way for the user to see it.
+var builtinPriorityAliases = map[string]string{
 	// canonical (lowercased)
 	"p0": "P0",
 	"p1": "P1",
@@ -55,16 +139,51 @@ var priorityAliases = map[string]string{
 	"low":      "P3",
 }
 
-// priorityCanonical is the ordered list for fuzzy matching, read from the
-// domain canon (see statusCanonical).
-var priorityCanonical = core.PriorityStrings()
+// priorityCanonical returns the effective priority vocabulary in rank
+// order: the user's `task.priorities` when declared, else the built-in
+// set.
+//
+// A function, not the package-level var it replaced, for the reason
+// statusCanonical is: the var was initialized at package-init time, long
+// before any config file is read, so it could only ever hold the
+// built-ins.
+func priorityCanonical() []string {
+	return core.ConfiguredPriorityStrings()
+}
 
-// effortAliases maps lowercase alias/variant → canonical uppercase value.
+// priorityAliases returns the effective alias table for the current
+// priority vocabulary: mechanical spelling variants derived for EVERY
+// declared priority, plus the hand-written built-ins whose target is
+// still declared.
+//
+// Shares buildAliases with statusAliases, so the derivation rules and
+// the built-ins-win precedence cannot drift between the two fields.
+func priorityAliases() map[string]string {
+	return buildAliases(priorityCanonical(), builtinPriorityAliases)
+}
+
+// builtinEffortAliases maps lowercase alias/variant → canonical value for
+// the BUILT-IN efforts.
+//
 // Single-letter canonicals (S, M, L) make fuzzy matching unreliable for
 // descriptive inputs like "small" or "medium", so each descriptive form
 // is registered explicitly here to be resolved at step 1 before fuzzy
 // runs.
-var effortAliases = map[string]string{
+//
+// Every entry is SEMANTIC — "tiny" → XS, "huge" → XL — a meaning no rule
+// could derive from the spelling of "XS", so they stay declared. Like the
+// status and priority built-ins they are gated on their target still
+// being declared, so a config that keeps the built-in five keeps every
+// descriptive form exactly as before, while a config that drops XL does
+// not leave "huge" resolving to a size the user no longer has.
+//
+// Deliberately NOT extended by derivation: a custom vocabulary gets the
+// mechanical spelling variants of its own names (see effortAliases) and
+// nothing else. Guessing that a user's TINY means "extra small" — or
+// re-pointing "small" at whatever sits second in a renamed list — is how
+// a typo silently lands on the wrong size, with no way for the user to
+// see that it happened.
+var builtinEffortAliases = map[string]string{
 	// canonical (lowercased)
 	"xs": "XS",
 	"s":  "S",
@@ -86,21 +205,72 @@ var effortAliases = map[string]string{
 	"huge":        "XL",
 }
 
-// effortCanonical is the ordered list for fuzzy matching, read from the
-// domain canon (see statusCanonical).
-var effortCanonical = core.EffortStrings()
+// effortCanonical returns the effective effort vocabulary in rank order
+// (smallest first): the user's `task.efforts` when declared, else the
+// built-in set.
+//
+// A function, not the package-level var it replaced, for the reason
+// statusCanonical and priorityCanonical are: the var was initialized at
+// package-init time, long before any config file is read, so it could
+// only ever hold the built-ins.
+func effortCanonical() []string {
+	return core.ConfiguredEffortStrings()
+}
+
+// effortAliases returns the effective alias table for the current effort
+// vocabulary: mechanical spelling variants derived for EVERY declared
+// effort, plus the hand-written built-ins whose target is still declared.
+//
+// Shares buildAliases with statusAliases and priorityAliases, so the
+// derivation rules and the built-ins-win precedence cannot drift between
+// the three fields.
+func effortAliases() map[string]string {
+	return buildAliases(effortCanonical(), builtinEffortAliases)
+}
+
+// dimensionAxisPrefixes returns the `dimension:` prefixes of the label
+// axes, in the order internal/labels emits them.
+//
+// This is the single answer to "which prefixes name an axis", and it
+// exists so that the TLS parser cannot go deaf to an axis the way it had
+// to `type:`, `status:` and `priority:`. Derived from
+// core.DimensionAxes rather than retyped, so a fifth axis reaches the
+// parser without anyone remembering to widen a second list.
+func dimensionAxisPrefixes() []string {
+	axes := core.DimensionAxes()
+	out := make([]string, 0, len(axes))
+	for _, a := range axes {
+		out = append(out, a+":")
+	}
+	return out
+}
+
+// resolveAxisValue maps the value half of a `dimension:value` token onto
+// the canonical vocabulary name, using EXACT alias resolution only.
+//
+// Fuzzy matching is deliberately not used here, unlike the --priority
+// and --status flags. A flag value is typed by a human who benefits from
+// "prioroty" resolving, and who sees the result on their own terminal. A
+// TLS token is written by a machine — formatTLS, `label init`, a sync
+// plugin — and read on the hot path of every storage open, with no user
+// watching. Fuzzy there would silently coerce an unrecognized value onto
+// whatever scored highest instead of leaving it as the tag it is.
+func resolveAxisValue(aliases map[string]string, value string) (string, bool) {
+	v, ok := aliases[strings.ToLower(strings.TrimSpace(value))]
+	return v, ok
+}
 
 // unknownStatusError renders the rejection for a status the normaliser
 // could not resolve, naming the legal set. Every caller — task list, task
 // create, task update, the HTTP surface — formats through this one helper,
 // so the message and the flag-enum registration cannot drift apart.
 func unknownStatusError(input string) error {
-	return fmt.Errorf("unknown status %q; valid values: %s", input, enumList(statusCanonical))
+	return fmt.Errorf("unknown status %q; valid values: %s", input, enumList(statusCanonical()))
 }
 
 // unknownPriorityError is unknownStatusError for --priority.
 func unknownPriorityError(input string) error {
-	return fmt.Errorf("unknown priority %q; valid values: %s", input, enumList(priorityCanonical))
+	return fmt.Errorf("unknown priority %q; valid values: %s", input, enumList(priorityCanonical()))
 }
 
 // invalidPriorityError is the set-on-write rejection for --priority. The
@@ -109,39 +279,44 @@ func unknownPriorityError(input string) error {
 // write path have always phrased it differently; both now read the same
 // canonical set, so only the prose differs.
 func invalidPriorityError(input string) error {
-	return fmt.Errorf("invalid priority %q: must be one of %s", input, enumList(priorityCanonical))
+	return fmt.Errorf("invalid priority %q: must be one of %s", input, enumList(priorityCanonical()))
 }
 
 // unknownEffortError is unknownStatusError for --effort.
 func unknownEffortError(input string) error {
-	return fmt.Errorf("invalid effort %q: must be one of %s", input, enumList(effortCanonical))
+	return fmt.Errorf("invalid effort %q: must be one of %s", input, enumList(effortCanonical()))
 }
 
 // enumList renders a canonical set the way the error messages and the
 // flag-enum help suffix both spell it: comma-separated, declaration order.
+//
+// Delegates to core rather than re-joining here. internal/inbox gates the
+// same vocabularies and cannot import internal/cli, so the rendering had
+// to move somewhere both can reach; leaving a second Join behind would
+// reintroduce exactly the drift this helper exists to prevent.
 func enumList(values []string) string {
-	return strings.Join(values, ", ")
+	return core.VocabularyList(values)
 }
 
 // NormalizeStatus resolves input to a canonical status string.
 // Resolution order: exact (case-insensitive) → alias → fuzzy.
 // Returns ("", false) when no match found.
 func NormalizeStatus(input string) (string, bool) {
-	return normalizeEnum(input, statusAliases, statusCanonical)
+	return normalizeEnum(input, statusAliases(), statusCanonical())
 }
 
 // NormalizePriority resolves input to a canonical priority string.
 // Resolution order: exact (case-insensitive) → alias → fuzzy.
 // Returns ("", false) when no match found.
 func NormalizePriority(input string) (string, bool) {
-	return normalizeEnum(input, priorityAliases, priorityCanonical)
+	return normalizeEnum(input, priorityAliases(), priorityCanonical())
 }
 
 // NormalizeEffort resolves input to a canonical effort string.
 // Resolution order: exact (case-insensitive) → alias → fuzzy.
 // Returns ("", false) when no match found.
 func NormalizeEffort(input string) (string, bool) {
-	return normalizeEnum(input, effortAliases, effortCanonical)
+	return normalizeEnum(input, effortAliases(), effortCanonical())
 }
 
 // normalizeEnum is the shared resolution logic for any enum field.

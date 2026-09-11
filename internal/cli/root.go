@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"hop.top/kit/go/ai/ext/dispatch"
 	kitcli "hop.top/kit/go/console/cli"
@@ -41,6 +43,11 @@ var (
 	// flag parsing, so initConfig also honors this var when non-empty.
 	cfgFile    string
 	tlcVersion = "dev" // overridden at build time via -ldflags
+
+	// preParsedConfigTokens carries the -c/--config tokens lifted out of
+	// os.Args by preParseConfigTokens, for the initConfig() call Execute()
+	// makes before cobra has parsed argv. See preParseConfigTokens.
+	preParsedConfigTokens []string
 )
 
 // notifyUpgrade indirects upgrade.NotifyIfAvailable so tests can substitute
@@ -224,7 +231,13 @@ func kitRoot() *kitcli.Root {
 
 	// Bridge kit's flat viper keys to TLC's namespaced keys on the global viper.
 	// kit binds --no-color to root.Viper["no-color"] and --quiet to root.Viper["quiet"].
-	// TLC reads "output.color" and "output.quiet" from the global viper.
+	//
+	// TLC reads "output.color" from the global viper (see the markdown
+	// render in formatter.go). "output.quiet" has no such reader: the
+	// binding below exists so the --quiet FLAG resolves, and the only
+	// consumer reads that flag off the command (upgrade.go), never the
+	// config key. Setting `output.quiet` in a config file therefore does
+	// nothing, which is why the key is not part of the config schema.
 	if err := viper.BindPFlag("output.color", cmd.PersistentFlags().Lookup("no-color")); err != nil {
 		log.Warn("Failed to bind color flag", "error", err)
 	}
@@ -239,6 +252,13 @@ func kitRoot() *kitcli.Root {
 
 	// --- Lifecycle hooks ---
 	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+		// cobra.OnInitialize(initConfig) has run by now, so the user's
+		// configured status vocabulary is finally readable. Overwrite the
+		// built-in flag enum kit stamped before argv was parsed.
+		restampConfiguredStatusEnum(root)
+		refreshCreateStatusUsage()
+		annotateTagPolicyUsage(root)
+
 		offline := viper.GetBool("runtime.offline")
 		if c.Name() != "upgrade" && !offline {
 			notifyUpgrade(c.Context(), newChecker(), os.Stderr)
@@ -331,6 +351,18 @@ func kitRoot() *kitcli.Root {
 // Registered before Execute, as kit requires: the sets are materialized
 // onto the flags during the Execute-time tree walk, so registrations added
 // afterwards never reach a flag.
+//
+// That walk is also why the task `--status`, `--priority` and `--effort`
+// sets registered here are the BUILT-IN ones rather than the user's
+// configured vocabularies. kit stamps
+// the enums in Root.Execute -> prepareTree, which is the first statement
+// of Execute and therefore runs before cobra parses argv — while the
+// config file is only read later, from cobra.OnInitialize(initConfig)
+// during PersistentPreRun. There is no kit API for a lazily-evaluated
+// enum set: WithCommandFlagEnum takes values, not a provider. So the
+// configured vocabulary is stamped in a second pass once config exists,
+// by restampConfiguredStatusEnum below, using kit's documented
+// FlagEnumAnnotation contract.
 func registerFlagEnums(root *kitcli.Root) {
 	statuses := core.TaskStatusStrings()
 	priorities := core.PriorityStrings()
@@ -351,6 +383,256 @@ func registerFlagEnums(root *kitcli.Root) {
 	}
 }
 
+// taskStatusEnumCommands are the command paths whose `--status` flag
+// carries the TASK status vocabulary. Track statuses are a separate set on
+// a separate flag and are deliberately not restamped here.
+var taskStatusEnumCommands = []string{"task list", "task graph", "task create", "task update"}
+
+// taskPriorityEnumCommands are the command paths whose `--priority` flag
+// carries the task priority vocabulary. Same list as the status one
+// today, kept separate because the two vocabularies are independent and a
+// future command may take one flag without the other.
+var taskPriorityEnumCommands = []string{"task list", "task graph", "task create", "task update"}
+
+// taskEffortEnumCommands are the command paths whose `--effort` flag
+// carries the task effort vocabulary. A SHORTER list than the status and
+// priority ones: effort is a write-path flag only, so `task list` and
+// `task graph` do not carry it and restamping them would look up a flag
+// that is not there.
+var taskEffortEnumCommands = []string{"task create", "task update"}
+
+// configuredTaskEnums enumerates the config-driven flag vocabularies that
+// need the post-config second pass: the flag name, the commands carrying
+// it, the accessor for the configured set, and the accessor for the
+// built-in set the pre-config registration stamped.
+//
+// A table rather than a copy of the status code per flag: the restamp,
+// the completion bind and the "is this even different from the built-in"
+// short-circuit are identical logic for --status and --priority, and the
+// version of this that duplicated them for status alone is what left
+// --priority stamped with a hardcoded canon.
+var configuredTaskEnums = []struct {
+	flag       string
+	commands   []string
+	configured func() []string
+	builtin    func() []string
+}{
+	{
+		flag:       "status",
+		commands:   taskStatusEnumCommands,
+		configured: core.ConfiguredTaskStatusStrings,
+		builtin:    core.TaskStatusStrings,
+	},
+	{
+		flag:       "priority",
+		commands:   taskPriorityEnumCommands,
+		configured: core.ConfiguredPriorityStrings,
+		builtin:    core.PriorityStrings,
+	},
+	{
+		flag:       "effort",
+		commands:   taskEffortEnumCommands,
+		configured: core.ConfiguredEffortStrings,
+		builtin:    core.EffortStrings,
+	},
+}
+
+// restampConfiguredStatusEnum rewrites the config-driven task flag-enum
+// annotations — `--status`, `--priority` and `--effort` — to the
+// vocabularies the user actually declared.
+//
+// Why a second pass: kit materializes flag enums in prepareTree, the first
+// thing Root.Execute does, which is strictly before cobra parses argv and
+// therefore before cobra.OnInitialize(initConfig) has read any config
+// file. registerFlagEnums consequently stamps the built-in four. This runs
+// from PersistentPreRunE — after initConfig — and overwrites that stamp
+// with the configured set, so `--help`, the parse-error message and shell
+// completion all name the vocabulary the user actually declared.
+//
+// It writes FlagEnumAnnotation directly, which kit documents as the
+// supported contract for adopters registering flags outside its builders.
+// Shell completion is NOT handled here — cobra refuses to replace an
+// already-registered completion function, so that half is claimed ahead of
+// kit by bindConfiguredStatusCompletion.
+func restampConfiguredStatusEnum(root *kitcli.Root) {
+	if root == nil || root.Cmd == nil {
+		return
+	}
+	for _, spec := range configuredTaskEnums {
+		configured := spec.configured()
+		// A no-op when the configured vocabulary equals the built-in
+		// one, which keeps an unchanged config byte-identical to
+		// today's behavior — including the help suffix kit already
+		// appended for the built-ins.
+		if slices.Equal(configured, spec.builtin()) {
+			continue
+		}
+		for _, path := range spec.commands {
+			// Rewrite the REGISTRY entry, not only the flag annotation: kit
+			// re-runs applyFlagEnums on every prepareTree, re-stamping and
+			// re-appending its help suffix from the registry. Updating only
+			// the annotation leaves the registry holding the built-ins, and
+			// the next walk appends a second, stale "(one of: ...)".
+			root.WithCommandFlagEnum(path, spec.flag, configured...)
+
+			cmd := findCommandByPath(root.Cmd, path)
+			if cmd == nil {
+				continue
+			}
+			f := cmd.Flags().Lookup(spec.flag)
+			if f == nil {
+				continue
+			}
+			if f.Annotations == nil {
+				f.Annotations = make(map[string][]string)
+			}
+			previous := f.Annotations[kitcli.FlagEnumAnnotation]
+			f.Annotations[kitcli.FlagEnumAnnotation] = append([]string(nil), configured...)
+			retargetFlagEnumHelp(f, previous, configured)
+		}
+	}
+}
+
+// tagFlagCommands are the command paths and flag names that WRITE tags,
+// and are therefore the ones a closed policy governs. `task list --tag`
+// filters rather than writes and is deliberately absent: a filter naming
+// a tag outside the vocabulary is a query that returns nothing, not a
+// violation, and advertising the vocabulary there would suggest the
+// filter is restricted to it.
+var tagFlagCommands = []struct {
+	path string
+	flag string
+}{
+	{"task create", "tag"},
+	{"task update", "add-tag"},
+}
+
+// annotateTagPolicyUsage appends the allowed vocabulary to the usage
+// text of the tag-writing flags when the policy is closed.
+//
+// Usage text rather than a flag ENUM, which is the mechanism --status,
+// --priority and --effort use. A flag enum makes cobra reject anything
+// outside the set during parsing, and under the default `open` policy
+// that set is unbounded — there is nothing to stamp. Stamping only under
+// `closed` would then make the two policies differ in WHERE the
+// rejection happens (cobra's parser vs the write gate) and in what the
+// message says, for one behavior; one gate, in core, reachable from
+// every write path including the ones with no cobra in them at all, is
+// the version that can actually hold. So the enum machinery is left
+// alone and only the help string learns about the policy.
+//
+// Runs from PersistentPreRunE for the same reason the restamp does: it
+// needs the config, and config is not read until initConfig, which is
+// strictly after kit materializes flags in prepareTree.
+func annotateTagPolicyUsage(root *kitcli.Root) {
+	if root == nil || root.Cmd == nil {
+		return
+	}
+	policy, vocab := core.TagPolicyFor()
+	if policy != config.TagPolicyClosed {
+		return
+	}
+	suffix := "(policy closed; allowed: " + strings.Join(vocab.Display(), ", ") + ")"
+	for _, spec := range tagFlagCommands {
+		cmd := findCommandByPath(root.Cmd, spec.path)
+		if cmd == nil {
+			continue
+		}
+		f := cmd.Flags().Lookup(spec.flag)
+		if f == nil || strings.HasSuffix(f.Usage, suffix) {
+			continue
+		}
+		f.Usage = strings.TrimSpace(f.Usage + " " + suffix)
+	}
+}
+
+// findCommandByPath resolves a space-separated command path below root.
+func findCommandByPath(root *cobra.Command, path string) *cobra.Command {
+	cur := root
+	for _, name := range strings.Fields(path) {
+		var next *cobra.Command
+		for _, c := range cur.Commands() {
+			if c.Name() == name {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		cur = next
+	}
+	return cur
+}
+
+// retargetFlagEnumHelp swaps the "(one of: ...)" suffix kit appended for
+// the pre-config values with one naming the configured set. kit's own
+// helper is idempotent by suffix match, so the stale suffix has to be
+// removed rather than left for a second append to skip.
+func retargetFlagEnumHelp(f *pflag.Flag, previous, configured []string) {
+	if len(previous) > 0 {
+		stale := "(one of: " + strings.Join(previous, ", ") + ")"
+		f.Usage = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(f.Usage), stale))
+	}
+	suffix := "(one of: " + strings.Join(configured, ", ") + ")"
+	if strings.HasSuffix(f.Usage, suffix) {
+		return
+	}
+	if f.Usage == "" {
+		f.Usage = suffix
+		return
+	}
+	f.Usage += " " + suffix
+}
+
+// bindConfiguredStatusCompletion binds completion functions for the
+// config-driven task flags — `--status`, `--priority` and `--effort` —
+// that read the configured vocabulary at completion time.
+//
+// It must win over the closure kit binds during prepareTree, which
+// captured the pre-config built-ins. Cobra keys completion functions by
+// *pflag.Flag and refuses to replace an existing entry
+// (RegisterFlagCompletionFunc errors on a duplicate, with no unregister
+// API), so this registers FIRST — from Execute, before Root.Prepare or
+// Root.Execute runs prepareTree — and kit's later bind is the one that
+// silently loses. kit documents that exact precedence: its bind ignores
+// the duplicate error because "that is exactly the adopter-wins case".
+//
+// Resolving inside the closure rather than capturing a slice is what
+// makes this correct despite running pre-config: completion requests
+// arrive during command execution, by which time initConfig has run.
+func bindConfiguredStatusCompletion(root *kitcli.Root) {
+	if root == nil || root.Cmd == nil {
+		return
+	}
+	for _, spec := range configuredTaskEnums {
+		// Bound to the loop var so each flag's closure reads its own
+		// vocabulary rather than whichever spec the loop ended on.
+		configured := spec.configured
+		for _, path := range spec.commands {
+			cmd := findCommandByPath(root.Cmd, path)
+			if cmd == nil {
+				continue
+			}
+			if cmd.Flags().Lookup(spec.flag) == nil {
+				continue
+			}
+			//nolint:errcheck // duplicate-registration error is the documented adopter-wins case; see the doc comment above
+			_ = cmd.RegisterFlagCompletionFunc(spec.flag, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+				values := configured()
+				out := make([]string, 0, len(values))
+				lower := strings.ToLower(toComplete)
+				for _, v := range values {
+					if strings.HasPrefix(strings.ToLower(v), lower) {
+						out = append(out, v)
+					}
+				}
+				return out, cobra.ShellCompDirectiveNoFileComp
+			})
+		}
+	}
+}
+
 func init() {
 	// Wire NL prompt handler after all package vars are initialized to avoid
 	// an init cycle: kitRoot() → runNLPrompt → runCommand → RootCmd → kitRoot().
@@ -365,8 +647,21 @@ func init() {
 	// Install kit-themed TableStyle so renderStyledList forwards it to
 	// output.WithTableStyle. The styled path activates only on TTY writers;
 	// non-TTY writers (pipes, tests) keep the plain tabwriter renderer.
+	//
+	// This is the pre-config style. initConfig re-derives it once
+	// ui.theme / ui.table_style are readable; until then a command that
+	// renders before config load still has a style rather than none.
 	setTableStyle(kitRootInstance.TableStyle())
+
+	// Hand initConfig the root without letting it name kitRootInstance,
+	// which would close an initialization cycle.
+	themeTarget = kitRootInstance
 }
+
+// themeTarget is the kit Root that applyUITheme themes from initConfig.
+// Assigned in init(); nil only in tests that never ran it, which
+// applyUITheme tolerates.
+var themeTarget *kitcli.Root
 
 // Execute runs the root command and handles any errors.
 // Alias expansion is applied to os.Args before cobra parses them.
@@ -392,6 +687,13 @@ func Execute() {
 		}
 		os.Args = newArgs
 	}
+	// Record the invocation directory now that -C has been applied and
+	// before any command body runs. Everything that WRITES a
+	// project-local config resolves against this rather than calling
+	// os.Getwd() at write time, so a chdir later in the process cannot
+	// redirect the write into an unrelated directory.
+	SetInvocationDir()
+
 	// Subcommands register on RootCmd via their own init() funcs, which
 	// run before main() — by the time Execute() is called they are all
 	// attached. Set GroupID now so kit's help renderer groups them
@@ -399,6 +701,53 @@ func Execute() {
 	// inside this function before stripping the flag) and before kit's
 	// Execute (which dispatches to fang for help rendering).
 	applyCommandGroups()
+
+	// Claim the task --status completion slot before kit's prepareTree
+	// binds the pre-config built-ins: cobra keeps the FIRST registration
+	// for a flag and kit's later bind loses. Must run here rather than in
+	// kitRoot(): the task subcommands attach to RootCmd from their own
+	// init() funcs, which run after the kitRootInstance package var is
+	// initialized, so the tree is empty at registerFlagEnums time.
+	bindConfiguredStatusCompletion(kitRootInstance)
+
+	// Stamp the configured status vocabulary onto the --status flags
+	// before kit's Execute renders any help.
+	//
+	// `--help` never reaches PersistentPreRunE — cobra's
+	// OnInitialize(initConfig) fires from PersistentPreRun, which the
+	// help path skips entirely — so a restamp that only ran there would
+	// leave `--help` naming the built-in four while the same
+	// invocation's errors named the configured set.
+	//
+	// Prepare() first, then restamp: Prepare runs the same prepareTree
+	// that Execute would, so kit has already appended its "(one of:
+	// ...)" help suffix for the pre-config values by the time the
+	// restamp replaces it. Restamping before prepareTree instead would
+	// let kit append its stale suffix afterwards, leaving the flag
+	// advertising two different sets. Both are idempotent, so Execute
+	// re-running prepareTree is a no-op. initConfig is likewise
+	// idempotent and cobra runs it again for the normal path.
+	//
+	// Lifting -c/--config out of os.Args first is what lets that restamp
+	// see a config file named on the command line: cobra has not parsed
+	// argv yet, so the flag's viper binding is empty and only TLC_CONFIG
+	// would otherwise be visible. Runs after preParseChdir stripped -C
+	// (a relative -c path resolves against the post-chdir cwd, as it does
+	// on the execute path) and before initConfig, which consumes them.
+	preParsedConfigTokens = preParseConfigTokens(os.Args)
+	initConfig()
+	if err := kitRootInstance.Prepare(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(exitCodeFor(err))
+	}
+	restampConfiguredStatusEnum(kitRootInstance)
+	refreshCreateStatusUsage()
+	// Same reason the restamp is here and not only in PersistentPreRunE:
+	// `--help` never reaches PersistentPreRunE, so an annotation applied
+	// only there would leave the help text silent about a policy the
+	// same invocation's errors enforce.
+	annotateTagPolicyUsage(kitRootInstance)
+
 	defer func() {
 		closePolicy()
 		if auditSub != nil {
@@ -498,6 +847,22 @@ func initConfig() {
 	// here would form an init cycle since kitRootInstance := kitRoot()
 	// and kitRoot() registers OnInitialize(initConfig).
 	rawConfigTokens := viper.GetStringSlice("config")
+	// Before cobra parses argv the viper key is still empty, so the
+	// tokens Execute() lifted out of os.Args stand in. Once cobra HAS
+	// parsed, the bound flag reports the same tokens and the two
+	// collapse to one set.
+	//
+	// De-duplicating rather than appending is housekeeping, not a
+	// correctness guard: re-merging a file replaces keys rather than
+	// accumulating them, so a doubled token resolves to the same config
+	// either way, and no test can pin the difference. It stays because
+	// resolving and re-reading every -c file twice on the normal path is
+	// pure waste — including a shortname token's registry lookup.
+	//
+	// Kept as a package var rather than viper.Set so the flag's own
+	// binding is never shadowed by a higher-precedence override for the
+	// rest of the process.
+	rawConfigTokens = mergeConfigTokens(rawConfigTokens, preParsedConfigTokens)
 	// TLC_CONFIG is the env-equivalent of -c <path>. AutomaticEnv binds
 	// it to the "config" viper key, but viper.GetStringSlice on a
 	// scalar env value returns a one-element slice of the raw string
@@ -613,13 +978,24 @@ func initConfig() {
 
 	// Validate merged configuration
 	var cfg config.Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := unmarshalConfig(&cfg); err != nil {
 		log.Warn("Failed to unmarshal config for validation", "error", err)
 	} else {
 		if err := cfg.Validate(); err != nil {
 			log.Warn("Invalid configuration", "error", err)
 		}
 	}
+
+	// Apply ui.theme / ui.table_style now that the merged config is
+	// readable. It cannot happen in kitRoot(): kitRootInstance is a
+	// package var, so kitcli.New has already run by the time cobra
+	// calls initConfig.
+	//
+	// Reached through themeTarget rather than kitRootInstance directly:
+	// naming the var here would close the init cycle
+	// kitRootInstance → kitRoot → initConfig → kitRootInstance that the
+	// RunE wiring below already sidesteps. init() fills it in.
+	applyUITheme(themeTarget, viper.GetString("ui.theme"), viper.GetString("ui.table_style"))
 
 	setupLogging()
 }
@@ -778,35 +1154,38 @@ func setupLogging() {
 }
 
 func setDefaults() {
+	// Only keys something actually reads are seeded here. A SetDefault
+	// for an unread key is not inert: `config set` rewrites the whole
+	// merged config back to disk, so every seeded key lands in the
+	// user's file as a real setting that nothing honors.
 	viper.SetDefault("output.format", "table")
 	viper.SetDefault("output.color", true)
 	viper.SetDefault("output.verbose", false)
-	viper.SetDefault("output.quiet", false)
 
 	dataDir := config.UserDataDir()
 	viper.SetDefault("task.todo_file", filepath.Join(dataDir, "todo.txt"))
 	viper.SetDefault("output.log_file", filepath.Join(dataDir, "tlc.log"))
 	viper.SetDefault("storage.db_path", filepath.Join(dataDir, "db.sqlite"))
 
-	viper.SetDefault("task.default_status", "TODO")
-	viper.SetDefault("task.id_format", "T-{seq:04d}")
-	viper.SetDefault("task.auto_assign", false)
-	viper.SetDefault("task.require_reference", true)
+	// No task.default_status default. Seeding "TODO" made the key present
+	// in every merged config, so a user who renamed the vocabulary and
+	// never wrote the key still failed validation with
+	// `default_status "TODO" does not match any defined status`. Left
+	// unset, the key means what it says — "the user nominated one" — and
+	// an omitted one resolves to the initial-role status instead.
 	viper.SetDefault("task.archive_threshold", 7*24*time.Hour)
 
 	viper.SetDefault("git.track", false)
-	viper.SetDefault("git.branch.prefix_from_type", true)
-	viper.SetDefault("git.branch.zero_pad_issue", 4)
-	viper.SetDefault("git.branch.separator", "/")
-	viper.SetDefault("git.commit.auto_generate", true)
-	viper.SetDefault("git.commit.template", "{type}: {description} (closes #{issue})")
 
 	viper.SetDefault("storage.backend", backendSQLite)
-	viper.SetDefault("ui.pager", "auto")
-	viper.SetDefault("ui.editor", os.Getenv("EDITOR"))
-	viper.SetDefault("ui.date_format", "2006-01-02 15:04:05")
 	viper.SetDefault("ui.timezone", "local")
 	viper.SetDefault("ui.table_style", "unicode")
+	// Seeded for discoverability as much as for the value: the
+	// interactive config search walks viper.AllKeys(), so a key with no
+	// default cannot be found by name there. "neon" is the palette kit
+	// already defaults to, so this seeds the behavior that was in
+	// effect anyway.
+	viper.SetDefault("ui.theme", "neon")
 }
 
 var dbSyncOnce sync.Once
@@ -946,6 +1325,76 @@ func preParseChdir(args []string) ([]string, string, bool) {
 		return args, "", false
 	}
 	return out, target, true
+}
+
+// preParseConfigTokens lifts the -c/--config tokens out of args so the
+// initConfig() Execute() runs BEFORE cobra parses argv can see them.
+//
+// Why this exists at all: the flag-enum restamp and the shell-completion
+// bind both need the user's configured vocabulary, and `--help` never
+// reaches PersistentPreRunE — cobra's OnInitialize(initConfig) fires from
+// PersistentPreRun, which the help path skips. So Execute() primes config
+// itself. At that moment cobra has not parsed argv, viper's binding for
+// the "config" key is still empty, and only the env-fed TLC_CONFIG was
+// visible — leaving `--help -c custom.yaml` advertising the built-in
+// vocabulary while the same invocation's validation honored the custom
+// one.
+//
+// Delegating to a throwaway pflag.FlagSet rather than hand-scanning args
+// is deliberate: -c is a StringArrayP, so it arrives as any of `-c v`,
+// `-c=v`, `-cv`, `-Vc v`, `--config v` or `--config=v`, repeatably, and
+// stops at `--`. pflag already decides all of that, and a second,
+// divergent opinion about argv shape is exactly the kind of drift the
+// help/validation split here was.
+//
+// UnknownFlags whitelisting keeps every other flag in the tree out of the
+// picture, and `help` is registered only so pflag does not abort the scan
+// with ErrHelp on the very invocation this fix targets. Parse errors are
+// swallowed: a malformed argv is cobra's to report, with its own message,
+// once it does the real parse.
+func preParseConfigTokens(args []string) []string {
+	if len(args) <= 1 {
+		return nil
+	}
+	fs := pflag.NewFlagSet("tlc-preparse", pflag.ContinueOnError)
+	fs.ParseErrorsAllowlist.UnknownFlags = true
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	fs.BoolP("help", "h", false, "")
+	tokens := fs.StringArrayP("config", "c", nil, "")
+	_ = fs.Parse(args[1:]) //nolint:errcheck // malformed argv is cobra's to report on the real parse; see the doc comment above
+	return *tokens
+}
+
+// mergeConfigTokens returns base followed by the tokens of extra that
+// base does not already carry, preserving order.
+//
+// Order matters: -c files merge in argument order and the last one named
+// wins, so the result has to keep the sequence the user typed. The
+// de-duplication covers the case the caller documents — the same tokens
+// arriving twice, once pre-parsed from os.Args and once from the bound
+// flag after cobra parses.
+//
+// Copies rather than appending into base's backing array, so a caller
+// holding that slice never sees it grow underneath them.
+func mergeConfigTokens(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base))
+	for _, t := range base {
+		seen[t] = struct{}{}
+	}
+	out := make([]string, len(base), len(base)+len(extra))
+	copy(out, base)
+	for _, t := range extra {
+		if _, dup := seen[t]; dup {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 // resolvePreChdirTarget expands ~ and converts the target to an absolute

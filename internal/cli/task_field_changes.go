@@ -210,12 +210,20 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		// --due, --remind-at, --rrule, --assigned-to.
 		if *changes.Priority == "" || *changes.Priority == "-" {
 			task.Priority = ""
+			// Clearing drops the provenance marker too, which is what
+			// hands the task back to derivation. It is the documented
+			// way to opt back in after having set a priority by hand:
+			// the value is gone and the next reprioritise supplies one.
+			core.ClearPrioritySource(task)
 		} else {
 			normalized, ok := NormalizePriority(*changes.Priority)
 			if !ok {
 				return changed, fmt.Errorf("%w: %v", domain.ErrValidation, invalidPriorityError(*changes.Priority))
 			}
 			task.Priority = core.Priority(normalized)
+			// A value that came in through -p came from a human. Mark
+			// it, and derivation will never overwrite it.
+			core.MarkPriorityManual(task)
 		}
 		changed = true
 	}
@@ -275,6 +283,15 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 	}
 
 	if len(changes.AddTags) > 0 || len(changes.RemoveTags) > 0 {
+		// Only the ADDED tags are gated. A task that already carries a
+		// tag the vocabulary no longer admits — because it predates the
+		// policy, or because the policy tightened — must stay editable,
+		// and removing such a tag must stay possible; gating the merged
+		// set would make both impossible and leave the user no way to
+		// bring the task back into compliance.
+		if err := core.ValidateTags(changes.AddTags); err != nil {
+			return changed, fmt.Errorf("%w: %v", domain.ErrValidation, err)
+		}
 		tagMap := make(map[string]bool)
 		for _, t := range task.Tags {
 			tagMap[t] = true

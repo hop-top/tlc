@@ -53,7 +53,7 @@ func buildTLCBinary(t *testing.T) string {
 		// caller's context.
 		cmd := exec.CommandContext(context.Background(), "go", "build",
 			"-buildvcs=false", "-o", binPath, "./cmd/tlc")
-		cmd.Dir = styledRepoRoot(t)
+		cmd.Dir = testRepoRoot(t)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			tlcBinaryErr = fmt.Errorf("go build tlc: %w\n%s", err, out)
 			return
@@ -65,29 +65,6 @@ func buildTLCBinary(t *testing.T) string {
 		t.Fatalf("%v", tlcBinaryErr)
 	}
 	return tlcBinaryPath
-}
-
-// styledRepoRoot returns the absolute path to the repo root by walking up
-// from the working directory until go.mod is found. Distinct from
-// cli.repoRoot (agent_helpers.go) which returns CWD or "/workspace"
-// depending on agent run mode.
-func styledRepoRoot(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd: %v", err)
-	}
-	d := wd
-	for {
-		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
-			return d
-		}
-		parent := filepath.Dir(d)
-		if parent == d {
-			t.Fatalf("repo root not found from %s", wd)
-		}
-		d = parent
-	}
 }
 
 // e2eEnv returns an env for subprocess tlc runs, isolated from the

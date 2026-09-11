@@ -21,13 +21,15 @@ type Request struct {
 }
 
 type SyncPullParams struct {
-	Repo       string `json:"repo"`
-	LastSyncAt string `json:"last_sync_at,omitempty"`
+	Repo       string      `json:"repo"`
+	LastSyncAt string      `json:"last_sync_at,omitempty"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 type SyncPushParams struct {
-	Repo  string `json:"repo"`
-	Tasks []Task `json:"tasks"`
+	Repo       string      `json:"repo"`
+	Tasks      []Task      `json:"tasks"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 type SyncDeleteParams struct {
@@ -77,7 +79,7 @@ func handleRequest(req Request) Response {
 			}
 		}
 
-		tasks, err := fetchGitHubIssues(params.Repo, params.LastSyncAt)
+		tasks, err := fetchGitHubIssues(params.Repo, params.LastSyncAt, params.Vocabulary)
 		if err != nil {
 			return Response{
 				JSONRPC: "2.0",
@@ -118,9 +120,9 @@ func handleRequest(req Request) Response {
 			var err error
 			originID, ok := task.Meta["origin_id"].(string)
 			if !ok || originID == "" {
-				err = createGitHubIssue(params.Repo, &task)
+				err = createGitHubIssue(params.Repo, &task, params.Vocabulary)
 			} else {
-				err = updateGitHubIssue(params.Repo, &task)
+				err = updateGitHubIssue(params.Repo, &task, params.Vocabulary)
 			}
 
 			if err != nil {
@@ -204,7 +206,7 @@ func parseRepo(repoFull string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error) {
+func fetchGitHubIssues(repoFull string, lastSyncAt string, vocab *Vocabulary) ([]interface{}, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("GITHUB_TOKEN environment variable not set")
@@ -246,7 +248,7 @@ func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error
 			if issue.IsPullRequest() {
 				continue
 			}
-			tasks = append(tasks, MapGitHubIssueToTask(issue))
+			tasks = append(tasks, MapGitHubIssueToTaskWith(issue, vocab))
 		}
 
 		if resp.NextPage == 0 {
@@ -258,7 +260,7 @@ func fetchGitHubIssues(repoFull string, lastSyncAt string) ([]interface{}, error
 	return tasks, nil
 }
 
-func createGitHubIssue(repoFull string, task *Task) error {
+func createGitHubIssue(repoFull string, task *Task, vocab *Vocabulary) error {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
@@ -274,7 +276,7 @@ func createGitHubIssue(repoFull string, task *Task) error {
 	tc := oauth2.NewClient(ctx, ts)
 	client := github.NewClient(tc)
 
-	req := MapTaskToGitHubIssueRequest(task)
+	req := MapTaskToGitHubIssueRequestWith(task, vocab)
 	issue, _, err := client.Issues.Create(ctx, owner, repo, req)
 	if err != nil {
 		return fmt.Errorf("failed to create github issue: %w", err)
@@ -291,7 +293,7 @@ func createGitHubIssue(repoFull string, task *Task) error {
 	return nil
 }
 
-func updateGitHubIssue(repoFull string, task *Task) error {
+func updateGitHubIssue(repoFull string, task *Task, vocab *Vocabulary) error {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
@@ -317,7 +319,7 @@ func updateGitHubIssue(repoFull string, task *Task) error {
 	tc := oauth2.NewClient(ctx, ts)
 	client := github.NewClient(tc)
 
-	req := MapTaskToGitHubIssueRequest(task)
+	req := MapTaskToGitHubIssueRequestWith(task, vocab)
 	if _, _, err := client.Issues.Edit(ctx, owner, repo, issueNumber, req); err != nil {
 		return fmt.Errorf("failed to edit github issue: %w", err)
 	}

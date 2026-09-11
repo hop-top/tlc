@@ -219,7 +219,7 @@ tlc task update T-0001 --timeout 4h
 # Show only stale tasks (filter flag on list)
 tlc task list --stale
 
-# Dedicated stale subcommand — lists IN_PROGRESS + TODO tasks past their threshold
+# Dedicated stale subcommand — lists unfinished tasks past their threshold
 tlc task stale
 
 # Fire configured stale hooks for all stale tasks (re-fires even if StaleFiredAt is set)

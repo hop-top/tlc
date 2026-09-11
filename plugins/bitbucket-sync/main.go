@@ -25,14 +25,16 @@ type Request struct {
 
 // SyncPullParams holds parameters for the sync.pull method.
 type SyncPullParams struct {
-	Repo       string `json:"repo"`
-	LastSyncAt string `json:"last_sync_at,omitempty"`
+	Repo       string      `json:"repo"`
+	LastSyncAt string      `json:"last_sync_at,omitempty"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 // SyncPushParams holds parameters for the sync.push method.
 type SyncPushParams struct {
-	Repo  string `json:"repo"`
-	Tasks []Task `json:"tasks"`
+	Repo       string      `json:"repo"`
+	Tasks      []Task      `json:"tasks"`
+	Vocabulary *Vocabulary `json:"vocabulary,omitempty"`
 }
 
 // SyncDeleteParams holds parameters for the sync.delete method.
@@ -100,7 +102,7 @@ func handleSyncPull(req Request) Response {
 		return errResponse(req.ID, -32602, "Invalid params")
 	}
 
-	tasks, err := fetchBitbucketIssues(params.Repo, params.LastSyncAt)
+	tasks, err := fetchBitbucketIssues(params.Repo, params.LastSyncAt, params.Vocabulary)
 	if err != nil {
 		return errResponse(req.ID, -32603,
 			fmt.Sprintf("failed to fetch issues: %v", err))
@@ -129,9 +131,9 @@ func handleSyncPush(req Request) Response {
 		var err error
 		originID, ok := task.Meta["origin_id"].(string)
 		if !ok || originID == "" {
-			err = createBitbucketIssue(params.Repo, &task)
+			err = createBitbucketIssue(params.Repo, &task, params.Vocabulary)
 		} else {
-			err = updateBitbucketIssue(params.Repo, &task)
+			err = updateBitbucketIssue(params.Repo, &task, params.Vocabulary)
 		}
 		if err != nil {
 			failed[task.ID] = err.Error()
@@ -240,7 +242,7 @@ func parseRepo(repoFull string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
+func fetchBitbucketIssues(repoFull, lastSyncAt string, vocab *Vocabulary) ([]*Task, error) {
 	owner, repo, err := parseRepo(repoFull)
 	if err != nil {
 		return nil, err
@@ -292,7 +294,7 @@ func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 			if issue.Component != nil && issue.Component.Name != "" {
 				components = strings.Split(issue.Component.Name, ",")
 			}
-			tasks = append(tasks, MapBitbucketIssueToTask(&issue, components))
+			tasks = append(tasks, MapBitbucketIssueToTaskWith(&issue, components, vocab))
 		}
 
 		pageURL = page.Next
@@ -301,13 +303,13 @@ func fetchBitbucketIssues(repoFull, lastSyncAt string) ([]*Task, error) {
 	return tasks, nil
 }
 
-func createBitbucketIssue(repoFull string, task *Task) error {
+func createBitbucketIssue(repoFull string, task *Task, vocab *Vocabulary) error {
 	owner, repo, err := parseRepo(repoFull)
 	if err != nil {
 		return err
 	}
 
-	issueReq := MapTaskToBitbucketIssue(task)
+	issueReq := MapTaskToBitbucketIssueWith(task, vocab)
 	url := fmt.Sprintf("%s/repositories/%s/%s/issues",
 		bitbucketAPIBase, owner, repo)
 
@@ -339,7 +341,7 @@ func createBitbucketIssue(repoFull string, task *Task) error {
 	return nil
 }
 
-func updateBitbucketIssue(repoFull string, task *Task) error {
+func updateBitbucketIssue(repoFull string, task *Task, vocab *Vocabulary) error {
 	owner, repo, err := parseRepo(repoFull)
 	if err != nil {
 		return err
@@ -350,7 +352,7 @@ func updateBitbucketIssue(repoFull string, task *Task) error {
 		return fmt.Errorf("origin_id missing or not a string")
 	}
 
-	issueReq := MapTaskToBitbucketIssue(task)
+	issueReq := MapTaskToBitbucketIssueWith(task, vocab)
 	url := fmt.Sprintf("%s/repositories/%s/%s/issues/%s",
 		bitbucketAPIBase, owner, repo, originIDStr)
 

@@ -23,9 +23,10 @@ var TaskListCmd = &cobra.Command{
 	Long: `List tasks across the active project (or all projects with --all),
 filtered by status, assignee, tag, priority, track, due/overdue, and more.
 
-Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
---archived is explicitly set. Supports temporal filters (--due-before,
---due-after, --overdue, --no-due) and aps profile / squad resolution.`,
+Defaults to unfinished work — every status your config gives the
+"initial" or "active" role — unless --status or --archived is explicitly
+set. Supports temporal filters (--due-before, --due-after, --overdue,
+--no-due) and aps profile / squad resolution.`,
 	Annotations: map[string]string{
 		"kit/side-effect": "read",
 	},
@@ -44,6 +45,13 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 			SortDirection:   taskListSortDirection,
 			IncludeArchived: taskListArchived,
 			AllProjects:     taskListAllProjects,
+			// Rank order for --sort-by priority and --sort-by effort.
+			// The store cannot read config, so the configured
+			// vocabularies travel with the query; without them those
+			// sorts would mean alphabetical, which is right for P0..P3
+			// by accident and right for XS..XL never.
+			PriorityOrder: core.ConfiguredPriorityStrings(),
+			EffortOrder:   core.ConfiguredEffortStrings(),
 		}
 
 		// Aggregate formats count the match set, never a page of it.
@@ -98,9 +106,15 @@ Defaults to active statuses (IN_PROGRESS + TODO) unless --status or
 		statusFlags := taskListStatus
 		statusProvided := cmd.Flags().Changed("status") || fromConfig["status"]
 		defaultStatusFilter := !statusProvided && !cmd.Flags().Changed("archived") && !fromConfig["archived"]
+		// The default filter is "not-yet-finished work", derived from the
+		// effective vocabulary's ROLES rather than named. Naming it — the
+		// IN_PROGRESS + TODO literal this replaces — made bare `task list`
+		// fail outright on any project whose `task.statuses` declares no
+		// IN_PROGRESS: the default filter was invalid under the very
+		// config it was filtering.
 		if defaultStatusFilter {
-			statusFlags = []string{string(core.StatusInProgress), string(core.StatusTodo)}
-			query.StatusPriority = string(core.StatusInProgress)
+			statusFlags = core.UnfinishedTaskStatuses()
+			query.StatusPriority = core.PrimaryActiveTaskStatus()
 		}
 		for _, st := range statusFlags {
 			normalized, ok := NormalizeStatus(st)
@@ -264,7 +278,7 @@ func runTaskListWorkspace(
 	cmd *cobra.Command, ctx context.Context, query core.Query, aggregate string,
 ) error {
 	var workspaces []config.WorkspaceConfig
-	if err := viper.UnmarshalKey("workspaces", &workspaces); err != nil {
+	if err := unmarshalConfigKey("workspaces", &workspaces); err != nil {
 		return fmt.Errorf("failed to read workspace config: %w", err)
 	}
 

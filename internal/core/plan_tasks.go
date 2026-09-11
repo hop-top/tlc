@@ -89,6 +89,17 @@ func (s *TrackService) CreateTasksFromPlan(
 	// (OOR, ambiguity) but not for soft errors; soft refs become
 	// deferred entries after tasks are created.
 	for i, spec := range specs {
+		// The tag vocabulary is a hard preflight check, like the ref
+		// indices below and unlike the ingest path in sync_local: a plan
+		// import is something the user asked for by name, so a tag the
+		// policy rejects is a plan to fix, not noise to filter. Checked
+		// before the DB is touched so a rejected plan creates no tasks
+		// at all rather than a prefix of them.
+		if err := ValidateTags(spec.Tags); err != nil {
+			return nil, fmt.Errorf(
+				"plan task %d (%q): %w", i, spec.Title, err,
+			)
+		}
 		for _, ref := range spec.BlockedBy {
 			switch {
 			case ref.IsIndex():
