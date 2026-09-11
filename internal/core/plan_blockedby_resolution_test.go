@@ -167,7 +167,7 @@ func TestCreateTasksFromPlan_ResolvesDisplayAlias(t *testing.T) {
 
 // blockerTask builds an existing task with a durable typeid-style ID
 // whose Seq backs the given "T-NNNN" display alias.
-func blockerTask(durableID, alias, title, trackID string) *Task {
+func blockerTask(durableID, alias, title string) *Task {
 	seq, err := strconv.ParseInt(strings.TrimPrefix(alias, "T-"), 10, 64)
 	if err != nil {
 		panic("blockerTask: alias must be T-NNNN, got " + alias)
@@ -177,7 +177,7 @@ func blockerTask(durableID, alias, title, trackID string) *Task {
 		Seq:     seq,
 		Title:   title,
 		Status:  StatusTodo,
-		TrackID: strPtr(trackID),
+		TrackID: strPtr("other"),
 		Meta:    map[string]any{},
 	}
 }
@@ -192,7 +192,7 @@ func TestCreateTasksFromPlan_TaskIDRefStoresResolvedID(t *testing.T) {
 
 	const durableID = "task_01m06j5p9cf3f9pff2mh4w8tjk"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(durableID, "T-0968", "Pre-existing blocker", "other"),
+		blockerTask(durableID, "T-0968", "Pre-existing blocker"),
 	)
 	svc := NewTrackService(trackRepo, taskRepo)
 
@@ -225,7 +225,7 @@ func TestReconcile_TaskIDRefStoresResolvedID(t *testing.T) {
 	const durableID = "task_01m06j5p9cf3f9pff2mh4w8tjk"
 	const mappedID = "task_01existingplanrow00000000"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(durableID, "T-0968", "Pre-existing blocker", "other"),
+		blockerTask(durableID, "T-0968", "Pre-existing blocker"),
 		&Task{
 			ID: mappedID, Title: "Depends on existing task",
 			Status: StatusTodo, TrackID: strPtr("trk"),

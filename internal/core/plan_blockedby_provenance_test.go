@@ -19,7 +19,7 @@ func TestReconcile_PreservesOutOfBandBlockedBy(t *testing.T) {
 	const manualBlocker = "task_01manualblocker0000000000"
 	const mappedID = "task_01planrow000000000000000"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(manualBlocker, "T-0968", "Manual blocker", "other"),
+		blockerTask(manualBlocker, "T-0968", "Manual blocker"),
 		&Task{
 			ID: mappedID, Title: "Plan task", Status: StatusTodo,
 			TrackID: strPtr("trk"),
@@ -58,7 +58,7 @@ func TestReconcile_PlanCanRemoveEdgeItDeclared(t *testing.T) {
 	const planBlocker = "task_01planblocker00000000000"
 	const mappedID = "task_01planrow000000000000000"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(planBlocker, "T-0968", "Plan-declared blocker", "other"),
+		blockerTask(planBlocker, "T-0968", "Plan-declared blocker"),
 		&Task{
 			ID: mappedID, Title: "Plan task", Status: StatusTodo,
 			TrackID: strPtr("trk"),
@@ -101,8 +101,8 @@ func TestReconcile_MixedManualAndPlanEdges(t *testing.T) {
 	const manualBlocker = "task_01manualblocker0000000000"
 	const mappedID = "task_01planrow000000000000000"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(planBlocker, "T-0001", "Plan blocker", "other"),
-		blockerTask(manualBlocker, "T-0002", "Manual blocker", "other"),
+		blockerTask(planBlocker, "T-0001", "Plan blocker"),
+		blockerTask(manualBlocker, "T-0002", "Manual blocker"),
 		&Task{
 			ID: mappedID, Title: "Plan task", Status: StatusTodo,
 			TrackID: strPtr("trk"),
@@ -139,7 +139,7 @@ func TestReconcile_RecordsPlanProvenance(t *testing.T) {
 	const blockerID = "task_01blocker00000000000000"
 	const mappedID = "task_01planrow000000000000000"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(blockerID, "T-0968", "Blocker", "other"),
+		blockerTask(blockerID, "T-0968", "Blocker"),
 		&Task{
 			ID: mappedID, Title: "Plan task", Status: StatusTodo,
 			TrackID: strPtr("trk"), Meta: map[string]any{},
@@ -174,7 +174,7 @@ func TestCreateTasksFromPlan_RecordsPlanProvenance(t *testing.T) {
 
 	const blockerID = "task_01blocker00000000000000"
 	taskRepo := newResolvingTaskRepo(
-		blockerTask(blockerID, "T-0968", "Blocker", "other"),
+		blockerTask(blockerID, "T-0968", "Blocker"),
 	)
 	svc := NewTrackService(trackRepo, taskRepo)
 

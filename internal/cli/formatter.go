@@ -220,10 +220,6 @@ func collectVtodoLogs(tasks []*core.Task) []*core.LogEntry {
 	return out
 }
 
-func printTask(cmd *cobra.Command, task *core.Task, logs []*core.LogEntry, format string) {
-	printTaskWithBlockers(cmd, task, logs, format, nil)
-}
-
 // printTaskWithBlockers renders a task, adding a resolved "blocked_by"
 // array to the structured views. Every pre-existing key is preserved —
 // blockers are an additive field, not a restructuring.

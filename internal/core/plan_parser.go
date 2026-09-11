@@ -92,7 +92,7 @@ var (
 		`^([a-z0-9][a-z0-9-]*)#(\d+)$`,
 	)
 	// crossProjectPattern matches the legacy "<org/project>#<T-NNNN>"
-	// spelling. Deprecated in favour of crossProjectSlashPattern but
+	// spelling. Deprecated in favor of crossProjectSlashPattern but
 	// still accepted so existing plans keep working.
 	crossProjectPattern = regexp.MustCompile(
 		`^([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)#(T-\d+)$`,
