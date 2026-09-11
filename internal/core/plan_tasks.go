@@ -27,6 +27,16 @@ const metaKeyUnresolved = "blocked_by_unresolved"
 // A dedicated cross-project resolver can process them later.
 const metaKeyCrossProject = "blocked_by_cross_project"
 
+// metaKeyPlanOwned is the task.Meta key recording which
+// meta["blocked_by"] entries were authored by plan frontmatter.
+//
+// Plan ingestion owns exactly the edges it declared: a later run may
+// retract those, but must leave edges added out-of-band (e.g. via
+// `task update --add-blocked-by`) untouched. Without this provenance
+// record the two sources are indistinguishable and a re-ingest silently
+// destroys manual dependencies.
+const metaKeyPlanOwned = "blocked_by_plan"
+
 // PlanIngestResult describes the outcome of a single
 // CreateTasksFromPlan call (phase 1).
 type PlanIngestResult struct {
@@ -120,13 +130,9 @@ func (s *TrackService) CreateTasksFromPlan(
 					)
 				}
 			case ref.TaskID != "":
-				t, err := s.taskRepo.GetTask(ctx, ref.TaskID)
-				if err != nil || t == nil {
+				if _, err := s.resolveTaskIDRef(ctx, projectID, ref.TaskID); err != nil {
 					return nil, fmt.Errorf(
-						"plan task %d (%q): blocked-by references "+
-							"task %q which does not exist; create it "+
-							"first or use an intra-track index",
-						i, spec.Title, ref.TaskID,
+						"plan task %d (%q): %w", i, spec.Title, err,
 					)
 				}
 			case ref.CrossTrack != nil:
@@ -182,7 +188,13 @@ func (s *TrackService) CreateTasksFromPlan(
 			case ref.IsIndex():
 				blockedBy = append(blockedBy, createdIDs[ref.Index])
 			case ref.TaskID != "":
-				blockedBy = append(blockedBy, ref.TaskID)
+				id, rErr := s.resolveTaskIDRef(ctx, projectID, ref.TaskID)
+				if rErr != nil {
+					return nil, fmt.Errorf(
+						"plan task %d (%q): %w", i, spec.Title, rErr,
+					)
+				}
+				blockedBy = append(blockedBy, id)
 			case ref.CrossTrack != nil:
 				id, deferred, rErr := s.resolveCrossTrackRef(
 					ctx, ref.CrossTrack,
@@ -218,6 +230,9 @@ func (s *TrackService) CreateTasksFromPlan(
 		meta := make(map[string]any)
 		if len(blockedBy) > 0 {
 			meta["blocked_by"] = blockedBy
+			// Every edge here came from plan frontmatter, so a later
+			// re-ingest is free to retract it.
+			meta[metaKeyPlanOwned] = blockedBy
 		}
 		if len(taskUnresolved) > 0 {
 			meta[metaKeyUnresolved] = taskUnresolved
@@ -289,6 +304,30 @@ func (s *TrackService) CreateTasksFromPlan(
 	}
 
 	return result, nil
+}
+
+// resolveTaskIDRef resolves a same-project "T-NNNN" blocked-by ref to
+// the target task's durable ID.
+//
+// Stored blocked_by entries are durable task IDs, while plan frontmatter
+// spells refs as display aliases. Storage maps an alias to a row only
+// through (project_id, seq), so resolution goes via ParseTaskRef — the
+// same translation `task update --add-blocked-by` performs. Persisting
+// the raw alias instead would leave a dangling edge.
+func (s *TrackService) resolveTaskIDRef(
+	ctx context.Context,
+	projectID string,
+	ref string,
+) (string, error) {
+	id, err := ParseTaskRef(ctx, s.taskRepo, projectID, ref)
+	if err != nil || id == "" {
+		return "", fmt.Errorf(
+			"blocked-by references task %q which does not exist in "+
+				"project %q; create it first or use an intra-track index",
+			ref, projectID,
+		)
+	}
+	return id, nil
 }
 
 // preflightCrossTrackRef validates a cross-track ref for *hard*
@@ -584,12 +623,17 @@ func (s *TrackService) ResolvePendingCrossTrackRefs(
 			continue
 		}
 
-		// Promote newly resolved entries into blocked_by.
+		// Promote newly resolved entries into blocked_by. They
+		// originate from plan frontmatter, so mark them plan-owned
+		// and retractable by a later ingest.
 		combined := append([]string{}, task.BlockedBy()...)
+		owned := NormalizeStringSliceMeta(task.Meta[metaKeyPlanOwned])
 		for _, v := range newlyResolved {
 			combined = append(combined, v)
+			owned = append(owned, v)
 		}
 		task.SetBlockedBy(combined)
+		setStringSliceMeta(task, metaKeyPlanOwned, owned)
 
 		// Update the unresolved meta entry.
 		if len(stillPending) == 0 {

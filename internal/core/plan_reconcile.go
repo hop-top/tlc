@@ -14,6 +14,11 @@ type ReconcileResult struct {
 	Unchanged []string // unchanged task IDs
 	Deleted   []string // deleted task IDs (were TODO)
 	Kept      []string // kept task IDs (non-TODO, removed from plan)
+	// DeferredCrossProject lists cross-project blocked-by refs that
+	// parsed but could not be resolved during this pass. They are
+	// persisted under meta["blocked_by_cross_project"]; reporting them
+	// lets the caller warn instead of implying nothing happened.
+	DeferredCrossProject []UnresolvedEntry
 }
 
 // reconcileCtx bundles shared state for a single reconciliation pass.
@@ -91,9 +96,11 @@ func (s *TrackService) ReconcileTasksFromPlan(
 		return nil, err
 	}
 
-	if err := s.resolveBlockedByFromMapping(ctx, specs, rc.newMap); err != nil {
+	deferred, err := s.resolveBlockedByFromMapping(ctx, specs, projectID, rc.newMap)
+	if err != nil {
 		return nil, fmt.Errorf("reconcile: resolve blocked-by: %w", err)
 	}
+	rc.result.DeferredCrossProject = deferred
 
 	if err := s.UpdateTrack(ctx, trackID, func(t *Track) error {
 		t.PlanMapping = rc.newMap
@@ -342,69 +349,117 @@ func tagsEqual(a, b []string) bool {
 func (s *TrackService) resolveBlockedByFromMapping(
 	ctx context.Context,
 	specs []PlanTaskSpec,
+	projectID string,
 	mapping map[int]string,
-) error {
+) ([]UnresolvedEntry, error) {
+	var deferred []UnresolvedEntry
 	for i, spec := range specs {
 		taskID, ok := mapping[i]
 		if !ok {
 			continue
 		}
-		// Always resolve — when spec.BlockedBy is empty, this clears
-		// any stale blocked_by on the task.
-		if err := s.resolveOneTaskBlockedBy(ctx, taskID, spec.BlockedBy, mapping); err != nil {
-			return err
+		// Always resolve — when spec.BlockedBy is empty this retracts
+		// the edges a previous ingest of this plan authored, while
+		// leaving out-of-band edges in place.
+		crossProject, err := s.resolveOneTaskBlockedBy(
+			ctx, taskID, projectID, spec.BlockedBy, mapping,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for _, ref := range crossProject {
+			deferred = append(deferred, UnresolvedEntry{
+				TaskID: taskID, Ref: ref,
+			})
 		}
 	}
-	return nil
+	return deferred, nil
 }
 
 func (s *TrackService) resolveOneTaskBlockedBy(
 	ctx context.Context,
 	taskID string,
+	projectID string,
 	refs []BlockedByRef,
 	mapping map[int]string,
-) error {
+) ([]string, error) {
 	task, err := s.taskRepo.GetTask(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("get task %s for blocked-by: %w", taskID, err)
+		return nil, fmt.Errorf("get task %s for blocked-by: %w", taskID, err)
 	}
 	if task == nil {
-		return nil // task may have been deleted; skip
+		return nil, nil // task may have been deleted; skip
 	}
 
-	blockedBy, unresolved, err := s.resolveRefList(ctx, taskID, refs, mapping)
+	blockedBy, unresolved, crossProject, err := s.resolveRefList(
+		ctx, taskID, projectID, refs, mapping,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if task.Meta == nil {
 		task.Meta = make(map[string]any)
 	}
-	if len(blockedBy) > 0 {
-		task.Meta["blocked_by"] = blockedBy
-	} else {
-		delete(task.Meta, "blocked_by")
-	}
-	if len(unresolved) > 0 {
-		task.Meta[metaKeyUnresolved] = unresolved
-	} else {
-		delete(task.Meta, metaKeyUnresolved)
-	}
+	task.SetBlockedBy(mergePlanBlockedBy(task, blockedBy))
+	setStringSliceMeta(task, metaKeyPlanOwned, blockedBy)
+	setStringSliceMeta(task, metaKeyUnresolved, unresolved)
+	setStringSliceMeta(task, metaKeyCrossProject, crossProject)
 	task.UpdatedAt = time.Now().UTC()
 	if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
-		return fmt.Errorf("update blocked-by for %s: %w", taskID, err)
+		return nil, fmt.Errorf("update blocked-by for %s: %w", taskID, err)
 	}
-	return nil
+	return crossProject, nil
 }
 
-// resolveRefList resolves a slice of BlockedByRef into concrete IDs
-// and deferred (unresolved) raw strings.
+// mergePlanBlockedBy computes a task's new blocked_by set for a plan
+// ingest that declared planEdges.
+//
+// The plan owns only the edges a previous ingest recorded under
+// metaKeyPlanOwned. Those are dropped and replaced by planEdges; every
+// other current edge is out-of-band (added via `task update
+// --add-blocked-by` or a sync plugin) and is preserved untouched.
+//
+// Ordering keeps the surviving manual edges first so a plan re-ingest
+// does not churn unrelated entries.
+func mergePlanBlockedBy(task *Task, planEdges []string) []string {
+	priorPlanOwned := make(map[string]struct{})
+	for _, id := range NormalizeStringSliceMeta(task.Meta[metaKeyPlanOwned]) {
+		priorPlanOwned[id] = struct{}{}
+	}
+
+	merged := make([]string, 0, len(planEdges))
+	for _, id := range task.BlockedBy() {
+		if _, planAuthored := priorPlanOwned[id]; planAuthored {
+			continue // retractable — re-added below only if still declared
+		}
+		merged = append(merged, id)
+	}
+	return append(merged, planEdges...)
+}
+
+// setStringSliceMeta stores values under key, removing the key when the
+// slice is empty so absent provenance stays absent rather than becoming
+// an empty list.
+func setStringSliceMeta(task *Task, key string, values []string) {
+	normalized := NormalizeStringSliceMeta(values)
+	if len(normalized) == 0 {
+		delete(task.Meta, key)
+		return
+	}
+	task.Meta[key] = normalized
+}
+
+// resolveRefList resolves a slice of BlockedByRef into concrete IDs,
+// deferred cross-track raw strings, and deferred cross-project raw
+// strings. Every ref lands in exactly one bucket so none can be lost.
 func (s *TrackService) resolveRefList(
 	ctx context.Context,
 	taskID string,
+	projectID string,
 	refs []BlockedByRef,
 	mapping map[int]string,
-) (blockedBy, unresolved []string, err error) {
+) (blockedBy, unresolved, crossProject []string, err error) {
 	for _, ref := range refs {
 		switch {
 		case ref.IsIndex():
@@ -412,13 +467,19 @@ func (s *TrackService) resolveRefList(
 				blockedBy = append(blockedBy, depID)
 			}
 		case ref.TaskID != "":
-			blockedBy = append(blockedBy, ref.TaskID)
+			id, rErr := s.resolveTaskIDRef(ctx, projectID, ref.TaskID)
+			if rErr != nil {
+				return nil, nil, nil, fmt.Errorf(
+					"task %s: %w", taskID, rErr,
+				)
+			}
+			blockedBy = append(blockedBy, id)
 		case ref.CrossTrack != nil:
 			id, deferred, rErr := s.resolveCrossTrackRef(
 				ctx, ref.CrossTrack,
 			)
 			if rErr != nil {
-				return nil, nil, fmt.Errorf(
+				return nil, nil, nil, fmt.Errorf(
 					"cross-track ref %s for task %s: %w",
 					ref.Raw(), taskID, rErr,
 				)
@@ -428,7 +489,13 @@ func (s *TrackService) resolveRefList(
 			} else {
 				blockedBy = append(blockedBy, id)
 			}
+		case ref.CrossProject != nil:
+			// Resolution needs the external project's DB, which is not
+			// available here. Record the ref as deferred rather than
+			// letting it fall through the switch — a ref that parses
+			// must never vanish without a trace.
+			crossProject = append(crossProject, ref.Raw())
 		}
 	}
-	return blockedBy, unresolved, nil
+	return blockedBy, unresolved, crossProject, nil
 }
