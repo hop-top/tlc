@@ -63,9 +63,17 @@ func TestExtractShimsPassthroughSymlinkTarget(t *testing.T) {
 	}
 	built := map[string]bool{}
 	for _, e := range entries {
+		if isNonShimEntry(e.Name()) {
+			continue // .gitignore/.gitkeep are bookkeeping, not shims
+		}
 		built[e.Name()] = true
 	}
-	if len(built) <= 1 { // only .gitkeep/.gitignore → shims not built
+	// Skip only when no shim is built at all; the assertions below cannot
+	// speak to binaries that do not exist. Counting bookkeeping dotfiles as
+	// shims made the old threshold off by one. The skip is still a real
+	// blind spot on a clean checkout, so CI builds shims before testing —
+	// otherwise naming drift ships green behind a self-skipping test.
+	if len(built) == 0 {
 		t.Skip("shim binaries not embedded; run `make build-shims` first")
 	}
 
@@ -92,6 +100,28 @@ func TestExtractShimsPassthroughSymlinkTarget(t *testing.T) {
 		}
 		if target != want {
 			t.Errorf("symlink %s → %s, want %s", name, target, want)
+		}
+	}
+}
+
+// TestExtractShimsSkipsDotfiles asserts repo bookkeeping files embedded by the
+// `shims/bin/*` glob (which, unlike an implicit directory walk, matches
+// dotfiles) are never extracted into BinDir as executable "shims".
+func TestExtractShimsSkipsDotfiles(t *testing.T) {
+	t.Parallel()
+
+	sb := &Sandbox{BinDir: t.TempDir()}
+	if err := sb.ExtractShims(); err != nil {
+		t.Fatalf("ExtractShims: %v", err)
+	}
+
+	got, err := os.ReadDir(sb.BinDir)
+	if err != nil {
+		t.Fatalf("read BinDir: %v", err)
+	}
+	for _, e := range got {
+		if isNonShimEntry(e.Name()) {
+			t.Errorf("extracted bookkeeping file %q into BinDir", e.Name())
 		}
 	}
 }

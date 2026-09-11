@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed shims/bin/*
@@ -36,7 +37,10 @@ func (s *Sandbox) ExtractShims() error {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == ".gitkeep" {
+		// `//go:embed shims/bin/*` matches dotfiles too (only an implicit
+		// directory walk skips them), so .gitignore/.gitkeep land in the
+		// embedded set. They are not shims; never extract them into BinDir.
+		if entry.IsDir() || isNonShimEntry(entry.Name()) {
 			continue
 		}
 		data, err := shimsFS.ReadFile("shims/bin/" + entry.Name())
@@ -65,6 +69,12 @@ func (s *Sandbox) ExtractShims() error {
 	}
 
 	return nil
+}
+
+// isNonShimEntry reports whether an embedded shims/bin entry is repo
+// bookkeeping rather than a compiled shim. Dotfiles are never shims.
+func isNonShimEntry(name string) bool {
+	return strings.HasPrefix(name, ".")
 }
 
 // resolvePassthroughBin returns the passthrough-always symlink target in
