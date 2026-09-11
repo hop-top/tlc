@@ -48,9 +48,9 @@ jobs:
   capture-and-dispatch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -93,7 +93,7 @@ jobs:
           echo "stub" > /tmp/cassettes/.placeholder
           ls -la /tmp/cassettes/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dogfood-cassettes-${{ github.event.pull_request.number || github.sha }}
           path: /tmp/cassettes/
