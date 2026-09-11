@@ -853,6 +853,23 @@ func TestProfileFlagSetsViperKey(t *testing.T) {
 	}
 }
 
+// TestProfileFlagDefaultsToAPSProfileID verifies the --profile default
+// is sourced from the env var `aps run` actually exports. The flag once
+// read APS_PROFILE, which aps never sets, so the default was always
+// empty and work went unattributed.
+func TestProfileFlagDefaultsToAPSProfileID(t *testing.T) {
+	t.Setenv("APS_PROFILE_ID", "sana")
+
+	root := kitRoot()
+	flag := root.Cmd.PersistentFlags().Lookup("profile")
+	if flag == nil {
+		t.Fatal("--profile flag not registered")
+	}
+	if flag.DefValue != "sana" {
+		t.Fatalf("--profile default = %q, want %q", flag.DefValue, "sana")
+	}
+}
+
 // TestInstanceFlagSetsViperKey verifies --instance binds to runtime.instance.
 func TestInstanceFlagSetsViperKey(t *testing.T) {
 	viper.Reset()
