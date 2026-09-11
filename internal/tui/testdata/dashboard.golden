@@ -4,7 +4,7 @@
 [38;5;39m►[m T-0001 [ ] [1mImplement auth middleware[m[38;5;241m @alice[m [38;5;39m#auth[m [38;5;170m#backend[m                                                                                                
                                                                                                                                                             
 [1;38;5;245mIN_PROGRESS[m                                                                                                                                                 
-  T-0002 [38;5;39m[~][m Refactor task list[38;5;241m[m [38;5;39m#refactor[m                                                                                                                   
+  T-0002 [38;5;39m[>][m Refactor task list[38;5;241m[m [38;5;39m#refactor[m                                                                                                                   
                                                                                                                                                             
 [1;38;5;245mDONE[m                                                                                                                                                        
   T-0003 [1;38;5;42m[x][m Add golden snapshot tests[38;5;241m[m [38;5;170m#test[m                                                                                                                

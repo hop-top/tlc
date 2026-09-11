@@ -25,17 +25,15 @@ func (m Model) fetchTasks() tea.Msg {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	// Sort tasks by status order
-	statusOrder := map[core.TaskStatus]int{
-		core.StatusTodo:       0,
-		core.StatusInProgress: 1,
-		core.StatusDone:       2,
-		core.StatusSkipped:    3,
-	}
+	// Sort tasks by the CONFIGURED status order. Declaration order is
+	// rank order, so the ranks come from the vocabulary rather than a
+	// literal map of the built-in four — which ranked every custom
+	// status 0 and collapsed the grouping to ID order.
+	ranks := statusRanks()
 
 	sort.Slice(tasks, func(i, j int) bool {
 		if tasks[i].Status != tasks[j].Status {
-			return statusOrder[tasks[i].Status] < statusOrder[tasks[j].Status]
+			return ranks[tasks[i].Status] < ranks[tasks[j].Status]
 		}
 		return tasks[i].ID < tasks[j].ID
 	})
@@ -113,16 +111,15 @@ func (m Model) unclaimTask(id string) tea.Cmd {
 func (m Model) rotateStatus(task *core.Task) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var next core.TaskStatus
-		switch task.Status {
-		case core.StatusTodo:
-			next = core.StatusInProgress
-		case core.StatusInProgress:
-			next = core.StatusDone
-		case core.StatusDone:
-			next = core.StatusTodo
-		default:
-			next = core.StatusTodo
+
+		// nextRotationStatus offers only targets the task's workflow
+		// accepts, so the transition below cannot be one the service
+		// then refuses. No offer means no legal move out of this
+		// status (every terminal status): do nothing visible rather
+		// than raise a banner on a cycle keypress.
+		next, ok := nextRotationStatus(task)
+		if !ok {
+			return nil
 		}
 
 		err := m.service.TransitionStatus(ctx, task.ID, next, core.GetCurrentUser(), "Rotated via TUI")
@@ -136,14 +133,12 @@ func (m Model) rotateStatus(task *core.Task) tea.Cmd {
 func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		statusOrder := []core.TaskStatus{
-			core.StatusTodo,
-			core.StatusInProgress,
-			core.StatusDone,
-		}
+		// The board's own columns, so a left/right move lands on a
+		// column the user can actually see.
+		columns := kanbanStatusOrder()
 
 		currentIdx := -1
-		for i, s := range statusOrder {
+		for i, s := range columns {
 			if s == task.Status {
 				currentIdx = i
 				break
@@ -155,11 +150,11 @@ func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 		}
 
 		newIdx := currentIdx + dir
-		if newIdx < 0 || newIdx >= len(statusOrder) {
+		if newIdx < 0 || newIdx >= len(columns) {
 			return nil
 		}
 
-		next := statusOrder[newIdx]
+		next := columns[newIdx]
 		err := m.service.TransitionStatus(ctx, task.ID, next, core.GetCurrentUser(), "Moved via Kanban")
 		if err != nil {
 			return fmt.Errorf("failed to move task: %w", err)
@@ -205,11 +200,22 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 		// URIs embed the TypeID so they survive renames.
 		id := core.NewTaskID()
 
+		// The create default is the workflow's initial status, not a
+		// hardcoded TODO. Same resolution the CLI create path and the
+		// HTTP route use: a task created into a status the config never
+		// declared can never be transitioned out of it.
+		initial, err := core.DefaultWorkflow().InitialStatus()
+		if err != nil {
+			return fmt.Errorf(
+				"no initial status to create into: %w; "+
+					"set task.default_status or give a status role \"initial\"", err)
+		}
+
 		task := &core.Task{
 			ID:          id,
 			Title:       title,
 			Description: description,
-			Status:      core.StatusTodo,
+			Status:      initial,
 			Reference:   fmt.Sprintf("tlc:///%s", id),
 			CreatedAt:   now,
 			UpdatedAt:   now,

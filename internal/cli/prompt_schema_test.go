@@ -193,9 +193,15 @@ func TestGenerateTaskSchema_FlagDetails(t *testing.T) {
 	}
 }
 
-// T-0597: FlagSchema.Default is populated from pflag defaults.
-// TaskCreateCmd has --status with default "TODO". The generated schema
-// must reflect that default value in FlagSchema.Default.
+// FlagSchema.Default is populated from pflag defaults.
+//
+// Vehicle is `task list --sort-by`, whose "created_at" is a genuine
+// pflag default. This used to assert `task create --status` == "TODO",
+// but that default was the bug: supplied on every run, it outranked
+// task.default_status and made create unusable under a renamed status
+// vocabulary. --status now registers empty and resolves from config, so
+// asserting a literal here would re-pin the defect rather than the
+// requirement (that DefValue reaches the schema at all).
 func TestFlagSchema_DefaultPopulatedFromPflag(t *testing.T) {
 	schemas := GenerateTaskSchema()
 	index := make(map[string]CommandSchema, len(schemas))
@@ -203,16 +209,17 @@ func TestFlagSchema_DefaultPopulatedFromPflag(t *testing.T) {
 		index[s.Name] = s
 	}
 
-	cs, ok := index["create"]
+	cs, ok := index["list"]
 	if !ok {
-		t.Fatal("subcommand 'create' not found in task schema")
+		t.Fatal("subcommand 'list' not found in task schema")
 	}
 
 	tests := []struct {
 		flag    string
 		wantDef string
 	}{
-		{"status", "TODO"},
+		{"sort-by", "created_at"},
+		{"sort-direction", "desc"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.flag, func(t *testing.T) {
@@ -224,7 +231,7 @@ func TestFlagSchema_DefaultPopulatedFromPflag(t *testing.T) {
 				}
 			}
 			if found == nil {
-				t.Fatalf("flag %q not found on 'create'", tc.flag)
+				t.Fatalf("flag %q not found on 'list'", tc.flag)
 			}
 			if found.Default != tc.wantDef {
 				t.Errorf(

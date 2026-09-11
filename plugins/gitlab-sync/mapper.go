@@ -64,8 +64,8 @@ func embedTLCUIDFooter(body, taskID string) string {
 	return body
 }
 
-// priorityLabelMap maps GitLab priority labels to TLC priorities.
-var priorityLabelMap = map[string]string{
+// builtinLabelToPriority maps GitLab priority labels to TLC priorities.
+var builtinLabelToPriority = map[string]string{
 	"priority:critical": "P0",
 	"priority:high":     "P1",
 	"priority:medium":   "P2",
@@ -73,15 +73,15 @@ var priorityLabelMap = map[string]string{
 }
 
 // priorityToLabel is the reverse mapping.
-var priorityToLabel = map[string]string{
+var builtinPriorityToLabel = map[string]string{
 	"P0": "priority:critical",
 	"P1": "priority:high",
 	"P2": "priority:medium",
 	"P3": "priority:low",
 }
 
-// effortLabelMap maps GitLab effort labels to TLC efforts.
-var effortLabelMap = map[string]string{
+// builtinLabelToEffort maps GitLab effort labels to TLC efforts.
+var builtinLabelToEffort = map[string]string{
 	"effort:xs": "XS",
 	"effort:s":  "S",
 	"effort:m":  "M",
@@ -90,7 +90,7 @@ var effortLabelMap = map[string]string{
 }
 
 // effortToLabel is the reverse mapping.
-var effortToLabel = map[string]string{
+var builtinEffortToLabel = map[string]string{
 	"XS": "effort:xs",
 	"S":  "effort:s",
 	"M":  "effort:m",
@@ -100,12 +100,18 @@ var effortToLabel = map[string]string{
 
 // MapGitLabIssueToTask maps a GitLab issue to a TLC task.
 func MapGitLabIssueToTask(issue *gitlab.Issue) *Task {
+	return MapGitLabIssueToTaskWith(issue, nil)
+}
+
+// MapGitLabIssueToTaskWith is MapGitLabIssueToTask against the
+// vocabulary the host sent.
+func MapGitLabIssueToTaskWith(issue *gitlab.Issue, vocab *Vocabulary) *Task {
 	iid := issue.IID
 	title := issue.Title
 	state := issue.State
 	body := issue.Description
 
-	status := deriveStatus(state, issue.Labels)
+	status := deriveStatusWith(state, issue.Labels, vocab)
 	blockedReason := deriveBlockedReason(state, issue.Labels)
 
 	task := &Task{
@@ -129,7 +135,7 @@ func MapGitLabIssueToTask(issue *gitlab.Issue) *Task {
 	}
 
 	// Parse labels into priority, effort, and tags
-	parseLabelDimensions(issue.Labels, task)
+	parseLabelDimensionsWith(issue.Labels, task, vocab)
 
 	// Map milestone
 	if issue.Milestone != nil {
@@ -150,20 +156,29 @@ func MapGitLabIssueToTask(issue *gitlab.Issue) *Task {
 }
 
 func deriveStatus(state string, labels []string) string {
+	return deriveStatusWith(state, labels, nil)
+}
+
+// deriveStatusWith resolves the status through the vocabulary, so a
+// renamed active status pulls back under its declared name instead of a
+// hardcoded IN_PROGRESS.
+func deriveStatusWith(state string, labels []string, vocab *Vocabulary) string {
 	hasLabel := labelSet(labels)
 
 	if state == "closed" {
 		if hasLabel["wontfix"] {
-			return "SKIPPED"
+			return vocab.terminalFor("not_planned")
 		}
-		return "DONE"
+		return vocab.terminalFor("completed")
 	}
 
 	// state == "opened"
-	if hasLabel["status:in-progress"] {
-		return "IN_PROGRESS"
+	for _, l := range labels {
+		if st, ok := vocab.activeStatusFor(strings.ToLower(l)); ok {
+			return st
+		}
 	}
-	return "TODO"
+	return vocab.initialStatus()
 }
 
 func deriveBlockedReason(state string, labels []string) string {
@@ -171,7 +186,7 @@ func deriveBlockedReason(state string, labels []string) string {
 		return ""
 	}
 	hasLabel := labelSet(labels)
-	if hasLabel["status:blocked"] {
+	if hasLabel[blockedLabel] {
 		return "blocked (see linked issues)"
 	}
 	return ""
@@ -186,18 +201,24 @@ func labelSet(labels []string) map[string]bool {
 }
 
 func parseLabelDimensions(labels []string, task *Task) {
+	parseLabelDimensionsWith(labels, task, nil)
+}
+
+// parseLabelDimensionsWith is parseLabelDimensions against the
+// vocabulary the host sent.
+func parseLabelDimensionsWith(labels []string, task *Task, vocab *Vocabulary) {
 	tags := make([]string, 0)
 	for _, label := range labels {
 		lower := strings.ToLower(label)
 
 		// Priority dimension
-		if p, ok := priorityLabelMap[lower]; ok {
+		if p, ok := vocab.priorityFor(lower); ok {
 			task.Priority = p
 			continue
 		}
 
 		// Effort dimension
-		if e, ok := effortLabelMap[lower]; ok {
+		if e, ok := vocab.effortFor(lower); ok {
 			task.Effort = e
 			continue
 		}
@@ -231,13 +252,19 @@ type GitLabIssueData struct {
 
 // MapTaskToGitLabIssueData converts a TLC task to GitLab issue fields.
 func MapTaskToGitLabIssueData(task *Task) *GitLabIssueData {
+	return MapTaskToGitLabIssueDataWith(task, nil)
+}
+
+// MapTaskToGitLabIssueDataWith is MapTaskToGitLabIssueData against the
+// vocabulary the host sent.
+func MapTaskToGitLabIssueDataWith(task *Task, vocab *Vocabulary) *GitLabIssueData {
 	state := "reopen"
-	if task.Status == "DONE" || task.Status == "SKIPPED" {
+	if _, terminal := vocab.isTerminal(task.Status); terminal {
 		state = "close"
 	}
 
 	// Build labels from priority, effort, tags, and status
-	labels := buildLabels(task)
+	labels := buildLabelsWith(task, vocab)
 
 	// Inject "Blocked by #N" into description if present
 	description := strings.ReplaceAll(task.Description, "\\`", "`")
@@ -265,30 +292,36 @@ func MapTaskToGitLabIssueData(task *Task) *GitLabIssueData {
 }
 
 func buildLabels(task *Task) gitlab.LabelOptions {
+	return buildLabelsWith(task, nil)
+}
+
+// buildLabelsWith is buildLabels against the vocabulary the host sent.
+func buildLabelsWith(task *Task, vocab *Vocabulary) gitlab.LabelOptions {
 	var labels gitlab.LabelOptions
 
+	closeReason, terminal := vocab.isTerminal(task.Status)
+
 	// Priority
-	if l, ok := priorityToLabel[task.Priority]; ok {
+	if l, ok := vocab.priorityLabel(task.Priority); ok {
 		labels = append(labels, l)
 	}
 
 	// Effort
-	if l, ok := effortToLabel[task.Effort]; ok {
+	if l, ok := vocab.effortLabel(task.Effort); ok {
 		labels = append(labels, l)
 	}
 
-	// Status label
-	switch task.Status {
-	case "IN_PROGRESS":
-		labels = append(labels, "status:in-progress")
-	case "TODO":
-		if task.BlockedReason != "" {
-			labels = append(labels, "status:blocked")
-		}
+	// Status label. Blocked is an orthogonal flag rather than a member
+	// of the vocabulary, so it is checked independently of the status.
+	if l, ok := vocab.statusLabel(task.Status); ok {
+		labels = append(labels, l)
+	}
+	if !terminal && task.BlockedReason != "" {
+		labels = append(labels, blockedLabel)
 	}
 
-	// Wontfix for SKIPPED
-	if task.Status == "SKIPPED" {
+	// Wontfix for a not-planned close
+	if terminal && closeReason == "not_planned" {
 		labels = append(labels, "wontfix")
 	}
 

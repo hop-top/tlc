@@ -38,6 +38,8 @@ Output formats:
 			SortDirection:   taskListSortDirection,
 			IncludeArchived: taskListArchived,
 			AllProjects:     taskListAllProjects,
+			PriorityOrder:   core.ConfiguredPriorityStrings(),
+			EffortOrder:     core.ConfiguredEffortStrings(),
 		}
 
 		if len(args) > 0 {
@@ -48,12 +50,27 @@ Output formats:
 			taskListAssignedTo = core.GetCurrentUser()
 		}
 
+		// Same role-derived default as `task list`, for the same reason:
+		// a named default is invalid under any vocabulary that does not
+		// happen to declare that name. Here the literal failed SILENTLY
+		// rather than loudly — the raw value went into the filter without
+		// normalisation, so a project without IN_PROGRESS got a graph
+		// that simply omitted its in-flight work.
 		statusFlags := taskListStatus
 		if !cmd.Flags().Changed("status") && !cmd.Flags().Changed("archived") {
-			statusFlags = []string{"IN_PROGRESS", "TODO"}
+			statusFlags = core.UnfinishedTaskStatuses()
 		}
+		// Normalise and validate explicitly-named statuses, as `task list`
+		// does. Passing them through raw accepted an undeclared status and
+		// answered "No tasks found" — indistinguishable from a real empty
+		// result — and dropped the aliases and casing every other status
+		// filter honors.
 		for _, st := range statusFlags {
-			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: st})
+			normalized, ok := NormalizeStatus(st)
+			if !ok {
+				return unknownStatusError(st)
+			}
+			query.Filters = append(query.Filters, core.FieldFilter{Field: "status", Value: normalized})
 		}
 		if taskListAssignedTo != "" {
 			query.Filters = append(query.Filters, core.FieldFilter{Field: "assigned_to", Value: taskListAssignedTo})
@@ -352,7 +369,7 @@ func init() {
 	TaskGraphCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")
 	TaskGraphCmd.Flags().BoolVar(&taskListStale, "stale", false, "Show only stale tasks")
 	TaskGraphCmd.Flags().BoolVar(&taskListBlocked, "blocked", false, "Show only blocked tasks")
-	TaskGraphCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority (P0, P1, P2, P3)")
+	TaskGraphCmd.Flags().StringSliceVar(&taskListPriority, "priority", []string{}, "Filter by priority")
 	TaskGraphCmd.Flags().StringSliceVar(&taskListBlockedBy, "blocked-by", []string{}, "Show only tasks blocked by the given task IDs")
 	TaskGraphCmd.Flags().StringVar(&taskGraphFormat, "format", "", "Output format: ascii (default), dot")
 }

@@ -99,8 +99,8 @@ func embedTLCUIDFooter(body, taskID string) string {
 	return body
 }
 
-// priorityLabelMap maps priority label names to TLC priority values.
-var priorityLabelMap = map[string]string{
+// builtinLabelToPriority maps priority label names to TLC priority values.
+var builtinLabelToPriority = map[string]string{
 	"priority:critical": "P0",
 	"priority:high":     "P1",
 	"priority:medium":   "P2",
@@ -108,7 +108,7 @@ var priorityLabelMap = map[string]string{
 }
 
 // priorityToLabel is the reverse mapping.
-var priorityToLabel = map[string]string{
+var builtinPriorityToLabel = map[string]string{
 	"P0": "priority:critical",
 	"P1": "priority:high",
 	"P2": "priority:medium",
@@ -116,7 +116,19 @@ var priorityToLabel = map[string]string{
 }
 
 // effortToLabel maps effort values to labels.
-var effortToLabel = map[string]string{
+// builtinLabelToEffort is the pull-direction table. Gitea previously
+// parsed the effort:* prefix and accepted the five built-in sizes; the
+// table states that same set explicitly so both directions read from
+// one place.
+var builtinLabelToEffort = map[string]string{
+	"effort:xs": "XS",
+	"effort:s":  "S",
+	"effort:m":  "M",
+	"effort:l":  "L",
+	"effort:xl": "XL",
+}
+
+var builtinEffortToLabel = map[string]string{
 	"XS": "effort:xs",
 	"S":  "effort:s",
 	"M":  "effort:m",
@@ -126,6 +138,12 @@ var effortToLabel = map[string]string{
 
 // MapGiteaIssueToTask maps a Gitea issue (with optional dependencies) to a TLC task.
 func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
+	return MapGiteaIssueToTaskWith(issue, deps, nil)
+}
+
+// MapGiteaIssueToTaskWith is MapGiteaIssueToTask against the vocabulary
+// the host sent.
+func MapGiteaIssueToTaskWith(issue *GiteaIssue, deps []GiteaDependency, vocab *Vocabulary) *Task {
 	task := &Task{
 		ID:          recoverOrMintTaskID(issue.Body),
 		Title:       issue.Title,
@@ -151,27 +169,23 @@ func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
 	}
 
 	// Process labels for status, priority, effort, and tags.
-	hasStatusInProgress := false
+	activeStatus := ""
 	hasStatusBlocked := false
 	hasWontfix := false
-	var blockedLabel string
+	var blockedReasonFromLabel string
 
 	for _, label := range issue.Labels {
 		name := strings.ToLower(label.Name)
 
 		// Priority labels.
-		if p, ok := priorityLabelMap[name]; ok {
+		if p, ok := vocab.priorityFor(name); ok {
 			task.Priority = p
 			continue
 		}
 
 		// Effort labels.
-		if strings.HasPrefix(name, "effort:") {
-			val := strings.ToUpper(strings.TrimPrefix(name, "effort:"))
-			switch val {
-			case "XS", "S", "M", "L", "XL":
-				task.Effort = val
-			}
+		if e, ok := vocab.effortFor(name); ok {
+			task.Effort = e
 			continue
 		}
 
@@ -183,11 +197,11 @@ func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
 		}
 
 		// Status labels.
-		if name == "status:in-progress" {
-			hasStatusInProgress = true
+		if st, ok := vocab.activeStatusFor(name); ok {
+			activeStatus = st
 			continue
 		}
-		if name == "status:blocked" {
+		if name == blockedLabel {
 			hasStatusBlocked = true
 			continue
 		}
@@ -198,29 +212,30 @@ func MapGiteaIssueToTask(issue *GiteaIssue, deps []GiteaDependency) *Task {
 
 		// Check for blocked reason in label like "blocked:reason text".
 		if strings.HasPrefix(name, "blocked:") {
-			blockedLabel = strings.TrimPrefix(name, "blocked:")
+			blockedReasonFromLabel = strings.TrimPrefix(name, "blocked:")
 			hasStatusBlocked = true
 			continue
 		}
 	}
 
 	// Determine status from state + labels.
+	initial := vocab.initialStatus()
 	switch {
 	case issue.State == "closed" && hasWontfix:
-		task.Status = "SKIPPED"
+		task.Status = vocab.terminalFor("not_planned")
 	case issue.State == "closed":
-		task.Status = "DONE"
-	case issue.State == "open" && hasStatusInProgress:
-		task.Status = "IN_PROGRESS"
+		task.Status = vocab.terminalFor("completed")
+	case issue.State == "open" && activeStatus != "":
+		task.Status = activeStatus
 	case issue.State == "open" && hasStatusBlocked:
-		task.Status = "TODO"
-		if blockedLabel != "" {
-			task.BlockedReason = blockedLabel
+		task.Status = initial
+		if blockedReasonFromLabel != "" {
+			task.BlockedReason = blockedReasonFromLabel
 		} else {
 			task.BlockedReason = "blocked"
 		}
 	default:
-		task.Status = "TODO"
+		task.Status = initial
 	}
 
 	// Parse body for "blocked by #N" / "depends on #N".
@@ -256,8 +271,16 @@ func parseBlockedByFromBody(body string) []string {
 
 // MapTaskToGiteaIssue converts a TLC task to Gitea issue create/edit fields.
 func MapTaskToGiteaIssue(task *Task) map[string]interface{} {
+	return MapTaskToGiteaIssueWith(task, nil)
+}
+
+// MapTaskToGiteaIssueWith is MapTaskToGiteaIssue against the vocabulary
+// the host sent. A nil vocab falls back to the built-in tables and emits
+// byte-identical fields to the version this replaced.
+func MapTaskToGiteaIssueWith(task *Task, vocab *Vocabulary) map[string]interface{} {
 	state := "open"
-	if task.Status == "DONE" || task.Status == "SKIPPED" {
+	closeReason, terminal := vocab.isTerminal(task.Status)
+	if terminal {
 		state = "closed"
 	}
 
@@ -266,25 +289,25 @@ func MapTaskToGiteaIssue(task *Task) map[string]interface{} {
 	// Build labels from priority, effort, tags, and status.
 	var labels []string
 
-	if l, ok := priorityToLabel[task.Priority]; ok {
+	if l, ok := vocab.priorityLabel(task.Priority); ok {
 		labels = append(labels, l)
 	}
-	if l, ok := effortToLabel[task.Effort]; ok {
+	if l, ok := vocab.effortLabel(task.Effort); ok {
 		labels = append(labels, l)
 	}
 	for _, tag := range task.Tags {
 		labels = append(labels, "dimension:"+tag)
 	}
 
-	// Status label.
-	switch task.Status {
-	case "IN_PROGRESS":
-		labels = append(labels, "status:in-progress")
-	case "TODO":
-		if task.BlockedReason != "" {
-			labels = append(labels, "status:blocked")
-		}
-	case "SKIPPED":
+	// Status label. Blocked is an orthogonal flag rather than a member
+	// of the vocabulary, so it is checked independently of the status.
+	if l, ok := vocab.statusLabel(task.Status); ok {
+		labels = append(labels, l)
+	}
+	if !terminal && task.BlockedReason != "" {
+		labels = append(labels, blockedLabel)
+	}
+	if terminal && closeReason == "not_planned" {
 		labels = append(labels, "wontfix")
 	}
 

@@ -492,10 +492,51 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_tracks_due_at ON tracks(due_at);
 		`,
 	},
+	{
+		// Audit ledger for runs executed by external tools that use tlc
+		// as their audit home (third audit leg beside task logs and flow
+		// runs). Keyed by (project_id, tool, run_id); steps replaced
+		// wholesale on upsert. Timestamps UTC RFC3339 TEXT per repo
+		// convention; metrics stored as a JSON object string.
+		version: 19,
+		query: `
+		CREATE TABLE IF NOT EXISTS audit_runs (
+			project_id  TEXT NOT NULL DEFAULT '',
+			tool        TEXT NOT NULL,
+			run_id      TEXT NOT NULL,
+			subject     TEXT,
+			started_at  TEXT NOT NULL,
+			finished_at TEXT,
+			outcome     TEXT,
+			metrics     TEXT,
+			created_at  TEXT NOT NULL,
+			updated_at  TEXT NOT NULL,
+			PRIMARY KEY (project_id, tool, run_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS audit_run_steps (
+			project_id TEXT NOT NULL DEFAULT '',
+			tool       TEXT NOT NULL,
+			run_id     TEXT NOT NULL,
+			seq        INTEGER NOT NULL,
+			name       TEXT NOT NULL,
+			status     TEXT NOT NULL,
+			detail     TEXT,
+			PRIMARY KEY (project_id, tool, run_id, seq),
+			FOREIGN KEY (project_id, tool, run_id)
+				REFERENCES audit_runs(project_id, tool, run_id)
+				ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_audit_runs_tool ON audit_runs(tool);
+		CREATE INDEX IF NOT EXISTS idx_audit_runs_subject ON audit_runs(subject);
+		CREATE INDEX IF NOT EXISTS idx_audit_runs_started_at ON audit_runs(started_at);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 18
+const LatestMigrationVersion = 19
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

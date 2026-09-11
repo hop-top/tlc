@@ -259,6 +259,7 @@ func resetTestDB(t *testing.T) string {
 		cfgFile = ""
 		_ = os.Chdir(origDir) //nolint:errcheck // test cleanup
 		core.ResetDetectionCache()
+		core.ResetDefaultWorkflow()
 		ResetSynonymCache()
 		_ = os.RemoveAll(tmpDir)
 	})
@@ -281,6 +282,7 @@ func resetTestDB(t *testing.T) string {
 	dbSyncOnce = sync.Once{}
 	touchOnce = sync.Once{}
 	core.ResetDetectionCache()
+	core.ResetDefaultWorkflow()
 	resetTaskFlags()
 	return dbPath
 }
@@ -304,6 +306,7 @@ func resetTestEnvWithScheduling(t *testing.T, extraYAML string) (string, string)
 		cfgFile = ""
 		_ = os.Chdir(origDir)
 		core.ResetDetectionCache()
+		core.ResetDefaultWorkflow()
 		ResetSynonymCache()
 		_ = os.RemoveAll(tmpDir)
 	})
@@ -324,6 +327,7 @@ func resetTestEnvWithScheduling(t *testing.T, extraYAML string) (string, string)
 	dbSyncOnce = sync.Once{}
 	touchOnce = sync.Once{}
 	core.ResetDetectionCache()
+	core.ResetDefaultWorkflow()
 	resetTaskFlags()
 	return tmpDir, dbPath
 }
@@ -361,7 +365,7 @@ func resetTaskFlags() {
 	ResetCreateFlags()
 	taskID = ""
 	taskDescription = ""
-	taskStatus = "TODO"
+	taskStatus = ""
 	taskAssignedTo = ""
 	taskEffort = ""
 	taskPriority = ""
@@ -432,6 +436,12 @@ func resetTaskFlags() {
 	taskUnclaimNote = ""
 	taskAssignNote = ""
 	taskCompleteNote = ""
+	taskReopenNote = ""
+	taskUnassignNote = ""
+	taskSkipNote = ""
+	taskSkipNoVerify = false
+	taskBlockNote = ""
+	taskUnblockNote = ""
 	taskUpdateForce = false
 	taskNoPrompt = false
 
@@ -559,6 +569,7 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 
 	viper.Reset()
 	core.ResetDetectionCache()
+	core.ResetDefaultWorkflow()
 	dbSyncOnce = sync.Once{}
 	touchOnce = sync.Once{}
 	cfgFile = projectCfgPath
@@ -570,6 +581,7 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 		cfgFile = ""
 		viper.Reset()
 		core.ResetDetectionCache()
+		core.ResetDefaultWorkflow()
 		dbSyncOnce = sync.Once{}
 		touchOnce = sync.Once{}
 		resetFlowFlags()
@@ -646,6 +658,7 @@ func isolateInitTest(t *testing.T) {
 	viper.Set("storage.backend", "sqlite")
 	viper.Set("storage.db_path", dbPath)
 	core.ResetDetectionCache()
+	core.ResetDefaultWorkflow()
 }
 
 func newTestInitCmd() *cobra.Command {

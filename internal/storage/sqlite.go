@@ -699,49 +699,73 @@ func scanLogEntries(rows *sql.Rows) ([]*core.LogEntry, error) {
 	return entries, nil
 }
 
+// rankedSortColumns maps a SortBy field to the vocabulary carried on the
+// query for it. A table rather than a branch per field: the ORDER BY
+// construction below is identical for both, and the version of this that
+// existed for priority alone is why "sort by effort" stayed a text sort.
+//
+// Both columns hold a value from a user-declared vocabulary whose
+// declaration order is its rank order; any future such column joins by
+// adding a row here.
+var rankedSortColumns = map[string]func(core.Query) []string{
+	"priority": func(q core.Query) []string { return q.PriorityOrder },
+	"effort":   func(q core.Query) []string { return q.EffortOrder },
+}
+
+// vocabRankOrder builds the ORDER BY fragment that sorts a vocabulary
+// column by RANK rather than by its text, plus its bind args. Returns an
+// empty expression when it does not apply, leaving the caller on the
+// plain column sort.
+//
+// It applies only when SortBy names a ranked column and the matching
+// vocabulary is supplied. A priority vocabulary of URGENT/NORMAL/LATER
+// sorts to LATER, NORMAL, URGENT as text — exactly backwards — while the
+// built-in P0..P3 sorts correctly by accident, which is why the plain
+// column sort survived this long. Effort had no such accident: the
+// built-in XS, S, M, L, XL sorts to L, M, S, XL, XS as text.
+//
+// The unset value is pinned last in BOTH directions by a separate leading
+// term, so reversing the direction reverses the ranked tasks without
+// promoting the un-set ones to the top. Ranks are bound as parameters
+// rather than interpolated: the values come from a user's config file.
+// The COLUMN name is interpolated, but only ever from the keys of
+// rankedSortColumns, never from the caller's string.
+func vocabRankOrder(query core.Query, order string) (string, []any) {
+	vocabFor, ok := rankedSortColumns[query.SortBy]
+	if !ok {
+		return "", nil
+	}
+	vocab := vocabFor(query)
+	if len(vocab) == 0 {
+		return "", nil
+	}
+	col := query.SortBy
+
+	var b strings.Builder
+	args := make([]any, 0, len(vocab)+1)
+
+	// Unset last, regardless of direction.
+	fmt.Fprintf(&b,
+		"CASE WHEN %s IS NULL OR %s = '' THEN 1 ELSE 0 END ASC, CASE %s",
+		col, col, col)
+	for i, name := range vocab {
+		b.WriteString(" WHEN ? THEN ?")
+		args = append(args, name, i)
+	}
+	// Unranked but non-empty values (a value written before the
+	// vocabulary was renamed) sort after every ranked one, ahead of
+	// unset, and stay visible rather than silently collapsing into
+	// rank 0 alongside the first declared value.
+	b.WriteString(" ELSE ? END ")
+	args = append(args, len(vocab))
+	b.WriteString(order)
+	return b.String(), args
+}
+
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
 	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks"
 
-	whereClauses, args := buildFilterClauses(query.Filters)
-
-	if query.Search != "" {
-		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
-		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
-	}
-
-	// Auto-filter by project if in a project context and not explicitly requesting all projects
-	if !query.AllProjects {
-		if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
-			whereClauses = append(whereClauses, "project_id = ?")
-			args = append(args, proj.ProjectID)
-		}
-	}
-
-	if !query.IncludeArchived {
-		whereClauses = append(whereClauses, "archived = 0")
-	}
-
-	// Temporal filters (T-0908). due_at is stored as RFC3339 UTC TEXT
-	// per docs/temporal-spec-0.1.md §4. RFC3339's lexicographic byte
-	// ordering matches chronological ordering when all values share the
-	// same offset (writes use UTC with the `Z` suffix uniformly — see
-	// the INSERT/UPDATE paths above), so a string `<` / `>` against an
-	// RFC3339 literal is a correct chronological compare.
-	if query.DueBefore != nil {
-		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at < ?")
-		args = append(args, query.DueBefore.UTC().Format(time.RFC3339))
-	}
-	if query.DueAfter != nil {
-		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at > ?")
-		args = append(args, query.DueAfter.UTC().Format(time.RFC3339))
-	}
-	if query.HasDue != nil {
-		if *query.HasDue {
-			whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at != ''")
-		} else {
-			whereClauses = append(whereClauses, "(due_at IS NULL OR due_at = '')")
-		}
-	}
+	whereClauses, args := buildTaskWhereClauses(query)
 
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
@@ -759,8 +783,13 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		if strings.ToLower(query.SortDirection) == "desc" {
 			order = sqlOrderDESC
 		}
-		orderParts = append(orderParts,
-			fmt.Sprintf("%s %s", query.SortBy, order)) //nolint:gosec // G202: SortBy is validated against known columns
+		if expr, exprArgs := vocabRankOrder(query, order); expr != "" {
+			orderParts = append(orderParts, expr)
+			args = append(args, exprArgs...)
+		} else {
+			orderParts = append(orderParts,
+				fmt.Sprintf("%s %s", query.SortBy, order))
+		}
 	} else {
 		orderParts = append(orderParts, "created_at DESC")
 	}
@@ -1584,40 +1613,4 @@ func (s *SQLiteStorage) Close() error {
 // Satisfies core.TaskReader.
 func (s *SQLiteStorage) GetTaskLogs(ctx context.Context, taskID string) ([]*core.LogEntry, error) {
 	return s.GetLogs(ctx, taskID, "desc")
-}
-
-// CountTasks returns the number of tasks matching the query.
-// Satisfies core.TaskReader.
-func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, error) {
-	sqlQuery := "SELECT COUNT(*) FROM tasks"
-
-	whereClauses, args := buildFilterClauses(query.Filters)
-
-	if query.Search != "" {
-		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
-		args = append(args, "%"+query.Search+"%", "%"+query.Search+"%")
-	}
-
-	// Auto-filter by project if in a project context and not explicitly requesting all projects
-	if !query.AllProjects {
-		if proj := core.DetectProject(); proj != nil && proj.InProject && proj.ProjectID != "" {
-			whereClauses = append(whereClauses, "project_id = ?")
-			args = append(args, proj.ProjectID)
-		}
-	}
-
-	if !query.IncludeArchived {
-		whereClauses = append(whereClauses, "archived = 0")
-	}
-
-	if len(whereClauses) > 0 {
-		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
-	}
-
-	var count int
-	err := s.db.QueryRowContext(ctx, sqlQuery, args...).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count tasks: %w", err)
-	}
-	return count, nil
 }

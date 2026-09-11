@@ -13,12 +13,22 @@ import (
 	"hop.top/tlc/internal/uri"
 )
 
-// taskIDPattern matches IDs like T-0001, T-42, abc/T-0001, tlc:// URIs.
-var taskIDPattern = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*/)?[A-Z]-\d+$|^tlc://`)
+// taskIDPattern matches display-alias forms: T-0001, T-42, abc/T-0001,
+// and tlc:// URIs. Case-insensitive on the alias so `t-0001` routes like
+// `T-0001` — every other task-argument command accepts that spelling, and
+// routing it to filter mode instead produced "no tasks tagged t-0001".
+var taskIDPattern = regexp.MustCompile(`(?i)^([a-z][a-z0-9_-]*/)?[a-z]-\d+$|^tlc://`)
 
 // looksLikeTaskID returns true if s appears to be a task identifier.
+//
+// This is a ROUTER, not a validator: it decides whether `tlc tag X …`
+// means "add tags to task X" or "filter by tags X …". It therefore has to
+// recognize every form a user may address a task by, including the
+// durable TypeID — which the alias pattern above cannot match, and which
+// was consequently misrouted into filter mode and answered with an empty
+// result rather than tagging the task.
 func looksLikeTaskID(s string) bool {
-	return taskIDPattern.MatchString(s)
+	return core.IsTaskID(s) || taskIDPattern.MatchString(s)
 }
 
 // TagCmd is the top-level `tlc tag` command group.
@@ -94,6 +104,24 @@ var TagListCmd = &cobra.Command{
 
 // runTagAdd adds tags to a task given its ID.
 func runTagAdd(cmd *cobra.Command, taskID string, newTags []string) error {
+	// `tlc tag <id> <tag…>` writes tags without going through
+	// applyTaskFieldChanges, so it needs the gate of its own — it is the
+	// most direct tag write in the tool and would otherwise be the hole
+	// the policy leaks through.
+	//
+	// BEFORE the task is resolved, deliberately: the gate is a statement
+	// about the TAGS, and nothing about the task can make a disallowed
+	// tag allowed. Rejecting on the tag before spending a lookup is both
+	// cheaper and a better message — "this tag is not permitted" rather
+	// than a not-found for a task the user addressed correctly.
+	//
+	// Only the NEW tags are checked, for the reason applyTaskFieldChanges
+	// spells out — a task already carrying a since-disallowed tag must
+	// stay editable.
+	if err := core.ValidateTags(newTags); err != nil {
+		return err //nolint:wrapcheck // policy message names the offending tag; wrapping buries it
+	}
+
 	s, err := getStorage()
 	if err != nil {
 		return err
@@ -101,7 +129,23 @@ func runTagAdd(cmd *cobra.Command, taskID string, newTags []string) error {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-	res, err := uri.NewResolver(s).ResolveTask(ctx, taskID)
+
+	// Resolve through the same path `task show` and every other
+	// task-argument command uses. T-NNNN is a DISPLAY ALIAS rendered on
+	// demand from (project_id, seq) and never stored; the durable
+	// identity is the TypeID. uri.Resolver looks up stored identifiers
+	// only, so calling it directly — as this command used to — could not
+	// find the one form users actually type, and `tlc tag T-0001 x`
+	// returned NOT_FOUND for a task that plainly existed.
+	//
+	// parseTaskRefForCLI does the project-scoped seq lookup and returns
+	// the input unchanged when it is not a short form, so URI and
+	// cross-project refs still fall through to the resolver untouched.
+	canonical, err := parseTaskRefForCLI(ctx, s, taskID)
+	if err != nil {
+		return err
+	}
+	res, err := uri.NewResolver(s).ResolveTask(ctx, canonical)
 	if err != nil {
 		return err
 	}
@@ -145,13 +189,18 @@ func runTagFilter(cmd *cobra.Command, args []string) error {
 		SortDirection: "desc",
 	}
 
-	// Default: show IN_PROGRESS + TODO unless --all-statuses.
+	// Default: unfinished work only, unless --all-statuses.
+	//
+	// Role-derived rather than named, matching `task list`. The literals
+	// this replaces were RAW STRINGS — not even the core constants — so
+	// they were config-blind twice over, and silently: on a vocabulary
+	// declaring neither name the filter matched nothing and the command
+	// printed an empty result at exit 0.
 	if !tagFilterAllStatuses {
-		query.Filters = append(
-			query.Filters,
-			core.FieldFilter{Field: "status", Value: "IN_PROGRESS"},
-			core.FieldFilter{Field: "status", Value: "TODO"},
-		)
+		for _, st := range core.UnfinishedTaskStatuses() {
+			query.Filters = append(query.Filters,
+				core.FieldFilter{Field: "status", Value: st})
+		}
 	}
 
 	// Parse OR-groups from args.
@@ -241,8 +290,15 @@ func filterTasksByTagGroups(tasks []*core.Task, groups [][]string) []*core.Task 
 var tagFilterAllStatuses bool
 
 func init() {
+	// Worded, not named. This runs at package init — long before any
+	// config file is read — so naming the default's statuses here can
+	// only ever name the ones this package happens to know, and a help
+	// string listing statuses the user's config does not declare is its
+	// own small lie. Reading config to fill it in would be worse: a
+	// pre-argv config read pins the memoising DefaultWorkflow* singleton
+	// and silently discards later `-c key=value` overrides.
 	TagCmd.PersistentFlags().BoolVar(&tagFilterAllStatuses, "all-statuses", false,
-		"Include tasks of all statuses (default: IN_PROGRESS + TODO only)")
+		"Include tasks of all statuses (default: unfinished work only)")
 
 	TagCmd.AddCommand(TagListCmd)
 

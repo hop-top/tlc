@@ -17,28 +17,17 @@ package cli
 //   - auth logout (C3, recently converted Run → RunE so the gate fires)
 
 import (
-	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
 
-// confirmGateExitCode runs `bin args...` with a non-TTY stdin/stdout
-// and returns the exit code. -1 if exec fails for non-exit reasons.
+// confirmGateExitCode returns just the exit code of a non-TTY run, which is
+// the whole assertion for these gate tests.
 func confirmGateExitCode(t *testing.T, bin, cwd string, env []string, args ...string) int {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), bin, args...)
-	cmd.Env = env
-	cmd.Dir = cwd
-	cmd.Stdin = nil
-	if err := cmd.Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return ee.ExitCode()
-		}
-		t.Fatalf("tlc %v: unexpected exec error: %v", args, err)
-	}
-	return 0
+	_, code := runTLC(t, bin, cwd, env, args...)
+	return code
 }
 
 // TestConfirmGate_NonTTYRefuses asserts that the three representative
@@ -52,18 +41,14 @@ func TestConfirmGate_NonTTYRefuses(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "test.db")
-	env := styledEnv(home, dbPath)
-	_ = os.MkdirAll(cwd, 0o755)
+	env := e2eEnv(t, home, dbPath)
 
 	// Seed init so storage paths exist (some commands open storage
 	// before the gate would fire; for those we still expect exit 5
 	// because the gate runs in PreRunE-equivalent slot before RunE).
 	// Scope to the test tempdirs via Dir+Env so init writes into the
 	// hermetic sandbox, not the package cwd or host HOME.
-	initCmd := exec.Command(bin, "init")
-	initCmd.Dir = cwd
-	initCmd.Env = env
-	_ = initCmd.Run() // best-effort; not assertive
+	_, _ = runTLC(t, bin, cwd, env, "init") // best-effort; not assertive
 
 	cases := []struct {
 		name string
@@ -95,7 +80,7 @@ func TestConfirmGate_NonTTYProceedsWithConfirmYes(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "test.db")
-	env := styledEnv(home, dbPath)
+	env := e2eEnv(t, home, dbPath)
 
 	cases := []struct {
 		name string
@@ -126,7 +111,7 @@ func TestConfirmGate_LocalFlagBridges(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
 	dbPath := filepath.Join(home, "test.db")
-	env := styledEnv(home, dbPath)
+	env := e2eEnv(t, home, dbPath)
 
 	cases := []struct {
 		name string

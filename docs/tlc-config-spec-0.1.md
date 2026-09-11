@@ -77,38 +77,16 @@ output:
 # Task defaults
 task:
   default_status: TODO
-  id_format: "T-{seq:04d}"
-  auto_assign: false
 
 # Git integration
 git:
-  worktree:
-    directory: .worktrees
-    auto_create: true
-  branch:
-    prefix_from_type: true
-    zero_pad_issue: 4
-  commit:
-    auto_generate: true
-    template: "{type}: {description} (closes #{issue})"
+  track: true
 
 # External system sync
 sync:
-  enabled: true
-  interval: 5m
-  conflict_strategy: prompt
-
   github:
-    enabled: true
     repo: org/repo
     sync_direction: bidirectional
-    import_labels: true
-    import_milestones: true
-
-  jira:
-    enabled: false
-    url: https://company.atlassian.net
-    project: PROJ
 
 # Storage backend
 storage:
@@ -182,21 +160,20 @@ project:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `default_status` | enum | `TODO` | Initial status for new tasks |
-| `id_format` | string | `T-{seq:04d}` | Task ID format template |
-| `auto_assign` | bool | `false` | Auto-assign to current user on create |
-| `require_reference` | bool | `true` | Require reference on creation |
 | `archive_threshold` | duration | `168h` (7d) | Auto-archive DONE/SKIPPED tasks after this duration |
 
-**ID Format Template Syntax**:
-- `{seq}` — Sequential number
-- `{seq:04d}` — Zero-padded to 4 digits
-- `{date:YYYYMMDD}` — Date prefix
-- `{random:8}` — Random alphanumeric (8 chars)
+**Task identity is not configurable**. A task's durable identity is a
+TypeID (`task_01h455vbqkfsn02nk084ksn02q`) assigned at creation. The
+familiar `T-0042` is a *display alias* rendered on demand from the
+per-project sequence number, never stored as the identity. The alias
+shape is fixed at `T-` plus at-least-4-digit zero padding because it is
+parsed back by independent readers — plan `blocked_by` refs,
+cross-project `<org/project>#T-NNNN` refs, the todo.txt round trip, and
+URI normalisation — each of which hardcodes that grammar.
 
 **Examples**:
 ```yaml
 task:
-  id_format: "T-{seq:04d}"        # T-0001, T-0042
   archive_threshold: 48h          # Archive after 2 days
 ```
 
@@ -212,14 +189,76 @@ Define custom statuses replacing the 4 defaults. Each entry is a
 | `description` | string | no | Short explanation of purpose |
 | `is_terminal` | bool | no | Terminal state; no outbound transitions |
 | `color` | string | no | ANSI/hex color for TUI/CLI output |
-| `role` | enum | no | Semantic role: `initial`, `active`, `completed` |
+| `role` | enum | no | Semantic role: `initial`, `active`, `completed`, `skipped` |
 | `tls_marker` | string | no | TLS bracket marker (e.g. `x`, `~`, `-`) |
 
 Semantic roles drive shortcut commands:
 
-- `initial` — target of `tlc task unclaim`
+- `initial` — target of `tlc task unclaim` and `tlc task reopen`
 - `active` — target of `tlc task claim`
 - `completed` — target of `tlc task complete`
+- `skipped` — target of `tlc task skip`
+
+A role is resolved to the FIRST status declaring it, so declare each
+role once. `completed` and `skipped` are separate roles because both
+are terminal and `is_terminal` cannot tell "done" from "abandoned"
+apart; without a distinct role the skip target is unreachable.
+
+If no status declares `skipped`, `tlc task skip` falls back to a status
+literally named `SKIPPED` and warns. If neither exists it refuses rather
+than electing an arbitrary terminal status.
+
+#### `task.tags` — Tag Policy and Vocabulary
+
+Controls whether a tag has to be in a vocabulary before it can be
+written to a task.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `policy` | enum | `open` | `open` accepts any tag; `closed` accepts only tags the vocabulary admits |
+| `allowed` | list | — | Project-specific tags a `closed` policy admits, in addition to the generated axes |
+
+`open` is the default and preserves the historical behaviour: any tag
+may be created on use. A config that says nothing about tags behaves
+exactly as it did before this key existed.
+
+Under `closed`, the axes TLC already generates are admitted **by
+construction** and do not need restating in `allowed`:
+
+- `type:*` — one per Conventional Commits type, plus `type:breaking`
+- `priority:*` — from `task.priorities` (the built-in `P0`–`P3` are
+  admitted under both their own names and the `critical`/`high`/
+  `medium`/`low` aliases the sync plugins put on the wire)
+- `effort:*` — from `task.efforts`
+- `status:*` — from `task.statuses`, plus `status:blocked`
+
+So `allowed` says only what is specific to the project. An entry ending
+in `:*` opens a whole dimension — `domain:*` admits `domain:storage` and
+any other `domain:` tag — which is what makes an open-ended axis usable
+without abandoning the guarantee elsewhere. That is the only wildcard
+shape accepted: it is anchored to a dimension prefix, so it can widen a
+namespace but never widen to everything.
+
+Enforcement covers every write path — `task create --tag`,
+`task update --add-tag`, `tlc tag <id> <tag…>`, the `serve` HTTP routes,
+the plan importer and the inbox. The two paths that read `todo.txt`
+(startup ingest and `doctor --fix`) drop disallowed tags and keep the
+task rather than failing, because they run on the happy path of ordinary
+read commands.
+
+A rejection names the offending tag and the whole allowed set, and
+`task create --help` / `task update --help` advertise the vocabulary when
+the policy is closed.
+
+```yaml
+task:
+  tags:
+    policy: closed
+    allowed:
+      - storage
+      - cli
+      - domain:*
+```
 
 #### `task.state_machine` — Transition Rules
 
@@ -261,6 +300,7 @@ task:
       color: "#00FF00"
     - name: WONTFIX
       label: Won't Fix
+      role: skipped
       is_terminal: true
       tls_marker: "-"
       color: "#FF0000"
@@ -347,102 +387,41 @@ task:
 
 ### `git` — Git Integration
 
-#### `git.worktree`
-
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `directory` | path | `.worktrees` | Worktree directory relative to repo root |
-| `auto_create` | bool | `true` | Auto-create worktrees for parent tasks |
-| `auto_remove` | bool | `false` | Auto-remove worktrees on task completion |
+| `track` | bool | `false` | Track the `.tlc` directory in git |
 
 **Example**:
 ```yaml
 git:
-  worktree:
-    directory: .work
-    auto_create: true
-    auto_remove: false
+  track: true
 ```
 
-#### `git.branch`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `prefix_from_type` | bool | `true` | Use task type as branch prefix |
-| `zero_pad_issue` | int | `4` | Zero-pad issue numbers in branches |
-| `separator` | string | `/` | Separator between prefix and name |
-
-**Example**:
-```yaml
-git:
-  branch:
-    prefix_from_type: true
-    zero_pad_issue: 4
-    separator: /
-
-# Generates: feat/0042-api-rate-limiting
-```
-
-#### `git.commit`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `auto_generate` | bool | `true` | Auto-generate commit messages from branch |
-| `template` | string | `{type}: {description} (closes #{issue})` | Commit message template |
-| `co_author` | string | - | Optional co-author trailer appended to commit message |
-
-**Template Variables**:
-- `{type}` — Branch/task type (feat, fix, etc.)
-- `{description}` — Branch purpose or task title
-- `{issue}` — Issue number (without padding)
-- `{task_id}` — Full task ID
-
-**Example**:
-```yaml
-git:
-  commit:
-    auto_generate: true
-    template: "{type}: {description} (closes #{issue})"
-```
+tlc neither names branches nor writes commit messages, so it has no
+branch, commit, or worktree settings. Earlier drafts of this spec
+documented `git.branch.*`, `git.commit.*` and `git.worktree.*`; no
+release ever read them.
 
 ---
 
 ### `sync` — External System Sync
 
-#### Global Sync Settings
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `true` | Enable external system sync |
-| `interval` | duration | `5m` | Polling interval (e.g., `5m`, `1h`) |
-| `conflict_strategy` | enum | `prompt` | Conflict resolution: `prompt`, `local`, `remote`, `manual` |
-| `batch_size` | int | `50` | Max tasks per sync batch |
-
-**Conflict Strategies**:
-- `prompt` — Ask user on conflict
-- `local` — Keep local changes
-- `remote` — Keep remote changes
-- `manual` — Mark as conflict, require manual resolution
-
-**Example**:
-```yaml
-sync:
-  enabled: true
-  interval: 10m
-  conflict_strategy: prompt
-```
+Sync runs when a sync command is invoked. There is no polling loop, no
+batching setting, and no configured conflict default: `tlc sync pull`
+takes its conflict strategy from `--strategy` (`remote-wins`,
+`local-wins`, `last-write-wins`, `manual`).
 
 #### `sync.github` — GitHub Integration
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `false` | Enable GitHub sync |
 | `repo` | string | - | Repository (org/repo) |
-| `sync_direction` | enum | `bidirectional` | Sync mode: `pull`, `push`, `bidirectional` |
-| `import_labels` | bool | `true` | Import GitHub labels as tags |
-| `import_milestones` | bool | `true` | Import milestones |
-| `import_assignees` | bool | `true` | Import assignees |
-| `issue_filter` | string | - | JQ filter for issues to import |
+| `sync_direction` | enum | - | Sync mode: `pull`, `push`, `bidirectional` |
+| `use_gh_auth` | bool | `false` | Set by tlc when a `GITHUB_TOKEN` is detected |
+
+Both `repo` and `sync_direction` are normally written by tlc itself the
+first time a sync command runs in a GitHub checkout, rather than typed by
+hand. An unrecognised `sync_direction` is rejected at config validation.
 
 **Sync Directions**:
 - `pull` — Only pull from GitHub (read-only)
@@ -453,53 +432,17 @@ sync:
 ```yaml
 sync:
   github:
-    enabled: true
     repo: myorg/myrepo
     sync_direction: bidirectional
-    import_labels: true
-    import_milestones: true
-    issue_filter: '.labels[] | select(.name | startswith("tlc:"))'
 ```
 
-#### `sync.jira` — Jira Integration
+#### Other providers
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `false` | Enable Jira sync |
-| `url` | string | - | Jira instance URL |
-| `project` | string | - | Jira project key |
-| `sync_direction` | enum | `bidirectional` | Sync mode |
-| `issue_type` | string | `Task` | Default issue type for new issues |
-| `import_custom_fields` | bool | `false` | Import custom fields as metadata |
-
-**Example**:
-```yaml
-sync:
-  jira:
-    enabled: true
-    url: https://company.atlassian.net
-    project: PROJ
-    sync_direction: pull
-    issue_type: Task
-```
-
-#### `sync.linear` — Linear Integration
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `false` | Enable Linear sync |
-| `team_id` | string | - | Linear team ID |
-| `sync_direction` | enum | `bidirectional` | Sync mode |
-| `import_projects` | bool | `true` | Import Linear projects as milestones |
-
-**Example**:
-```yaml
-sync:
-  linear:
-    enabled: true
-    team_id: team_abc123
-    sync_direction: bidirectional
-```
+Jira, Linear, GitLab, Gitea, Bitbucket, Azure DevOps and vTodo are sync
+**plugins**. Each is configured through its own plugin settings and
+environment (for example `JIRA_EMAIL` / `JIRA_TOKEN`), not through
+`sync.*` keys in this file. Earlier drafts of this spec documented
+`sync.jira.*` and `sync.linear.*` blocks; no release ever read them.
 
 ---
 
@@ -507,9 +450,11 @@ sync:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `backend` | enum | `sqlite` | Storage backend: `sqlite`, `postgres`, `local` |
-| `db_path` | path | `.tlc/db.sqlite` | Database file path (sqlite only) |
-| `connection_string` | string | - | Database connection string (postgres) |
+| `backend` | enum | `sqlite` | Storage backend: `sqlite`, `local` |
+| `db_path` | path | `.tlc/db.sqlite` | Database file path |
+
+`postgres` is still accepted by config validation but is not
+implemented; there is no connection-string key to go with it.
 
 **Two databases**: TLC maintains two distinct SQLite files:
 - **Project DB** — `.tlc/db.sqlite` (or `.hop/tlc/db.sqlite` in hop mode); stores tasks,
@@ -525,13 +470,6 @@ The `storage.db_path` config key refers to the project DB only.
 storage:
   backend: sqlite
   db_path: .tlc/tasks.db
-```
-
-**Example (PostgreSQL)**:
-```yaml
-storage:
-  backend: postgres
-  connection_string: postgresql://user:pass@localhost/tlc
 ```
 
 ---
@@ -614,11 +552,16 @@ plugins:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `pager` | string | `auto` | Pager command: `auto`, `less`, `more`, `none` |
-| `editor` | string | `$EDITOR` | Editor command |
-| `date_format` | string | `2006-01-02 15:04:05` | Date format (Go layout) |
 | `timezone` | string | `local` | Timezone: `local`, `UTC`, or IANA name |
-| `table_style` | enum | `unicode` | Table style: `unicode`, `ascii`, `simple` |
+| `table_style` | enum | `unicode` | Table border: `unicode`, `rounded`, `thick`, `double`, `ascii`, `none` |
+| `theme` | enum | `neon` | Color theme: `neon`, `dark`, `bauhaus` |
+
+Both keys style output only. An unrecognised value warns and is ignored
+rather than aborting the command.
+
+Styled table rendering activates on terminals only. When output is piped
+or redirected, tables render as plain columns and `table_style` has no
+visible effect.
 
 **Table Styles**:
 ```
@@ -626,22 +569,23 @@ unicode:  ┌───┬───┐
           │ A │ B │
           ├───┼───┤
 
+rounded:  ╭───┬───╮
+          │ A │ B │
+          ├───┼───┤
+
 ascii:    +---+---+
           | A | B |
           +---+---+
 
-simple:   A   B
-          ─────────
+none:     (no border; theme colors retained)
 ```
 
 **Example**:
 ```yaml
 ui:
-  pager: less
-  editor: vim
-  date_format: "2006-01-02 15:04"
   timezone: America/New_York
   table_style: unicode
+  theme: neon
 ```
 
 ---
@@ -787,8 +731,8 @@ TLC_<SECTION>_<KEY>=value
 
 Nested keys use underscores:
 ```
-TLC_GIT_WORKTREE_DIRECTORY=.work
 TLC_SYNC_GITHUB_REPO=org/repo
+TLC_TASK_STALE_DEFAULT_TIMEOUT=6h
 ```
 
 ### Common Variables
@@ -800,10 +744,10 @@ TLC_SYNC_GITHUB_REPO=org/repo
 | `TLC_NO_COLOR` | `output.color=false` | `1` |
 | `TLC_VERBOSE` | `output.verbose` | `true` |
 | `TLC_TASK_DEFAULT_STATUS` | `task.default_status` | `IN_PROGRESS` |
-| `TLC_GIT_WORKTREE_DIRECTORY` | `git.worktree.directory` | `.work` |
-| `TLC_SYNC_ENABLED` | `sync.enabled` | `false` |
-| `TLC_SYNC_INTERVAL` | `sync.interval` | `10m` |
-| `TLC_STORAGE_BACKEND` | `storage.backend` | `postgres` |
+| `TLC_GIT_TRACK` | `git.track` | `true` |
+| `TLC_SYNC_GITHUB_REPO` | `sync.github.repo` | `org/repo` |
+| `TLC_UI_TIMEZONE` | `ui.timezone` | `UTC` |
+| `TLC_STORAGE_BACKEND` | `storage.backend` | `sqlite` |
 
 ### Credential Variables
 
@@ -842,7 +786,7 @@ Project ID fallback chain (first non-empty wins):
 ```yaml
 # Detects Go binary project (go.mod exists)
 task:
-  id_format: "T-{seq:04d}"
+  default_status: TODO
 
 # Auto-suggests domain labels for Go projects
 # (see github-label-convention-0.1.md)
@@ -883,7 +827,7 @@ tlc config get sync.github.repo
 tlc config set output.format json
 
 # Set user-level
-tlc config set --global ui.editor vim
+tlc config set --global ui.theme dark
 
 # Set nested value
 tlc config set sync.github.repo myorg/myrepo
@@ -929,14 +873,13 @@ output:
   format: xml  # Error: format must be table|json|yaml|tls|summary
 
 # Invalid: bad type
-sync:
-  interval: "not-a-duration"  # Error: interval must be duration (e.g., 5m)
+tracks:
+  stale_threshold: "not-a-duration"  # Error: must be duration (e.g., 48h)
 
-# Invalid: missing required field
+# Invalid: value outside the enum
 sync:
   github:
-    enabled: true
-    # Error: repo is required when enabled=true
+    sync_direction: sideways  # Error: must be pull, push, or bidirectional
 ```
 
 ### Validation Command
@@ -953,7 +896,7 @@ tlc config validate
 # Or with errors
 ✗ Config invalid
   - sync.github.repo: required when enabled=true
-  - task.id_format: invalid template syntax
+  - task.default_status: not among defined statuses
 ```
 
 ---
@@ -981,8 +924,8 @@ tlc config migrate --dry-run
 Config version: 0.1
 TLC version: 0.2
 Migration required:
-  - Rename: git.worktree_dir → git.worktree.directory
-  - Add: sync.conflict_strategy (default: prompt)
+  - Rename: task.stale_timeout → task.stale.default_timeout
+  - Add: tracks.stale_threshold (default: 48h)
 
 # Perform migration
 tlc config migrate
@@ -1017,15 +960,9 @@ output:
 
 task:
   default_status: TODO
-  id_format: "T-{seq:04d}"
 
 git:
-  worktree:
-    directory: .worktrees
-    auto_create: true
-
-sync:
-  enabled: false
+  track: false
 
 storage:
   backend: sqlite
@@ -1042,63 +979,22 @@ output:
 
 task:
   default_status: TODO
-  auto_assign: false
 
 git:
-  worktree:
-    directory: .worktrees
-    auto_create: true
-  commit:
-    auto_generate: true
+  track: true
 
 sync:
-  enabled: true
-  interval: 5m
-  conflict_strategy: prompt
-
   github:
-    enabled: true
     repo: myorg/myrepo
     sync_direction: bidirectional
-    import_labels: true
-    import_milestones: true
 
 storage:
   backend: sqlite
   db_path: .tlc/db.sqlite
 
 ui:
-  pager: less
-  editor: vim
   timezone: UTC
-```
-
-### Multi-System Sync
-
-```yaml
-version: 0.1
-
-sync:
-  enabled: true
-  interval: 10m
-  conflict_strategy: prompt
-
-  github:
-    enabled: true
-    repo: myorg/frontend
-    sync_direction: bidirectional
-
-  jira:
-    enabled: true
-    url: https://company.atlassian.net
-    project: FRONT
-    sync_direction: pull
-    issue_type: Story
-
-  linear:
-    enabled: true
-    team_id: team_abc123
-    sync_direction: bidirectional
+  theme: dark
 ```
 
 ---

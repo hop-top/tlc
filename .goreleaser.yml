@@ -55,7 +55,7 @@ release:
   # Pro-only), so we disable its own release publishing entirely.
   disable: true
 
-brews:
+homebrew_casks:
   - name: tlc
     repository:
       owner: hop-top
@@ -65,12 +65,10 @@ brews:
     homepage: https://github.com/hop-top/tlc
     description: "tlc — deterministic task management for terminal AI workflows."
     license: MIT
+    binaries: [tlc]
     # {{ .Env.RELEASE_TAG }} is the literal `tlc/v<version>` tag,
     # which is the path segment GitHub Releases use for asset
     # downloads. {{.Tag}} here would resolve to the synthesized
     # bare tag — wrong for the URL.
-    url_template: "https://github.com/hop-top/tlc/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
-    install: |
-      bin.install "tlc"
-    test: |
-      system "#{bin}/tlc", "--version"
+    url:
+      template: "https://github.com/hop-top/tlc/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"

@@ -304,9 +304,93 @@ func TestSortTasks_DefaultsToCreatedAtAsc(t *testing.T) {
 		mkTask("b", "B", core.StatusTodo, now),
 		mkTask("a", "A", core.StatusTodo, now.Add(-1*time.Hour)),
 	}
-	sortTasks(tasks, "", "")
+	sortTasks(tasks, "", "", nil, nil)
 	if tasks[0].ID != "a" {
 		t.Fatalf("expected 'a' first, got %s", tasks[0].ID)
+	}
+}
+
+// Workspace mode sorts by priority RANK, not by the text of the priority
+// column. The vocabulary below is chosen so alphabetical order is the
+// exact reverse of rank order — with the built-in P0..P3 the two coincide
+// and a text sort would pass by accident.
+//
+// The field previously had no case in compareTasks at all: --sort-by
+// priority fell through to created_at and silently ignored the flag.
+func TestSortTasks_PriorityUsesRankOrder(t *testing.T) {
+	now := time.Now()
+	order := []string{"URGENT", "NORMAL", "LATER"}
+
+	mk := func(id string, p core.Priority) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Priority = p
+		return task
+	}
+	tasks := []*core.Task{
+		mk("later", "LATER"),
+		mk("unset", ""),
+		mk("urgent", "URGENT"),
+		mk("normal", "NORMAL"),
+	}
+
+	sortTasks(tasks, "priority", "asc", order, nil)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want := []string{"urgent", "normal", "later", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
+	}
+
+	// Reversing the direction reverses the RANKED tasks only: unset is
+	// not a rank, so it stays last rather than being promoted to first.
+	sortTasks(tasks, "priority", "desc", order, nil)
+	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want = []string{"later", "normal", "urgent", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("desc order = %v, want %v", got, want)
+		}
+	}
+}
+
+// Effort sorts by RANK too, and unlike priority it never sorted right as
+// text: the BUILT-IN XS, S, M, L, XL compares to L, M, S, XL, XS. So the
+// vocabulary here is the built-in one — no renaming needed to expose the
+// defect.
+func TestSortTasks_EffortUsesRankOrder(t *testing.T) {
+	now := time.Now()
+	order := []string{"XS", "S", "M", "L", "XL"}
+
+	mk := func(id string, e core.Effort) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Effort = e
+		return task
+	}
+	tasks := []*core.Task{
+		mk("xl", "XL"),
+		mk("unset", ""),
+		mk("xs", "XS"),
+		mk("m", "M"),
+	}
+
+	sortTasks(tasks, "effort", "asc", nil, order)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want := []string{"xs", "m", "xl", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
+	}
+
+	// Unset is not a size, so reversing promotes nothing: it stays last.
+	sortTasks(tasks, "effort", "desc", nil, order)
+	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want = []string{"xl", "m", "xs", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("desc order = %v, want %v", got, want)
+		}
 	}
 }
 
@@ -391,5 +475,120 @@ func TestSourceClose(t *testing.T) {
 
 	if !src.closed {
 		t.Fatal("expected source to be closed after query")
+	}
+}
+
+// A value that is not in the supplied vocabulary — a priority written
+// before the vocabulary was renamed — ranks AFTER every declared value
+// and BEFORE unset, in both directions. That is the contract the SQL
+// path spells out (see vocabRankOrder): such a value stays visible
+// rather than silently collapsing into rank 0 alongside the first
+// declared value.
+//
+// The two paths must agree. A workspace query and a single-project query
+// disagreeing on where a legacy value lands is a difference nobody could
+// explain from the flags.
+func TestSortTasks_UnrankedValueSortsAfterRankedBeforeUnset(t *testing.T) {
+	now := time.Now()
+	order := []string{"P0", "P1", "P2", "P3"}
+
+	mk := func(id string, p core.Priority) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Priority = p
+		return task
+	}
+	tasks := []*core.Task{
+		mk("legacy", "CRITICAL"),
+		mk("unset", ""),
+		mk("p3", "P3"),
+		mk("p0", "P0"),
+	}
+
+	// Ascending: ranked values in rank order, then the unranked legacy
+	// value, then unset. Text order would have put CRITICAL first.
+	sortTasks(tasks, "priority", "asc", order, nil)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want := []string{"p0", "p3", "legacy", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
+	}
+
+	// Descending reverses the ranks, so the unranked value — ranked
+	// len(order), past every declared one — leads. Unset is not a rank
+	// and stays last regardless of direction.
+	sortTasks(tasks, "priority", "desc", order, nil)
+	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want = []string{"legacy", "p3", "p0", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("desc order = %v, want %v", got, want)
+		}
+	}
+}
+
+// Effort takes the same rule: the ranked/unranked split lives in one
+// compare, so neither field can drift from the SQL contract alone.
+func TestSortTasks_UnrankedEffortSortsAfterRankedBeforeUnset(t *testing.T) {
+	now := time.Now()
+	order := []string{"XS", "S", "M", "L", "XL"}
+
+	mk := func(id string, e core.Effort) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Effort = e
+		return task
+	}
+	tasks := []*core.Task{
+		mk("legacy", "EPIC"),
+		mk("unset", ""),
+		mk("xl", "XL"),
+		mk("xs", "XS"),
+	}
+
+	sortTasks(tasks, "effort", "asc", nil, order)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want := []string{"xs", "xl", "legacy", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
+	}
+
+	sortTasks(tasks, "effort", "desc", nil, order)
+	got = []string{tasks[0].ID, tasks[1].ID, tasks[2].ID, tasks[3].ID}
+	want = []string{"legacy", "xl", "xs", "unset"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("desc order = %v, want %v", got, want)
+		}
+	}
+}
+
+// Two unranked values are ordered against each other by text, since
+// neither carries a rank. Pinned so the len(order) tie does not become
+// an accidental "arbitrary but stable" ordering nobody chose.
+func TestSortTasks_TwoUnrankedValuesCompareAsText(t *testing.T) {
+	now := time.Now()
+	order := []string{"P0", "P1"}
+
+	mk := func(id string, p core.Priority) *core.Task {
+		task := mkTask(id, id, core.StatusTodo, now)
+		task.Priority = p
+		return task
+	}
+	tasks := []*core.Task{
+		mk("zeta", "ZETA"),
+		mk("alpha", "ALPHA"),
+		mk("p0", "P0"),
+	}
+
+	sortTasks(tasks, "priority", "asc", order, nil)
+	got := []string{tasks[0].ID, tasks[1].ID, tasks[2].ID}
+	want := []string{"p0", "alpha", "zeta"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("asc order = %v, want %v", got, want)
+		}
 	}
 }

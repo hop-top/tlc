@@ -19,12 +19,38 @@ const (
 	TrackStatusArchived  TrackStatus = "archived"
 )
 
+// trackStatuses is the closed set of track statuses in lifecycle order.
+// Distinct from taskStatuses: a track's status set shares the `--status`
+// flag NAME with a task's but not its values, which is why the CLI scopes
+// its flag-enum registrations per command rather than tree-wide.
+var trackStatuses = []TrackStatus{
+	TrackStatusPending,
+	TrackStatusActive,
+	TrackStatusCompleted,
+	TrackStatusAbandoned,
+	TrackStatusArchived,
+}
+
+// TrackStatuses returns the closed set of track statuses in lifecycle
+// order. The returned slice is a copy.
+func TrackStatuses() []TrackStatus {
+	return append([]TrackStatus(nil), trackStatuses...)
+}
+
+// TrackStatusStrings returns TrackStatuses as plain strings.
+func TrackStatusStrings() []string {
+	return enumStrings(trackStatuses)
+}
+
 // ValidTrackStatus returns true if s is a recognised track status (or empty).
 func ValidTrackStatus(s TrackStatus) bool {
-	switch s {
-	case "", TrackStatusPending, TrackStatusActive, TrackStatusCompleted,
-		TrackStatusAbandoned, TrackStatusArchived:
+	if s == "" {
 		return true
+	}
+	for _, v := range trackStatuses {
+		if s == v {
+			return true
+		}
 	}
 	return false
 }

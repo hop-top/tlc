@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
@@ -364,5 +366,81 @@ func TestEmptyInbox(t *testing.T) {
 	}
 	if len(result.Failed) != 0 {
 		t.Errorf("expected 0 failed, got %d", len(result.Failed))
+	}
+}
+
+// TestTagPolicyRejectsInboxCreate covers the inbox write path, which has
+// no CLI surface of its own.
+//
+// The inbox already has exactly the right shape of failure for a policy
+// violation: the offending file goes to failed/ with the reason in its
+// sidecar, so the user gets the message naming the tag and the allowed
+// set, and the other files in the batch still process. That last part is
+// what this asserts alongside the rejection.
+func TestTagPolicyRejectsInboxCreate(t *testing.T) {
+	proc, _, store, inboxDir := newTestEnv(t)
+	ctx := context.Background()
+
+	// Restored to nil rather than to a captured previous value: core
+	// exposes a setter and no getter, and this package registers no
+	// provider of its own, so nil IS the state to return to.
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{
+			Statuses:     config.GetDefaultStatuses(),
+			StateMachine: config.GetDefaultStateMachine(),
+			Tags: config.TagsConfig{
+				Policy:  config.TagPolicyClosed,
+				Allowed: []string{"storage"},
+			},
+		}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+
+	bad, _ := json.Marshal(map[string]any{
+		"title": "rejected", "tags": []string{"bogustag"},
+	})
+	writeFile(t, filepath.Join(inboxDir, "create"), "01-bad.json", bad)
+
+	good, _ := json.Marshal(map[string]any{
+		"title": "accepted", "tags": []string{"storage", "type:feat"},
+	})
+	writeFile(t, filepath.Join(inboxDir, "create"), "02-good.json", good)
+
+	result, err := proc.Process(ctx)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	if len(result.Failed) != 1 || result.Failed[0] != "01-bad.json" {
+		t.Fatalf("failed = %v, want [01-bad.json]", result.Failed)
+	}
+	// The other file in the batch must still have processed: one bad tag
+	// is a bad FILE, not a bad run.
+	if len(result.Created) != 1 {
+		t.Fatalf("created = %v, want exactly the good file's task", result.Created)
+	}
+
+	sidecar := filepath.Join(inboxDir, "failed", "01-bad.json.error")
+	data, readErr := os.ReadFile(sidecar)
+	if readErr != nil {
+		t.Fatalf("read failure sidecar: %v", readErr)
+	}
+	for _, want := range []string{"bogustag", "storage"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("sidecar should name %q, got: %s", want, data)
+		}
+	}
+
+	// And the accepted task really carries its tags.
+	task, getErr := store.GetTask(ctx, result.Created[0])
+	if getErr != nil || task == nil {
+		t.Fatalf("get created task: %v", getErr)
+	}
+	if len(task.Tags) != 2 {
+		t.Errorf("created task tags = %v, want both allowed tags", task.Tags)
 	}
 }

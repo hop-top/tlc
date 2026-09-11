@@ -194,7 +194,7 @@ func (m Model) rebuildTaskList() Model {
 
 	var items []kittui.Item
 	taskIdx := 0
-	for _, status := range statusOrder {
+	for _, status := range configuredStatusOrder() {
 		tasks := groups[status]
 		if len(tasks) == 0 {
 			continue
@@ -256,16 +256,9 @@ func (m Model) getLineOfSelected() int {
 		groups[t.Status] = append(groups[t.Status], t)
 	}
 
-	statusOrder := []core.TaskStatus{
-		core.StatusTodo,
-		core.StatusInProgress,
-		core.StatusDone,
-		core.StatusSkipped,
-	}
-
 	line := 0
 	taskIdx := 0
-	for _, status := range statusOrder {
+	for _, status := range configuredStatusOrder() {
 		tasks := groups[status]
 		if len(tasks) == 0 {
 			continue

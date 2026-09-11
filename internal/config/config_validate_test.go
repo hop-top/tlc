@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,12 +31,25 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing github repo when enabled",
+			name: testInvalid + " github sync_direction",
 			setup: func(c *Config) {
-				c.Sync.GitHub.Enabled = true
-				c.Sync.GitHub.Repo = ""
+				c.Sync.GitHub.SyncDirection = testInvalid
 			},
 			wantErr: true,
+		},
+		{
+			name: "valid github sync_direction",
+			setup: func(c *Config) {
+				c.Sync.GitHub.SyncDirection = "bidirectional"
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty github sync_direction",
+			setup: func(c *Config) {
+				c.Sync.GitHub.SyncDirection = ""
+			},
+			wantErr: false,
 		},
 		{
 			name: testInvalid + " storage backend",
@@ -395,5 +409,185 @@ func TestTaskConfig_EmptyStatusesPopulatedWithDefaults(t *testing.T) {
 	}
 	if cfg.Task.StateMachine == nil {
 		t.Error("expected state machine to be populated with defaults")
+	}
+}
+
+// TestTaskConfig_PriorityVocabularyValidation covers the priority
+// vocabulary's own structural checks — the ones that are fatal because
+// DefaultWorkflow builds on them.
+func TestTaskConfig_PriorityVocabularyValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		priorities []PriorityDefinition
+		wantErr    bool
+	}{
+		{"empty falls back to built-ins", nil, false},
+		{
+			"custom vocabulary accepted",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "LATER"}},
+			false,
+		},
+		{
+			"duplicate name rejected",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "URGENT"}},
+			true,
+		},
+		{
+			"unnamed definition rejected",
+			[]PriorityDefinition{{Name: "URGENT"}, {Label: "no name"}},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Task.Priorities = tt.priorities
+			err := cfg.Validate()
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestTaskConfig_EmptyPrioritiesNotMaterialised pins the deliberate
+// asymmetry with statuses: Validate fills in default STATUSES but must
+// leave Priorities empty, so "declared none" stays distinguishable from
+// "declared exactly the built-in four".
+func TestTaskConfig_EmptyPrioritiesNotMaterialised(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Priorities = nil
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Task.Priorities) != 0 {
+		t.Errorf("Validate materialized %d priorities; it must leave the list empty",
+			len(cfg.Task.Priorities))
+	}
+	if got := len(cfg.Task.EffectivePriorities()); got != 4 {
+		t.Errorf("EffectivePriorities() = %d entries, want the 4 built-ins", got)
+	}
+}
+
+// TestTaskConfig_SchedulingKeyOutsideVocabulary covers the silent no-op:
+// a by_priority key naming a priority outside the vocabulary is
+// unreachable at runtime and must be reported rather than ignored.
+func TestTaskConfig_SchedulingKeyOutsideVocabulary(t *testing.T) {
+	tests := []struct {
+		name       string
+		priorities []PriorityDefinition
+		key        string
+		wantErr    bool
+	}{
+		{"built-in key under built-in vocabulary", nil, "P0", false},
+		{"unknown key under built-in vocabulary", nil, "NOSUCH", true},
+		{
+			"declared key under custom vocabulary",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "LATER"}},
+			"URGENT", false,
+		},
+		{
+			"built-in key under custom vocabulary is now unknown",
+			[]PriorityDefinition{{Name: "URGENT"}, {Name: "LATER"}},
+			"P0", true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Task.Priorities = tt.priorities
+			cfg.Task.Scheduling.ByPriority = map[string]PriorityScheduleRule{
+				tt.key: {Due: time.Hour},
+			}
+			err := cfg.Validate()
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestTaskConfig_ValidateWorkflowSkipsSchedulingKeys pins the split that
+// keeps a stale scheduling key off DefaultWorkflow's FATAL path. Validate
+// must reject it; ValidateWorkflow must not, or a cosmetic config mistake
+// would stop every command in the tool from running.
+func TestTaskConfig_ValidateWorkflowSkipsSchedulingKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Scheduling.ByPriority = map[string]PriorityScheduleRule{
+		"NOSUCH": {Due: time.Hour},
+	}
+	if err := cfg.Task.ValidateWorkflow(); err != nil {
+		t.Errorf("ValidateWorkflow must ignore scheduling keys, got: %v", err)
+	}
+	if err := cfg.Task.Validate(); err == nil {
+		t.Error("Validate must reject an out-of-vocabulary scheduling key")
+	}
+}
+
+// A rule whose FROM status is terminal can never fire: ValidateTransition
+// refuses every transition out of a terminal status before it ever
+// consults the rules, and `tlc task reopen` is the sanctioned way out.
+// Accepting such a rule silently left the user with a rule they wrote,
+// config validation blessed, and nothing honored. Reject it instead, so
+// the config fails loudly and names the status.
+func TestTaskConfig_StateMachineRuleFromTerminalStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.StateMachine.Rules["DONE"] = []string{"TODO"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for state machine rule out of terminal status DONE, got nil")
+	}
+	if !strings.Contains(err.Error(), "DONE") {
+		t.Errorf("error must name the offending status, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "reopen") {
+		t.Errorf("error must point at the sanctioned way out, got: %v", err)
+	}
+}
+
+// The per-tag overrides get the same check. This is the case that
+// motivated it: `workflows.reopenable.state_machine.rules.DONE` was
+// accepted here and inert at runtime.
+func TestTaskConfig_WorkflowOverrideRuleFromTerminalStatusRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.Workflows = map[string]WorkflowOverride{
+		"reopenable": {
+			StateMachine: &WorkflowDefinition{
+				Rules: map[string][]string{"DONE": {"TODO"}},
+			},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for override rule out of terminal status DONE, got nil")
+	}
+	if !strings.Contains(err.Error(), "reopenable") {
+		t.Errorf("error must name the override tag, got: %v", err)
+	}
+}
+
+// Terminal statuses remain legal as rule TARGETS — that is how a task
+// reaches DONE at all. Only the FROM side is rejected, so this check
+// cannot creep into forbidding completion.
+func TestTaskConfig_TerminalStatusAllowedAsRuleTarget(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Task.StateMachine.Rules["TODO"] = []string{"IN_PROGRESS", "DONE", "SKIPPED"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("terminal status as a rule target must stay valid, got: %v", err)
+	}
+}
+
+// The built-in rule set keys only off TODO and IN_PROGRESS, both
+// non-terminal, so the default config must survive the new check.
+func TestTaskConfig_DefaultsSurviveTerminalFromCheck(t *testing.T) {
+	cfg := DefaultConfig()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config must validate, got: %v", err)
 	}
 }

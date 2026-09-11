@@ -84,6 +84,10 @@ No daemon required.
 - **Auto-fired on `tlc task list`**: after filtering, before rendering, any task with
   `IsStale() == true` and `StaleFiredAt == nil` triggers `RunStaleHooks` and records
   `StaleFiredAt`; subsequent `task list` calls are no-ops until the crossing resets
+- **Row output only**: an aggregate format (`--summary` / `--counters`, however
+  spelled) fires no hooks and writes no `StaleFiredAt`. Counts never read that
+  field, and `task list` is annotated `kit/side-effect: read` — a hook exec plus
+  a write transaction per stale task is not a read
 - Crossing resets naturally: any task update advances `UpdatedAt` and sets
   `StaleFiredAt = nil`; staleness is re-evaluated on the next `task list` run
 - `tlc task stale --run-hooks` forces re-fire regardless of `stale_fired_at`
@@ -164,7 +168,18 @@ Rules:
   - substring search on title
   - `--stale` — post-query: keep only tasks where `IsStale()` is true
     (applies project `stale.default_timeout` to tasks with no per-task timeout)
-  - `--blocked` — post-query: keep only tasks where `BlockedReason` is non-empty
+  - `--blocked` — column predicate: `blocked_reason IS NOT NULL AND blocked_reason != ''`
+  - `--overdue` — column predicate: `due_at < now AND status NOT IN ('DONE', 'SKIPPED')`.
+    One definition, expressed in SQL, shared by `task list --overdue` and
+    `tlc status`; a finished task past its due date is not overdue.
+
+Aggregate output (`--summary`, `--counters`, and the same two as
+`--format` values or a config `output.format`) counts the whole match set,
+never a page of it: `--limit`/`--offset` are dropped before the query, since a
+count truncated at the page size is indistinguishable from a real one. Where
+every filter is a column predicate the count is a single SQL aggregate;
+`--stale`, `--blocked-by`, and qualified track IDs are decided in Go, so those
+count a fully-filtered, unpaginated slice instead.
 
 #### Query Operators
 
@@ -1023,7 +1038,9 @@ task:
 ### Hook Firing Lifecycle
 
 - `stale_fired_at` records when hooks last fired for a task.
-- Auto-fired during `tlc task list` — once per stale crossing (guarded by `StaleFiredAt == nil`).
+- Auto-fired during `tlc task list` row output — once per stale crossing (guarded by
+  `StaleFiredAt == nil`). Aggregate formats (`--summary` / `--counters`) skip the
+  bookkeeping entirely: no hook fires and no `stale_fired_at` is written.
 - Cleared on any `tlc task update` — `StaleFiredAt` set to nil; stale clock resets with `updated_at`.
 - `tlc task stale --run-hooks` re-fires hooks for all currently-stale tasks regardless of
   `stale_fired_at`.

@@ -93,14 +93,6 @@ func ParseTransitionJSON(data []byte) (*TransitionIntent, error) {
 	return &t, nil
 }
 
-// validStatuses enumerates accepted task status values.
-var validStatuses = map[string]bool{
-	"TODO":        true,
-	"IN_PROGRESS": true,
-	"DONE":        true,
-	"SKIPPED":     true,
-}
-
 // validateCreate checks title is non-empty and enums are valid.
 func validateCreate(r *ParseResult) error {
 	if strings.TrimSpace(r.Title) == "" {
@@ -109,39 +101,62 @@ func validateCreate(r *ParseResult) error {
 				"add a non-empty title field",
 		)
 	}
-	if r.Status != "" && !validStatuses[r.Status] {
+	// Each gate below validates through core and names its allowed set
+	// from the same effective vocabulary, rather than keeping the inbox's
+	// own copy. The status map that used to live here predated any
+	// trustworthy shared helper; keeping it meant a project declaring
+	// IN_REVIEW had the CLI accept the status and the inbox reject it.
+	// The retyped priority list is the same defect caught in the act — it
+	// read "P0, P1, P2, P3, P4", and P4 has never been a tlc priority.
+	if !core.ValidTaskStatus(core.TaskStatus(r.Status)) {
 		return fmt.Errorf(
-			"inbox create: invalid status %q; "+
-				"allowed: TODO, IN_PROGRESS, DONE, SKIPPED",
+			"inbox create: invalid status %q; allowed: %s",
 			r.Status,
+			core.TaskStatusVocabularyList(),
 		)
 	}
-	if r.Priority != "" && !core.ValidPriority(
-		core.Priority(r.Priority),
-	) {
+	if !core.ValidPriority(core.Priority(r.Priority)) {
 		return fmt.Errorf(
-			"inbox create: invalid priority %q; "+
-				"allowed: P0, P1, P2, P3, P4",
+			"inbox create: invalid priority %q; allowed: %s",
 			r.Priority,
+			core.PriorityVocabularyList(),
 		)
 	}
-	if r.Effort != "" && !core.ValidEffort(
-		core.Effort(r.Effort),
-	) {
+	if !core.ValidEffort(core.Effort(r.Effort)) {
 		return fmt.Errorf(
-			"inbox create: invalid effort %q; "+
-				"allowed: XS, S, M, L, XL",
+			"inbox create: invalid effort %q; allowed: %s",
 			r.Effort,
+			core.EffortVocabularyList(),
 		)
 	}
 	return nil
 }
 
-// applyCreateDefaults sets Status to "TODO" when not specified.
+// applyCreateDefaults resolves the status a drop that nominated none
+// lands in.
+//
+// Through core, for the same reason validateCreate above reads
+// core.ValidTaskStatus rather than its own map: `tlc task create`
+// resolves its default through this call, and a literal here would put
+// the two intake paths back into disagreement one line below the gate
+// that was fixed to end it. A project declaring OPEN/DOING/SHIPPED got a
+// file drop whose status was outside its own vocabulary — and, having
+// never been declared, one the state machine had no transition out of.
+//
+// The built-in is the fallback rather than the literal simply being
+// deleted. ValidTaskStatus admits "" by contract, so an unresolved
+// default would pass validation and land a task with no status at all;
+// a library consumer that registers no config provider still needs a
+// usable one.
 func applyCreateDefaults(r *ParseResult) {
-	if r.Status == "" {
-		r.Status = "TODO"
+	if r.Status != "" {
+		return
 	}
+	if configured := core.ConfiguredInitialTaskStatus(); configured != "" {
+		r.Status = configured
+		return
+	}
+	r.Status = string(core.StatusTodo)
 }
 
 // validateTransition checks that id and status are non-empty.
@@ -157,11 +172,14 @@ func validateTransition(t *TransitionIntent) error {
 				"add a non-empty status field",
 		)
 	}
-	if !validStatuses[t.Status] {
+	// The second status gate, and it has to read the same vocabulary as
+	// the create gate above. Fixing only one leaves a config-declared
+	// status that can be created but never transitioned to.
+	if !core.ValidTaskStatus(core.TaskStatus(t.Status)) {
 		return fmt.Errorf(
-			"inbox transition: invalid status %q; "+
-				"allowed: TODO, IN_PROGRESS, DONE, SKIPPED",
+			"inbox transition: invalid status %q; allowed: %s",
 			t.Status,
+			core.TaskStatusVocabularyList(),
 		)
 	}
 	return nil

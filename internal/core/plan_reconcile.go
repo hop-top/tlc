@@ -67,8 +67,19 @@ func (s *TrackService) ReconcileTasksFromPlan(
 		result:     &ReconcileResult{},
 		specTitles: make(map[string]bool, len(specs)),
 	}
-	for _, sp := range specs {
+	for i, sp := range specs {
 		rc.specTitles[sp.Title] = true
+		// Same hard preflight as CreateTasksFromPlan, and here it also
+		// covers the UPDATE half: applySpecToTask assigns spec.Tags over
+		// whatever the task carried, so an unchecked reconcile would be
+		// the way a disallowed tag reaches an EXISTING task. Checked for
+		// every spec before any is processed, so a rejected plan leaves
+		// the mapping untouched rather than half-reconciled.
+		if err := ValidateTags(sp.Tags); err != nil {
+			return nil, fmt.Errorf(
+				"reconcile: plan task %d (%q): %w", i, sp.Title, err,
+			)
+		}
 	}
 
 	if err := rc.loadExistingTasks(); err != nil {

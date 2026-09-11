@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hop.top/kit/go/console/output"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/rpc"
 	"hop.top/tlc/internal/sync"
@@ -96,7 +97,7 @@ func autoConfigureGitHub(directionHint string) error {
 
 	// Check existing configuration
 	existingRepo := viper.GetString("sync.github.repo")
-	existingDirection := viper.GetString("sync.github.direction")
+	existingDirection := viper.GetString("sync.github.sync_direction")
 
 	// Determine if we need to update configuration
 	needsUpdate := false
@@ -128,7 +129,7 @@ func autoConfigureGitHub(directionHint string) error {
 	}
 
 	if newDirection != existingDirection {
-		viper.Set("sync.github.direction", newDirection)
+		viper.Set("sync.github.sync_direction", newDirection)
 		needsUpdate = true
 	}
 
@@ -141,39 +142,30 @@ func autoConfigureGitHub(directionHint string) error {
 		viper.Set("sync.github.use_gh_auth", true)
 	}
 
-	// Save to config file
-	// Prefer .tlc/config.yaml in current directory
-	configFile := viper.ConfigFileUsed()
-	if configFile == "" {
-		// Check if .tlc directory exists
-		if _, err := os.Stat(".tlc"); os.IsNotExist(err) {
-			// No .tlc directory, use .tlc.yaml in current directory
-			configFile = ".tlc.yaml"
-		} else {
-			// .tlc directory exists, use config.yaml inside it
-			configFile = filepath.Join(".tlc", "config.yaml")
-		}
-		viper.SetConfigFile(configFile)
+	// Resolve the write target through the shared helper so the file lands
+	// on the config cascade (the loaded file, else the user config dir) and
+	// never in the process working directory.
+	target, err := config.PrepareViperForWrite(viper.GetViper())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not resolve a writable config file: %v\n", err)
+		return nil
 	}
 
-	// Write message BEFORE attempting to save (in case write fails silently)
+	if err := viper.WriteConfig(); err != nil {
+		if err := viper.SafeWriteConfig(); err != nil {
+			// Auto-configuration is a convenience alongside the sync it
+			// precedes; a failed write must not fail the sync itself.
+			fmt.Fprintf(os.Stderr, "Warning: could not save config to %s: %v\n", target, err)
+			return nil
+		}
+	}
+
+	// Report only after the write actually landed, so a success line is
+	// never printed alongside a warning contradicting it.
 	if existingRepo == "" && existingDirection == "" {
 		fmt.Printf("✓ Auto-configured GitHub sync for repo: %s (%s)\n", repo, newDirection)
 	} else if newDirection != existingDirection {
 		fmt.Printf("✓ Updated GitHub sync direction from %s to %s\n", existingDirection, newDirection)
-	}
-
-	if err := viper.WriteConfig(); err != nil {
-		// If config doesn't exist, create it
-		if os.IsNotExist(err) || strings.Contains(err.Error(), "Not Found") {
-			if err := viper.SafeWriteConfig(); err != nil {
-				// Don't fail on config write errors - just warn
-				fmt.Fprintf(os.Stderr, "Warning: Could not save config: %v\n", err)
-			}
-		} else {
-			// Don't fail on config write errors - just warn
-			fmt.Fprintf(os.Stderr, "Warning: Could not update config: %v\n", err)
-		}
 	}
 
 	return nil
@@ -227,6 +219,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 	params := map[string]interface{}{
 		"repo":         viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
 		"last_sync_at": lastSyncAt,
+		"vocabulary":   buildSyncVocabulary(),
 	}
 
 	var result struct {
@@ -488,8 +481,9 @@ Example:
 		defer func() { _ = client.Close() }()
 
 		params := map[string]interface{}{
-			"repo":  viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
-			"tasks": tasks,
+			"repo":       viper.GetString(fmt.Sprintf("sync.%s.repo", system)),
+			"tasks":      tasks,
+			"vocabulary": buildSyncVocabulary(),
 		}
 
 		var result struct {
