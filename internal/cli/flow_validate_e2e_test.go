@@ -73,27 +73,11 @@ func TestFlowValidate_E2E_InvalidCycle(t *testing.T) {
 }
 
 // findFixture resolves a fixture path relative to examples/flows/fixtures/
-// by walking up from the test file location to the repo root.
+// in the repo root.
 func findFixture(t *testing.T, rel string) string {
 	t.Helper()
 
-	// Walk up to find repo root (has go.mod).
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not find repo root (go.mod)")
-		}
-		dir = parent
-	}
-
-	path := filepath.Join(dir, "examples", "flows", "fixtures", rel)
+	path := filepath.Join(testRepoRoot(t), "examples", "flows", "fixtures", rel)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("fixture not found: %s", path)
 	}

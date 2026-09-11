@@ -13,23 +13,49 @@ import (
 // escape sequences embedded in table cell data corrupt runewidth
 // calculations and truncate visible content.
 //
-// After the suite, it fails the run if a test dropped a config file into
-// the package directory. Several commands persist configuration with
-// viper.WriteConfig, which falls back to ".tlc.yaml" in the process
-// working directory when no config file is set. A test that reaches such
-// a command without chdir'ing away writes a real config file into the
-// source tree: it shows up untracked in git status, and any later run in
-// that directory discovers it as a project config and inherits its state.
-// Tests that exercise those paths must chdir into a temp directory and
-// point viper at a config path inside it.
+// It also moves the suite's working directory out of the source tree
+// before running, and fails the run afterwards if a config file landed
+// in the package directory anyway.
+//
+// The chdir is the fix, not a workaround. Project detection creates a
+// config file on first use when none is found — `project.fallback_mode:
+// auto` is the documented default — so a command run with no ambient
+// project legitimately writes one into the working directory. Go sets
+// that directory to the package source directory, so the write lands in
+// internal/cli/. Sandboxing the individual test that trips it first does
+// not help: detection and DB sync both latch through sync.Once, so the
+// write simply migrates to whichever test wins the race next. Moving the
+// whole process out of the tree once, before any test runs, sends every
+// such write to a temp directory instead.
+//
+// The post-run guard stays as a regression net for the other shape of
+// the same leak: a command that reaches viper.WriteConfig with no config
+// file set falls back to ".tlc.yaml" in the working directory. A test
+// that chdirs into the package directory and then triggers one would
+// reintroduce the stray file the chdir prevents.
 func TestMain(m *testing.M) {
 	os.Setenv("COLORTERM", "truecolor")
 
-	// Resolve before running: a test may leave the process in another
-	// directory, and the check must target the package directory itself.
+	// Capture before the chdir below: the helpers that locate repo
+	// fixtures walk up from here, and the post-run check must target the
+	// package directory itself rather than wherever the suite ended up.
 	pkgDir, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "TestMain: getwd: %v\n", err)
+		os.Exit(1)
+	}
+	testPkgDir = pkgDir
+
+	// Run outside the source tree. A config file the suite legitimately
+	// creates then lands in a temp directory that goes away with the
+	// process, instead of in the checkout.
+	runDir, err := os.MkdirTemp("", "tlc-cli-suite")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: tempdir: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.Chdir(runDir); err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: chdir %s: %v\n", runDir, err)
 		os.Exit(1)
 	}
 
@@ -49,7 +75,51 @@ func TestMain(m *testing.M) {
 		}
 	}
 
+	// Leave the temp run directory before removing it: a process cannot
+	// reliably operate from a deleted directory, and the removal is
+	// best-effort anyway — the OS reclaims it if this fails.
+	if err := os.Chdir(pkgDir); err == nil {
+		os.RemoveAll(runDir)
+	}
+
 	os.Exit(code)
+}
+
+// testPkgDir is the package source directory, captured in TestMain
+// before the suite chdirs out of the tree.
+//
+// Helpers that resolve repo-relative paths must start from here rather
+// than from os.Getwd: the suite runs from a temp directory, and
+// individual tests chdir freely on top of that, so the working
+// directory says nothing about where the checkout is.
+var testPkgDir string
+
+// testRepoRoot returns the repo root — the nearest ancestor of the
+// package source directory holding go.mod.
+//
+// Three helpers used to each walk up from os.Getwd for this. They are
+// one function now, anchored to testPkgDir, so none of them depends on
+// where the process happens to be standing.
+//
+// Distinct from cli.repoRoot (agent_helpers.go), which returns the
+// working directory or "/workspace" depending on agent run mode.
+func testRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	if testPkgDir == "" {
+		t.Fatal("testRepoRoot: package directory not captured; TestMain must run first")
+	}
+	dir := testPkgDir
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("no go.mod found above %s", testPkgDir)
+		}
+		dir = parent
+	}
 }
 
 // strayConfigNames are the config paths viper writes when no explicit
