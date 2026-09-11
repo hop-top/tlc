@@ -1,22 +1,17 @@
 version: 2
 project_name: tlc
 
-# Tags are shaped `tlc/v<version>` (release-please monorepo
-# convention). GoReleaser's `monorepo:` block strips this natively
-# but is Pro-only. The goreleaser-on-tag.yml reusable workflow in
-# hop-top/.github sidesteps this by synthesizing a local `v<bare>`
-# git tag at the same commit and setting GORELEASER_CURRENT_TAG to
-# it, so {{.Version}} and {{.Tag}} resolve normally in this file.
+# Tags are plain `v<version>` (root-artifact repo — single
+# component at the repo root, no component prefix). GoReleaser
+# parses them directly as semver, so {{.Version}} and {{.Tag}}
+# resolve with no rewriting: the goreleaser-on-tag.yml reusable
+# workflow in hop-top/.github skips its tag-synthesis step when the
+# real tag is already bare.
 #
-# The reusable workflow also disables GoReleaser's own release
-# publishing (release.disable: true below) and uploads the dist/*
-# artifacts to the real release-please-created release afterwards
-# via `gh release upload`. The release tag itself stays as
-# `tlc/v<version>` — only the value GoReleaser sees is rewritten.
-#
-# RELEASE_TAG env var holds the real prefixed tag and is used in
-# the Homebrew formula URL, where the asset path must match the
-# real GitHub Release tag.
+# The reusable workflow still uploads dist/* to the
+# release-please-created release via `gh release upload`, so
+# `release.disable: true` below remains mandatory — GoReleaser OSS
+# must not also try to publish.
 #
 # Reference: https://github.com/hop-top/.github/blob/main/docs/binaries/go.md
 
@@ -66,9 +61,6 @@ homebrew_casks:
     description: "tlc — deterministic task management for terminal AI workflows."
     license: MIT
     binaries: [tlc]
-    # {{ .Env.RELEASE_TAG }} is the literal `tlc/v<version>` tag,
-    # which is the path segment GitHub Releases use for asset
-    # downloads. {{.Tag}} here would resolve to the synthesized
-    # bare tag — wrong for the URL.
-    url:
-      template: "https://github.com/hop-top/tlc/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
+    # No url template override: with plain `v<version>` tags there is
+    # no synthesized tag, so GoReleaser's default asset URL (built
+    # from {{ .Tag }}) already matches the real GitHub Release path.

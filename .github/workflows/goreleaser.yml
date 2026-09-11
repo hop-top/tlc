@@ -2,7 +2,7 @@ name: goreleaser
 
 on:
   push:
-    tags: ['tlc/v*']
+    tags: ['v*']
 
 jobs:
   goreleaser:
