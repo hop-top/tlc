@@ -77,6 +77,7 @@ SHIMS = claude codex gemini copilot opencode fabric llm \
 build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 	@echo "$(COLOR_BLUE)Building flowtest shims...$(COLOR_RESET)"
 	@mkdir -p $(SHIMS_BIN_DIR)
+	@find $(SHIMS_BIN_DIR) -mindepth 1 ! -name .gitignore -delete
 	@for shim in $(SHIMS); do \
 		go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/$$shim ./internal/flowtest/shims/$$shim/ || exit 1; \
 		echo "  built $$shim"; \

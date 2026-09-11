@@ -70,11 +70,13 @@ func TestExtractShimsPassthroughSymlinkTarget(t *testing.T) {
 	}
 
 	if built["passthrough"] {
-		t.Errorf("embedded shim set contains bare %q; helper shims must use the %q name",
+		t.Errorf("embedded shim set contains bare %q; helper shims must use the %q name "+
+			"(likely a stale binary from an older build — run `make build-shims`)",
 			"passthrough", shimPassthroughName)
 	}
 	if !built[shimPassthroughName] {
-		t.Fatalf("embedded shim set missing %s; got %v", shimPassthroughName, keys(built))
+		t.Fatalf("embedded shim set missing %s; run `make build-shims` to rebuild; got %v",
+			shimPassthroughName, keys(built))
 	}
 
 	sb := &Sandbox{BinDir: t.TempDir()}
