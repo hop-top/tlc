@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	gotoken "go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -164,7 +163,7 @@ var knownDeadPaths = map[string]string{
 // that every leaf yaml path is named by some consumer outside
 // internal/config.
 func TestConfigFieldsHaveReaders(t *testing.T) {
-	root := configRepoRoot(t)
+	root := testRepoRoot(t)
 
 	idx := newConsumerIndex(t, root)
 
@@ -219,7 +218,7 @@ Fix one of three ways, in order of preference:
 // real reader, is stale and must be removed. Without this, the allowlist
 // silently grows into a place where dead fields go to hide.
 func TestConfigAllowlistIsCurrent(t *testing.T) {
-	root := configRepoRoot(t)
+	root := testRepoRoot(t)
 	idx := newConsumerIndex(t, root)
 
 	live := make(map[string]configLeaf)
@@ -245,7 +244,7 @@ func TestConfigAllowlistIsCurrent(t *testing.T) {
 // place for dead fields to hide, which is the failure this whole file
 // exists to prevent.
 func TestConfigKnownDeadPathsAreStillDead(t *testing.T) {
-	root := configRepoRoot(t)
+	root := testRepoRoot(t)
 	idx := newConsumerIndex(t, root)
 
 	live := make(map[string]configLeaf)
@@ -586,25 +585,4 @@ func (c *consumerIndex) noteSelector(node *ast.SelectorExpr, pkgNames map[string
 // only config-importing files contribute selectors at all.
 func (c *consumerIndex) hasSelector(field string) bool {
 	return c.selectors[field]
-}
-
-// configRepoRoot walks up from the test's working directory to the
-// directory holding go.mod.
-func configRepoRoot(t *testing.T) string {
-	t.Helper()
-
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("no go.mod found above %s", dir)
-		}
-		dir = parent
-	}
 }

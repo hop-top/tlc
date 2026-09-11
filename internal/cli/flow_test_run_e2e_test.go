@@ -70,7 +70,7 @@ steps:
 // happy-path/contracts/*.yaml exist on disk.
 func TestFlowTestRun_ContractFixtureStructure(t *testing.T) {
 	fixtureBase := filepath.Join(
-		"..", "..", "examples", "flows", "fixtures",
+		testRepoRoot(t), "examples", "flows", "fixtures",
 		"test-run", "happy-path",
 	)
 
