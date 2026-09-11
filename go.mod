@@ -29,7 +29,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.0
-	hop.top/kit v0.5.0-alpha.4
+	hop.top/kit v0.5.0-alpha.5
 	hop.top/vstar v0.0.0-20260526030101-766e6e3a0692
 	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.48.2
@@ -37,7 +37,6 @@ require (
 
 require (
 	cel.dev/expr v0.25.1 // indirect
-	charm.land/fang/v2 v2.0.1 // indirect
 	connectrpc.com/connect v1.19.1 // indirect
 	filippo.io/age v1.3.1 // indirect
 	filippo.io/hpke v0.4.0 // indirect
@@ -93,6 +92,7 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/hashicorp/mdns v1.0.6 // indirect
+	github.com/hop-top/fang/v2 v2.0.2-hop.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
