@@ -178,7 +178,7 @@ func confirmBatch(cmd *cobra.Command, tasks []*uri.ResolvedTask, pattern string)
 		),
 	).WithOutput(cmd.OutOrStdout()).Run()
 	if err != nil {
-		return err
+		return fmt.Errorf("confirmation prompt: %w", err)
 	}
 	if !confirmed {
 		return fmt.Errorf("aborted")

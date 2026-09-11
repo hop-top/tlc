@@ -208,7 +208,7 @@ var ProjectListCmd = &cobra.Command{
 		switch format {
 		case formatJSON, formatYAML:
 			if err := output.Render(cmd.OutOrStdout(), format, projects); err != nil {
-				return err
+				return err //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 			}
 		default:
 			renderProjectTable(cmd, projects)

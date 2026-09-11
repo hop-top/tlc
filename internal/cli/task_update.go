@@ -345,7 +345,10 @@ func publishDeletePrePersisted(ctx context.Context, taskID string) error {
 		EntityID: taskID,
 	}
 	ev := bus.NewEvent("kit.runtime.entity.pre_persisted", "tlc.task.cli", payload)
-	return b.Publish(ctx, ev)
+	if err := b.Publish(ctx, ev); err != nil {
+		return fmt.Errorf("publish pre-delete event: %w", err)
+	}
+	return nil
 }
 
 // policyAsCLIError returns a *output.Error envelope (CONFLICT, exit 4)

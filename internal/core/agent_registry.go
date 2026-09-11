@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -67,12 +68,12 @@ func (r *AgentRegistry) LoadDefaults() error {
 		return fmt.Errorf("agent registry: cannot determine home dir: %w", err)
 	}
 	globalPath := filepath.Join(home, ".config", "tlc", "agents.yaml")
-	if err := r.loadGlobal(globalPath); err != nil && !os.IsNotExist(err) {
+	if err := r.loadGlobal(globalPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 
 	projectPath := filepath.Join(".tlc", "agents.yaml")
-	if err := r.loadProject(projectPath); err != nil && !os.IsNotExist(err) {
+	if err := r.loadProject(projectPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -226,7 +227,7 @@ func copyConfig(c *AgentConfig) *AgentConfig {
 func parseAgentFile(path string) (map[string]*AgentConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("agent registry: read %s: %w", path, err)
 	}
 	var f agentConfigFile
 	if err := yaml.Unmarshal(data, &f); err != nil {

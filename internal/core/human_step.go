@@ -25,7 +25,7 @@ import (
 func encodeJSON(v any) (io.Reader, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode webhook payload: %w", err)
 	}
 	return bytes.NewReader(b), nil
 }
@@ -156,12 +156,12 @@ func (h *HTTPWebhookFirer) Fire(ctx context.Context, url string, payload map[str
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
-		return err
+		return fmt.Errorf("build webhook request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("post webhook %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
@@ -234,7 +234,7 @@ func (g *HumanStepGate) Wait(ctx context.Context) (ApprovalAudit, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return ApprovalAudit{}, ctx.Err()
+			return ApprovalAudit{}, ctx.Err() //nolint:wrapcheck // context.Canceled/DeadlineExceeded surface verbatim for caller sentinel checks
 		case a := <-g.resolved:
 			return a, g.persist(ctx, a)
 		case <-timeoutCh:

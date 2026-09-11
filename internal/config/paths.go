@@ -29,7 +29,7 @@ func UserDataDir() string {
 // UserCacheDir returns the user-level cache directory for tlc
 // via kit/xdg.CacheDir.
 func UserCacheDir() (string, error) {
-	return xdg.CacheDir(toolName)
+	return xdg.CacheDir(toolName) //nolint:wrapcheck // thin xdg alias; kit error already names the tool and dir
 }
 
 // EnsureCacheDir returns the cache directory path, creating it if needed.
@@ -58,7 +58,7 @@ func EnsureCacheDir() (string, error) {
 func UserStateDir() (string, error) {
 	dir, err := xdg.StateDir(toolName)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("resolve state dir: %w", err)
 	}
 	if runtime.GOOS == "darwin" && os.Getenv("XDG_STATE_HOME") == "" {
 		dir = filepath.Join(dir, "state")
@@ -83,7 +83,7 @@ func EnsureStateDir() (string, error) {
 // UserConfigDir returns the user-level config directory for tlc
 // via kit/xdg.ConfigDir.
 func UserConfigDir() (string, error) {
-	return xdg.ConfigDir(toolName)
+	return xdg.ConfigDir(toolName) //nolint:wrapcheck // thin xdg alias; kit error already names the tool and dir
 }
 
 func UserConfigPath() (string, error) {

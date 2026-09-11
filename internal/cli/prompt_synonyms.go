@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -85,7 +86,7 @@ func loadSynonyms() *synonymsFile {
 func writeSynonyms(sf *synonymsFile, path string) error {
 	data, err := yaml.Marshal(sf)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal synonyms: %w", err)
 	}
 	return os.WriteFile(path, data, 0o644)
 }

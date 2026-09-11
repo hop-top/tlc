@@ -179,7 +179,7 @@ func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow
 	if _, err := os.Stat(input); err == nil {
 		f, err := os.Open(input)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("open flow file %s: %w", input, err)
 		}
 		defer f.Close()
 		flow, err := core.ParseFlow(f, input)

@@ -30,7 +30,10 @@ var routePromptFn = routePrompt
 // classify -> route -> execute pipeline.
 func runNLPrompt(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return cmd.Help()
+		if err := cmd.Help(); err != nil {
+			return fmt.Errorf("render help: %w", err)
+		}
+		return nil
 	}
 
 	prompt := strings.Join(args, " ")

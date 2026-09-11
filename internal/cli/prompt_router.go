@@ -177,7 +177,11 @@ func resolveFromConfig(cfg llm.ResolvedConfig) (llm.Provider, error) {
 	if cfg.Provider.APIKey != "" {
 		uri += "?api_key=" + cfg.Provider.APIKey
 	}
-	return llm.Resolve(uri)
+	client, err := llm.Resolve(uri)
+	if err != nil {
+		return nil, fmt.Errorf("resolve llm provider: %w", err)
+	}
+	return client, nil
 }
 
 // parseRouterResponse extracts []ResolvedCommand and any clarification text

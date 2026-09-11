@@ -26,7 +26,7 @@ func (r *AgentRef) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	case yaml.MappingNode:
 		type plain AgentRef
-		return value.Decode((*plain)(r))
+		return value.Decode((*plain)(r)) //nolint:wrapcheck // Unmarshaler contract; yaml decorates with node position
 	default:
 		return nil
 	}
@@ -50,16 +50,16 @@ func (r *AgentRef) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 	type plain AgentRef
-	return json.Unmarshal(b, (*plain)(r))
+	return json.Unmarshal(b, (*plain)(r)) //nolint:wrapcheck // Unmarshaler contract; json decorates with type + offset
 }
 
 // MarshalJSON emits a plain string when Config is empty, object otherwise.
 func (r AgentRef) MarshalJSON() ([]byte, error) {
 	if len(r.Config) == 0 {
-		return json.Marshal(r.Name)
+		return json.Marshal(r.Name) //nolint:wrapcheck // Marshaler contract; json decorates with type context
 	}
 	type plain AgentRef
-	return json.Marshal(plain(r))
+	return json.Marshal(plain(r)) //nolint:wrapcheck // Marshaler contract; json decorates with type context
 }
 
 // FlowStatus represents the transient state of a flow run.

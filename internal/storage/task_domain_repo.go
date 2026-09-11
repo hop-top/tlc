@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"hop.top/kit/go/runtime/domain"
@@ -45,7 +46,7 @@ func scanTaskFields(s scanner) (core.Task, error) {
 		&staleNs, &blockedReason, &staleFired, &trackID,
 	)
 	if err != nil {
-		return t, err
+		return t, fmt.Errorf("scan task row: %w", err)
 	}
 	populateTask(&t, createdAt, updatedAt, metaStr, tagsStr, originSys,
 		lastSync, projectID, effortStr, priorityStr, staleNs,

@@ -65,7 +65,7 @@ func run(name string) error {
 				"tlc-flow-test: cassette miss for %q: re-run with --record\n", name)
 			os.Exit(2)
 		}
-		return err
+		return fmt.Errorf("cassette record %s: %w", name, err)
 	}
 
 	// Replay sessions return *xrr.RawResponse; record/passthrough return

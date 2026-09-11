@@ -33,7 +33,7 @@ func ScanFlowRun(row *sql.Row) (core.FlowRun, error) {
 	err := row.Scan(&r.ID, &r.FlowID, &r.Status, &startedAt,
 		&endedAt, &resultsStr)
 	if err != nil {
-		return r, err
+		return r, fmt.Errorf("scan flow run row: %w", err)
 	}
 	if err := populateFlowRun(&r, startedAt, endedAt, resultsStr); err != nil {
 		return r, err
@@ -50,7 +50,7 @@ func ScanFlowRunRows(rows *sql.Rows) (core.FlowRun, error) {
 	err := rows.Scan(&r.ID, &r.FlowID, &r.Status, &startedAt,
 		&endedAt, &resultsStr)
 	if err != nil {
-		return r, err
+		return r, fmt.Errorf("scan flow run row: %w", err)
 	}
 	if err := populateFlowRun(&r, startedAt, endedAt, resultsStr); err != nil {
 		return r, err

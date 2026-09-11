@@ -198,7 +198,7 @@ func promptProjectSelection(
 	)
 
 	if err := form.Run(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("project selection prompt: %w", err)
 	}
 
 	result := projects[selected]

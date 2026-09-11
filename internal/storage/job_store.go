@@ -104,7 +104,10 @@ func (s *SQLiteStorage) ListJobs(
 		}
 		jobs = append(jobs, job)
 	}
-	return jobs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate job rows: %w", err)
+	}
+	return jobs, nil
 }
 
 // ClaimNextJob atomically picks the oldest queued job and marks it running.

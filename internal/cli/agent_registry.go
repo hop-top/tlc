@@ -218,7 +218,7 @@ type agentConfigFileShape struct {
 
 func writeAgentEntry(path, name string, cfg *core.AgentConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return fmt.Errorf("create agent config dir: %w", err)
 	}
 
 	file := agentConfigFileShape{Agents: make(map[string]*core.AgentConfig)}
@@ -235,7 +235,7 @@ func writeAgentEntry(path, name string, cfg *core.AgentConfig) error {
 
 	out, err := yaml.Marshal(&file)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal agent config: %w", err)
 	}
 	return os.WriteFile(path, out, 0o644)
 }

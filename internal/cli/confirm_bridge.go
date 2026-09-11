@@ -25,6 +25,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +46,10 @@ func isFlagTrue(cmd *cobra.Command, name string) bool {
 func setConfirmYes(cmd *cobra.Command) error {
 	for c := cmd; c != nil; c = c.Parent() {
 		if f := c.PersistentFlags().Lookup("confirm"); f != nil {
-			return f.Value.Set("yes")
+			if err := f.Value.Set("yes"); err != nil {
+				return fmt.Errorf("set --confirm: %w", err)
+			}
+			return nil
 		}
 	}
 	return nil

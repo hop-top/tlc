@@ -149,7 +149,7 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		for i, r := range rows {
 			out[i] = toTrackListOutput(r.Track, r.State, r.Progress)
 		}
-		return output.Render(cmd.OutOrStdout(), format, out)
+		return output.Render(cmd.OutOrStdout(), format, out) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 	default:
 		cols := effectiveTrackColumns(cmd, statusProvided, trackListAllProjects)
 		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects, cols)

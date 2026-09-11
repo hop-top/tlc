@@ -89,7 +89,7 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 	switch format {
 	case formatJSON, formatYAML:
 		out := buildTrackShowOutput(track, flags, progress, strategy)
-		return output.Render(cmd.OutOrStdout(), format, out)
+		return output.Render(cmd.OutOrStdout(), format, out) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
 	case formatVtodo:
 		return writeVtodo(cmd, tasks, []*core.Track{track}, trackShowOutputPath, trackShowIncludeLogs)
 	default:
