@@ -737,10 +737,15 @@ tlc track show browser-rendering    # by slug
 
 ```bash
 tlc track list
-# Alias   Slug                 Title                     Type     Status
-# L-0001  browser-rendering    Browser rendering         feature  active
-# L-0002  render-v2            Browser rendering two     feature  pending
+# ID      Slug               Title                  Type     Status   State     Progress  Assignee
+# L-0002  render-v2          Browser rendering two  feature  pending  unlinked  0/0       -
+# L-0001  browser-rendering  Browser rendering      feature  active   unlinked  0/0       -
 ```
+
+On a narrow terminal the Slug column is the first to be dropped, and a long
+slug is clipped with an ellipsis to keep the other columns on screen. That
+is display only — `tlc track show` and `-f json` always carry the full
+slug, so a script never reads a clipped value.
 
 `tlc track create` derives the slug from the title, or takes one via
 `--id`:
