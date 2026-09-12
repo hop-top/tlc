@@ -40,6 +40,7 @@ var (
 	taskListOutput        string
 	taskListIncludeLogs   bool
 	taskListGroupBy       string
+	taskListGroupLimit    int
 
 	taskShowOutput      string
 	taskShowIncludeLogs bool

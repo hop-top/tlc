@@ -135,6 +135,23 @@ type listOptions struct {
 	// listing. Validated by the caller via ValidGroupByKey; an unknown
 	// key here degrades to ungrouped rather than rendering nothing.
 	groupBy string
+
+	// groupLimit caps the rows rendered WITHIN each group. Zero or
+	// negative means no cap — the zero value must mean "unset", not
+	// "render nothing", or a config-supplied default would silently
+	// blank every section.
+	//
+	// Deliberately NOT --limit. --limit caps the match set fetched from
+	// the store, before grouping; this caps what each group shows after
+	// it, which is the only way every group stays represented when one
+	// of them holds most of the rows.
+	groupLimit int
+
+	// partialMatchSet records that the fetched rows are a --limit page
+	// of the matches, not all of them. It changes nothing about what
+	// renders — only whether the per-group totals are qualified. See
+	// renderGroupedTables.
+	partialMatchSet bool
 }
 
 // listOption mutates listOptions. See withGroupBy.
@@ -145,6 +162,20 @@ type listOption func(*listOptions)
 // forward an unset flag unconditionally.
 func withGroupBy(key string) listOption {
 	return func(o *listOptions) { o.groupBy = key }
+}
+
+// withGroupLimit caps the rows rendered within each group at n. Zero or
+// negative is no cap, so callers forward an unset flag unconditionally.
+// Meaningless without withGroupBy, and the command rejects that
+// combination before reaching here.
+func withGroupLimit(n int) listOption {
+	return func(o *listOptions) { o.groupLimit = n }
+}
+
+// withPartialMatchSet declares that --limit truncated the match set, so
+// per-group totals count only the fetched rows.
+func withPartialMatchSet(partial bool) listOption {
+	return func(o *listOptions) { o.partialMatchSet = partial }
 }
 
 // formatTasks is the SINGLE chokepoint for `task list`-shaped row
@@ -184,9 +215,13 @@ func formatTasks(
 		// same listing.
 		cols := effectiveTaskColumns(cmd, statusProvided)
 		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
-			renderGroupedTables(out, groups, cols)
+			renderGroupedTables(out, groups, cols, o)
 			return nil
 		}
+		// --group-limit is NOT consulted here. It caps rows within a
+		// group, and an ungrouped listing has none; applying it would
+		// silently truncate a plain `task list`, which is a data loss
+		// the user did not ask for and cannot see.
 		renderTable(out, tasks, cols)
 	}
 	return nil
@@ -204,17 +239,36 @@ func formatTasks(
 // over 2 tasks reads as a duplication bug; with it, the duplication is
 // stated. When the counts agree the line carries no information and is
 // omitted rather than printed as redundant noise.
-func renderGroupedTables(w io.Writer, groups []TaskGroup, cols []string) {
+//
+// TRUNCATION IS ANNOUNCED, never silent. o.groupLimit caps each group's
+// rows, and a capped group's heading carries "(shown of total)" so the
+// reader can see rows were withheld. A group that fits under the cap is
+// NOT annotated: "(2 of 2)" states nothing, and an annotation printed
+// unconditionally stops meaning "there is more".
+//
+// The counts the footer and the headings report are counts of RENDERED
+// rows and of the FETCHED match set respectively — never of the store.
+// When --limit truncated that match set, o.partialMatchSet is set and a
+// trailing note says the totals are partial. Printing "2 of 5" off a
+// truncated fetch would state a group size that is not the group's size,
+// the same defect noteIgnoredPagination exists to prevent for counts.
+func renderGroupedTables(w io.Writer, groups []TaskGroup, cols []string, o listOptions) {
 	rows := 0
+	truncated := false
 	distinct := make(map[string]struct{})
 	for i, g := range groups {
 		if i > 0 {
 			_, _ = fmt.Fprintln(w)
 		}
-		_, _ = fmt.Fprintln(w, groupHeading(g.Name))
-		renderTable(w, g.Tasks, cols)
-		rows += len(g.Tasks)
-		for _, t := range g.Tasks {
+		shown := g.Tasks
+		if o.groupLimit > 0 && len(shown) > o.groupLimit {
+			shown = shown[:o.groupLimit]
+			truncated = true
+		}
+		_, _ = fmt.Fprintln(w, groupHeading(groupTitle(g.Name, len(shown), len(g.Tasks))))
+		renderTable(w, shown, cols)
+		rows += len(shown)
+		for _, t := range shown {
 			if t != nil {
 				distinct[t.ID] = struct{}{}
 			}
@@ -223,6 +277,22 @@ func renderGroupedTables(w io.Writer, groups []TaskGroup, cols []string) {
 	if rows > len(distinct) {
 		_, _ = fmt.Fprintf(w, "\n%d rows, %d distinct tasks\n", rows, len(distinct))
 	}
+	// Only when a total was actually printed: with nothing truncated
+	// there is no "of N" on screen for the note to qualify, and an
+	// unconditional disclaimer is noise a reader learns to skip.
+	if truncated && o.partialMatchSet {
+		_, _ = fmt.Fprintf(w,
+			"\nnote: group totals are partial; --limit truncated the match set before grouping\n")
+	}
+}
+
+// groupTitle renders a group's heading text, appending the shown/total
+// count only when rows were withheld.
+func groupTitle(name string, shown, total int) string {
+	if shown >= total {
+		return name
+	}
+	return fmt.Sprintf("%s (%d of %d)", name, shown, total)
 }
 
 // groupHeading styles a group name as a section title. titleStyle is the

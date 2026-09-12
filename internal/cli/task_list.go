@@ -47,6 +47,15 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 			return unknownGroupByError(taskListGroupBy)
 		}
 
+		// --group-limit caps rows WITHIN a group, so without a grouping
+		// dimension there is nothing for it to cap. Accepting it there
+		// would leave the user believing their listing was capped when
+		// it was not: the flag would parse, exit 0, and do nothing.
+		if taskListGroupLimit != 0 && taskListGroupBy == "" {
+			return fmt.Errorf("--group-limit caps rows within each group and needs --group-by; " +
+				"add --group-by <dimension>, or use --limit to cap the whole listing")
+		}
+
 		query := core.Query{
 			Limit:           taskListLimit,
 			Offset:          taskListOffset,
@@ -276,8 +285,18 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 		// from several paths and each extra branch is a chance for two
 		// of them to render differently. Aggregate formats above are
 		// deliberately excluded — they emit counts, not rows.
+		// A match set that came back exactly at the limit is
+		// indistinguishable from one that was truncated by it, so it is
+		// treated as truncated. Over-disclosing costs one stderr-shaped
+		// note on an exact-fit listing; under-disclosing prints per-group
+		// totals that are not the groups' totals, with nothing on screen
+		// to say so — the asymmetry noteIgnoredPagination settles the
+		// same way.
+		partial := taskListLimit > 0 && len(tasks) >= taskListLimit
 		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided,
-			withGroupBy(taskListGroupBy))
+			withGroupBy(taskListGroupBy),
+			withGroupLimit(taskListGroupLimit),
+			withPartialMatchSet(partial))
 	},
 }
 
@@ -426,6 +445,10 @@ func init() {
 	// registration in registerFlagEnums is what renders them, into help,
 	// the parse rejection and shell completion alike. See GroupByKeys.
 	TaskListCmd.Flags().StringVar(&taskListGroupBy, "group-by", "", "Group results into one table per value of the given dimension")
+	// Separate knob from --limit on purpose: --limit caps the match set
+	// fetched from the store, this caps rows rendered within each group.
+	// Zero means no cap, so an unset flag forwards unconditionally.
+	TaskListCmd.Flags().IntVar(&taskListGroupLimit, "group-limit", 0, "Cap rows rendered within each --group-by group (0 = no cap)")
 
 	// Temporal filters (T-0908). Values for --due-before/--due-after are
 	// parsed with util.ParseUntil per docs/temporal-spec-0.1.md §5.
