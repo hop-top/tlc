@@ -12,6 +12,7 @@ import (
 // string used by the taskTableRow struct.
 var taskColumnHeaders = map[string]string{
 	"id":       "ID",
+	"project":  "Project",
 	"title":    "Title",
 	"status":   "Status",
 	"priority": "Priority",
@@ -25,6 +26,9 @@ var taskColumnHeaders = map[string]string{
 
 // taskListDefaultColumns is the built-in default column order for
 // `tlc task list` (matches the columns visible today).
+// "project" is in the registry but NOT here — it is injected only for the
+// cross-project view (--workspace), the same way trackListDefaultColumns
+// leaves it out and track list injects it under --all-projects.
 var taskListDefaultColumns = []string{
 	"id", "title", "status", "assigned", "due", "stale", "blocked",
 }
@@ -70,9 +74,11 @@ func resolveColumnHeaders(keys []string, registry map[string]string) (headers []
 // command from the config ladder (<domain>.list.columns ->
 // defaults.list.columns -> defaults.columns), then the --cols flag
 // (viper key "cols"), lowercase-normalizing throughout. `transform`, if
-// non-nil, mutates the key list after normalization (used for track's
-// --all-projects project-column injection). When statusProvided, the
-// "status" column is pruned. Returns nil when nothing customized the
+// non-nil, mutates the key list after normalization (used for the
+// project-column injection under --all-projects / --workspace). It is
+// told whether the key list came from an explicit --cols so an injected
+// DEFAULT can stand down when the user named the columns themselves.
+// When statusProvided, the "status" column is pruned. Returns nil when nothing customized the
 // default set (so the caller keeps the styled TTY path); otherwise returns
 // resolved table headers, warning on unknown keys to cmd stderr.
 func resolveEffectiveColumns(
@@ -80,9 +86,10 @@ func resolveEffectiveColumns(
 	defaults []string,
 	registry map[string]string,
 	statusProvided bool,
-	transform func(keys []string) (out []string, customized bool),
+	transform func(keys []string, explicit bool) (out []string, customized bool),
 ) []string {
 	customized := false
+	explicit := false
 	keys := defaults
 
 	if key, ok := resolveFlagDefaultKey(cmd, "columns"); ok {
@@ -94,6 +101,7 @@ func resolveEffectiveColumns(
 	if c := viper.GetStringSlice("cols"); len(c) > 0 {
 		keys = c
 		customized = true
+		explicit = true
 	}
 
 	norm := make([]string, len(keys))
@@ -104,7 +112,7 @@ func resolveEffectiveColumns(
 
 	if transform != nil {
 		var tCustomized bool
-		keys, tCustomized = transform(keys)
+		keys, tCustomized = transform(keys, explicit)
 		customized = customized || tCustomized
 	}
 
@@ -143,6 +151,20 @@ func containsKey(keys []string, k string) bool {
 		}
 	}
 	return false
+}
+
+// injectFirst returns a new slice with ins at the front, unless it is
+// already present anywhere in keys.
+//
+// FRONT, not after "id": the project is the outermost thing a row belongs
+// to, and the cross-project listing has always led with it. Leading also
+// keeps the identifier columns adjacent to the project that scopes them,
+// which matters when two projects hand out the same T-NNNN.
+func injectFirst(keys []string, ins string) []string {
+	if containsKey(keys, ins) {
+		return keys
+	}
+	return append([]string{ins}, keys...)
 }
 
 // injectAfter returns a new slice with ins inserted immediately after the

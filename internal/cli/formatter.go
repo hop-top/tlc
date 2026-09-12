@@ -191,6 +191,16 @@ type listOptions struct {
 	// store handle, and formatTasks is a rendering chokepoint that
 	// deliberately holds none. See groupLabelerFor.
 	labeler groupLabeler
+
+	// projectColumn adds the Project column to the default table column
+	// set. Set by the cross-project view (--workspace), where a bare
+	// T-NNNN is ambiguous: the sequence is per project, so two rows in one
+	// listing legitimately carry the same id.
+	//
+	// A DEFAULT, not a floor. An explicit --cols is the user naming the
+	// whole set, and it wins here exactly as it wins everywhere else —
+	// "project" is a registry key they can name themselves.
+	projectColumn bool
 }
 
 // listOption mutates listOptions. See withGroupBy.
@@ -215,6 +225,13 @@ func withGroupLimit(n int) listOption {
 // per-group totals count only the fetched rows.
 func withPartialMatchSet(partial bool) listOption {
 	return func(o *listOptions) { o.partialMatchSet = partial }
+}
+
+// withProjectColumn adds Project to the default table columns. Used by
+// the cross-project listing; false everywhere else, so a single-project
+// listing does not grow a column whose every cell is the same value.
+func withProjectColumn(show bool) listOption {
+	return func(o *listOptions) { o.projectColumn = show }
 }
 
 // withGroupLabeler supplies the key-to-name mapping for group headings.
@@ -283,7 +300,7 @@ func formatTasks(
 		// Column resolution runs ONCE and is shared by every group
 		// table, so the headers cannot differ between sections of the
 		// same listing.
-		cols := effectiveTaskColumns(cmd, statusProvided)
+		cols := effectiveTaskColumns(cmd, statusProvided, o.projectColumn)
 		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
 			// Headings show NAMES, not the stored keys grouping ran on:
 			// a track's title rather than its typeid, an assignee's
@@ -340,7 +357,7 @@ func renderGroupedTables(w io.Writer, groups []TaskGroup, cols []string, o listO
 			shown = shown[:o.groupLimit]
 			truncated = true
 		}
-		_, _ = fmt.Fprintln(w, groupHeading(groupTitle(g.Name, len(shown), len(g.Tasks))))
+		_, _ = fmt.Fprintln(w, groupHeading(w, groupTitle(g.Name, len(shown), len(g.Tasks))))
 		renderTable(w, shown, cols)
 		rows += len(shown)
 		for _, t := range shown {
@@ -373,14 +390,52 @@ func groupTitle(name string, shown, total int) string {
 // groupHeading styles a group name as a section title. titleStyle is the
 // same style `task show` uses for its heading, so grouped output reads
 // as part of the same CLI rather than a bolt-on.
-func groupHeading(name string) string {
+//
+// STYLED ONLY ON A TERMINAL, and gated on the destination writer rather
+// than on a global. lipgloss renders escape sequences whatever it is
+// writing into, so an unguarded heading ships raw escape bytes down a
+// pipe, into a redirect, and into a script's stdin — the same hazard the
+// table cells avoid by carrying plain values (see formatStatusPlain).
+// The gate is the one kit/output applies to its own styled renderer:
+// *os.File plus a character device. Everything else gets the bare name.
+func groupHeading(w io.Writer, name string) string {
+	if !styledWriter(w) {
+		return name
+	}
 	return titleStyle.Render(name)
+}
+
+// styledWriter reports whether w is a terminal that can render ANSI.
+//
+// Deliberately NOT writerInteractive: that one additionally requires
+// /dev/tty to be openable, which is the gate for prompting a human. A
+// heading only needs to know whether escapes will be displayed or stored,
+// and a writer can be a perfectly good terminal with no controlling tty.
+func styledWriter(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && charDevice(f)
 }
 
 // effectiveTaskColumns resolves the table header list for `task list`.
 // See resolveEffectiveColumns for the full ladder and pruning logic.
-func effectiveTaskColumns(cmd *cobra.Command, statusProvided bool) []string {
-	return resolveEffectiveColumns(cmd, taskListDefaultColumns, taskColumnHeaders, statusProvided, nil)
+//
+// showProject injects the Project column for the cross-project view, the
+// same shape effectiveTrackColumns uses for --all-projects. The injection
+// is a transform over the KEY list rather than a second row struct, so
+// the cross-project table is the same table with one more column — not a
+// parallel renderer free to drift away from this one.
+func effectiveTaskColumns(cmd *cobra.Command, statusProvided, showProject bool) []string {
+	return resolveEffectiveColumns(cmd, taskListDefaultColumns, taskColumnHeaders, statusProvided,
+		func(keys []string, explicit bool) ([]string, bool) {
+			// An explicit --cols is the user naming the whole set, and a
+			// default does not get to append itself to it. They can still
+			// ask for the column by name — "project" is a registry key,
+			// not a mode this path switches on.
+			if showProject && !explicit && !containsKey(keys, "project") {
+				return injectFirst(keys, "project"), true
+			}
+			return keys, false
+		})
 }
 
 // writeVtodo serialises the supplied tasks/tracks (and optionally logs)
@@ -560,6 +615,11 @@ func formatDuration(d time.Duration) string {
 // which headers are rendered so the default view stays identical to
 // the pre-widening layout.
 type taskTableRow struct {
+	// Project leads because the cross-project view (--workspace) has
+	// always led with it, and because the ID that follows is a per-project
+	// sequence: two projects hand out the same T-NNNN, so the scope has to
+	// be adjacent to the identifier it scopes.
+	Project  string `table:"Project"`
 	ID       string `table:"ID"`
 	Title    string `table:"Title"`
 	Status   string `table:"Status"`
@@ -727,7 +787,7 @@ func resolveOffPageBlockers(refs []string, dst map[string]*core.Task) {
 // taskCells holds the computed display strings for all table columns.
 type taskCells struct {
 	id, title, status, assigned, due, stale, blocked string
-	priority, track, effort                          string
+	priority, track, effort, project                 string
 }
 
 // computeTaskCells derives every display cell for a task in one place,
@@ -778,6 +838,14 @@ func computeTaskCells(t *core.Task, unmetBlockers []string) taskCells {
 	if t.Effort != "" {
 		effortCol = string(t.Effort)
 	}
+	// The SHORT label, not the registered id: an org prefix every row
+	// repeats buys nothing and costs width the titles need. Grouping still
+	// buckets on the full id — see groupTasks — so the heading names the
+	// project unambiguously while the column only has to disambiguate rows.
+	projectCol := "-"
+	if t.ProjectID != nil && *t.ProjectID != "" {
+		projectCol = projectLabel(*t.ProjectID)
+	}
 	return taskCells{
 		id:       formatTaskAlias(t),
 		title:    t.Title,
@@ -789,6 +857,7 @@ func computeTaskCells(t *core.Task, unmetBlockers []string) taskCells {
 		priority: priorityCol,
 		track:    trackCol,
 		effort:   effortCol,
+		project:  projectCol,
 	}
 }
 
@@ -796,6 +865,7 @@ func computeTaskCells(t *core.Task, unmetBlockers []string) taskCells {
 func buildWideRow(t *core.Task, unmetBlockers []string) taskTableRow {
 	c := computeTaskCells(t, unmetBlockers)
 	return taskTableRow{
+		Project:  c.project,
 		ID:       c.id,
 		Title:    c.title,
 		Status:   c.status,
@@ -809,45 +879,17 @@ func buildWideRow(t *core.Task, unmetBlockers []string) taskTableRow {
 	}
 }
 
-// workspaceTaskRow is the row schema for the workspace tasks table
-// (cross-project view, includes Project column).
-type workspaceTaskRow struct {
-	Project  string `table:"Project"`
-	ID       string `table:"ID"`
-	Title    string `table:"Title"`
-	Status   string `table:"Status"`
-	Assigned string `table:"Assigned"`
-}
-
-// renderWorkspaceTable renders a task table with an additional Project column.
-func renderWorkspaceTable(w io.Writer, tasks []*core.Task) {
-	rows := make([]workspaceTaskRow, len(tasks))
-	for i, t := range tasks {
-		assignee := "-"
-		if t.AssignedTo != nil {
-			assignee = *t.AssignedTo
-		}
-		proj := "-"
-		if t.ProjectID != nil && *t.ProjectID != "" {
-			proj = projectLabel(*t.ProjectID)
-		}
-		rows[i] = workspaceTaskRow{
-			Project: proj,
-			ID:      formatTaskAlias(t),
-			Title:   t.Title,
-			// Cell values must be plain — kit/output's tabwriter (non-TTY)
-			// passes them through verbatim, so any pre-styled lipgloss
-			// escapes would leak into piped output.
-			Status:   formatStatusPlain(t.Status),
-			Assigned: assignee,
-		}
-	}
-
-	_ = renderStyledList(w, formatTable, rows, nil) //nolint:errcheck // best-effort output
-}
-
 // formatStatusPlain returns the human-readable status label without ANSI
 // escape sequences, safe to embed in table cell data.
+//
+// EVERY table cell goes through this, never formatStatus. kit/output's
+// non-TTY renderer is a tabwriter that passes cell values through
+// VERBATIM — it neither strips nor re-measures escape sequences — so a
+// pre-styled lipgloss cell ships raw escape bytes into a pipe, a
+// redirect, or a script's stdin, and mismeasures the column width on the
+// way out. Row color is applied by the renderer instead, which knows
+// whether it is writing to a terminal; formatStatus is for prose
+// (`task show`), not for cells.
 func formatStatusPlain(status core.TaskStatus) string {
 	wm := core.DefaultWorkflow()
 	def, err := wm.GetStatusDef(status)

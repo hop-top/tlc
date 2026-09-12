@@ -231,7 +231,7 @@ type trackRowData struct {
 // See resolveEffectiveColumns for the full ladder and pruning logic.
 func effectiveTrackColumns(cmd *cobra.Command, statusProvided, showProject bool) []string {
 	return resolveEffectiveColumns(cmd, trackListDefaultColumns, trackColumnHeaders, statusProvided,
-		func(keys []string) ([]string, bool) {
+		func(keys []string, _ bool) ([]string, bool) {
 			if showProject && !containsKey(keys, "project") {
 				return injectAfter(keys, "id", "project"), true
 			}
