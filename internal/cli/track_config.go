@@ -32,6 +32,12 @@ func getConfigDefaultTrackType() string {
 	return core.TrackTypeFix
 }
 
+// getConfigSlugMaxLen returns the configured write-path limit for new
+// track slugs, falling back to the package default.
+func getConfigSlugMaxLen() int {
+	return core.ClampSlugMaxLen(viper.GetInt("tracks.slug_max_len"))
+}
+
 // titleFromID derives a title from a track ID by replacing hyphens
 // with spaces and title-casing each word.
 func titleFromID(id string) string {
@@ -50,7 +56,8 @@ func autoCreateTrack(
 	ctx context.Context, w io.Writer,
 	s *storage.SQLiteStorage, input string,
 ) (string, error) {
-	if err := core.ValidateTrackSlug(input); err != nil {
+	// Write path: the typed reference becomes a brand-new slug.
+	if err := core.ValidateNewTrackSlug(input, getConfigSlugMaxLen()); err != nil {
 		return "", fmt.Errorf(
 			"cannot auto-create track: %w; "+
 				"run 'tlc track create' manually",
@@ -94,7 +101,7 @@ func autoCreateTrack(
 		Type:  trackType,
 	}
 
-	svc := core.NewTrackService(s, s)
+	svc := core.NewTrackService(s, s, core.WithSlugMaxLen(getConfigSlugMaxLen()))
 	if err := svc.CreateTrack(ctx, track); err != nil {
 		return "", fmt.Errorf("auto-create track failed: %w", err)
 	}
