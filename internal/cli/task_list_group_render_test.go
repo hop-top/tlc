@@ -168,15 +168,21 @@ func TestFormatTasksGroupedHonoursColumns(t *testing.T) {
 	}
 }
 
-// TestFormatTasksGroupedLeavesStructuredFormatsAlone: grouping is a
-// table-format concern only. json/yaml/tls/summary/counters must render
-// exactly as they do ungrouped.
+// TestFormatTasksGroupedLeavesStructuredFormatsAlone: grouping must not
+// reshape the formats that have no notion of a group.
+//
+// json and yaml are deliberately EXCLUDED: they nest under --group-by so
+// a script consumes the same shape a human reads (see
+// TestGroupedJSONNestsGroups), and their ungrouped payload is pinned
+// unchanged by TestUngroupedJSONUnchanged. The formats listed here are
+// the ones with nowhere to put a group name — tls is one line per task,
+// and summary/counters are aggregates over the whole set.
 func TestFormatTasksGroupedLeavesStructuredFormatsAlone(t *testing.T) {
 	tasks := []*core.Task{
 		{ID: "T-0001", Seq: 1, Title: "alpha", Status: core.StatusTodo, Tags: []string{"api", "urgent"}},
 		{ID: "T-0002", Seq: 2, Title: "beta", Status: core.StatusTodo, Tags: []string{"urgent"}},
 	}
-	for _, format := range []string{formatJSON, formatYAML, "tls", formatSummary, formatCounters} {
+	for _, format := range []string{"tls", formatSummary, formatCounters} {
 		var plain bytes.Buffer
 		cmdPlain, bufPlain := groupRenderCmd(t)
 		if err := formatTasks(cmdPlain, tasks, format, false); err != nil {

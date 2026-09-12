@@ -198,6 +198,23 @@ func formatTasks(
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
+		// Grouped structured output NESTS, so a script consumes the same
+		// shape a human reads. The wrap is conditional on purpose: with
+		// no grouping key the payload stays the top-level array every
+		// existing consumer iterates. Wrapping unconditionally would
+		// break all of them at once and silently — `jq '.[]'` on an
+		// object fails exactly the way it failed on the `null` the
+		// empty-slice fix removed.
+		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
+			// --group-limit is NOT applied here. It caps what is
+			// DISPLAYED; a truncated task list inside a JSON payload
+			// carries no marker of its truncation, so a consumer that
+			// re-serializes it persists a subset as the whole. That is
+			// data corruption, not a display choice. The omission is
+			// announced instead — see noteGroupLimitIgnored.
+			_ = output.Render(out, format, groupedPayload(groups)) //nolint:errcheck // best-effort output
+			return nil
+		}
 		_ = output.Render(out, format, normalizeEmptySlices(tasks)) //nolint:errcheck // best-effort output
 	case "tls":
 		for _, t := range tasks {

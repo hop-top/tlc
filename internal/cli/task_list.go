@@ -293,7 +293,16 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 		// to say so — the asymmetry noteIgnoredPagination settles the
 		// same way.
 		partial := taskListLimit > 0 && len(tasks) >= taskListLimit
-		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided,
+
+		// --group-limit caps what a screen shows; a structured payload
+		// carries every task instead, so the flag does not apply there.
+		// It is not dropped silently: exiting 0 with output that ignored
+		// a typed flag is how a user comes to trust a cap that never ran.
+		format := viper.GetString("output.format")
+		if taskListGroupLimit > 0 && taskListGroupBy != "" && structuredFormat(format) {
+			noteGroupLimitIgnored(cmd.ErrOrStderr(), format)
+		}
+		return formatTasks(cmd, tasks, format, statusProvided,
 			withGroupBy(taskListGroupBy),
 			withGroupLimit(taskListGroupLimit),
 			withPartialMatchSet(partial))

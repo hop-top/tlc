@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"sort"
 
 	"hop.top/tlc/internal/core"
@@ -234,4 +235,55 @@ func derefString(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// groupedPayload shapes grouped results for JSON/YAML as
+// {groups: [{name, tasks: [...]}]}.
+//
+// Built from an ordered SLICE of maps, never a map of name to tasks: a
+// Go map would randomize section order per marshal, and the ordering
+// groupTasks works to establish — named groups ascending or in
+// vocabulary rank, "(none)" forced last — is part of the contract a
+// script reads, not a rendering nicety.
+//
+// Each group's task slice runs through normalizeEmptySlices so an empty
+// group serializes `tasks: []` rather than `null`, per the repo-wide
+// empty-list contract. Reusing that helper rather than a local nil check
+// keeps ONE definition of "empty list" — a second one would be free to
+// drift back to null for exactly the payloads it did not cover.
+func groupedPayload(groups []TaskGroup) map[string]any {
+	out := make([]map[string]any, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, map[string]any{
+			"name":  g.Name,
+			"tasks": normalizeEmptySlices(g.Tasks),
+		})
+	}
+	return map[string]any{"groups": out}
+}
+
+// structuredFormat reports whether format serializes data for a machine
+// rather than rendering it for a screen. --group-limit is a display cap,
+// so these formats ignore it — and say so.
+func structuredFormat(format string) bool {
+	switch format {
+	case formatJSON, formatYAML, formatVtodo, "tls":
+		return true
+	default:
+		return false
+	}
+}
+
+// noteGroupLimitIgnored tells the user on stderr that --group-limit did
+// not apply, and why.
+//
+// Silently dropping a flag the user typed is its own defect class: the
+// command exits 0 with a payload that looks like the one they asked for.
+// The note goes to STDERR so the stdout a script parses stays pure
+// payload — the same split noteIgnoredPagination uses for the aggregate
+// formats.
+func noteGroupLimitIgnored(w io.Writer, format string) {
+	_, _ = fmt.Fprintf(w,
+		"note: --group-limit ignored with --format %s; structured output carries every task, "+
+			"so a consumer never reads a silently truncated list\n", format)
 }
