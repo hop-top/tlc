@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -145,28 +146,34 @@ func TestTrackList_HasSlugColumn(t *testing.T) {
 // TestTrackList_SlugColumnParticipatesInCols pins the --cols contract:
 // the new column must be addressable by name like every other, and
 // selecting it alone must not drag other columns along.
+//
+// Subprocess, not in-process: --cols is registered by kit on the real
+// root command, so the in-process test harness has no such flag at all
+// (neither local nor inherited on `track list`). Driving this through
+// the global viper instead would assert nothing about the flag — kit
+// binds it to a viper instance it creates privately, so the global key
+// is never the one the reader consults. Only a real argv proves a user
+// typing `--cols id,slug` gets these columns.
 func TestTrackList_SlugColumnParticipatesInCols(t *testing.T) {
-	withTestLock(func() {
-		_, cleanup := setupTestDir(t)
-		defer cleanup()
+	bin := buildTLCBinary(t)
+	home := t.TempDir()
+	cwd := t.TempDir()
+	dbPath := filepath.Join(home, "test.db")
+	env := e2eEnv(t, home, dbPath)
 
-		tracks := seedTrackListTracks(t, [2]string{"browser-rendering", "Browser rendering"})
-		viper.Set("cols", []string{"id", "slug"})
-		defer viper.Set("cols", nil)
+	runTLCOK(t, bin, cwd, env, "init")
+	const slug = "browser-rendering"
+	runTLCOK(t, bin, cwd, env, "track", "create", slug, "--type", "feature")
 
-		out := runTrackListCmd(t)
+	out := runTLCOK(t, bin, cwd, env, "track", "list", "--cols", "id,slug")
 
-		if strings.Contains(out, "warning: unknown column") {
-			t.Fatalf("--cols rejected a column it should know:\n%s", out)
-		}
-		hdr := headerFields(out)
-		if len(hdr) != 2 || !strings.EqualFold(hdr[0], "id") || !strings.EqualFold(hdr[1], "slug") {
-			t.Errorf("header = %v, want [ID Slug]\n%s", hdr, out)
-		}
-		if !strings.Contains(out, tracks[0].Slug) {
-			t.Errorf("slug %q absent under --cols id,slug\n%s", tracks[0].Slug, out)
-		}
-	})
+	if strings.Contains(out, "warning: unknown column") {
+		t.Fatalf("--cols rejected a column it should know:\n%s", out)
+	}
+	assertHeaders(t, out, []string{"ID", "Slug"})
+	if !strings.Contains(out, slug) {
+		t.Errorf("slug %q absent under --cols id,slug\n%s", slug, out)
+	}
 }
 
 // TestTrackList_JSONSlugIsNeverTruncated is the data-integrity guard.
