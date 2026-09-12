@@ -101,6 +101,28 @@ tlc track summary                                # project health pulse
 Track statuses: `pending` · `active` · `completed` · `abandoned` · `archived`
 Types: `feature` · `bug` · `refactor`
 
+Track identifiers — `<id>` above accepts any of these:
+
+```bash
+tlc track show L-0002                                # display alias (per-project, stable)
+tlc track show l-0002                                # aliases are case-insensitive
+tlc track show browser-rendering                     # slug
+tlc track show track_01h455vbqkfsn02nk084ksn02q      # durable TypeID
+```
+
+`L-NNNN` is the per-project alias, assigned at creation and fixed for the
+life of the track. The slug is the readable name and the on-disk directory
+under `.tlc/tracks/<slug>/`, which is why tracks keep both. `track_<typeid>`
+is the durable identity: unique across projects and never reused, so prefer
+it for references that cross a project boundary.
+
+Tasks follow the same split: `T-NNNN` (or a bare number) is the per-project
+alias, `task_<typeid>` the durable identity.
+
+New slugs are capped at `tracks.slug_max_len` (default 24) and derived slugs
+cut at a word boundary. The cap applies to slugs being created only —
+existing longer slugs keep resolving and are never renamed.
+
 Task-track integration:
 ```bash
 tlc task create "..." --track <track-id>         # link on create
