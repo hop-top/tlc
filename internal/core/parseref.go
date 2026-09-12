@@ -150,3 +150,39 @@ func FormatTaskDisplay(t *Task) string {
 	}
 	return t.ID
 }
+
+// FormatTrackSeq renders a sequence number as the "L-NNNN" display alias.
+// The "L" prefix is deliberately neither "T" (tasks) nor "TR": it must not
+// visually collide with T-NNNN when skimming or typing. The minimum width
+// of 4 digits matches the task alias while letting larger values grow
+// naturally (e.g. seq 12345 → "L-12345"). Returns "" for non-positive seq.
+func FormatTrackSeq(seq int64) string {
+	if seq <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("L-%04d", seq)
+}
+
+// FormatTrackAlias renders a Track as its display alias (e.g. "L-0042").
+// Delegates to FormatTrackSeq so width policy lives in one place.
+func FormatTrackAlias(t *Track) string {
+	if t == nil {
+		return ""
+	}
+	return FormatTrackSeq(t.Seq)
+}
+
+// FormatTrackDisplay returns the display alias when available, otherwise
+// the track ID. Mirrors FormatTaskDisplay for renderers that must always
+// show *something* and can't gracefully degrade when seq is unset (tracks
+// created before sequences existed, or structs built in memory). Empty
+// input yields empty output.
+func FormatTrackDisplay(t *Track) string {
+	if t == nil {
+		return ""
+	}
+	if alias := FormatTrackSeq(t.Seq); alias != "" {
+		return alias
+	}
+	return t.ID
+}

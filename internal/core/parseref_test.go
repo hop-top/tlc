@@ -205,3 +205,49 @@ func (r *testRepo) DeleteTrack(_ context.Context, _ string) error { return nil }
 func (r *testRepo) ListTracks(_ context.Context, _ TrackQuery) ([]*Track, error) {
 	return nil, nil
 }
+
+func TestFormatTrackSeq(t *testing.T) {
+	cases := []struct {
+		seq  int64
+		want string
+	}{
+		{0, ""},
+		{-1, ""},
+		{1, "L-0001"},
+		{42, "L-0042"},
+		{9999, "L-9999"},
+		{10000, "L-10000"},
+		{12345, "L-12345"},
+	}
+	for _, c := range cases {
+		if got := FormatTrackSeq(c.seq); got != c.want {
+			t.Errorf("FormatTrackSeq(%d) = %q; want %q", c.seq, got, c.want)
+		}
+	}
+}
+
+func TestFormatTrackAlias(t *testing.T) {
+	if got := FormatTrackAlias(nil); got != "" {
+		t.Errorf("FormatTrackAlias(nil) = %q; want empty", got)
+	}
+	if got := FormatTrackAlias(&Track{Seq: 7}); got != "L-0007" {
+		t.Errorf("FormatTrackAlias(seq 7) = %q; want %q", got, "L-0007")
+	}
+	if got := FormatTrackAlias(&Track{Seq: 0}); got != "" {
+		t.Errorf("FormatTrackAlias(seq 0) = %q; want empty", got)
+	}
+}
+
+func TestFormatTrackDisplay(t *testing.T) {
+	id := NewTrackID()
+	if got := FormatTrackDisplay(nil); got != "" {
+		t.Errorf("FormatTrackDisplay(nil) = %q; want empty", got)
+	}
+	if got := FormatTrackDisplay(&Track{ID: id, Seq: 3}); got != "L-0003" {
+		t.Errorf("FormatTrackDisplay(seq 3) = %q; want %q", got, "L-0003")
+	}
+	// Seq unset: renderers still need something printable.
+	if got := FormatTrackDisplay(&Track{ID: id}); got != id {
+		t.Errorf("FormatTrackDisplay(no seq) = %q; want %q", got, id)
+	}
+}
