@@ -38,6 +38,15 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 			return err
 		}
 
+		// Validated before storage opens, so a mistyped dimension fails
+		// against the user's flags with no I/O side effects. The flag
+		// enum already rejects unknown values at parse time; this is the
+		// second gate for the config-supplied path, which never reaches
+		// cobra's parser.
+		if taskListGroupBy != "" && !ValidGroupByKey(taskListGroupBy) {
+			return unknownGroupByError(taskListGroupBy)
+		}
+
 		query := core.Query{
 			Limit:           taskListLimit,
 			Offset:          taskListOffset,
@@ -407,6 +416,10 @@ func init() {
 	TaskListCmd.Flags().StringVar(&taskListTrack, "track", "", "Filter by track ID")
 	TaskListCmd.Flags().StringVar(&taskListOutput, "output", "", "Write output to a file instead of stdout")
 	TaskListCmd.Flags().BoolVar(&taskListIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
+	// Values are NOT spelled out in the usage string: the flag-enum
+	// registration in registerFlagEnums is what renders them, into help,
+	// the parse rejection and shell completion alike. See GroupByKeys.
+	TaskListCmd.Flags().StringVar(&taskListGroupBy, "group-by", "", "Group results into one table per value of the given dimension")
 
 	// Temporal filters (T-0908). Values for --due-before/--due-after are
 	// parsed with util.ParseUntil per docs/temporal-spec-0.1.md §5.

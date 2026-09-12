@@ -39,6 +39,7 @@ var (
 	taskListOffset        int
 	taskListOutput        string
 	taskListIncludeLogs   bool
+	taskListGroupBy       string
 
 	taskShowOutput      string
 	taskShowIncludeLogs bool
