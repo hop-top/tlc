@@ -200,6 +200,18 @@ func (r *testRepo) GetTrackBySlug(_ context.Context, projectID, slug string) (*T
 	}
 	return nil, nil
 }
+func (r *testRepo) GetTrackBySeq(_ context.Context, projectID string, seq int64) (*Track, error) {
+	for _, t := range r.tracks {
+		var pid string
+		if t.ProjectID != nil {
+			pid = *t.ProjectID
+		}
+		if pid == projectID && t.Seq == seq {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
 func (r *testRepo) UpdateTrack(_ context.Context, _ *Track) error { return nil }
 func (r *testRepo) DeleteTrack(_ context.Context, _ string) error { return nil }
 func (r *testRepo) ListTracks(_ context.Context, _ TrackQuery) ([]*Track, error) {
@@ -249,5 +261,120 @@ func TestFormatTrackDisplay(t *testing.T) {
 	// Seq unset: renderers still need something printable.
 	if got := FormatTrackDisplay(&Track{ID: id}); got != id {
 		t.Errorf("FormatTrackDisplay(no seq) = %q; want %q", got, id)
+	}
+}
+
+func TestParseTrackRef_Alias(t *testing.T) {
+	repo := newTestRepo()
+	id := NewTrackID()
+	repo.tracks[id] = &Track{ID: id, Slug: "auth-rewrite", Seq: 42}
+
+	got, err := ParseTrackRef(context.Background(), repo, "", "L-0042")
+	if err != nil {
+		t.Fatalf("ParseTrackRef: %v", err)
+	}
+	if got != id {
+		t.Errorf("got %q; want %q", got, id)
+	}
+}
+
+func TestParseTrackRef_AliasCaseInsensitive(t *testing.T) {
+	repo := newTestRepo()
+	id := NewTrackID()
+	repo.tracks[id] = &Track{ID: id, Slug: "auth-rewrite", Seq: 42}
+
+	for _, in := range []string{"L-0042", "l-0042", "L-42", "l-42"} {
+		got, err := ParseTrackRef(context.Background(), repo, "", in)
+		if err != nil {
+			t.Fatalf("ParseTrackRef(%q): %v", in, err)
+		}
+		if got != id {
+			t.Errorf("ParseTrackRef(%q) = %q; want %q", in, got, id)
+		}
+	}
+}
+
+func TestParseTrackRef_BareDigits(t *testing.T) {
+	repo := newTestRepo()
+	id := NewTrackID()
+	repo.tracks[id] = &Track{ID: id, Slug: "auth-rewrite", Seq: 7}
+
+	got, err := ParseTrackRef(context.Background(), repo, "", "7")
+	if err != nil {
+		t.Fatalf("ParseTrackRef: %v", err)
+	}
+	if got != id {
+		t.Errorf("got %q; want %q", got, id)
+	}
+}
+
+func TestParseTrackRef_LargeSeq(t *testing.T) {
+	repo := newTestRepo()
+	id := NewTrackID()
+	repo.tracks[id] = &Track{ID: id, Slug: "big", Seq: 12345}
+
+	got, err := ParseTrackRef(context.Background(), repo, "", "L-12345")
+	if err != nil {
+		t.Fatalf("ParseTrackRef: %v", err)
+	}
+	if got != id {
+		t.Errorf("got %q; want %q", got, id)
+	}
+}
+
+// TestParseTrackRef_AliasBeatsSlug pins the load-bearing resolution order:
+// typeid, then L-NNNN, then slug. A track whose slug is literally "l-0001"
+// must not shadow the track that actually holds seq 1.
+func TestParseTrackRef_AliasBeatsSlug(t *testing.T) {
+	repo := newTestRepo()
+
+	decoyID := NewTrackID()
+	repo.tracks[decoyID] = &Track{ID: decoyID, Slug: "l-0001", Seq: 9}
+
+	aliasID := NewTrackID()
+	repo.tracks[aliasID] = &Track{ID: aliasID, Slug: "real-track", Seq: 1}
+
+	got, err := ParseTrackRef(context.Background(), repo, "", "l-0001")
+	if err != nil {
+		t.Fatalf("ParseTrackRef: %v", err)
+	}
+	if got == decoyID {
+		t.Fatalf("slug %q shadowed the alias; resolution order must try L-NNNN first", "l-0001")
+	}
+	if got != aliasID {
+		t.Errorf("got %q; want %q (seq 1)", got, aliasID)
+	}
+
+	// The decoy stays reachable by its own alias.
+	byAlias, err := ParseTrackRef(context.Background(), repo, "", "L-0009")
+	if err != nil {
+		t.Fatalf("ParseTrackRef(L-0009): %v", err)
+	}
+	if byAlias != decoyID {
+		t.Errorf("L-0009 = %q; want %q", byAlias, decoyID)
+	}
+}
+
+// TestParseTrackRef_SlugShapedLikeAliasWithoutMatch falls through to slug
+// resolution when no track holds that seq.
+func TestParseTrackRef_SlugShapedLikeAliasWithoutMatch(t *testing.T) {
+	repo := newTestRepo()
+	id := NewTrackID()
+	repo.tracks[id] = &Track{ID: id, Slug: "l-0001", Seq: 9}
+
+	got, err := ParseTrackRef(context.Background(), repo, "", "l-0001")
+	if err != nil {
+		t.Fatalf("ParseTrackRef: %v", err)
+	}
+	if got != id {
+		t.Errorf("got %q; want %q", got, id)
+	}
+}
+
+func TestParseTrackRef_AliasNotFound(t *testing.T) {
+	repo := newTestRepo()
+	_, err := ParseTrackRef(context.Background(), repo, "", "L-9999")
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected not-found error; got %v", err)
 	}
 }

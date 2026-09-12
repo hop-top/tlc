@@ -127,3 +127,46 @@ func seqOf(t *core.Track) any {
 	}
 	return t.Seq
 }
+
+// TestGetTrackBySeq pins the alias lookup used by ParseTrackRef's L-NNNN
+// branch: scoped by project, nil for a miss.
+func TestGetTrackBySeq(t *testing.T) {
+	s := newTrackTestStorage(t)
+	ctx := context.Background()
+
+	track := newSeqTrack("by-seq", "By Seq")
+	if err := s.CreateTrack(ctx, track); err != nil {
+		t.Fatalf("CreateTrack: %v", err)
+	}
+
+	got, err := s.GetTrackBySeq(ctx, "", track.Seq)
+	if err != nil {
+		t.Fatalf("GetTrackBySeq: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected track, got nil")
+	}
+	if got.ID != track.ID {
+		t.Errorf("GetTrackBySeq ID = %q; want %q", got.ID, track.ID)
+	}
+	if got.Seq != track.Seq {
+		t.Errorf("GetTrackBySeq Seq = %d; want %d", got.Seq, track.Seq)
+	}
+
+	miss, err := s.GetTrackBySeq(ctx, "", 9999)
+	if err != nil {
+		t.Fatalf("GetTrackBySeq(miss): %v", err)
+	}
+	if miss != nil {
+		t.Errorf("expected nil for unknown seq; got %q", miss.ID)
+	}
+
+	// A different project's bucket must not see this row.
+	other, err := s.GetTrackBySeq(ctx, "other-project", track.Seq)
+	if err != nil {
+		t.Fatalf("GetTrackBySeq(other project): %v", err)
+	}
+	if other != nil {
+		t.Errorf("seq leaked across projects; got %q", other.ID)
+	}
+}

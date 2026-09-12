@@ -12,6 +12,12 @@ import (
 // Case-insensitive so "t-0034" resolves identically to "T-0034".
 var taskAliasRe = regexp.MustCompile(`(?i)^T-(\d+)$`)
 
+// trackAliasRe matches the L-NNNN+ display alias form (≥1 digits).
+// Case-insensitive so "l-0001" resolves identically to "L-0001", mirroring
+// taskAliasRe. The "L" prefix is deliberately not "T": track aliases must
+// never be mistaken for task aliases when skimming or typing.
+var trackAliasRe = regexp.MustCompile(`(?i)^L-(\d+)$`)
+
 // bareDigitsRe matches a bare numeric task reference like "42".
 var bareDigitsRe = regexp.MustCompile(`^\d+$`)
 
@@ -82,7 +88,14 @@ func resolveTaskBySeq(ctx context.Context, repo Repository, projectID string, se
 //
 // Accepted forms:
 //   - "track_<26char>"   typeid
+//   - "L-NNNN" / "L-12345"  display alias resolved via (project_id, seq)
+//   - "1234"             bare digits, treated as a seq
 //   - "<slug>"           user-supplied alias resolved via (project_id, slug)
+//
+// Resolution order is load-bearing: typeid, then L-NNNN, then slug. A slug
+// that happens to be shaped like "l-0001" must never shadow the track that
+// actually holds that sequence number. Such a slug stays reachable: when no
+// track holds the seq, resolution falls through to the slug path.
 func ParseTrackRef(ctx context.Context, repo TrackRepository, projectID, input string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
@@ -96,6 +109,43 @@ func ParseTrackRef(ctx context.Context, repo TrackRepository, projectID, input s
 		}
 		if track == nil {
 			return "", fmt.Errorf("track %q not found", input)
+		}
+		return track.ID, nil
+	}
+
+	// L-NNNN alias, tried before slugs so a track can never be hidden
+	// behind another track's alias-shaped slug.
+	if m := trackAliasRe.FindStringSubmatch(input); m != nil {
+		seq, parseErr := strconv.ParseInt(m[1], 10, 64)
+		if parseErr != nil {
+			return "", fmt.Errorf("malformed track alias %q: %w", input, parseErr)
+		}
+		track, err := repo.GetTrackBySeq(ctx, projectID, seq)
+		if err != nil {
+			return "", fmt.Errorf("lookup track seq %d: %w", seq, err)
+		}
+		if track != nil {
+			return track.ID, nil
+		}
+		// No track holds that seq. Fall through: the input may still be a
+		// literal slug shaped like an alias. ValidateTrackSlug below
+		// rejects uppercase, so a miss on "L-0042" surfaces as not found.
+		if err := ValidateTrackSlug(input); err != nil {
+			return "", fmt.Errorf("track %q not found in project %q", input, projectID)
+		}
+	}
+
+	// Bare digits are a seq, exactly as for tasks. No fall-through: a bare
+	// number can never be a valid slug (slugs are >= 3 chars and a
+	// three-digit slug like "123" would be ambiguous by design).
+	if bareDigitsRe.MatchString(input) {
+		seq, _ := strconv.ParseInt(input, 10, 64) //nolint:errcheck // regex guarantees digits
+		track, err := repo.GetTrackBySeq(ctx, projectID, seq)
+		if err != nil {
+			return "", fmt.Errorf("lookup track seq %d: %w", seq, err)
+		}
+		if track == nil {
+			return "", fmt.Errorf("track %q not found in project %q", input, projectID)
 		}
 		return track.ID, nil
 	}

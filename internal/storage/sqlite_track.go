@@ -126,6 +126,21 @@ func (s *SQLiteStorage) GetTrackBySlug(ctx context.Context, projectID, slug stri
 	return scanTrackFromRow(row)
 }
 
+// GetTrackBySeq retrieves a track by its (project_id, seq) display alias,
+// the "L-NNNN" form. Empty projectID matches the global bucket. Returns
+// nil, nil if not found. Mirrors GetTaskBySeq.
+func (s *SQLiteStorage) GetTrackBySeq(
+	ctx context.Context,
+	projectID string,
+	seq int64,
+) (*core.Track, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, seq, slug, title, type, status, assigned_to,
+			created_at, updated_at, project_id, meta, plan_mapping, due_at
+		FROM tracks WHERE project_id = ? AND seq = ?`, projectID, seq)
+	return scanTrackFromRow(row)
+}
+
 func (s *SQLiteStorage) UpdateTrack(ctx context.Context, track *core.Track) error {
 	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		metaJSON, _ := json.Marshal(track.Meta) //nolint:errcheck // marshalling known-valid struct

@@ -55,6 +55,20 @@ func (r *stubTrackRepo) GetTrackBySlug(_ context.Context, projectID, slug string
 	return nil, nil
 }
 
+func (r *stubTrackRepo) GetTrackBySeq(_ context.Context, projectID string, seq int64) (*Track, error) {
+	for _, t := range r.tracks {
+		var pid string
+		if t.ProjectID != nil {
+			pid = *t.ProjectID
+		}
+		if pid == projectID && t.Seq == seq {
+			cp := *t
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *stubTrackRepo) UpdateTrack(_ context.Context, track *Track) error {
 	if _, ok := r.tracks[track.ID]; !ok {
 		return fmt.Errorf("track %q not found", track.ID)
