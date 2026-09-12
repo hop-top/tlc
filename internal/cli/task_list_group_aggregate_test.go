@@ -62,8 +62,8 @@ func aggregateConflictSpellings() []aggregateSpelling {
 }
 
 // runGroupByAggregate runs `task list --group-by track` under one
-// aggregate spelling and returns the error and combined output.
-func runGroupByAggregate(t *testing.T, sp aggregateSpelling) (error, string) {
+// aggregate spelling and returns the combined output and the error.
+func runGroupByAggregate(t *testing.T, sp aggregateSpelling) (string, error) {
 	t.Helper()
 	ctx, cleanup := setupTestDir(t)
 	defer cleanup()
@@ -100,7 +100,8 @@ func runGroupByAggregate(t *testing.T, sp aggregateSpelling) (error, string) {
 		viper.Set("output.format", sp.configFormat)
 	}
 
-	return cmd.Execute(), buf.String()
+	err = cmd.Execute()
+	return buf.String(), err
 }
 
 // TestGroupByWithAggregateFormatIsRejected: every spelling fails, and the
@@ -108,7 +109,7 @@ func runGroupByAggregate(t *testing.T, sp aggregateSpelling) (error, string) {
 func TestGroupByWithAggregateFormatIsRejected(t *testing.T) {
 	for _, sp := range aggregateConflictSpellings() {
 		t.Run(sp.name, func(t *testing.T) {
-			err, out := runGroupByAggregate(t, sp)
+			out, err := runGroupByAggregate(t, sp)
 			if err == nil {
 				t.Fatalf("--group-by with %s must fail; got success:\n%s", sp.name, out)
 			}

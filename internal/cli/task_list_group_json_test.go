@@ -33,8 +33,8 @@ func renderTasksFormat(t *testing.T, tasks []*core.Task, format string, opts ...
 // groupedJSONPayload is the decoded nested document.
 type groupedJSONPayload struct {
 	Groups []struct {
-		Name  string  `json:"name"`
-		Tasks *[]any  `json:"tasks"`
+		Name  string `json:"name"`
+		Tasks *[]any `json:"tasks"`
 	} `json:"groups"`
 }
 
@@ -156,7 +156,7 @@ func TestGroupedYAMLNestsGroups(t *testing.T) {
 // DISPLAY cap, and JSON is data. A machine consumer asking for JSON gets
 // every task in every group, capped or not.
 //
-// The alternative — honouring the cap — writes a truncated task list into
+// The alternative — honoring the cap — writes a truncated task list into
 // a payload that carries no marker of the truncation, so a script that
 // re-serializes it silently persists a subset as if it were the whole.
 // That is data corruption, not a display choice. Ignoring a flag the user
