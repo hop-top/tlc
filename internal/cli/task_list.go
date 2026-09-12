@@ -83,6 +83,28 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 		// must agree on whether this run is an aggregate, and a second
 		// resolution is a second chance to disagree.
 		aggregate := aggregateFormat()
+
+		// --group-by and an aggregate format both claim the output
+		// shape: one partitions the match set into row tables, the other
+		// collapses it into counts. There is no reading of the pair that
+		// satisfies either, so it is rejected rather than resolved —
+		// silently picking a winner hands the user output for a command
+		// they did not type.
+		//
+		// Gated on the RESOLVED aggregate, never on taskListSummary /
+		// taskListCounters. An aggregate has three spellings and the
+		// bools see only one of them; `-f summary` and a config
+		// `output.format: summary` leave both false. Keying on the bools
+		// is the same mistake aggregateFormat's doc comment records from
+		// the pagination path, and here it would let exactly those two
+		// spellings through the check.
+		if aggregate != "" && taskListGroupBy != "" {
+			return fmt.Errorf(
+				"--group-by cannot be combined with --%s: --group-by lists rows in one table per %s, "+
+					"--%s counts the whole match set; pick one",
+				aggregate, taskListGroupBy, aggregate)
+		}
+
 		paginationRequested := cmd.Flags().Changed("limit") ||
 			cmd.Flags().Changed("offset") ||
 			fromConfig["limit"] || fromConfig["offset"]
