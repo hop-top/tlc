@@ -155,10 +155,119 @@ func isShowTypeIDOutput() bool {
 	return false
 }
 
-func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, statusProvided bool) error {
+// listOptions carries the presentation choices that vary between the
+// callers of formatTasks. Threaded as options rather than positional
+// parameters so the callers that want none of them (task stale, tag
+// list) keep their existing call shape and cannot accidentally opt in.
+type listOptions struct {
+	// groupBy is the --group-by dimension, empty for an ungrouped
+	// listing. Validated by the caller via ValidGroupByKey; an unknown
+	// key here degrades to ungrouped rather than rendering nothing.
+	groupBy string
+
+	// groupLimit caps the rows rendered WITHIN each group. Zero or
+	// negative means no cap — the zero value must mean "unset", not
+	// "render nothing", or a config-supplied default would silently
+	// blank every section.
+	//
+	// Deliberately NOT --limit. --limit caps the match set fetched from
+	// the store, before grouping; this caps what each group shows after
+	// it, which is the only way every group stays represented when one
+	// of them holds most of the rows.
+	groupLimit int
+
+	// partialMatchSet records that the fetched rows are a --limit page
+	// of the matches, not all of them. It changes nothing about what
+	// renders — only whether the per-group totals are qualified. See
+	// renderGroupedTables.
+	partialMatchSet bool
+
+	// labeler renames group headings from the stored KEY to a name a
+	// reader recognizes — a track's title, an assignee's resolved
+	// profile. Nil for the dimensions whose keys are already names, and
+	// nil for every caller that does not group at all.
+	//
+	// Built by the caller, not here: resolving a track title needs a
+	// store handle, and formatTasks is a rendering chokepoint that
+	// deliberately holds none. See groupLabelerFor.
+	labeler groupLabeler
+}
+
+// listOption mutates listOptions. See withGroupBy.
+type listOption func(*listOptions)
+
+// withGroupBy renders the table format as one titled table per group
+// along key. Empty key means ungrouped — the default — so callers can
+// forward an unset flag unconditionally.
+func withGroupBy(key string) listOption {
+	return func(o *listOptions) { o.groupBy = key }
+}
+
+// withGroupLimit caps the rows rendered within each group at n. Zero or
+// negative is no cap, so callers forward an unset flag unconditionally.
+// Meaningless without withGroupBy, and the command rejects that
+// combination before reaching here.
+func withGroupLimit(n int) listOption {
+	return func(o *listOptions) { o.groupLimit = n }
+}
+
+// withPartialMatchSet declares that --limit truncated the match set, so
+// per-group totals count only the fetched rows.
+func withPartialMatchSet(partial bool) listOption {
+	return func(o *listOptions) { o.partialMatchSet = partial }
+}
+
+// withGroupLabeler supplies the key-to-name mapping for group headings.
+// Nil is the identity pass, so callers forward an unresolved dimension
+// unconditionally.
+func withGroupLabeler(l groupLabeler) listOption {
+	return func(o *listOptions) { o.labeler = l }
+}
+
+// formatTasks is the SINGLE chokepoint for `task list`-shaped row
+// output. Every path — plain, aggregate, stale, tag — renders through
+// here, so a presentation change lands once. Grouping in particular is
+// threaded through opts rather than branched at the call sites: a second
+// branch is a second chance for the two to diverge.
+func formatTasks(
+	cmd *cobra.Command,
+	tasks []*core.Task,
+	format string,
+	statusProvided bool,
+	opts ...listOption,
+) error {
+	var o listOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
+		// Grouped structured output NESTS, so a script consumes the same
+		// shape a human reads. The wrap is conditional on purpose: with
+		// no grouping key the payload stays the top-level array every
+		// existing consumer iterates. Wrapping unconditionally would
+		// break all of them at once and silently — `jq '.[]'` on an
+		// object fails exactly the way it failed on the `null` the
+		// empty-slice fix removed.
+		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
+			// --group-limit is NOT applied here. It caps what is
+			// DISPLAYED; a truncated task list inside a JSON payload
+			// carries no marker of its truncation, so a consumer that
+			// re-serializes it persists a subset as the whole. That is
+			// data corruption, not a display choice. The omission is
+			// announced instead — see noteGroupLimitIgnored.
+			//
+			// Labeled the SAME way the table path labels, so a script
+			// reading `.groups[].name` and a human reading the headings
+			// see the same names. Emitting raw typeids here while the
+			// table shows titles would make the two views of one listing
+			// disagree about what the groups are called.
+			groups = applyGroupLabels(groups, o.labeler)
+			_ = output.Render(out, format, groupedPayload(groups)) //nolint:errcheck // best-effort output
+			return nil
+		}
 		_ = output.Render(out, format, normalizeEmptySlices(tasks)) //nolint:errcheck // best-effort output
 	case "tls":
 		for _, t := range tasks {
@@ -171,10 +280,101 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, statusPr
 	case formatVtodo:
 		return writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default: // table
+		// Column resolution runs ONCE and is shared by every group
+		// table, so the headers cannot differ between sections of the
+		// same listing.
 		cols := effectiveTaskColumns(cmd, statusProvided)
+		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
+			// Headings show NAMES, not the stored keys grouping ran on:
+			// a track's title rather than its typeid, an assignee's
+			// resolved profile rather than whichever alias the row
+			// happens to carry. Applied after grouping so the ordering
+			// groupTasks established survives — see applyGroupLabels.
+			renderGroupedTables(out, applyGroupLabels(groups, o.labeler), cols, o)
+			return nil
+		}
+		// --group-limit is NOT consulted here. It caps rows within a
+		// group, and an ungrouped listing has none; applying it would
+		// silently truncate a plain `task list`, which is a data loss
+		// the user did not ask for and cannot see.
 		renderTable(out, tasks, cols)
 	}
 	return nil
+}
+
+// renderGroupedTables writes one titled table per group: the group name
+// as a heading, its rows beneath it, a blank line between sections.
+// Headers repeat per table because each table stands alone — a reader
+// scrolled to the third section should not have to scroll back up to
+// learn what the columns mean.
+//
+// A distinct-count footer follows ONLY when the rendered row count
+// exceeds the distinct task count, which happens under `--group-by tag`
+// because tag membership is many-to-many. Without the footer "3 rows"
+// over 2 tasks reads as a duplication bug; with it, the duplication is
+// stated. When the counts agree the line carries no information and is
+// omitted rather than printed as redundant noise.
+//
+// TRUNCATION IS ANNOUNCED, never silent. o.groupLimit caps each group's
+// rows, and a capped group's heading carries "(shown of total)" so the
+// reader can see rows were withheld. A group that fits under the cap is
+// NOT annotated: "(2 of 2)" states nothing, and an annotation printed
+// unconditionally stops meaning "there is more".
+//
+// The counts the footer and the headings report are counts of RENDERED
+// rows and of the FETCHED match set respectively — never of the store.
+// When --limit truncated that match set, o.partialMatchSet is set and a
+// trailing note says the totals are partial. Printing "2 of 5" off a
+// truncated fetch would state a group size that is not the group's size,
+// the same defect noteIgnoredPagination exists to prevent for counts.
+func renderGroupedTables(w io.Writer, groups []TaskGroup, cols []string, o listOptions) {
+	rows := 0
+	truncated := false
+	distinct := make(map[string]struct{})
+	for i, g := range groups {
+		if i > 0 {
+			_, _ = fmt.Fprintln(w)
+		}
+		shown := g.Tasks
+		if o.groupLimit > 0 && len(shown) > o.groupLimit {
+			shown = shown[:o.groupLimit]
+			truncated = true
+		}
+		_, _ = fmt.Fprintln(w, groupHeading(groupTitle(g.Name, len(shown), len(g.Tasks))))
+		renderTable(w, shown, cols)
+		rows += len(shown)
+		for _, t := range shown {
+			if t != nil {
+				distinct[t.ID] = struct{}{}
+			}
+		}
+	}
+	if rows > len(distinct) {
+		_, _ = fmt.Fprintf(w, "\n%d rows, %d distinct tasks\n", rows, len(distinct))
+	}
+	// Only when a total was actually printed: with nothing truncated
+	// there is no "of N" on screen for the note to qualify, and an
+	// unconditional disclaimer is noise a reader learns to skip.
+	if truncated && o.partialMatchSet {
+		_, _ = fmt.Fprintf(w,
+			"\nnote: group totals are partial; --limit truncated the match set before grouping\n")
+	}
+}
+
+// groupTitle renders a group's heading text, appending the shown/total
+// count only when rows were withheld.
+func groupTitle(name string, shown, total int) string {
+	if shown >= total {
+		return name
+	}
+	return fmt.Sprintf("%s (%d of %d)", name, shown, total)
+}
+
+// groupHeading styles a group name as a section title. titleStyle is the
+// same style `task show` uses for its heading, so grouped output reads
+// as part of the same CLI rather than a bolt-on.
+func groupHeading(name string) string {
+	return titleStyle.Render(name)
 }
 
 // effectiveTaskColumns resolves the table header list for `task list`.

@@ -38,6 +38,24 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 			return err
 		}
 
+		// Validated before storage opens, so a mistyped dimension fails
+		// against the user's flags with no I/O side effects. The flag
+		// enum already rejects unknown values at parse time; this is the
+		// second gate for the config-supplied path, which never reaches
+		// cobra's parser.
+		if taskListGroupBy != "" && !ValidGroupByKey(taskListGroupBy) {
+			return unknownGroupByError(taskListGroupBy)
+		}
+
+		// --group-limit caps rows WITHIN a group, so without a grouping
+		// dimension there is nothing for it to cap. Accepting it there
+		// would leave the user believing their listing was capped when
+		// it was not: the flag would parse, exit 0, and do nothing.
+		if taskListGroupLimit != 0 && taskListGroupBy == "" {
+			return fmt.Errorf("--group-limit caps rows within each group and needs --group-by; " +
+				"add --group-by <dimension>, or use --limit to cap the whole listing")
+		}
+
 		query := core.Query{
 			Limit:           taskListLimit,
 			Offset:          taskListOffset,
@@ -65,6 +83,28 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 		// must agree on whether this run is an aggregate, and a second
 		// resolution is a second chance to disagree.
 		aggregate := aggregateFormat()
+
+		// --group-by and an aggregate format both claim the output
+		// shape: one partitions the match set into row tables, the other
+		// collapses it into counts. There is no reading of the pair that
+		// satisfies either, so it is rejected rather than resolved —
+		// silently picking a winner hands the user output for a command
+		// they did not type.
+		//
+		// Gated on the RESOLVED aggregate, never on taskListSummary /
+		// taskListCounters. An aggregate has three spellings and the
+		// bools see only one of them; `-f summary` and a config
+		// `output.format: summary` leave both false. Keying on the bools
+		// is the same mistake aggregateFormat's doc comment records from
+		// the pagination path, and here it would let exactly those two
+		// spellings through the check.
+		if aggregate != "" && taskListGroupBy != "" {
+			return fmt.Errorf(
+				"--group-by cannot be combined with --%s: --group-by lists rows in one table per %s, "+
+					"--%s counts the whole match set; pick one",
+				aggregate, taskListGroupBy, aggregate)
+		}
+
 		paginationRequested := cmd.Flags().Changed("limit") ||
 			cmd.Flags().Changed("offset") ||
 			fromConfig["limit"] || fromConfig["offset"]
@@ -262,7 +302,41 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 			noteIgnoredPagination(cmd, aggregate, paginationRequested, len(tasks))
 			return formatTasks(cmd, tasks, aggregate, statusProvided)
 		}
-		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided)
+		// --group-by travels as an option into the single chokepoint
+		// rather than branching here: `task list` reaches formatTasks
+		// from several paths and each extra branch is a chance for two
+		// of them to render differently. Aggregate formats above are
+		// deliberately excluded — they emit counts, not rows.
+		// A match set that came back exactly at the limit is
+		// indistinguishable from one that was truncated by it, so it is
+		// treated as truncated. Over-disclosing costs one stderr-shaped
+		// note on an exact-fit listing; under-disclosing prints per-group
+		// totals that are not the groups' totals, with nothing on screen
+		// to say so — the asymmetry noteIgnoredPagination settles the
+		// same way.
+		partial := taskListLimit > 0 && len(tasks) >= taskListLimit
+
+		// --group-limit caps what a screen shows; a structured payload
+		// carries every task instead, so the flag does not apply there.
+		// It is not dropped silently: exiting 0 with output that ignored
+		// a typed flag is how a user comes to trust a cap that never ran.
+		format := viper.GetString("output.format")
+		if taskListGroupLimit > 0 && taskListGroupBy != "" && structuredFormat(format) {
+			noteGroupLimitIgnored(cmd.ErrOrStderr(), format)
+		}
+		// Headings read as NAMES. The labeler is built HERE, where the
+		// store handle lives, and threaded in: resolving a track title
+		// needs a read, and formatTasks is a rendering chokepoint that
+		// deliberately holds no storage. Built once per run — the track
+		// lookup is a single batched pass, not a query per section.
+		// Nil for every dimension whose keys are already names.
+		labeler := groupLabelerFor(ctx, taskListGroupBy, s)
+
+		return formatTasks(cmd, tasks, format, statusProvided,
+			withGroupBy(taskListGroupBy),
+			withGroupLimit(taskListGroupLimit),
+			withPartialMatchSet(partial),
+			withGroupLabeler(labeler))
 	},
 }
 
@@ -407,6 +481,14 @@ func init() {
 	TaskListCmd.Flags().StringVar(&taskListTrack, "track", "", "Filter by track ID")
 	TaskListCmd.Flags().StringVar(&taskListOutput, "output", "", "Write output to a file instead of stdout")
 	TaskListCmd.Flags().BoolVar(&taskListIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
+	// Values are NOT spelled out in the usage string: the flag-enum
+	// registration in registerFlagEnums is what renders them, into help,
+	// the parse rejection and shell completion alike. See GroupByKeys.
+	TaskListCmd.Flags().StringVar(&taskListGroupBy, "group-by", "", "Group results into one table per value of the given dimension")
+	// Separate knob from --limit on purpose: --limit caps the match set
+	// fetched from the store, this caps rows rendered within each group.
+	// Zero means no cap, so an unset flag forwards unconditionally.
+	TaskListCmd.Flags().IntVar(&taskListGroupLimit, "group-limit", 0, "Cap rows rendered within each --group-by group (0 = no cap)")
 
 	// Temporal filters (T-0908). Values for --due-before/--due-after are
 	// parsed with util.ParseUntil per docs/temporal-spec-0.1.md §5.

@@ -376,6 +376,10 @@ func registerFlagEnums(root *kitcli.Root) {
 		root.WithCommandFlagEnum(path, "status", statuses...)
 		root.WithCommandFlagEnum(path, "priority", priorities...)
 	}
+	// --group-by is `task list` only, and its set is a fixed vocabulary of
+	// tlc's own dimensions rather than a config-driven one, so it needs no
+	// entry in configuredTaskEnums' post-config restamp.
+	root.WithCommandFlagEnum("task list", "group-by", GroupByKeys()...)
 	// --effort is a write-path flag only; task list/graph filter without it.
 	for _, path := range []string{"task create", "task update"} {
 		root.WithCommandFlagEnum(path, "effort", efforts...)

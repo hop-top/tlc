@@ -388,6 +388,8 @@ func resetTaskFlags() {
 	taskListCounters = false
 	taskListOutput = ""
 	taskListIncludeLogs = false
+	taskListGroupBy = ""
+	taskListGroupLimit = 0
 	taskShowOutput = ""
 	taskShowIncludeLogs = false
 	taskListWorkspace = ""

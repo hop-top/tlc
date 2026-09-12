@@ -113,6 +113,8 @@ check      "task list --stale"          $TLC task list --stale
 check      "task list --blocked"        $TLC task list --blocked
 check_flag "task list --priority"       $TLC task list --priority
 check_flag "task list --blocked-by"     $TLC task list --blocked-by
+check_flag "task list --group-by"       $TLC task list --group-by
+check_flag "task list --group-limit"    $TLC task list --group-limit
 check      "task stale --run-hooks"     $TLC task stale --run-hooks
 check      "task update --force"        $TLC task update --force
 check_flag "task update --add-tag"           $TLC task update --add-tag
