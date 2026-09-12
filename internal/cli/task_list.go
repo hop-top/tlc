@@ -418,7 +418,20 @@ func runTaskListWorkspace(
 	if aggregate != "" {
 		format = aggregate
 	}
-	return formatWorkspaceTasks(cmd, tasks, format)
+	// Grouping travels the same way the single-project path sends it —
+	// as options into the one chokepoint. The labeler is nil here on
+	// purpose: it resolves track titles out of the LOCAL store, and a
+	// cross-project listing's track ids belong to other stores, so a
+	// lookup would either miss or, worse, rename a group after an
+	// unrelated project's track that happens to share an id.
+	if taskListGroupLimit > 0 && taskListGroupBy != "" && structuredFormat(format) {
+		noteGroupLimitIgnored(cmd.ErrOrStderr(), format)
+	}
+	partial := taskListLimit > 0 && len(tasks) >= taskListLimit
+	return formatWorkspaceTasks(cmd, tasks, format,
+		withGroupBy(taskListGroupBy),
+		withGroupLimit(taskListGroupLimit),
+		withPartialMatchSet(partial))
 }
 
 // projectLabel returns a short label from a project ID.
@@ -428,12 +441,22 @@ func projectLabel(projectID string) string {
 }
 
 // formatWorkspaceTasks renders tasks with project context.
-func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string) error {
+//
+// Every arm delegates to formatTasks. The table arm used to be the
+// exception — a private row struct with five fixed columns and its own
+// renderer — which is why --cols, --group-by, --group-limit, truncation
+// and priority-driven column dropping all stopped at the --workspace
+// boundary while exiting 0. The only thing the cross-project view
+// actually needs is one more column, and that is a column-registry key
+// now, so it travels as an option instead of a second renderer.
+//
+// The tls arm stays local: it prefixes each line with the project label,
+// which the shared formatter has no notion of.
+func formatWorkspaceTasks(
+	cmd *cobra.Command, tasks []*core.Task, format string, opts ...listOption,
+) error {
 	out := cmd.OutOrStdout()
-	switch format {
-	case formatJSON, formatYAML:
-		return formatTasks(cmd, tasks, format, false)
-	case "tls":
+	if format == "tls" {
 		for _, t := range tasks {
 			label := ""
 			if t.ProjectID != nil && *t.ProjectID != "" {
@@ -445,16 +468,13 @@ func formatWorkspaceTasks(cmd *cobra.Command, tasks []*core.Task, format string)
 				_, _ = fmt.Fprintln(out, formatTLS(t))
 			}
 		}
-	case formatSummary:
-		renderSummary(out, tasks)
-	case formatCounters:
-		renderCounters(out, tasks)
-	case formatVtodo:
-		return writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
-	default:
-		renderWorkspaceTable(out, tasks)
+		return nil
 	}
-	return nil
+	// Appended, not prepended: a caller that explicitly passed
+	// withProjectColumn(false) — a test pinning the un-injected shape —
+	// would otherwise be silently overridden by the default.
+	return formatTasks(cmd, tasks, format, false,
+		append([]listOption{withProjectColumn(true)}, opts...)...)
 }
 
 func init() {
