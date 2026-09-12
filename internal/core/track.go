@@ -123,20 +123,66 @@ type Track struct {
 // trackSlugRe matches lowercase alphanumeric characters and hyphens, 3-64 chars.
 var trackSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$`)
 
-// ValidateTrackSlug checks that slug is lowercase alphanumeric + hyphens, 3-64 chars.
+// MinTrackSlugLen is the shortest acceptable track slug.
+const MinTrackSlugLen = 3
+
+// MaxTrackSlugLen is the READ-path ceiling. Slugs up to this length stay
+// resolvable forever: tracks created before the shorter write-path limit
+// keep their names, and there is no migration or re-slugging.
+const MaxTrackSlugLen = 64
+
+// DefaultNewTrackSlugMaxLen is the write-path ceiling applied to newly
+// created slugs when no limit is configured.
+const DefaultNewTrackSlugMaxLen = 24
+
+// ValidateTrackSlug is the READ-path validator: it checks that slug is
+// lowercase alphanumeric + hyphens, MinTrackSlugLen..MaxTrackSlugLen chars.
 // Slugs are the human-typeable display alias for tracks; the durable identity
 // is Track.ID (a TypeID like track_<26char>).
+//
+// Keep this ceiling at MaxTrackSlugLen. Lookups must continue to resolve
+// long slugs minted before the write-path limit existed. To validate a slug
+// that is about to be written, use ValidateNewTrackSlug instead.
 func ValidateTrackSlug(slug string) error {
-	if len(slug) < 3 {
+	return validateTrackSlug(slug, MaxTrackSlugLen)
+}
+
+// ValidateNewTrackSlug is the WRITE-path validator: it applies every
+// ValidateTrackSlug rule plus the configured length limit for slugs being
+// minted now. A maxLen of 0 means DefaultNewTrackSlugMaxLen; values above
+// MaxTrackSlugLen are capped there so the write limit can never exceed what
+// lookups accept.
+//
+// This is a distinct entry point rather than a mode flag on
+// ValidateTrackSlug: read and write call sites must be classified at the
+// call, not toggled by an argument that is easy to pass wrong.
+func ValidateNewTrackSlug(slug string, maxLen int) error {
+	return validateTrackSlug(slug, ClampSlugMaxLen(maxLen))
+}
+
+// ClampSlugMaxLen normalises a configured new-slug limit: 0 (or less) means
+// the default, and anything above the read ceiling is capped there.
+func ClampSlugMaxLen(maxLen int) int {
+	if maxLen <= 0 {
+		return DefaultNewTrackSlugMaxLen
+	}
+	if maxLen > MaxTrackSlugLen {
+		return MaxTrackSlugLen
+	}
+	return maxLen
+}
+
+func validateTrackSlug(slug string, maxLen int) error {
+	if len(slug) < MinTrackSlugLen {
 		return fmt.Errorf(
-			"track slug %q too short (min 3 chars); use lowercase alphanum + hyphens",
-			slug,
+			"track slug %q too short (min %d chars); use lowercase alphanum + hyphens",
+			slug, MinTrackSlugLen,
 		)
 	}
-	if len(slug) > 64 {
+	if len(slug) > maxLen {
 		return fmt.Errorf(
-			"track slug %q too long (max 64 chars); use lowercase alphanum + hyphens",
-			slug,
+			"track slug %q too long (max %d chars); use lowercase alphanum + hyphens",
+			slug, maxLen,
 		)
 	}
 	if !trackSlugRe.MatchString(slug) {
@@ -151,8 +197,12 @@ func ValidateTrackSlug(slug string) error {
 
 // SlugFromTitle derives a track ID slug from a human-readable title.
 // Lowercases, replaces non-alphanum runs with hyphens, trims, and clamps
-// to 64 chars.
-func SlugFromTitle(title string) string {
+// to maxLen chars (0 means DefaultNewTrackSlugMaxLen).
+//
+// Clamping prefers a word boundary: the slug is cut at the last hyphen
+// inside the budget so it ends on a whole word. When no hyphen fits (the
+// first word alone overruns the budget) it falls back to a hard cut.
+func SlugFromTitle(title string, maxLen int) string {
 	lower := strings.ToLower(strings.TrimSpace(title))
 	var b strings.Builder
 	prevHyphen := false
@@ -169,8 +219,39 @@ func SlugFromTitle(title string) string {
 		}
 	}
 	slug := strings.TrimRight(b.String(), "-")
-	if len(slug) > 64 {
-		slug = strings.TrimRight(slug[:64], "-")
+	return clampSlug(slug, ClampSlugMaxLen(maxLen))
+}
+
+// clampSlug trims slug to at most maxLen chars, preferring the last hyphen
+// inside the budget so the result ends on a whole word. Falls back to a hard
+// cut when no hyphen fits. Never leaves a trailing hyphen.
+//
+// The budget yields to the MinTrackSlugLen floor: when every prefix inside
+// the budget would be shorter than the minimum (a leading word shorter than
+// the minimum followed by a hyphen), the cut extends to the first prefix
+// that is long enough and ends on an alphanum.
+func clampSlug(slug string, maxLen int) string {
+	if len(slug) <= maxLen {
+		return slug
 	}
-	return slug
+	cut := strings.TrimRight(slug[:maxLen], "-")
+	if i := strings.LastIndexByte(cut, '-'); i >= MinTrackSlugLen {
+		cut = strings.TrimRight(cut[:i], "-")
+	}
+	if len(cut) >= MinTrackSlugLen {
+		return cut
+	}
+	return minLenPrefix(slug)
+}
+
+// minLenPrefix returns the shortest prefix of slug that is at least
+// MinTrackSlugLen chars and ends on an alphanum, or slug itself when no
+// such prefix exists.
+func minLenPrefix(slug string) string {
+	for n := MinTrackSlugLen; n <= len(slug); n++ {
+		if slug[n-1] != '-' {
+			return slug[:n]
+		}
+	}
+	return strings.TrimRight(slug, "-")
 }
