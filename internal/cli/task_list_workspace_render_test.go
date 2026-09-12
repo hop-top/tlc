@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"hop.top/tlc/internal/core"
 )
@@ -61,19 +60,44 @@ func workspaceTasks() []*core.Task {
 	}
 }
 
-// workspaceRenderCmd returns a command whose output is captured, with
-// viper reset so a --cols value set by one test cannot leak into the
-// next. resolveEffectiveColumns reads the "cols" key off the global
-// viper, so the reset is load-bearing, not hygiene.
+// workspaceRenderCmd returns a command whose output is captured.
+//
+// The command carries no --cols: the default column set is what the
+// tests using this helper assert against, and a flag left unregistered
+// cannot be Changed, which is the state colsFromFlags reads.
 func workspaceRenderCmd(t *testing.T) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
-	viper.Set("cols", nil)
-	t.Cleanup(func() { viper.Set("cols", nil) })
 	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	return cmd, &buf
+}
+
+// workspaceColsCmd returns a capture command carrying --cols/--columns
+// registered the way kit registers them on the real root, then parses
+// argv against it so pflag marks the flag Changed.
+//
+// Registration matters because colsFromFlags reads cmd.Flags() — a
+// Changed StringSlice — and NOT the global viper. kit binds both flags
+// to a viper instance it creates privately inside console/cli.New, so
+// the global "cols" key is never the one production consults; a
+// viper.Set here would write a map nothing reads and the test would
+// assert against the default columns while claiming to test the flag.
+// Parsing real argv is what makes the assertion mean something.
+//
+// StringSlice + persistent flags mirror kit/console/output's own
+// registration, so the value arrives in the same shape production sees.
+func workspaceColsCmd(t *testing.T, argv ...string) (*cobra.Command, *bytes.Buffer) {
+	t.Helper()
+	cmd, buf := workspaceRenderCmd(t)
+	cmd.PersistentFlags().StringSlice("cols", nil,
+		"Restrict columns to this comma-separated list (repeatable)")
+	cmd.PersistentFlags().StringSlice("columns", nil, "Alias for --cols")
+	if err := cmd.ParseFlags(argv); err != nil {
+		t.Fatalf("ParseFlags(%v): %v", argv, err)
+	}
+	return cmd, buf
 }
 
 // renderWorkspace runs the workspace table arm and returns its text.
@@ -243,13 +267,7 @@ func assertNoANSI(t *testing.T, s, what string) {
 // discarded by the private renderer — the listing came back with its
 // five fixed columns and exit code 0.
 func TestWorkspaceTableHonorsCols(t *testing.T) {
-	viper.Set("cols", []string{"id", "title"})
-	t.Cleanup(func() { viper.Set("cols", nil) })
-
-	cmd := &cobra.Command{Use: "list"}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	cmd, buf := workspaceColsCmd(t, "--cols", "id,title")
 	if err := formatWorkspaceTasks(cmd, workspaceTasks(), formatTable); err != nil {
 		t.Fatalf("formatWorkspaceTasks: %v", err)
 	}
@@ -268,6 +286,10 @@ func TestWorkspaceTableHonorsCols(t *testing.T) {
 	if strings.Contains(got, "Project") {
 		t.Errorf("explicit --cols without project should not re-inject Project:\n%s", got)
 	}
+	// Exact header row, not just the two Contains above: it also pins the
+	// ORDER the user asked for and catches any column the substring
+	// checks do not happen to name.
+	assertHeaders(t, got, []string{"ID", "Title"})
 }
 
 // TestWorkspaceTableColsCanRequestProject is the other half: "project"
@@ -275,13 +297,7 @@ func TestWorkspaceTableHonorsCols(t *testing.T) {
 // workspace path bolts on outside it. A user who wants it alongside a
 // custom set must be able to name it.
 func TestWorkspaceTableColsCanRequestProject(t *testing.T) {
-	viper.Set("cols", []string{"project", "id", "title"})
-	t.Cleanup(func() { viper.Set("cols", nil) })
-
-	cmd := &cobra.Command{Use: "list"}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	cmd, buf := workspaceColsCmd(t, "--cols", "project,id,title")
 	if err := formatWorkspaceTasks(cmd, workspaceTasks(), formatTable); err != nil {
 		t.Fatalf("formatWorkspaceTasks: %v", err)
 	}
@@ -293,6 +309,7 @@ func TestWorkspaceTableColsCanRequestProject(t *testing.T) {
 	if strings.Contains(got, "warning: unknown column") {
 		t.Errorf("%q must be a known task column key:\n%s", "project", got)
 	}
+	assertHeaders(t, got, []string{"Project", "ID", "Title"})
 }
 
 // TestWorkspaceTableHonorsGroupBy pins the grouping the workspace path
