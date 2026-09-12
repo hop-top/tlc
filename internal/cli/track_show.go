@@ -150,9 +150,16 @@ func renderTrackShowDetail(
 	tasks []*core.Task,
 	strategy *core.ExecutionStrategy,
 ) {
-	// Header
-	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", formatTrackAlias(t))))
-	if isShowTypeIDOutput() && t.ID != "" && t.ID != formatTrackAlias(t) {
+	// Header leads with the short L-NNNN identifier so `show` names a track
+	// the same way `list` does, then carries the FULL slug beside it. The
+	// slug is never clipped here: the list table may elide it to fit the
+	// terminal, which makes this the only view that shows it whole.
+	header := formatTrackDisplayID(t)
+	if slug := formatTrackSlug(t); slug != "" && slug != header {
+		header = fmt.Sprintf("%s  %s", header, slug)
+	}
+	_, _ = fmt.Fprintln(w, titleStyle.Render(fmt.Sprintf("Track: %s", header)))
+	if isShowTypeIDOutput() && t.ID != "" && t.ID != formatTrackDisplayID(t) {
 		_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("ID:"), t.ID)
 	}
 	_, _ = fmt.Fprintf(w, "%s %s\n", labelStyle.Render("Title:"), t.Title)

@@ -55,6 +55,20 @@ func (r *stubTrackRepo) GetTrackBySlug(_ context.Context, projectID, slug string
 	return nil, nil
 }
 
+func (r *stubTrackRepo) GetTrackBySeq(_ context.Context, projectID string, seq int64) (*Track, error) {
+	for _, t := range r.tracks {
+		var pid string
+		if t.ProjectID != nil {
+			pid = *t.ProjectID
+		}
+		if pid == projectID && t.Seq == seq {
+			cp := *t
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *stubTrackRepo) UpdateTrack(_ context.Context, track *Track) error {
 	if _, ok := r.tracks[track.ID]; !ok {
 		return fmt.Errorf("track %q not found", track.ID)
@@ -579,5 +593,60 @@ func TestTrackService_GetTrackWithState_Unlinked(t *testing.T) {
 	}
 	if len(flags) != 1 || flags[0] != TrackStateUnlinked {
 		t.Errorf("expected [unlinked], got %v", flags)
+	}
+}
+
+// TestCreateTrack_SlugMaxLen pins the write-path ceiling on track creation:
+// an explicit over-limit slug is rejected, one at the limit is accepted.
+func TestCreateTrack_SlugMaxLen(t *testing.T) {
+	over := "abcdefghijklmnopqrstuvwxy" // 25 chars
+	at := over[:24]
+
+	svc := NewTrackService(newStubTrackRepo(), nil, WithSlugMaxLen(24))
+	err := svc.CreateTrack(context.Background(), &Track{
+		Slug: over, Title: "Over", Type: TrackTypeFeature,
+	})
+	if err == nil {
+		t.Fatalf("CreateTrack with %d-char slug expected error, got nil", len(over))
+	}
+
+	if err := svc.CreateTrack(context.Background(), &Track{
+		Slug: at, Title: "At", Type: TrackTypeFeature,
+	}); err != nil {
+		t.Fatalf("CreateTrack with %d-char slug unexpected error: %v", len(at), err)
+	}
+}
+
+// TestGrandfatheredSlugStillResolves is the crux pairing: a legacy 53-char
+// slug already in storage resolves through ParseTrackRef (the read path),
+// while a 25-char explicit new slug is refused by CreateTrack (the write
+// path). There is no migration and no re-slugging.
+func TestGrandfatheredSlugStillResolves(t *testing.T) {
+	legacy := "config-driven-label-templates-and-workflow-wiring-etc"
+	if len(legacy) != 53 {
+		t.Fatalf("legacy fixture length drift: %d", len(legacy))
+	}
+
+	repo := newStubTrackRepo()
+	// Seed directly: this track predates the limit.
+	id := NewTrackID()
+	repo.tracks[id] = &Track{
+		ID: id, Slug: legacy, Title: "Legacy", Type: TrackTypeFeature,
+		Status: TrackStatusPending,
+	}
+
+	got, err := ParseTrackRef(context.Background(), repo, "", legacy)
+	if err != nil {
+		t.Fatalf("legacy slug %q must stay resolvable: %v", legacy, err)
+	}
+	if got != id {
+		t.Errorf("ParseTrackRef(%q) = %q, want %q", legacy, got, id)
+	}
+
+	svc := NewTrackService(repo, nil, WithSlugMaxLen(24))
+	if err := svc.CreateTrack(context.Background(), &Track{
+		Slug: "abcdefghijklmnopqrstuvwxy", Title: "New", Type: TrackTypeFeature,
+	}); err == nil {
+		t.Fatal("25-char explicit slug must be refused on the write path")
 	}
 }

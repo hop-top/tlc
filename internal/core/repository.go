@@ -109,6 +109,10 @@ type TrackRepository interface {
 	// GetTrackBySlug retrieves a track by its (project_id, slug) display
 	// alias. projectID may be empty. Returns nil, nil if not found.
 	GetTrackBySlug(ctx context.Context, projectID, slug string) (*Track, error)
+	// GetTrackBySeq retrieves a track by its (project_id, seq) display
+	// alias, the "L-NNNN" form. projectID may be empty. Returns nil, nil
+	// if not found.
+	GetTrackBySeq(ctx context.Context, projectID string, seq int64) (*Track, error)
 	// UpdateTrack updates an existing track.
 	UpdateTrack(ctx context.Context, track *Track) error
 	// DeleteTrack removes a track by its ID. Fails if tasks reference this track.

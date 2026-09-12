@@ -33,6 +33,7 @@ var taskListDefaultColumns = []string{
 // string used by the trackTableRow / trackTableRowWithProject structs.
 var trackColumnHeaders = map[string]string{
 	"id":       "ID",
+	"slug":     "Slug",
 	"project":  "Project",
 	"title":    "Title",
 	"type":     "Type",
@@ -47,7 +48,7 @@ var trackColumnHeaders = map[string]string{
 // "project" is in the registry but NOT here — it is injected only when
 // --all-projects is set.
 var trackListDefaultColumns = []string{
-	"id", "title", "type", "status", "state", "progress", "assignee",
+	"id", "slug", "title", "type", "status", "state", "progress", "assignee",
 }
 
 // resolveColumnHeaders maps a lowercase-normalized key list to table

@@ -12,6 +12,11 @@ import (
 	"hop.top/tlc/internal/storage"
 )
 
+// trackTypeName is the registered URI type name for tracks. It doubles as
+// the singular namespace accepted in a track URI, so both the registration
+// and the namespace check read from one place.
+const trackTypeName = "track"
+
 // TypesDirConfig holds configurable directory paths for URI type registration.
 type TypesDirConfig struct {
 	FlowsDir     string // empty = "examples/flows"
@@ -42,6 +47,7 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 	registrations := []scheme.TypeRegistration{
 		projectCompletion(s),
 		taskCompletion(s),
+		trackCompletion(s),
 		assigneeCompletion(dc),
 		tagCompletion(s),
 		flowCompletion(dc),
@@ -88,6 +94,48 @@ func taskCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
 				}
 			}
 			return ids, nil
+		},
+	}
+}
+
+// trackCompletion completes track references for tlc://tracks/ URIs.
+//
+// Unlike taskCompletion, which offers raw IDs, this offers the L-NNNN
+// display alias and the slug, never the 26-char TypeID. A TypeID is not
+// something a person types or reads back from a link, and the alias
+// exists precisely so a track reference can be short; completing IDs
+// here would hand the shell the one form the alias was introduced to
+// replace. Both forms resolve via core.ParseTrackRef, so everything
+// offered here is dereferenceable.
+func trackCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
+	return scheme.TypeRegistration{
+		Name: trackTypeName,
+		Completer: func(ctx context.Context, prefix string) ([]string, error) {
+			tracks, err := s.ListTracks(ctx, core.TrackQuery{})
+			if err != nil {
+				return nil, fmt.Errorf("list tracks: %w", err)
+			}
+			// Match aliases case-insensitively so a typed "l-" narrows
+			// to aliases the same way "L-" does; slugs are lowercase by
+			// validation, so the same folded compare is correct there.
+			lower := strings.ToLower(prefix)
+			refs := make([]string, 0, len(tracks)*2)
+			seen := make(map[string]struct{}, len(tracks)*2)
+			add := func(ref string) {
+				if ref == "" || !strings.HasPrefix(strings.ToLower(ref), lower) {
+					return
+				}
+				if _, dup := seen[ref]; dup {
+					return
+				}
+				seen[ref] = struct{}{}
+				refs = append(refs, ref)
+			}
+			for _, track := range tracks {
+				add(core.FormatTrackSeq(track.Seq))
+				add(track.Slug)
+			}
+			return refs, nil
 		},
 	}
 }

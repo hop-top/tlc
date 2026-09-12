@@ -693,6 +693,101 @@ Tasks are stored in a canonical single-line format:
 Example:
 `[~] T-0002 Fix token refresh race @engineer-3 #auth #bug ref:docs/rfc/012.md`
 
+## 🔖 Identifiers
+
+Tasks and tracks each carry a durable internal ID and a short display
+alias. You type the alias; TLC stores the durable ID.
+
+| Entity | Type to refer to it | Also accepted | Durable identity |
+|--------|---------------------|---------------|------------------|
+| Task   | `T-0042`            | `42`, `task_01h455vb4pex5vsknk084sn02q` | `task_<typeid>` |
+| Track  | `L-0002`            | slug, `track_01h455vbqkfsn02nk084ksn02q` | `track_<typeid>` |
+
+Aliases are numbered per project and stay fixed once assigned — `L-0002`
+keeps pointing at the same track for the life of that track. They are
+unique inside a project, so the same alias may exist in another project.
+Alias input is case-insensitive: `l-0002` resolves like `L-0002`.
+
+The `track_<typeid>` form is the durable identity. It never changes and is
+unique across every project, so use it when a reference must survive being
+copied between projects.
+
+### Track slugs
+
+A track also has a **slug** — the readable name you see in prose and on
+disk. The slug is the directory name under `.tlc/tracks/`:
+
+```
+.tlc/tracks/browser-rendering/
+    metadata.json
+    plan.md
+```
+
+That is why tracks keep a slug alongside `L-NNNN`: `tracks/L-0002/` would
+tell you nothing in a file listing or a diff.
+
+Both forms address the same track, so use whichever reads better:
+
+```bash
+tlc track show L-0002               # by alias
+tlc track show browser-rendering    # by slug
+```
+
+`tlc track list` shows both, so you can copy either one:
+
+```bash
+tlc track list
+# ID      Slug               Title                  Type     Status   State     Progress  Assignee
+# L-0002  render-v2          Browser rendering two  feature  pending  unlinked  0/0       -
+# L-0001  browser-rendering  Browser rendering      feature  active   unlinked  0/0       -
+```
+
+On a narrow terminal the Slug column is the first to be dropped, and a long
+slug is clipped with an ellipsis to keep the other columns on screen. That
+is display only — `tlc track show` and `-f json` always carry the full
+slug, so a script never reads a clipped value.
+
+`tlc track create` derives the slug from the title, or takes one via
+`--id`:
+
+```bash
+tlc track create "Browser rendering" --type feature
+# slug: browser-rendering
+
+tlc track create "Browser rendering" --type feature --id render-v2
+# slug: render-v2
+```
+
+Slugs are lowercase alphanumerics and hyphens, starting and ending with
+an alphanumeric.
+
+### Slug length
+
+New slugs are capped at 24 characters by default. A derived slug is cut at
+a word boundary, so it stays readable:
+
+```bash
+tlc track create "Config driven label templates and workflow wiring" --type feature
+# slug: config-driven-label
+```
+
+Change the cap with `tracks.slug_max_len`:
+
+```yaml
+# .tlc/config.yaml
+tracks:
+  slug_max_len: 32           # default: 24
+```
+
+The cap applies **only to slugs being created**. Tracks created before you
+set it — or under a longer cap — keep their names and keep resolving; TLC
+never renames a track directory. Only a new slug over the cap is rejected:
+
+```bash
+tlc track create "Legacy" --type feature --id config-driven-label-templates-and-workflow-wiring
+# error: track slug "config-driven-label-templates-and-workflow-wiring" too long (max 24 chars)
+```
+
 ## ⚙️ Configuration
 TLC follows a hierarchical configuration:
 1. Environment variables (`TLC_*`)
@@ -721,6 +816,7 @@ the original hardcoded values so existing projects work unchanged.
 # .tlc/config.yaml
 tracks:
   dir: docs/tracks             # default: "tracks" (relative to .tlc/)
+  slug_max_len: 24             # default: 24 (new slugs only)
 
 flow:
   dir: workflows               # default: "examples/flows"

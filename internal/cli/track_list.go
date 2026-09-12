@@ -172,6 +172,7 @@ type trackListOutput struct {
 // trackTableRow is the table-only schema (no Project column).
 type trackTableRow struct {
 	ID       string `table:"ID"`
+	Slug     string `table:"Slug,priority=2"`
 	Title    string `table:"Title"`
 	Type     string `table:"Type"`
 	Status   string `table:"Status"`
@@ -184,6 +185,7 @@ type trackTableRow struct {
 // rendered when --all-projects is set.
 type trackTableRowWithProject struct {
 	ID       string `table:"ID"`
+	Slug     string `table:"Slug,priority=2"`
 	Project  string `table:"Project"`
 	Title    string `table:"Title"`
 	Type     string `table:"Type"`
@@ -271,7 +273,8 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool, co
 		out := make([]trackTableRowWithProject, len(rows))
 		for i, r := range rows {
 			out[i] = trackTableRowWithProject{
-				ID:       formatTrackAlias(r.Track),
+				ID:       formatTrackDisplayID(r.Track),
+				Slug:     formatTrackSlug(r.Track),
 				Project:  trackProject(r.Track),
 				Title:    r.Track.Title,
 				Type:     r.Track.Type,
@@ -288,7 +291,8 @@ func renderTrackListTable(w io.Writer, rows []trackRowData, showProject bool, co
 	out := make([]trackTableRow, len(rows))
 	for i, r := range rows {
 		out[i] = trackTableRow{
-			ID:       formatTrackAlias(r.Track),
+			ID:       formatTrackDisplayID(r.Track),
+			Slug:     formatTrackSlug(r.Track),
 			Title:    r.Track.Title,
 			Type:     r.Track.Type,
 			Status:   string(r.Track.Status),

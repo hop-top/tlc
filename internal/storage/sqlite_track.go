@@ -34,12 +34,26 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 			dueAtSQL = sql.NullString{String: track.DueAt.UTC().Format(time.RFC3339), Valid: true}
 		}
 
+		// Allocate the per-project sequence number backing the L-NNNN
+		// display alias if one hasn't already been assigned. Allocation
+		// runs in the same write transaction as the insert so concurrent
+		// creates can never collide on (project_id, seq). The allocated
+		// value is echoed back onto the struct so callers can render the
+		// alias without a re-read.
+		if track.Seq == 0 {
+			seq, err := allocTrackSeqInTx(ctx, tx, projectID)
+			if err != nil {
+				return fmt.Errorf("failed to allocate track sequence: %w", err)
+			}
+			track.Seq = int64(seq)
+		}
+
 		_, err := tx.ExecContext(
 			ctx, `
-			INSERT INTO tracks (id, slug, title, type, status, assigned_to,
+			INSERT INTO tracks (id, seq, slug, title, type, status, assigned_to,
 				created_at, updated_at, project_id, meta, plan_mapping, due_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			track.ID, track.Slug, track.Title, track.Type, track.Status,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			track.ID, track.Seq, track.Slug, track.Title, track.Type, track.Status,
 			track.AssignedTo,
 			track.CreatedAt.Format(time.RFC3339),
 			track.UpdatedAt.Format(time.RFC3339),
@@ -66,12 +80,12 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 	if core.IsTrackID(id) {
 		if scoped {
 			row = s.db.QueryRowContext(ctx, `
-				SELECT id, slug, title, type, status, assigned_to,
+				SELECT id, seq, slug, title, type, status, assigned_to,
 					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE id = ? AND project_id = ?`, id, proj.ProjectID)
 		} else {
 			row = s.db.QueryRowContext(ctx, `
-				SELECT id, slug, title, type, status, assigned_to,
+				SELECT id, seq, slug, title, type, status, assigned_to,
 					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
 		}
@@ -79,12 +93,12 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 		// Slug fallback. Match the same project-scoping rules.
 		if scoped {
 			row = s.db.QueryRowContext(ctx, `
-				SELECT id, slug, title, type, status, assigned_to,
+				SELECT id, seq, slug, title, type, status, assigned_to,
 					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE slug = ? AND project_id = ?`, id, proj.ProjectID)
 		} else {
 			row = s.db.QueryRowContext(ctx, `
-				SELECT id, slug, title, type, status, assigned_to,
+				SELECT id, seq, slug, title, type, status, assigned_to,
 					created_at, updated_at, project_id, meta, plan_mapping, due_at
 				FROM tracks WHERE slug = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1`, id)
 		}
@@ -96,7 +110,7 @@ func (s *SQLiteStorage) GetTrack(ctx context.Context, id string) (*core.Track, e
 // getTrackInProject retrieves a track scoped to a specific project.
 func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID string) (*core.Track, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, slug, title, type, status, assigned_to,
+		SELECT id, seq, slug, title, type, status, assigned_to,
 			created_at, updated_at, project_id, meta, plan_mapping, due_at
 		FROM tracks WHERE id = ? AND project_id = ?`, id, projectID)
 	return scanTrackFromRow(row)
@@ -106,9 +120,24 @@ func (s *SQLiteStorage) getTrackInProject(ctx context.Context, id, projectID str
 // Empty projectID matches the global bucket. Returns nil, nil if not found.
 func (s *SQLiteStorage) GetTrackBySlug(ctx context.Context, projectID, slug string) (*core.Track, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, slug, title, type, status, assigned_to,
+		SELECT id, seq, slug, title, type, status, assigned_to,
 			created_at, updated_at, project_id, meta, plan_mapping, due_at
 		FROM tracks WHERE project_id = ? AND slug = ?`, projectID, slug)
+	return scanTrackFromRow(row)
+}
+
+// GetTrackBySeq retrieves a track by its (project_id, seq) display alias,
+// the "L-NNNN" form. Empty projectID matches the global bucket. Returns
+// nil, nil if not found. Mirrors GetTaskBySeq.
+func (s *SQLiteStorage) GetTrackBySeq(
+	ctx context.Context,
+	projectID string,
+	seq int64,
+) (*core.Track, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, seq, slug, title, type, status, assigned_to,
+			created_at, updated_at, project_id, meta, plan_mapping, due_at
+		FROM tracks WHERE project_id = ? AND seq = ?`, projectID, seq)
 	return scanTrackFromRow(row)
 }
 
@@ -230,7 +259,7 @@ func (s *SQLiteStorage) ListTracks(
 	ctx context.Context,
 	query core.TrackQuery,
 ) ([]*core.Track, error) {
-	sqlQuery := `SELECT id, slug, title, type, status, assigned_to,
+	sqlQuery := `SELECT id, seq, slug, title, type, status, assigned_to,
 		created_at, updated_at, project_id, meta, plan_mapping, due_at FROM tracks`
 	var args []interface{}
 	var whereClauses []string
@@ -303,9 +332,10 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 	var track core.Track
 	var createdAtStr, updatedAtStr string
 	var assignedTo, projectID, metaStr, planMappingStr, dueAtStr sql.NullString
+	var seqVal sql.NullInt64
 
 	err := row.Scan(
-		&track.ID, &track.Slug, &track.Title, &track.Type, &track.Status,
+		&track.ID, &seqVal, &track.Slug, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
 		&planMappingStr, &dueAtStr,
 	)
@@ -314,6 +344,10 @@ func scanTrackFromRow(row *sql.Row) (*core.Track, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan track row: %w", err)
+	}
+
+	if seqVal.Valid {
+		track.Seq = seqVal.Int64
 	}
 
 	if track.CreatedAt, err = parseRFC3339(createdAtStr); err != nil {
@@ -356,14 +390,19 @@ func scanTrackFromRows(rows *sql.Rows) (*core.Track, error) {
 	var track core.Track
 	var createdAtStr, updatedAtStr string
 	var assignedTo, projectID, metaStr, planMappingStr, dueAtStr sql.NullString
+	var seqVal sql.NullInt64
 
 	err := rows.Scan(
-		&track.ID, &track.Slug, &track.Title, &track.Type, &track.Status,
+		&track.ID, &seqVal, &track.Slug, &track.Title, &track.Type, &track.Status,
 		&assignedTo, &createdAtStr, &updatedAtStr, &projectID, &metaStr,
 		&planMappingStr, &dueAtStr,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan track row: %w", err)
+	}
+
+	if seqVal.Valid {
+		track.Seq = seqVal.Int64
 	}
 
 	if track.CreatedAt, err = parseRFC3339(createdAtStr); err != nil {

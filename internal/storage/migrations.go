@@ -533,10 +533,59 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_audit_runs_started_at ON audit_runs(started_at);
 		`,
 	},
+	{
+		// Per-project track sequence numbers, mirroring the task model
+		// from v13 (tasks.seq + task_sequences). tracks.seq is nullable
+		// rather than NOT NULL so the column can be added in place —
+		// rebuilding the table would put every existing track row at
+		// risk, and v13 already demonstrated what that costs.
+		//
+		// Backfill assigns seq per project in created_at order (id as
+		// tie-breaker for identical timestamps), starting at 1, then
+		// seeds each project's counter one past its highest backfilled
+		// value so the first runtime allocation cannot collide. Rows are
+		// only UPDATEd; none are deleted or recreated.
+		//
+		// project_id '' normalizes to 'default' in track_sequences,
+		// matching task_sequences' storage key for the global bucket.
+		//
+		// Idempotent: the backfill is scoped to seq IS NULL, and the
+		// counter seed uses INSERT OR IGNORE.
+		version: 20,
+		query: `
+		CREATE TABLE IF NOT EXISTS track_sequences (
+			project_id TEXT PRIMARY KEY,
+			next_id    INTEGER DEFAULT 1
+		);
+
+		ALTER TABLE tracks ADD COLUMN seq INTEGER;
+
+		UPDATE tracks SET seq = (
+			SELECT COUNT(*)
+			FROM tracks AS earlier
+			WHERE earlier.project_id = tracks.project_id
+			  AND (
+				earlier.created_at < tracks.created_at
+				OR (earlier.created_at = tracks.created_at AND earlier.id <= tracks.id)
+			  )
+		)
+		WHERE seq IS NULL;
+
+		INSERT OR IGNORE INTO track_sequences (project_id, next_id)
+		SELECT
+			CASE WHEN project_id = '' THEN 'default' ELSE project_id END,
+			MAX(seq) + 1
+		FROM tracks
+		WHERE seq IS NOT NULL
+		GROUP BY project_id;
+
+		CREATE INDEX IF NOT EXISTS idx_tracks_seq ON tracks(project_id, seq);
+		`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 19
+const LatestMigrationVersion = 20
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

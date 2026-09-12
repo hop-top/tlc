@@ -75,6 +75,29 @@ type TrackConfig struct {
 	Types          []string          `yaml:"types,omitempty"`
 	DefaultType    string            `yaml:"default_type,omitempty"`
 	List           *ListDefaults     `yaml:"list,omitempty"`
+	SlugMaxLen     int               `yaml:"slug_max_len,omitempty"`
+}
+
+// DefaultSlugMaxLen is the write-path ceiling for newly created track
+// slugs. Slugs already stored stay resolvable at their original length;
+// the limit applies to new slugs only.
+const DefaultSlugMaxLen = 24
+
+// MinSlugLen is the shortest acceptable track slug.
+const MinSlugLen = 3
+
+// MaxSlugMaxLen is the highest value tracks.slug_max_len may take. It
+// matches the read-path ceiling, so the write limit can never exceed
+// what lookups accept.
+const MaxSlugMaxLen = 64
+
+// SlugMaxLenOrDefault returns the configured new-slug length limit or
+// DefaultSlugMaxLen when unset.
+func (tc *TrackConfig) SlugMaxLenOrDefault() int {
+	if tc.SlugMaxLen > 0 {
+		return tc.SlugMaxLen
+	}
+	return DefaultSlugMaxLen
 }
 
 // TracksDir returns the configured tracks directory or the default "tracks".
@@ -126,6 +149,13 @@ func (tc *TrackConfig) Validate() error {
 		return fmt.Errorf(
 			"tracks.health.min_progress_to_start must be 0-100, got %d",
 			tc.Health.MinProgressToStart,
+		)
+	}
+	if tc.SlugMaxLen != 0 &&
+		(tc.SlugMaxLen < MinSlugLen || tc.SlugMaxLen > MaxSlugMaxLen) {
+		return fmt.Errorf(
+			"tracks.slug_max_len must be %d-%d, got %d",
+			MinSlugLen, MaxSlugMaxLen, tc.SlugMaxLen,
 		)
 	}
 	if tc.DefaultType != "" {

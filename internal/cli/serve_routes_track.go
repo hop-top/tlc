@@ -120,7 +120,8 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "slug is required")
 			return
 		}
-		if err := core.ValidateTrackSlug(req.Slug); err != nil {
+		// Write path: the request mints a new slug.
+		if err := core.ValidateNewTrackSlug(req.Slug, getConfigSlugMaxLen()); err != nil {
 			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
 			return
 		}
@@ -138,7 +139,10 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 			track.ProjectID = &proj.ProjectID
 		}
 
-		svc := core.NewTrackService(deps.storage, deps.storage)
+		svc := core.NewTrackService(
+			deps.storage, deps.storage,
+			core.WithSlugMaxLen(getConfigSlugMaxLen()),
+		)
 		if err := svc.CreateTrack(ctx, track); err != nil {
 			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "%v", err)
 			return

@@ -56,6 +56,10 @@ func formatTaskAlias(t *core.Task) string {
 
 // formatTrackAlias renders the human-readable track display alias (the
 // slug). Falls back to the durable typeid when Slug is unset.
+//
+// This is the *prose* alias — what reads best mid-sentence ("Created track
+// browser-rendering"). Table ID cells want formatTrackDisplayID instead:
+// a slug is unbounded and pushes every other column off the screen.
 func formatTrackAlias(t *core.Track) string {
 	if t == nil {
 		return ""
@@ -64,6 +68,31 @@ func formatTrackAlias(t *core.Track) string {
 		return t.Slug
 	}
 	return t.ID
+}
+
+// formatTrackDisplayID renders the short "L-NNNN" identifier for an ID
+// column. Delegates to core.FormatTrackDisplay, which falls back to the
+// durable typeid when Seq is 0 — rows predating the sequence backfill, and
+// structs assembled in memory, still get an identifier rather than a hole
+// in the column.
+func formatTrackDisplayID(t *core.Track) string {
+	if t == nil {
+		return ""
+	}
+	return core.FormatTrackDisplay(t)
+}
+
+// formatTrackSlug renders the slug cell for a table row. The cell carries
+// the FULL slug: clipping it to the terminal is the table renderer's job
+// (kit/output measures the whole table and elides the widest cells), and
+// keeping it out of here is what stops a truncated slug from ever reaching
+// the JSON/YAML projections, where it would be an unresolvable reference
+// rather than a cosmetic elision.
+func formatTrackSlug(t *core.Track) string {
+	if t == nil {
+		return ""
+	}
+	return t.Slug
 }
 
 // formatTaskTrackDisplay resolves a Task.TrackID value into its human-

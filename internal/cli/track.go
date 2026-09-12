@@ -52,9 +52,10 @@ fresh track, so the operation is not idempotent.`,
 		// User-supplied --id (or auto-derived from title) becomes the
 		// human-facing Slug. Track.ID itself is the durable TypeID,
 		// minted by TrackService.CreateTrack via core.NewTrackID().
+		slugMaxLen := getConfigSlugMaxLen()
 		slug := trackCreateID
 		if slug == "" {
-			slug = core.SlugFromTitle(title)
+			slug = core.SlugFromTitle(title, slugMaxLen)
 		}
 
 		if trackCreateType == "" {
@@ -85,7 +86,7 @@ fresh track, so the operation is not idempotent.`,
 		}
 		defer func() { _ = s.Close() }()
 
-		svc := core.NewTrackService(s, s)
+		svc := core.NewTrackService(s, s, core.WithSlugMaxLen(slugMaxLen))
 		ctx := context.Background()
 
 		var assignee *string

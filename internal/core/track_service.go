@@ -15,9 +15,10 @@ import (
 // (auto-transition, plan ingestion, abandon-with-tasks) stays as
 // wrappers.
 type TrackService struct {
-	repo      TrackRepository
-	taskRepo  Repository
-	domainSvc *domain.Service[Track]
+	repo       TrackRepository
+	taskRepo   Repository
+	domainSvc  *domain.Service[Track]
+	slugMaxLen int
 }
 
 // TrackServiceOption configures a TrackService.
@@ -31,6 +32,15 @@ func WithDomainTrackRepo(
 ) TrackServiceOption {
 	return func(s *TrackService) {
 		s.domainSvc = domain.NewService[Track](dr, opts...)
+	}
+}
+
+// WithSlugMaxLen sets the write-path length limit applied to slugs of
+// newly created tracks. Zero keeps DefaultNewTrackSlugMaxLen. Existing
+// tracks are unaffected: lookups keep the MaxTrackSlugLen read ceiling.
+func WithSlugMaxLen(n int) TrackServiceOption {
+	return func(s *TrackService) {
+		s.slugMaxLen = n
 	}
 }
 
@@ -69,7 +79,9 @@ func (s *TrackService) CreateTrack(ctx context.Context, track *Track) error {
 		}
 		track.ID = NewTrackID()
 	}
-	if err := ValidateTrackSlug(track.Slug); err != nil {
+	// Write path: new slugs obey the configured limit. Reads keep the
+	// wider ceiling so pre-existing long slugs stay resolvable.
+	if err := ValidateNewTrackSlug(track.Slug, s.slugMaxLen); err != nil {
 		return err
 	}
 	if !ValidTrackType(track.Type) {
