@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -68,8 +69,8 @@ func resolveColumnHeaders(keys []string, registry map[string]string) (headers []
 
 // resolveEffectiveColumns resolves the table header list for a `list`
 // command from the config ladder (<domain>.list.columns ->
-// defaults.list.columns -> defaults.columns), then the --cols flag
-// (viper key "cols"), lowercase-normalizing throughout. `transform`, if
+// defaults.list.columns -> defaults.columns), then the --cols/--columns
+// flags, lowercase-normalizing throughout. `transform`, if
 // non-nil, mutates the key list after normalization (used for track's
 // --all-projects project-column injection). When statusProvided, the
 // "status" column is pruned. Returns nil when nothing customized the
@@ -91,7 +92,7 @@ func resolveEffectiveColumns(
 			customized = true
 		}
 	}
-	if c := viper.GetStringSlice("cols"); len(c) > 0 {
+	if c := colsFromFlags(cmd); len(c) > 0 {
 		keys = c
 		customized = true
 	}
@@ -122,6 +123,54 @@ func resolveEffectiveColumns(
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown column %q (skipped)\n", u)
 	}
 	return headers
+}
+
+// colsFromFlags reads --cols / --columns off the command line.
+//
+// It deliberately does NOT consult the global viper. kit registers both
+// flags against a viper instance it creates privately (console/cli.New),
+// so nothing ever writes the "cols" key on the global singleton that the
+// rest of tlc reads — a global read returns the flag's value never, and
+// only ever sees leakage from tests that called viper.Set themselves.
+//
+// Config-sourced columns arrive by the separate ladder above
+// (resolveFlagDefaultKey), so reading only Changed flags here keeps the
+// two sources distinct and gives the flag precedence: applyConfigDefaults
+// seeds unset flags without flipping pflag's Changed bit.
+//
+// --columns is a strict alias of --cols; when both are given the values
+// concatenate in that order, each value comma-split and deduped (pflag
+// does not split values that arrive through a StringSlice default).
+func colsFromFlags(cmd *cobra.Command) []string {
+	var raw []string
+	for _, name := range []string{"cols", "columns"} {
+		f := cmd.Flags().Lookup(name)
+		if f == nil || !f.Changed {
+			continue
+		}
+		sv, ok := f.Value.(pflag.SliceValue)
+		if !ok {
+			continue
+		}
+		raw = append(raw, sv.GetSlice()...)
+	}
+
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		for _, part := range strings.Split(item, ",") {
+			p := strings.TrimSpace(part)
+			if p == "" {
+				continue
+			}
+			if _, dup := seen[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // dropKey returns a new slice with all occurrences of drop removed.
