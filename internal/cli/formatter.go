@@ -152,6 +152,16 @@ type listOptions struct {
 	// renders — only whether the per-group totals are qualified. See
 	// renderGroupedTables.
 	partialMatchSet bool
+
+	// labeler renames group headings from the stored KEY to a name a
+	// reader recognizes — a track's title, an assignee's resolved
+	// profile. Nil for the dimensions whose keys are already names, and
+	// nil for every caller that does not group at all.
+	//
+	// Built by the caller, not here: resolving a track title needs a
+	// store handle, and formatTasks is a rendering chokepoint that
+	// deliberately holds none. See groupLabelerFor.
+	labeler groupLabeler
 }
 
 // listOption mutates listOptions. See withGroupBy.
@@ -176,6 +186,13 @@ func withGroupLimit(n int) listOption {
 // per-group totals count only the fetched rows.
 func withPartialMatchSet(partial bool) listOption {
 	return func(o *listOptions) { o.partialMatchSet = partial }
+}
+
+// withGroupLabeler supplies the key-to-name mapping for group headings.
+// Nil is the identity pass, so callers forward an unresolved dimension
+// unconditionally.
+func withGroupLabeler(l groupLabeler) listOption {
+	return func(o *listOptions) { o.labeler = l }
 }
 
 // formatTasks is the SINGLE chokepoint for `task list`-shaped row
@@ -212,6 +229,13 @@ func formatTasks(
 			// re-serializes it persists a subset as the whole. That is
 			// data corruption, not a display choice. The omission is
 			// announced instead — see noteGroupLimitIgnored.
+			//
+			// Labeled the SAME way the table path labels, so a script
+			// reading `.groups[].name` and a human reading the headings
+			// see the same names. Emitting raw typeids here while the
+			// table shows titles would make the two views of one listing
+			// disagree about what the groups are called.
+			groups = applyGroupLabels(groups, o.labeler)
 			_ = output.Render(out, format, groupedPayload(groups)) //nolint:errcheck // best-effort output
 			return nil
 		}
@@ -232,7 +256,12 @@ func formatTasks(
 		// same listing.
 		cols := effectiveTaskColumns(cmd, statusProvided)
 		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
-			renderGroupedTables(out, groups, cols, o)
+			// Headings show NAMES, not the stored keys grouping ran on:
+			// a track's title rather than its typeid, an assignee's
+			// resolved profile rather than whichever alias the row
+			// happens to carry. Applied after grouping so the ordering
+			// groupTasks established survives — see applyGroupLabels.
+			renderGroupedTables(out, applyGroupLabels(groups, o.labeler), cols, o)
 			return nil
 		}
 		// --group-limit is NOT consulted here. It caps rows within a

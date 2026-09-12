@@ -324,10 +324,19 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 		if taskListGroupLimit > 0 && taskListGroupBy != "" && structuredFormat(format) {
 			noteGroupLimitIgnored(cmd.ErrOrStderr(), format)
 		}
+		// Headings read as NAMES. The labeler is built HERE, where the
+		// store handle lives, and threaded in: resolving a track title
+		// needs a read, and formatTasks is a rendering chokepoint that
+		// deliberately holds no storage. Built once per run — the track
+		// lookup is a single batched pass, not a query per section.
+		// Nil for every dimension whose keys are already names.
+		labeler := groupLabelerFor(ctx, taskListGroupBy, s)
+
 		return formatTasks(cmd, tasks, format, statusProvided,
 			withGroupBy(taskListGroupBy),
 			withGroupLimit(taskListGroupLimit),
-			withPartialMatchSet(partial))
+			withPartialMatchSet(partial),
+			withGroupLabeler(labeler))
 	},
 }
 
