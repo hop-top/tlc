@@ -21,6 +21,7 @@
     ".": {
       "component": "tlc",
       "release-type": "go",
+      "initial-version": "0.1.0-alpha.0",
       "prerelease": true,
       "prerelease-type": "alpha.0",
       "versioning": "prerelease",
