@@ -213,6 +213,8 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Stale subcommand: `tlc task stale` (dedicated stale view; fires hooks with `--run-hooks`)
 - List blocked: `tlc task list --blocked` (only tasks with a blocked reason)
 - List by priority: `tlc task list --priority P0` or `--priority P0,P1`
+- Group a listing: `tlc task list --group-by track` (one table per track, assignee, tag, status, priority, or project)
+- Cap rows per group: `tlc task list --group-by track --group-limit 5`
 - List blocked by: `tlc task list --blocked-by T-0041` (tasks that depend on T-0041)
 - Update: `tlc task update T-0042 --status IN_PROGRESS`
 - Update blockers: `tlc task update T-0042 --add-blocked-by T-0009 --remove-blocked-by T-0003`
@@ -444,6 +446,161 @@ tlc task list --workspace myws --space labs
 
 # Summary view (grouped counts by status)
 tlc task list --summary
+```
+
+### Grouping listings
+
+Split a listing into one titled table per group with `--group-by`:
+
+```bash
+tlc task list --group-by track
+```
+
+```text
+Adoption rollout
+ID      Title                      Status  Assigned  Due  Stale  Blocked
+T-0004  Ship rollout toggle        To Do   -         -    -      -
+T-0001  Wire adoption metrics      To Do   ann       -    -      -
+T-0002  Draft rollout plan         To Do   bob       -    -      -
+T-0003  Measure activation funnel  To Do   ann       -    -      -
+
+Billing migration
+ID      Title                Status  Assigned  Due  Stale  Blocked
+T-0005  Port billing schema  To Do   bob       -    -      -
+
+(none)
+ID      Title            Status  Assigned  Due  Stale  Blocked
+T-0006  Untracked chore  To Do   -         -    -      -
+```
+
+Group by `track`, `assignee`, `tag`, `status`, `priority`, or `project`.
+
+Headings show names, not internal IDs: a track renders its title, an
+assignee its resolved aps profile. A track that has since been deleted
+falls back to its raw ID rather than an unnamed section.
+
+**Tasks with no value for the dimension** collect into a `(none)`
+section, always last — no track, no assignee, no tags, no priority.
+Named groups lead; the leftovers trail.
+
+**Ordering** is by group name ascending, except `status` and `priority`,
+which follow your configured lifecycle order (so `TODO` precedes
+`IN_PROGRESS` rather than sorting alphabetically). The order is stable
+across runs.
+
+#### Tags duplicate rows
+
+Tag membership is many-to-many, so a task tagged `[api, urgent]` appears
+under **both** groups. When that makes the rendered row count exceed the
+number of distinct tasks, a footer says so:
+
+```bash
+tlc task list --group-by tag
+```
+
+```text
+api
+ID      Title                  Status  Assigned  Due  Stale  Blocked
+T-0005  Port billing schema    To Do   bob       -    -      -
+T-0001  Wire adoption metrics  To Do   ann       -    -      -
+T-0002  Draft rollout plan     To Do   bob       -    -      -
+
+docs
+ID      Title                      Status  Assigned  Due  Stale  Blocked
+T-0003  Measure activation funnel  To Do   ann       -    -      -
+
+urgent
+ID      Title               Status  Assigned  Due  Stale  Blocked
+T-0002  Draft rollout plan  To Do   bob       -    -      -
+
+(none)
+ID      Title                Status  Assigned  Due  Stale  Blocked
+T-0004  Ship rollout toggle  To Do   -         -    -      -
+T-0006  Untracked chore      To Do   -         -    -      -
+
+7 rows, 6 distinct tasks
+```
+
+The footer is omitted when the two counts agree.
+
+#### Capping rows per group
+
+`--limit` caps the **match set** fetched before grouping, so one large
+group can crowd out the rest. `--group-limit` caps the rows shown
+**within each group**, keeping every group represented:
+
+```bash
+tlc task list --group-by track --group-limit 2
+```
+
+```text
+Adoption rollout (2 of 4)
+ID      Title                  Status  Assigned  Due  Stale  Blocked
+T-0004  Ship rollout toggle    To Do   -         -    -      -
+T-0001  Wire adoption metrics  To Do   ann       -    -      -
+
+Billing migration
+ID      Title                Status  Assigned  Due  Stale  Blocked
+T-0005  Port billing schema  To Do   bob       -    -      -
+
+(none)
+ID      Title            Status  Assigned  Due  Stale  Blocked
+T-0006  Untracked chore  To Do   -         -    -      -
+```
+
+A truncated group announces it as `(shown of total)`. A group that fits
+under the cap is not annotated. `--group-limit` needs `--group-by`; on
+its own it is rejected rather than silently ignored.
+
+#### JSON output nests
+
+With `--group-by`, `-f json` (and `-f yaml`) wrap the results in groups:
+
+```bash
+tlc task list --group-by track -f json
+```
+
+```json
+{
+  "groups": [
+    {
+      "name": "Adoption rollout",
+      "tasks": [
+        {
+          "id": "task_01m29y23gcfkvvwvn1fypmqwvy",
+          "seq": 4,
+          "title": "Ship rollout toggle",
+          "status": "TODO",
+          "assigned_to": null,
+          "track_id": "track_01m29y22cvecktj19v6edcfpdb"
+        }
+      ]
+    }
+  ]
+}
+```
+
+(Task objects are shown abbreviated; each carries the same fields as an
+ungrouped listing. A group with no tasks serializes `"tasks": []`, never
+`null`.)
+
+Group names match the table headings, and group order matches the
+rendered order. Without `--group-by` the payload stays the flat array
+existing consumers iterate, so adding the flag is opt-in.
+
+`--group-limit` does **not** apply to structured output — it caps what a
+screen shows, and a truncated list inside a payload carries no marker of
+its truncation. Passing both prints a note on stderr and emits every
+task.
+
+#### Not combinable with aggregates
+
+`--group-by` lists rows; `--summary` and `-f counters` collapse the match
+set into counts. Combining them is rejected:
+
+```console
+$ tlc task list --group-by track --summary
+--group-by cannot be combined with --summary: --group-by lists rows in one table per track, --summary counts the whole match set; pick one
 ```
 
 ### Tracks

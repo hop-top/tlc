@@ -215,6 +215,63 @@ Implementations SHOULD support pagination via:
   - `after=<task_id>` returns tasks created after specified ID
   - Stable under concurrent writes
 
+#### Grouping
+
+Implementations MAY support partitioning a listing into named groups
+along one dimension. The reference CLI spells this `--group-by <key>`,
+accepting `track`, `assignee`, `tag`, `status`, `priority`, `project`.
+
+Grouping applies to the match set AFTER filtering and sorting. Within a
+group, tasks retain the order sorting established.
+
+**Group naming.** Groups are keyed on the stored value but SHOULD be
+titled with a resolved display name — a track's title rather than its
+ID, an assignee's canonical profile rather than a raw alias. A key that
+cannot be resolved (a deleted track, an unknown profile) MUST still
+render its raw key; an empty heading leaves the rows beneath it without
+attribution.
+
+**Group ordering** MUST be deterministic across runs:
+
+- `track` / `assignee` / `tag` / `project` — group name ascending.
+- `status` / `priority` — declared vocabulary order, which is rank
+  order. Alphabetical ordering would place `DONE` ahead of `TODO`.
+
+**Unset values** collect into a single group, rendered last regardless of
+the sort that placed the others. The reference CLI names it `(none)`.
+This includes a task carrying no tags at all, which would otherwise be
+absent from a `tag` grouping it matched the filters for.
+
+**Tag grouping is many-to-many.** A task with multiple tags appears once
+per tag, so the rendered row count MAY exceed the distinct task count.
+Implementations SHOULD state the distinct count when the two differ;
+deduplicating instead would require choosing one tag to hide the task
+under.
+
+**Per-group limits.** `--limit` bounds the match set fetched before
+grouping; a separate per-group cap (`--group-limit`) bounds the rows
+rendered within each group, so every group stays represented when one
+holds most of the rows. A capped group SHOULD announce the withheld
+rows; an uncapped one SHOULD NOT be annotated. A per-group cap without a
+grouping dimension MUST be rejected rather than ignored.
+
+The per-group cap is a DISPLAY bound and MUST NOT apply to structured
+output: a truncated array carries no marker of its truncation, so a
+consumer that re-serializes it persists a subset as the whole.
+Implementations SHOULD announce the omission on stderr.
+
+**Structured output.** When grouping is requested, JSON/YAML SHOULD nest
+as `{"groups": [{"name": ..., "tasks": [...]}]}`, preserving group order
+and using the same resolved names the rendered headings show. Without a
+grouping dimension the payload MUST remain the flat array, so existing
+consumers are unaffected.
+
+**Aggregate conflict.** Grouping partitions rows; aggregate formats
+(`--summary`, `--counters`) collapse the match set into counts. The
+combination MUST be rejected rather than resolved in either flag's
+favor. The rejection MUST key on the resolved output format, not on
+boolean flags alone, since an aggregate has several spellings.
+
 #### Bulk Read
 
 Implementations MAY support bulk read by IDs:
