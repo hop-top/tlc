@@ -204,11 +204,11 @@ func (r *Resolver) ResolveTrack(ctx context.Context, input string) (*ResolvedTra
 
 	id, err := core.ParseTrackRef(ctx, r.storage, projectID, ref)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve track reference %q: %w", ref, err)
 	}
 	track, err := r.storage.GetTrack(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get track %q: %w", id, err)
 	}
 	if track == nil {
 		return nil, fmt.Errorf("track %q not found", ref)
@@ -221,7 +221,7 @@ func (r *Resolver) ResolveTrack(ctx context.Context, input string) (*ResolvedTra
 // singular type name are accepted.
 func isTrackNamespace(ns string) bool {
 	switch strings.ToLower(ns) {
-	case "tracks", "track":
+	case trackTypeName + "s", trackTypeName:
 		return true
 	}
 	return false

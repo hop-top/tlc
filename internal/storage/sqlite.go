@@ -1287,33 +1287,7 @@ func (s *SQLiteStorage) GetNextSequenceID(ctx context.Context, projectID string)
 // that consumes the value to avoid (project_id, seq) collisions under
 // concurrent creates.
 func allocSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error) {
-	if projectID == "" {
-		projectID = "default"
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO task_sequences (project_id, next_id)
-		VALUES (?, 1)
-	`, projectID); err != nil {
-		return 0, fmt.Errorf("ensure sequence row: %w", err)
-	}
-
-	var nextID int
-	if err := tx.QueryRowContext(
-		ctx,
-		`SELECT next_id FROM task_sequences WHERE project_id = ?`, projectID,
-	).Scan(&nextID); err != nil {
-		return 0, fmt.Errorf("read sequence: %w", err)
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE task_sequences SET next_id = next_id + 1 WHERE project_id = ?`, projectID,
-	); err != nil {
-		return 0, fmt.Errorf("bump sequence: %w", err)
-	}
-
-	return nextID, nil
+	return allocCounterSeqInTx(ctx, tx, "task_sequences", "sequence", projectID)
 }
 
 // allocTrackSeqInTx reserves the next monotonically increasing sequence
@@ -1329,30 +1303,44 @@ func allocSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error
 // the value to avoid (project_id, seq) collisions under concurrent
 // creates.
 func allocTrackSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error) {
+	return allocCounterSeqInTx(ctx, tx, "track_sequences", "track sequence", projectID)
+}
+
+// allocCounterSeqInTx implements the shared reserve-and-bump against a
+// (project_id, next_id) counter table. table is an internal literal, never
+// caller input, so interpolating it into the statements is safe. label
+// names the counter in returned errors.
+func allocCounterSeqInTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	table string,
+	label string,
+	projectID string,
+) (int, error) {
 	if projectID == "" {
 		projectID = "default"
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO track_sequences (project_id, next_id)
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+		INSERT OR IGNORE INTO %s (project_id, next_id)
 		VALUES (?, 1)
-	`, projectID); err != nil {
-		return 0, fmt.Errorf("ensure track sequence row: %w", err)
+	`, table), projectID); err != nil {
+		return 0, fmt.Errorf("ensure %s row: %w", label, err)
 	}
 
 	var nextID int
 	if err := tx.QueryRowContext(
 		ctx,
-		`SELECT next_id FROM track_sequences WHERE project_id = ?`, projectID,
+		fmt.Sprintf(`SELECT next_id FROM %s WHERE project_id = ?`, table), projectID,
 	).Scan(&nextID); err != nil {
-		return 0, fmt.Errorf("read track sequence: %w", err)
+		return 0, fmt.Errorf("read %s: %w", label, err)
 	}
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`UPDATE track_sequences SET next_id = next_id + 1 WHERE project_id = ?`, projectID,
+		fmt.Sprintf(`UPDATE %s SET next_id = next_id + 1 WHERE project_id = ?`, table), projectID,
 	); err != nil {
-		return 0, fmt.Errorf("bump track sequence: %w", err)
+		return 0, fmt.Errorf("bump %s: %w", label, err)
 	}
 
 	return nextID, nil

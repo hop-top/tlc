@@ -12,6 +12,11 @@ import (
 	"hop.top/tlc/internal/storage"
 )
 
+// trackTypeName is the registered URI type name for tracks. It doubles as
+// the singular namespace accepted in a track URI, so both the registration
+// and the namespace check read from one place.
+const trackTypeName = "track"
+
 // TypesDirConfig holds configurable directory paths for URI type registration.
 type TypesDirConfig struct {
 	FlowsDir     string // empty = "examples/flows"
@@ -104,11 +109,11 @@ func taskCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
 // offered here is dereferenceable.
 func trackCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
 	return scheme.TypeRegistration{
-		Name: "track",
+		Name: trackTypeName,
 		Completer: func(ctx context.Context, prefix string) ([]string, error) {
 			tracks, err := s.ListTracks(ctx, core.TrackQuery{})
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("list tracks: %w", err)
 			}
 			// Match aliases case-insensitively so a typed "l-" narrows
 			// to aliases the same way "L-" does; slugs are lowercase by

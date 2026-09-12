@@ -46,7 +46,7 @@ func currentProjectID() string {
 
 // trimTrackURI strips a "tlc://tracks/" (or "track://") wrapper from a
 // track reference, reporting whether one was present. Only the track
-// collection is recognised, so a task or flow URI is left alone and
+// collection is recognized, so a task or flow URI is left alone and
 // fails as the unknown reference it is.
 func trimTrackURI(input string) (string, bool) {
 	i := strings.Index(input, "://")

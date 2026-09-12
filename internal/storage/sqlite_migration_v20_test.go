@@ -61,7 +61,10 @@ func TestMigrationV20_FreshDBHasTrackSeqSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("select tracks.seq: %v", err)
 	}
-	_ = rows.Close()
+	defer rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("scan tracks.seq: %v", err)
+	}
 	_ = seq
 }
 
@@ -257,7 +260,7 @@ func TestMigrationV20_AllocAfterBackfillDoesNotCollide(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginTx: %v", err)
 	}
-	defer tx.Rollback() //nolint:errcheck // rolled back or committed below
+	defer tx.Rollback()
 
 	got, err := allocTrackSeqInTx(ctx, tx, "proj-a")
 	if err != nil {

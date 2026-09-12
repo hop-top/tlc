@@ -171,7 +171,7 @@ func TestSlugFromTitle_ClampInvariants(t *testing.T) {
 	for _, limit := range []int{3, 8, 24, 64} {
 		for _, title := range titles {
 			slug := SlugFromTitle(title, limit)
-			// The budget holds, except where honouring it would emit a
+			// The budget holds, except where honoring it would emit a
 			// slug below MinTrackSlugLen: the validity floor wins, and
 			// the overrun is the shortest valid prefix.
 			if len(slug) > limit {
