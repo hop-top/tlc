@@ -198,6 +198,10 @@ func defaultKeyHints() map[string]keyHint {
 			Key:         "tracks.default_type",
 			Description: "Default track type",
 		},
+		"tracks.slug_max_len": {
+			Key:         "tracks.slug_max_len",
+			Description: "Max length for newly created track slugs",
+		},
 	}
 }
 

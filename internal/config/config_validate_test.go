@@ -591,3 +591,37 @@ func TestTaskConfig_DefaultsSurviveTerminalFromCheck(t *testing.T) {
 		t.Fatalf("default config must validate, got: %v", err)
 	}
 }
+
+func TestTrackConfig_SlugMaxLen(t *testing.T) {
+	tests := []struct {
+		name    string
+		set     int
+		want    int
+		wantErr bool
+	}{
+		{name: "unset defaults to 24", set: 0, want: 24},
+		{name: "explicit min", set: 3, want: 3},
+		{name: "explicit max", set: 64, want: 64},
+		{name: "below min rejected", set: 2, wantErr: true},
+		{name: "negative rejected", set: -1, wantErr: true},
+		{name: "above max rejected", set: 65, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &TrackConfig{SlugMaxLen: tc.set}
+			err := cfg.Validate()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Validate() expected error for slug_max_len=%d", tc.set)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Validate() unexpected error: %v", err)
+			}
+			if got := cfg.SlugMaxLenOrDefault(); got != tc.want {
+				t.Errorf("SlugMaxLenOrDefault() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
