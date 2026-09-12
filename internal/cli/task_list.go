@@ -271,7 +271,13 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 			noteIgnoredPagination(cmd, aggregate, paginationRequested, len(tasks))
 			return formatTasks(cmd, tasks, aggregate, statusProvided)
 		}
-		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided)
+		// --group-by travels as an option into the single chokepoint
+		// rather than branching here: `task list` reaches formatTasks
+		// from several paths and each extra branch is a chance for two
+		// of them to render differently. Aggregate formats above are
+		// deliberately excluded — they emit counts, not rows.
+		return formatTasks(cmd, tasks, viper.GetString("output.format"), statusProvided,
+			withGroupBy(taskListGroupBy))
 	},
 }
 

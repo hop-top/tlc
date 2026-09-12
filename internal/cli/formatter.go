@@ -126,7 +126,44 @@ func isShowTypeIDOutput() bool {
 	return false
 }
 
-func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, statusProvided bool) error {
+// listOptions carries the presentation choices that vary between the
+// callers of formatTasks. Threaded as options rather than positional
+// parameters so the callers that want none of them (task stale, tag
+// list) keep their existing call shape and cannot accidentally opt in.
+type listOptions struct {
+	// groupBy is the --group-by dimension, empty for an ungrouped
+	// listing. Validated by the caller via ValidGroupByKey; an unknown
+	// key here degrades to ungrouped rather than rendering nothing.
+	groupBy string
+}
+
+// listOption mutates listOptions. See withGroupBy.
+type listOption func(*listOptions)
+
+// withGroupBy renders the table format as one titled table per group
+// along key. Empty key means ungrouped — the default — so callers can
+// forward an unset flag unconditionally.
+func withGroupBy(key string) listOption {
+	return func(o *listOptions) { o.groupBy = key }
+}
+
+// formatTasks is the SINGLE chokepoint for `task list`-shaped row
+// output. Every path — plain, aggregate, stale, tag — renders through
+// here, so a presentation change lands once. Grouping in particular is
+// threaded through opts rather than branched at the call sites: a second
+// branch is a second chance for the two to diverge.
+func formatTasks(
+	cmd *cobra.Command,
+	tasks []*core.Task,
+	format string,
+	statusProvided bool,
+	opts ...listOption,
+) error {
+	var o listOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
@@ -142,10 +179,57 @@ func formatTasks(cmd *cobra.Command, tasks []*core.Task, format string, statusPr
 	case formatVtodo:
 		return writeVtodo(cmd, tasks, nil, taskListOutput, taskListIncludeLogs)
 	default: // table
+		// Column resolution runs ONCE and is shared by every group
+		// table, so the headers cannot differ between sections of the
+		// same listing.
 		cols := effectiveTaskColumns(cmd, statusProvided)
+		if groups := groupTasks(tasks, o.groupBy); len(groups) > 0 {
+			renderGroupedTables(out, groups, cols)
+			return nil
+		}
 		renderTable(out, tasks, cols)
 	}
 	return nil
+}
+
+// renderGroupedTables writes one titled table per group: the group name
+// as a heading, its rows beneath it, a blank line between sections.
+// Headers repeat per table because each table stands alone — a reader
+// scrolled to the third section should not have to scroll back up to
+// learn what the columns mean.
+//
+// A distinct-count footer follows ONLY when the rendered row count
+// exceeds the distinct task count, which happens under `--group-by tag`
+// because tag membership is many-to-many. Without the footer "3 rows"
+// over 2 tasks reads as a duplication bug; with it, the duplication is
+// stated. When the counts agree the line carries no information and is
+// omitted rather than printed as redundant noise.
+func renderGroupedTables(w io.Writer, groups []TaskGroup, cols []string) {
+	rows := 0
+	distinct := make(map[string]struct{})
+	for i, g := range groups {
+		if i > 0 {
+			_, _ = fmt.Fprintln(w)
+		}
+		_, _ = fmt.Fprintln(w, groupHeading(g.Name))
+		renderTable(w, g.Tasks, cols)
+		rows += len(g.Tasks)
+		for _, t := range g.Tasks {
+			if t != nil {
+				distinct[t.ID] = struct{}{}
+			}
+		}
+	}
+	if rows > len(distinct) {
+		_, _ = fmt.Fprintf(w, "\n%d rows, %d distinct tasks\n", rows, len(distinct))
+	}
+}
+
+// groupHeading styles a group name as a section title. titleStyle is the
+// same style `task show` uses for its heading, so grouped output reads
+// as part of the same CLI rather than a bolt-on.
+func groupHeading(name string) string {
+	return titleStyle.Render(name)
 }
 
 // effectiveTaskColumns resolves the table header list for `task list`.
