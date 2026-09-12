@@ -256,3 +256,54 @@ func TestTaskCreateAliasMissDoesNotAutoCreate(t *testing.T) {
 func aliasFor(seq int) string {
 	return fmt.Sprintf("L-%04d", seq)
 }
+
+// TestTrackURIFormResolves pins the tlc://tracks/ URI as dereferenceable,
+// not merely typeable: registering a URI type buys completion, and a link
+// nobody can follow is worse than no link at all.
+func TestTrackURIFormResolves(t *testing.T) {
+	bin, cwd, env, slugs := aliasFixture(t)
+
+	for _, ref := range []string{
+		"tlc://tracks/L-0002",
+		"tlc://tracks/l-0002",
+		"tlc://tracks/" + slugs[1],
+		"tlc://track/L-0002",
+	} {
+		out, code := runTLC(t, bin, cwd, env, "track", "show", ref)
+		if code != 0 {
+			t.Errorf("track show %s: exit %d\n%s", ref, code, out)
+			continue
+		}
+		if !strings.Contains(out, slugs[1]) {
+			t.Errorf("track show %s did not resolve to %q:\n%s",
+				ref, slugs[1], out)
+		}
+	}
+}
+
+// TestTrackURIFilterOnTaskList carries the URI form through the --track
+// filter, the surface a pasted link is most likely to land in.
+func TestTrackURIFilterOnTaskList(t *testing.T) {
+	bin, cwd, env, slugs := aliasFixture(t)
+
+	bySlug := taskTitles(t, runTLCOK(t, bin, cwd, env,
+		"task", "list", "--track", slugs[1], "--format", "json"))
+	byURI := taskTitles(t, runTLCOK(t, bin, cwd, env,
+		"task", "list", "--track", "tlc://tracks/L-0002", "--format", "json"))
+
+	if strings.Join(bySlug, "|") != strings.Join(byURI, "|") {
+		t.Errorf("--track tlc://tracks/L-0002 returned %v, want %v",
+			byURI, bySlug)
+	}
+}
+
+// TestNonTrackURIIsNotSilentlyAccepted keeps the wrapper narrow: a task
+// URI must not be quietly treated as a track reference.
+func TestNonTrackURIIsNotSilentlyAccepted(t *testing.T) {
+	bin, cwd, env, _ := aliasFixture(t)
+
+	out, code := runTLC(t, bin, cwd, env, "track", "show", "tlc://tasks/L-0002")
+	if code == 0 {
+		t.Errorf("track show tlc://tasks/L-0002 unexpectedly succeeded:\n%s", out)
+	}
+}

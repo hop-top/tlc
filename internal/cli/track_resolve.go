@@ -44,6 +44,40 @@ func currentProjectID() string {
 	return ""
 }
 
+// trimTrackURI strips a "tlc://tracks/" (or "track://") wrapper from a
+// track reference, reporting whether one was present. Only the track
+// collection is recognised, so a task or flow URI is left alone and
+// fails as the unknown reference it is.
+func trimTrackURI(input string) (string, bool) {
+	i := strings.Index(input, "://")
+	if i <= 0 {
+		return input, false
+	}
+	rest := input[i+3:]
+	if j := strings.IndexAny(rest, "?#"); j >= 0 {
+		rest = rest[:j]
+	}
+	ns, ref, found := strings.Cut(rest, "/")
+	if !found {
+		return input, false
+	}
+	switch strings.ToLower(ns) {
+	case "tracks", "track":
+	default:
+		return input, false
+	}
+	ref = strings.Trim(ref, "/")
+	if ref == "" {
+		return input, false
+	}
+	// A project-qualified form keeps only the final segment; tracks have
+	// no project-scoped URI shape today.
+	if k := strings.LastIndex(ref, "/"); k >= 0 {
+		ref = ref[k+1:]
+	}
+	return ref, true
+}
+
 // resolveTrackID resolves a track reference to its canonical TypeID.
 //
 // Accepted user-facing forms:
@@ -67,6 +101,13 @@ func resolveTrackID(
 	}
 
 	projectID := currentProjectID()
+
+	// 0. tlc://tracks/<ref> URI form. Peel the wrapper so the reference
+	// inside takes exactly the same resolution path as a bare one; a URI
+	// must never be a second, weaker way to name a track.
+	if ref, ok := trimTrackURI(input); ok {
+		input = ref
+	}
 
 	// 1a. Strict TypeID path — never fall through to fuzzy.
 	if core.IsTrackID(input) {

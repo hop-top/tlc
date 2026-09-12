@@ -21,7 +21,8 @@ func TestGetRegistry_RegistersExpectedTypes(t *testing.T) {
 	require.NotNil(t, reg)
 
 	types := reg.Types()
-	assert.ElementsMatch(t, []string{"project", "task", "assignee", "tag", "flow"}, types)
+	assert.ElementsMatch(t,
+		[]string{"project", "task", "track", "assignee", "tag", "flow"}, types)
 }
 
 func TestGetRegistry_DoubleCallReturnsNewRegistry(t *testing.T) {

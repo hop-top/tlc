@@ -160,6 +160,73 @@ func (r *Resolver) ResolveTask(ctx context.Context, input string) (*ResolvedTask
 	return &ResolvedTask{Task: task, Storage: projStorage}, nil
 }
 
+// ResolvedTrack represents a track and the storage it was found in.
+type ResolvedTrack struct {
+	Track   *core.Track
+	Storage *storage.SQLiteStorage
+}
+
+// ResolveTrack resolves a track reference or tlc://tracks/<ref> URI into
+// a Track.
+//
+// Registering the "track" URI type only makes such a URI typeable; this
+// is what makes it dereferenceable. The URI wrapper is peeled off here
+// and the remaining reference is handed to core.ParseTrackRef, so a URI
+// accepts exactly the forms every other track-taking surface accepts:
+// TypeID, L-NNNN alias (case-insensitive), bare seq digits, and slug.
+func (r *Resolver) ResolveTrack(ctx context.Context, input string) (*ResolvedTrack, error) {
+	ref := strings.TrimSpace(input)
+	if ref == "" {
+		return nil, fmt.Errorf("uri: empty track reference")
+	}
+
+	u, err := splitTaskInput(ref)
+	if err != nil {
+		return nil, err
+	}
+	// "tlc://tracks/L-0002" and the shorthand "tracks/L-0002" both carry
+	// the collection name in Namespace; anything else (a bare alias or
+	// slug) arrives with the whole value in ID.
+	if u.ID != "" && isTrackNamespace(u.Namespace) {
+		ref = u.ID
+	}
+	// A project-qualified form ("tracks/<proj>/L-0002") is not a shape
+	// tracks have today; keep the last segment so a stray prefix cannot
+	// silently turn into a slug lookup.
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		ref = ref[i+1:]
+	}
+
+	projectID := ""
+	if proj := core.DetectProject(); proj != nil && proj.InProject {
+		projectID = proj.ProjectID
+	}
+
+	id, err := core.ParseTrackRef(ctx, r.storage, projectID, ref)
+	if err != nil {
+		return nil, err
+	}
+	track, err := r.storage.GetTrack(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if track == nil {
+		return nil, fmt.Errorf("track %q not found", ref)
+	}
+	return &ResolvedTrack{Track: track, Storage: r.storage}, nil
+}
+
+// isTrackNamespace reports whether a URI namespace names the track
+// collection. Both the plural collection form used in links and the
+// singular type name are accepted.
+func isTrackNamespace(ns string) bool {
+	switch strings.ToLower(ns) {
+	case "tracks", "track":
+		return true
+	}
+	return false
+}
+
 // ResolvedFlow represents a flow and the directory it was found in.
 type ResolvedFlow struct {
 	Flow *core.Flow

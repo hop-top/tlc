@@ -56,6 +56,16 @@ func setupURICompletion(s *storage.SQLiteStorage) error {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
+	// Track commands. The completer offers L-NNNN aliases and slugs, the
+	// two forms a track reference is actually written in.
+	trackComp := completer.Complete("track")
+	trackShowCmd.ValidArgsFunction = trackComp
+	trackUpdateCmd.ValidArgsFunction = trackComp
+	trackGraphCmd.ValidArgsFunction = trackComp
+	trackArchiveCmd.ValidArgsFunction = trackComp
+	trackAbandonCmd.ValidArgsFunction = trackComp
+	trackDeleteCmd.ValidArgsFunction = trackComp
+
 	// Flow commands
 	flowComp := completer.Complete("flow")
 	FlowRunCmd.ValidArgsFunction = flowComp
