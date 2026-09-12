@@ -21,6 +21,18 @@ import (
 // hands out a copy.
 var groupByKeys = []string{"track", "assignee", "tag", "status", "priority", "project"}
 
+// noneGroupName titles the section holding tasks that carry no value for
+// the grouping dimension: no track, no assignee, no tags, no status, no
+// priority.
+//
+// Parenthesised on purpose. A bare "none" is indistinguishable from a
+// track, assignee or tag literally named "none", and those exist — the
+// parens say "this is the renderer talking, not your data". The same
+// name serves every dimension so "unset" reads identically across the
+// whole command rather than being a nameless trailing bucket for status
+// and priority and a blank heading for the rest.
+const noneGroupName = "(none)"
+
 // GroupByKeys returns the accepted --group-by dimensions in declaration
 // order. The returned slice is a copy.
 func GroupByKeys() []string {
@@ -82,6 +94,11 @@ type TaskGroup struct {
 // That is intended, not a bug to dedupe away — a tag listing that showed
 // each task once would have to pick a tag to hide it under.
 //
+// UNSET VALUES collect into a single trailing noneGroupName group —
+// see appendNoneLast. That includes a task with no tags at all, which
+// has no tag membership to generate and would otherwise disappear from
+// a listing it matched the filters for.
+//
 // An unknown key yields no groups; callers validate with
 // ValidGroupByKey before reaching here.
 func groupTasks(tasks []*core.Task, key string) []TaskGroup {
@@ -95,6 +112,13 @@ func groupTasks(tasks []*core.Task, key string) []TaskGroup {
 	// reaches the output.
 	buckets := make(map[string][]*core.Task)
 	add := func(name string, t *core.Task) {
+		// ONE notion of "unset", applied at the single point where a
+		// value becomes a group name. Every dimension's empty value —
+		// nil pointer, empty string, absent status — lands in the same
+		// named section rather than each key inventing its own.
+		if name == "" {
+			name = noneGroupName
+		}
 		buckets[name] = append(buckets[name], t)
 	}
 
@@ -104,7 +128,14 @@ func groupTasks(tasks []*core.Task, key string) []TaskGroup {
 		}
 		switch key {
 		case "tag":
-			// Many-to-many: one membership per tag, no dedupe.
+			// Many-to-many: one membership per tag, no dedupe. An
+			// untagged task has no membership to generate, so it is
+			// placed explicitly — otherwise it would vanish from a
+			// listing it matched the filters for.
+			if len(t.Tags) == 0 {
+				add("", t)
+				break
+			}
 			for _, tag := range t.Tags {
 				add(tag, t)
 			}
@@ -132,9 +163,13 @@ func groupTasks(tasks []*core.Task, key string) []TaskGroup {
 	default:
 		order = make([]string, 0, len(buckets))
 		for name := range buckets {
+			if name == noneGroupName {
+				continue
+			}
 			order = append(order, name)
 		}
 		sort.Strings(order)
+		order = appendNoneLast(order, buckets)
 	}
 
 	groups := make([]TaskGroup, 0, len(order))
@@ -150,9 +185,10 @@ func groupTasks(tasks []*core.Task, key string) []TaskGroup {
 // (a stale row, a config narrowed after the fact) still renders rather
 // than vanishing from the listing.
 //
-// The empty name — the unset status or priority — is such a name and
-// lands in that trailing group. Naming and placement of a "(none)"
-// section is a rendering concern and is deliberately not decided here.
+// The unset status or priority does NOT land in that trailing group: it
+// is named noneGroupName during bucketing and forced past everything
+// else by appendNoneLast, so "unset" reads the same under --group-by
+// status as it does under --group-by assignee.
 func vocabularyOrder(canon []string, buckets map[string][]*core.Task) []string {
 	known := make(map[string]bool, len(canon))
 	order := make([]string, 0, len(buckets))
@@ -164,12 +200,29 @@ func vocabularyOrder(canon []string, buckets map[string][]*core.Task) []string {
 	}
 	rest := make([]string, 0, len(buckets))
 	for name := range buckets {
-		if !known[name] {
+		if !known[name] && name != noneGroupName {
 			rest = append(rest, name)
 		}
 	}
 	sort.Strings(rest)
-	return append(order, rest...)
+	return appendNoneLast(append(order, rest...), buckets)
+}
+
+// appendNoneLast puts the "(none)" section at the very end of order when
+// one is populated.
+//
+// FORCED, never sorted into place. "(none)" begins with "(", which sorts
+// ahead of every letter in ASCII, so a plain sort would open every
+// grouped listing with the pile of unset rows — the least informative
+// section leading. Populated, named groups lead; the leftovers trail.
+// It also has to outrank the values the configured vocabulary does not
+// know, because "no status at all" says less than "a status this config
+// retired".
+func appendNoneLast(order []string, buckets map[string][]*core.Task) []string {
+	if _, ok := buckets[noneGroupName]; !ok {
+		return order
+	}
+	return append(order, noneGroupName)
 }
 
 // derefString reads a *string field as its value, with the nil pointer

@@ -206,3 +206,154 @@ func inOrder(s string, needles []string) bool {
 	}
 	return true
 }
+
+// TestGroupTasksNoneIsTrailing: tasks with no value for the grouping
+// dimension collect into a single "(none)" group, and that group renders
+// LAST regardless of where its name would sort. Populated, named groups
+// lead — a reader scanning for their own work should not wade past the
+// unassigned pile to reach it.
+func TestGroupTasksNoneIsTrailing(t *testing.T) {
+	// Names chosen so alphabetical ordering would place "(none)" FIRST:
+	// "(" sorts before every letter in ASCII. A grouper that sorted the
+	// literal name instead of forcing the section last passes nothing here.
+	cases := map[string][]*core.Task{
+		"assignee": {
+			{ID: "T-0001", AssignedTo: strptr("zoe")},
+			{ID: "T-0002"},
+			{ID: "T-0003", AssignedTo: strptr("ann")},
+		},
+		"track": {
+			{ID: "T-0001", TrackID: strptr("zeta")},
+			{ID: "T-0002"},
+			{ID: "T-0003", TrackID: strptr("alpha")},
+		},
+		"project": {
+			{ID: "T-0001", ProjectID: strptr("zzz")},
+			{ID: "T-0002"},
+			{ID: "T-0003", ProjectID: strptr("aaa")},
+		},
+		"tag": {
+			{ID: "T-0001", Tags: []string{"zulu"}},
+			{ID: "T-0002"},
+			{ID: "T-0003", Tags: []string{"alpha"}},
+		},
+	}
+	for key, tasks := range cases {
+		got := groupNames(groupTasks(tasks, key))
+		if len(got) != 3 {
+			t.Errorf("groupTasks(_, %q) = %v, want 3 groups", key, got)
+			continue
+		}
+		if got[len(got)-1] != noneGroupName {
+			t.Errorf("groupTasks(_, %q) names = %v, want %q last", key, got, noneGroupName)
+		}
+		// The unset task is IN that group, not dropped.
+		if ids := groupIDs(groupTasks(tasks, key), noneGroupName); strings.Join(ids, ",") != "T-0002" {
+			t.Errorf("groupTasks(_, %q)[%s] = %v, want [T-0002]", key, noneGroupName, ids)
+		}
+		// The named groups keep their own ascending order ahead of it.
+		if got[0] > got[1] {
+			t.Errorf("named groups must stay ascending, got %v for %q", got, key)
+		}
+	}
+}
+
+// TestGroupTasksNoneFoldsUnsetStatusAndPriority: status and priority
+// route the empty value through the SAME "(none)" treatment as the
+// free-text keys. One notion of "unset" across every dimension — not a
+// nameless trailing bucket for two of them.
+func TestGroupTasksNoneFoldsUnsetStatusAndPriority(t *testing.T) {
+	t.Run("status", func(t *testing.T) {
+		tasks := []*core.Task{
+			{ID: "T-0001", Status: core.StatusDone},
+			{ID: "T-0002", Status: ""},
+			{ID: "T-0003", Status: core.StatusTodo},
+		}
+		got := groupNames(groupTasks(tasks, "status"))
+		want := []string{"TODO", "DONE", noneGroupName}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("status groups = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("priority", func(t *testing.T) {
+		tasks := []*core.Task{
+			{ID: "T-0001", Priority: core.PriorityP2},
+			{ID: "T-0002", Priority: ""},
+			{ID: "T-0003", Priority: core.PriorityP0},
+		}
+		got := groupNames(groupTasks(tasks, "priority"))
+		want := []string{"P0", "P2", noneGroupName}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("priority groups = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("unset still trails a value outside the vocabulary", func(t *testing.T) {
+		// A stale row carrying a status the configured vocabulary no
+		// longer knows must still render — and "(none)" must sit after
+		// it, because "no status" is the weakest thing to say about a row.
+		tasks := []*core.Task{
+			{ID: "T-0001", Status: ""},
+			{ID: "T-0002", Status: core.TaskStatus("ZZ_RETIRED")},
+			{ID: "T-0003", Status: core.StatusTodo},
+		}
+		got := groupNames(groupTasks(tasks, "status"))
+		want := []string{"TODO", "ZZ_RETIRED", noneGroupName}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("status groups = %v, want %v", got, want)
+		}
+	})
+}
+
+// TestFormatTasksAllNoneStillRendersTitledTable pins the decision for a
+// listing where NOTHING carries the grouping value: it renders a single
+// "(none)"-titled table, not a bare ungrouped one.
+//
+// Reasoning: the user explicitly typed --group-by. Degrading to a plain
+// table produces output byte-identical to `tlc task list`, leaving them
+// unable to tell whether the flag was ignored, mistyped, or correctly
+// reported that nothing here has a track. The heading answers the
+// question the command asked.
+func TestFormatTasksAllNoneStillRendersTitledTable(t *testing.T) {
+	tasks := []*core.Task{
+		{ID: "T-0001", Seq: 1, Title: "orphan one", Status: core.StatusTodo},
+		{ID: "T-0002", Seq: 2, Title: "orphan two", Status: core.StatusTodo},
+	}
+	got := renderGroupedOutput(t, tasks, "track")
+
+	if !strings.Contains(got, noneGroupName) {
+		t.Errorf("all-unset listing must still carry the %q heading; got:\n%s", noneGroupName, got)
+	}
+	// Exactly one section: one header row, both tasks under it.
+	if n := strings.Count(got, "Title"); n != 1 {
+		t.Errorf("all-unset listing must render ONE table, got %d headers:\n%s", n, got)
+	}
+	if !inOrder(got, []string{noneGroupName, "T-0001", "T-0002"}) {
+		t.Errorf("both tasks must render under the heading:\n%s", got)
+	}
+	// And it must NOT be indistinguishable from the ungrouped listing.
+	var plain bytes.Buffer
+	renderTable(&plain, tasks, nil)
+	if got == plain.String() {
+		t.Error("all-unset grouping degraded to a plain ungrouped table; the flag would look ignored")
+	}
+}
+
+// TestFormatTasksNoneHeadingRenders: the "(none)" group gets a real
+// heading in rendered output, not the blank line an empty group name
+// produced before.
+func TestFormatTasksNoneHeadingRenders(t *testing.T) {
+	tasks := []*core.Task{
+		{ID: "T-0001", Seq: 1, Title: "owned", Status: core.StatusTodo, AssignedTo: strptr("ann")},
+		{ID: "T-0002", Seq: 2, Title: "orphan", Status: core.StatusTodo},
+	}
+	got := renderGroupedOutput(t, tasks, "assignee")
+	if !strings.Contains(got, noneGroupName) {
+		t.Errorf("expected %q heading; got:\n%s", noneGroupName, got)
+	}
+	// Named group leads, "(none)" trails.
+	if !inOrder(got, []string{"ann", "T-0001", noneGroupName, "T-0002"}) {
+		t.Errorf("named group must lead and %q must trail; got:\n%s", noneGroupName, got)
+	}
+}
