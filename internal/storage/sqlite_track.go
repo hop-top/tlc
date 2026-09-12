@@ -34,12 +34,26 @@ func (s *SQLiteStorage) CreateTrack(ctx context.Context, track *core.Track) erro
 			dueAtSQL = sql.NullString{String: track.DueAt.UTC().Format(time.RFC3339), Valid: true}
 		}
 
-		_, err := tx.ExecContext(
+		// Allocate the per-project sequence number backing the short-ID
+		// display alias. Allocation runs in the same write transaction
+		// as the insert so concurrent creates can never collide on
+		// (project_id, seq).
+		//
+		// NOTE: core.Track carries no Seq field yet, so the value is
+		// written straight to the column and not echoed back onto the
+		// struct. Once the field lands, mirror the task path: skip
+		// allocation when track.Seq != 0 and assign the result back.
+		seq, err := allocTrackSeqInTx(ctx, tx, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to allocate track sequence: %w", err)
+		}
+
+		_, err = tx.ExecContext(
 			ctx, `
-			INSERT INTO tracks (id, slug, title, type, status, assigned_to,
+			INSERT INTO tracks (id, seq, slug, title, type, status, assigned_to,
 				created_at, updated_at, project_id, meta, plan_mapping, due_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			track.ID, track.Slug, track.Title, track.Type, track.Status,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			track.ID, seq, track.Slug, track.Title, track.Type, track.Status,
 			track.AssignedTo,
 			track.CreatedAt.Format(time.RFC3339),
 			track.UpdatedAt.Format(time.RFC3339),

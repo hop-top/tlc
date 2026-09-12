@@ -1316,6 +1316,48 @@ func allocSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error
 	return nextID, nil
 }
 
+// allocTrackSeqInTx reserves the next monotonically increasing sequence
+// number for projectID inside the given transaction. Mirrors
+// allocSeqInTx, against the track_sequences counter table.
+//
+// Empty projectID is normalized to "default" so the global bucket has its
+// own counter row — the same storage key task_sequences uses. Note that
+// tracks.project_id itself stores the empty string, so seq lookups query
+// that column directly rather than the normalized key.
+//
+// The increment must happen in the same tx as the INSERT that consumes
+// the value to avoid (project_id, seq) collisions under concurrent
+// creates.
+func allocTrackSeqInTx(ctx context.Context, tx *sql.Tx, projectID string) (int, error) {
+	if projectID == "" {
+		projectID = "default"
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO track_sequences (project_id, next_id)
+		VALUES (?, 1)
+	`, projectID); err != nil {
+		return 0, fmt.Errorf("ensure track sequence row: %w", err)
+	}
+
+	var nextID int
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT next_id FROM track_sequences WHERE project_id = ?`, projectID,
+	).Scan(&nextID); err != nil {
+		return 0, fmt.Errorf("read track sequence: %w", err)
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`UPDATE track_sequences SET next_id = next_id + 1 WHERE project_id = ?`, projectID,
+	); err != nil {
+		return 0, fmt.Errorf("bump track sequence: %w", err)
+	}
+
+	return nextID, nil
+}
+
 func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
 	var task core.Task
 	var createdAtStr, updatedAtStr string
