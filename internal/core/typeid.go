@@ -9,11 +9,13 @@ import (
 const (
 	taskIDPrefix  = "task"
 	trackIDPrefix = "track"
+	runIDPrefix   = "run"
 )
 
 var (
 	taskTypeIDPattern  = regexp.MustCompile(`^task_[0-9a-z]{26}$`)
 	trackTypeIDPattern = regexp.MustCompile(`^track_[0-9a-z]{26}$`)
+	runTypeIDPattern   = regexp.MustCompile(`^run_[0-9a-z]{26}$`)
 )
 
 // NewTaskID returns a fresh TypeID-shaped task identifier
@@ -39,11 +41,25 @@ func NewTrackID() string {
 	return id.String()
 }
 
+// NewRecipeRunID returns a fresh TypeID-shaped recipe run identifier
+// (e.g. "run_01h455vbqkfsn02nk084ksn02q"); one is minted per
+// materialization and stamped on every task it creates.
+func NewRecipeRunID() string {
+	id, err := typeid.WithPrefix(runIDPrefix)
+	if err != nil {
+		panic("typeid: NewRecipeRunID: " + err.Error())
+	}
+	return id.String()
+}
+
 // IsTaskID reports whether s is a syntactically valid task TypeID.
 func IsTaskID(s string) bool { return taskTypeIDPattern.MatchString(s) }
 
 // IsTrackID reports whether s is a syntactically valid track TypeID.
 func IsTrackID(s string) bool { return trackTypeIDPattern.MatchString(s) }
+
+// IsRecipeRunID reports whether s is a syntactically valid recipe run TypeID.
+func IsRecipeRunID(s string) bool { return runTypeIDPattern.MatchString(s) }
 
 // IsInternalTaskRef reports whether ref is an auto-generated internal task
 // reference that adds no information beyond the task's display alias.

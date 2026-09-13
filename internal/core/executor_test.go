@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -19,9 +20,13 @@ const (
 var execNow = time.Date(2026, 9, 13, 10, 0, 0, 0, time.UTC)
 
 // fakeRunStore is an in-memory RecipeRunStore: enough for results
-// lookups and subject completion.
+// lookups, subject completion and the materializer's ledger reads. It
+// keeps the SQL store's ordering contracts — ListRecipeRuns newest first,
+// ListRecipeRunTasksByTrack runs oldest first — so reconcile tests on the
+// fake exercise the same "later runs win" rule as the real store.
 type fakeRunStore struct {
 	runs  map[string]*RecipeRun
+	order []string // run ids in creation order
 	tasks map[string][]RecipeRunTask
 }
 
@@ -31,6 +36,7 @@ func newFakeRunStore() *fakeRunStore {
 
 func (f *fakeRunStore) CreateRecipeRun(_ context.Context, run *RecipeRun) error {
 	f.runs[run.ID] = run
+	f.order = append(f.order, run.ID)
 	return nil
 }
 
@@ -38,10 +44,33 @@ func (f *fakeRunStore) GetRecipeRun(_ context.Context, id string) (*RecipeRun, e
 	return f.runs[id], nil
 }
 
-func (f *fakeRunStore) ListRecipeRuns(context.Context, RecipeRunQuery) ([]*RecipeRun, error) {
-	return nil, nil
+func (f *fakeRunStore) ListRecipeRuns(_ context.Context, q RecipeRunQuery) ([]*RecipeRun, error) {
+	var out []*RecipeRun
+	for i := len(f.order) - 1; i >= 0; i-- {
+		r := f.runs[f.order[i]]
+		if r == nil ||
+			(q.RecipeID != "" && r.RecipeID != q.RecipeID) ||
+			(q.TrackID != "" && r.TrackID != q.TrackID) ||
+			(q.ProjectID != "" && r.ProjectID != q.ProjectID) {
+			continue
+		}
+		out = append(out, r)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
 }
-func (f *fakeRunStore) DeleteRecipeRun(context.Context, string) error { return nil }
+
+func (f *fakeRunStore) DeleteRecipeRun(_ context.Context, id string) error {
+	delete(f.runs, id)
+	delete(f.tasks, id)
+	for i, existing := range f.order {
+		if existing == id {
+			f.order = append(f.order[:i], f.order[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
 
 func (f *fakeRunStore) AddRecipeRunTasks(_ context.Context, runID string, tasks []RecipeRunTask) error {
 	for _, t := range tasks {
@@ -55,8 +84,14 @@ func (f *fakeRunStore) ListRecipeRunTasks(_ context.Context, runID string) ([]Re
 	return f.tasks[runID], nil
 }
 
-func (f *fakeRunStore) ListRecipeRunTasksByTrack(context.Context, string) ([]RecipeRunTask, error) {
-	return nil, nil
+func (f *fakeRunStore) ListRecipeRunTasksByTrack(_ context.Context, trackID string) ([]RecipeRunTask, error) {
+	var out []RecipeRunTask
+	for _, id := range f.order {
+		if r := f.runs[id]; r != nil && r.TrackID == trackID {
+			out = append(out, f.tasks[id]...)
+		}
+	}
+	return out, nil
 }
 
 // fakeDispatcher records dispatch order and peak concurrency; fn decides
