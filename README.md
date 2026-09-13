@@ -4,15 +4,6 @@
     <h3><em>Task </em></h3>
 </div>
 
-> [!WARNING]
-> **🚧 Do Not Use — History Will Be Rewritten 🚧**
->
-> This repo is undergoing major restructuring as we selectively
-> open-source internal tools built at
-> [Idea Crafters LLC](https://ideacrafters.com). Git history **will be
-> force-pushed and rewritten** multiple times. Do not fork, clone, or
-> depend on this repo in any capacity until we tag a stable release.
-
 <p align="center">
     <strong>An open source toolkit that allows you to focus on product scenarios and predictable outcomes instead of vibe coding every piece from scratch.</strong>
 </p>
@@ -26,11 +17,11 @@
     <a href="https://github.com/hop-top/tlc/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hop-top/tlc" alt="License"/></a>
 </p>
 
-
-
 ☑︎ TLC
 
 TLC is a high-performance, multi-agent task orchestration tool designed for developers and AI agents. It uses a human-friendly "Task Line Syntax" (TLS) to manage tasks in a flat text file while maintaining a synchronized SQLite database for advanced querying and state management.
+
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
 
 ## 🚀 Key Features
 
