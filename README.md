@@ -708,6 +708,14 @@ tlc track execute browser-rendering --agent code-analyst
 tlc flow run deploy.yaml --agent code-analyst
 ```
 
+**Agent protocol:** every run receives its context file path in
+`TLC_CONTEXT_PATH` and must write its results file to `TLC_RESULTS_PATH`
+(container: `/workspace/.tlc/context.json` and `results.json`; local: a
+per-run `.tlc/runs/<run-id>/` directory under the repo root), then print
+a JSON status line on stdout. `tlc track execute --concurrency N` runs
+container agents in parallel, one pod each; local agents share the
+working tree and run one at a time.
+
 **Monitor and manage agent runs:**
 ```bash
 tlc agent status <job-id>     # check async job status

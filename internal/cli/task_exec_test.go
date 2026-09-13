@@ -439,6 +439,35 @@ func TestTaskExec_WithPodFalseRunsLocal(t *testing.T) {
 	})
 }
 
+// TestTaskExecParams_FromFlags pins that `task execute` hands the exec
+// path its own env/mount/network/keep-pod flags instead of stashing them
+// into the `agent run` bindings.
+func TestTaskExecParams_FromFlags(t *testing.T) {
+	withTestLock(func() {
+		defer resetTaskExecFlags()
+		taskExecEnv = []string{"MODEL=opus"}
+		taskExecMounts = []string{"/a:/b"}
+		taskExecNetwork = "bridge"
+		taskExecKeepPod = true
+
+		p := taskExecParams("codex", false)
+		assert.Equal(t, "codex", p.agent)
+		assert.False(t, p.local)
+		assert.Equal(t, []string{"MODEL=opus"}, p.env)
+		assert.Equal(t, []core.MountSpec{{Source: "/a", Target: "/b"}}, p.mounts)
+		assert.Equal(t, "bridge", p.network)
+		assert.True(t, p.keepPod)
+		assert.Equal(t, "/workspace", p.repoRoot)
+		assert.Zero(t, p.timeout, "the command wraps ctx with --timeout itself")
+
+		p = taskExecParams("codex", true)
+		cwd, _ := os.Getwd()
+		assert.True(t, p.local)
+		assert.Equal(t, cwd, p.repoRoot)
+		assert.Equal(t, filepath.Join(cwd, ".tlc", "runs"), p.runsDir)
+	})
+}
+
 // TestBuildFlowAgentRunner_empty is preserved from the legacy file —
 // unrelated to task exec but lived here.
 func TestBuildFlowAgentRunner_empty(t *testing.T) {

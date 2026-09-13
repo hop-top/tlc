@@ -239,3 +239,46 @@ func TestTrackExecute_HumanWaitsAndReports(t *testing.T) {
 		}
 	})
 }
+
+// TestTrackExecute_LocalModeConcurrencyNotice: --concurrency above 1 with
+// local agents announces that agent tasks still run one at a time;
+// container mode says nothing of the sort.
+func TestTrackExecute_LocalModeConcurrencyNotice(t *testing.T) {
+	withTestLock(func() {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		_ = withHome(t)
+		plantAgentsYAML(t, "agents:\n  claude:\n    binary: /bin/true\n    image: img\n")
+		defer resetTrackExecuteFlags()
+
+		s, err := getStorageRaw()
+		if err != nil {
+			t.Fatalf("getStorageRaw: %v", err)
+		}
+		defer s.Close()
+		seedExecTrack(t, ctx, s, execTestTask("task_a", 1))
+
+		resetTrackExecuteFlags()
+		trackExecuteDryRun = true
+		trackExecuteWithPod = "false"
+		trackExecuteConcurrency = 3
+		out, err := execTrackCmd(t, execTestTrack)
+		if err != nil {
+			t.Fatalf("track execute --dry-run local: %v\n%s", err, out)
+		}
+		if !strings.Contains(out, "one at a time") {
+			t.Errorf("local mode with --concurrency 3 must announce serialized agents:\n%s", out)
+		}
+
+		resetTrackExecuteFlags()
+		trackExecuteDryRun = true
+		trackExecuteConcurrency = 3
+		out, err = execTrackCmd(t, execTestTrack)
+		if err != nil {
+			t.Fatalf("track execute --dry-run container: %v\n%s", err, out)
+		}
+		if strings.Contains(out, "one at a time") {
+			t.Errorf("container mode must not announce serialized agents:\n%s", out)
+		}
+	})
+}
