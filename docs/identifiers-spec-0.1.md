@@ -187,7 +187,7 @@ $ tlc task show T-0042 --format json
 
 ## URIs
 
-TLC URI scheme (`tlc://`, `flow://`) uses TypeIDs for stable persistence:
+TLC URI scheme (`tlc://`) uses TypeIDs for stable persistence:
 
 ```
 tlc://project-id/task_01h455vb4pex5vsknk084sn02q
@@ -199,6 +199,17 @@ tlc://hop-top/tlc/task_01h455vb4pex5vsknk084sn02q
 ```
 tlc://project/T-0042  ← Resolved to task_01h455vb4pex5vsknk084sn02q before persistence
 ```
+
+**Recipes** are named, not TypeID'd — the file on the search path is the
+identity, so both forms carry the name:
+
+```
+tlc://recipe/code-review              ← current project
+tlc://hop-top/tlc/recipe:code-review  ← explicit project
+```
+
+A materialization gets a TypeID like everything else
+(`run_01h455vbqkfsn02nk084ksn02q`).
 
 For URI parsing and resolution details, see the `poly-cite` reference.
 

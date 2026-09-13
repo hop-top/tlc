@@ -3,19 +3,19 @@ name: tlc
 description: |
   Task management CLI for developers and AI agents. Use for creating,
   tracking, and completing work items with state machine enforcement,
-  multi-agent coordination, and declarative flow orchestration.
+  multi-agent coordination, and recipe-driven task generation.
 
   Automatically applies when: a `.tlc/` directory or `tlc` binary is
   available in the project, or the user references task IDs like T-0042.
 
   Use when: creating tasks, claiming work, tracking progress, running
-  flows, querying status, or coordinating multi-agent work.
+  recipes, querying status, or coordinating multi-agent work.
 ---
 
 # tlc — Task Line CLI
 
 CLI-first task management with state machine enforcement, multi-agent
-coordination, and declarative flow execution.
+coordination, and recipe-driven task generation.
 
 ## When to use tlc
 
@@ -24,7 +24,7 @@ coordination, and declarative flow execution.
 - Hand off or delegate → `tlc task update --assigned-to`
 - Query what's active → `tlc task list`
 - Finish work → `tlc task complete`
-- Orchestrate multi-step workflows → `tlc flow run`
+- Generate a multi-step procedure → `tlc track create --recipe`
 - Group tasks into work streams → `tlc track create`
 - Monitor work stream progress → `tlc track list`
 - View phase breakdown → `tlc track show`
@@ -202,14 +202,30 @@ tlc task delete T-0046 T-0047 --no-prompt
 `--no-prompt` is a persistent flag on `task` — applies to all subcommands.
 `--title` is blocked when updating multiple tasks.
 
-### 7 · Run a flow
+### 7 · Use a recipe
+
+A recipe is a versioned YAML template that materializes into a track and
+its tasks: ordered steps with dependencies, a kind per step (`agent`,
+`exec`, `human`), retries, gates and due dates, plus the vars a run binds.
 
 ```bash
-tlc flow run <flow-file.yaml>
-tlc flow list
-tlc flow status <run-id>
-tlc flow import <uri>                        # import from GitHub or URI
+tlc recipe list                              # recipes on the search path
+tlc recipe show <recipe>                     # header, vars, expanded steps
+tlc recipe validate <recipe>                 # before anything else
+
+tlc track create --recipe <recipe> --var pr=42   # new track + its tasks
+tlc task create --recipe <recipe> --var pr=42 --track <id>
+
+tlc track execute <track> --agent claude     # run the ready tasks
+tlc track execute <track> --recipe <recipe>  # reconcile first, then run
+tlc task approve <id> --note "looks good"    # decide a human step
+
+tlc recipe runs [<recipe>]                   # the run ledger
+tlc recipe import <track|url>                # capture or convert into a recipe
 ```
+
+Reference a recipe by name, `name@version`, or file path. Search path:
+`recipe.dir` → `.tlc/recipes` → `~/.config/tlc/recipes`.
 
 ### 9 · Manage tracks
 

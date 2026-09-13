@@ -141,12 +141,11 @@ track auto-transitions to active.
 
 ### `tlc agent` — Agent Dispatch
 
-Run tasks, tracks, or flows via named agent profiles.
+Run tasks or tracks via named agent profiles.
 
 ```bash
-# run an agent against a task, flow, or track
+# run an agent against a task or a track
 tlc agent run --agent <name> --task <id>
-tlc agent run --agent <name> --flow <flow.yaml>
 tlc agent run --agent <name> --track <id>
 
 # watch the agent queue; poll every 5s
@@ -175,10 +174,33 @@ tlc task execute <id> --recipe <recipe> [--var key=val]
 tlc track execute <id> --recipe <recipe> [--recreate]
 ```
 
-The `--agent <name>` flag is also accepted on `tlc flow run`:
+`--agent <name>` supplies the agent for agent-kind tasks that name none;
+`track execute` also takes `--with-pod`, `--concurrency`, `--permissive`,
+`--reclaim`, `--wait --poll`, `--timeout`, `--trust-project` and `--ctxt`.
+
+### `tlc recipe` — Recipe Templates
+
 ```bash
-tlc flow run <flow.yaml> --agent <name>
+tlc recipe list [--source <dir|builtin>]      # recipes in the search path
+tlc recipe show <recipe>                      # header, vars, expanded steps
+tlc recipe validate <recipe>                  # exit 0 valid, 1 with the problem
+tlc recipe import <track|url> [--var --name --version -o --install --force --external-deps]
+tlc recipe runs [<recipe>[@<version>]] [--all-projects --track <track>]
+tlc recipe diff <track> [--recipe <recipe>]
 ```
+
+A recipe is referenced by name, by `name@version`, or by file path. The
+search path is `recipe.dir` (relative to the project root), then
+`.tlc/recipes`, then `~/.config/tlc/recipes`.
+
+Human-kind steps wait for a decision:
+```bash
+tlc task approve <id> [--by <who> --note "..."]
+tlc task reject <id> --reason "<why>" [--by <who>]
+```
+
+See [`docs/recipes.md`](docs/recipes.md) for the guide and
+[`docs/recipe-spec-0.1.md`](docs/recipe-spec-0.1.md) for the grammar.
 
 ### `tlc schema` — Toolspec Schema
 
@@ -334,8 +356,8 @@ the live `tlc` CLI registry. Stale examples mislead agents and break automation.
 using `--help` mode. Exits non-zero if any check fails.
 
 Covers (46 checks as of 2026-03-28):
-- all top-level subcommands (`task`, `flow`, `auth`, `config`, …)
-- all `task` and `flow` subcommands
+- all top-level subcommands (`task`, `recipe`, `auth`, `config`, …)
+- all `task` and `recipe` subcommands
 - key flags: `--no-verify`, `--yes`, `--mine`, `--counters`, `--force`, etc.
 
 ### Running locally
@@ -379,7 +401,7 @@ make tidy           # go mod tidy && go mod verify (mutating)
 make fmt-check      # formatting check (non-mutating; exits 1 if dirty)
 make tidy-check     # module tidiness check (non-mutating; exits 1 if dirty)
 make coverage       # test with coverage report
-make build-shims    # compile flowtest shim binaries
+make build-shims    # compile recipe-test shim binaries
 ```
 
 ## Configurable Paths

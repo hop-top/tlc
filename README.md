@@ -35,8 +35,8 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 ## 🚀 Key Features
 
 - **Hybrid Storage Model**: Edit tasks directly in a human-friendly `todo.txt` (Task Line Syntax) or use the synchronized SQLite database for high-performance querying.
-- **Complex Orchestration (Task Flows)**: Define declarative workflows with support for sequential and parallel execution, conditional branching, synchronization joins, and automated retries.
-- **Flows & Assignees**: Procedural workflow templates that generate task sequences with capability-based auto-assignment to specialized executors.
+- **Recipes**: Versioned YAML templates that materialize into a track and its tasks the same way every time — ordered steps with dependencies, a kind per step (agent, exec, human), conditions, retries, gates and due dates, plus the variables a run binds.
+- **Recipe Execution**: One executor runs the tasks in dependency batches, skipping on `when`, retrying to a bound, holding a step at an eva gate and waiting on human approval — with every materialization recorded in a run ledger.
 - **Multi-Agent Collaboration**: Safe coordination between humans and AI agents using task claiming, responsibility transfer, delegation protocols, and time-bounded ownership leases (TTL).
 - **Deterministic Task Execution**: Robust execution contract with stdout/stderr capture, error normalization, and configurable timeouts.
 - **Audit-Ready Logging**: A canonical, reverse-chronological `CHANGELOG` capturing every state transition, collaboration action, and execution attempt.
@@ -67,7 +67,7 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
   claim. Project health pulse with overcommit warnings.
 - **Modern TUI & CLI**: A keyboard-driven Terminal User Interface
   built with Bubble Tea, featuring a Kanban board, dashboard, and
-  real-time flow monitoring.
+  a Runs view over the recipe run ledger.
 - **XDG Specification Compliance**: Zero-config persistence
   following standard OS paths for data, logs, and configuration.
 
@@ -279,8 +279,8 @@ Configure the LLM provider:
 export TLC_PROMPT_LLM="ollama://llama3.2"  # or anthropic://, openai://
 ```
 
-**Cross-domain resolution (no LLM):** Common track, flow, and project queries resolve
-deterministically without LLM. Examples: `"list active tracks"`, `"run deploy flow"`,
+**Cross-domain resolution (no LLM):** Common track, recipe, and project queries resolve
+deterministically without LLM. Examples: `"list active tracks"`, `"list recipes"`,
 `"count active tracks"` → `track list --status active`. Typo-tolerant:
 `"list trakcs"` resolves to `track list` (fuzzy match, confidence 0.8).
 
@@ -795,9 +795,10 @@ tlc recipe diff release-flow                      # against the latest run's rec
 tlc recipe diff release-flow --recipe ./code-review.yaml
 ```
 
-### Flows & Assignees
+### Assignees
 
-TLC includes a comprehensive workflow suite with capability-based task assignment:
+Assignees are specialized executor profiles that the assignment engine
+matches against a task's requirements:
 
 **List available assignees:**
 ```bash
@@ -809,35 +810,22 @@ TLC includes a comprehensive workflow suite with capability-based task assignmen
 ./bin/tlc assignee show assignee:code-analyst:1.0
 ```
 
-**Invoke a flow to generate tasks:**
-```bash
-./bin/tlc flow invoke examples/flows/brainstorming.yaml
-```
-
-**Available workflow flows:**
-- **Creative & Planning**: brainstorming, writing-plans
-- **Development**: test-driven-development, executing-plans
-- **Quality Assurance**: systematic-debugging, code-review, verification-before-completion
-- **Workflow**: finishing-development-branch
-
-See [docs/flows-and-assignees.md](docs/flows-and-assignees.md) for complete documentation.
+See [docs/recipes.md](docs/recipes.md) for how `--assign` picks one.
 
 ### Agent Execution
 
-TLC supports delegating tasks, tracks, and flows to registered AI agents:
+TLC supports delegating tasks and tracks to registered AI agents:
 
 **Run agents directly:**
 ```bash
 tlc agent run --agent code-analyst --task T-0042
 tlc agent run --agent code-analyst --track browser-rendering
-tlc agent run --agent code-analyst --flow deploy.yaml
 ```
 
-**Execute from task/track/flow context:**
+**Execute from task/track context:**
 ```bash
 tlc task execute T-0042 --agent code-analyst
 tlc track execute browser-rendering --agent code-analyst
-tlc flow run deploy.yaml --agent code-analyst
 ```
 
 **Agent protocol:** every run receives its context file path in
@@ -891,8 +879,6 @@ agents:
   before it is cut; an empty `env` value cannot unset a variable the image
   provides; files the command writes stay in the pod.
 
-See [docs/plans/2026-04-02-flowtest-agent-dispatch.md](docs/plans/2026-04-02-flowtest-agent-dispatch.md) for design details.
-
 ### Interactive TUI
 Launch the interactive terminal interface:
 ```bash
@@ -907,7 +893,7 @@ Launch the interactive terminal interface:
 - `s`: Cycle task status
 - `/`: Search/Filter tasks
 - `t`: Open theme picker
-- `v`: Cycle views (Dashboard -> Kanban -> Flows)
+- `v`: Cycle views (Dashboard -> Kanban -> Runs)
 - `r`: Refresh data
 - `q`: Quit
 
@@ -1162,7 +1148,7 @@ recipe:
 Detailed specifications can be found in the `docs/` directory:
 
 **Features & Guides:**
-- [Flows & Assignees](docs/flows-and-assignees.md) - Workflow automation and capability-based assignment
+- [Recipes & Assignees](docs/recipes.md) - Recipe templates, execution and capability-based assignment
 - [Development Setup](docs/development-setup.md) - Development workflow and watch modes
 - [Editor Setup](docs/editor-setup.md) - IDE/editor integration
 - [Docker Usage](docs/docker.md) - Container deployment
@@ -1174,7 +1160,7 @@ Detailed specifications can be found in the `docs/` directory:
 **Specifications:**
 - [Task CRUD Spec](docs/task-crud-spec-0.1.md)
 - [Task Line Syntax Spec](docs/task-line-spec-0.1.md)
-- [Task Flow Spec](docs/task-flow-spec-0.1.md)
+- [Recipe Spec](docs/recipe-spec-0.1.md)
 - [Task Log Spec](docs/task-log-spec-0.1.md)
 - [Sync Architecture](docs/sync-architecture-0.1.md)
 - [TUI Spec](docs/tlc-tui-spec-0.1.md)

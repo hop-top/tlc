@@ -16,7 +16,7 @@ source-tracks:
 ## TL;DR
 
 Engineering ships a typed RPC API (`.proto` over Connect-go) that
-exposes every tlc entity (tasks, tracks, flows) behind one uniform
+exposes every tlc entity (tasks, tracks, recipes, runs) behind one uniform
 CRUD+lifecycle grammar. Same API serves CLI, TUI, browser, gRPC
 clients, MCP. Product team owns: how the web/desktop app surfaces
 this API to humans. Engineering does NOT decide UI; product does.
@@ -52,15 +52,16 @@ RPCs: `Get`, `List`, `Create`, `Update`, `Delete`, `Transition`,
 `AbandonWithTasks`, `GetWithState`, `LinkedNonTerminalTasks`,
 `AutoTransitionOnTaskClaim`, `ArchiveTrack`.
 
-### 3. FlowDefService — `proto/tlc/v1/flow_def.proto`
-MutableRegistry tier (no Transition — flow defs are versioned
-artifacts). RPCs: `Get`, `List`, `Create`, `Update`, `Delete`,
-`Import`, `Resolve`.
+### 3. RecipeService — `proto/tlc/v1/recipe.proto`
+MutableRegistry tier (no Transition — recipes are versioned
+artifacts). RPCs: `Get`, `List`, `Validate`, `Import`, `Resolve`,
+`Materialize`, `Diff`.
 
-### 4. FlowRunService — `proto/tlc/v1/flow_run.proto`
-Full Registry tier. RPCs: `Get`, `List`, `Invoke`, `Pause`, `Resume`,
-`Cancel`, `GetStatus`. Lifecycle: queued → running → (paused) →
-succeeded | failed | canceled.
+### 4. RecipeRunService — `proto/tlc/v1/recipe_run.proto`
+Ledger tier, read-mostly. RPCs: `Get`, `List`, `ListTasks`. A run is a
+record of a materialization — which recipe at which version and hash,
+with which vars, for which subject, into which track, by whom — and has
+no status of its own: progress is read from the tasks its steps became.
 
 ### Shared types — `proto/tlc/v1/common.proto`
 - `Actor { by, note }` — every mutation carries one
@@ -73,15 +74,17 @@ succeeded | failed | canceled.
 Storage stays heterogeneous; the wire surface is uniform. UI shows
 the canonical column.
 
-| Canonical | Task    | Track     | Flow run  |
-|-----------|---------|-----------|-----------|
-| pending   | TODO    | pending   | queued    |
-| active    | IN_PROGRESS | active| running   |
-| paused    | —       | —         | paused    |
-| done      | DONE    | completed | succeeded |
-| failed    | —       | —         | failed    |
-| canceled  | SKIPPED | abandoned | canceled  |
-| archived  | (flag)  | archived  | —         |
+| Canonical | Task        | Track     |
+|-----------|-------------|-----------|
+| pending   | TODO        | pending   |
+| active    | IN_PROGRESS | active    |
+| done      | DONE        | completed |
+| canceled  | SKIPPED     | abandoned |
+| archived  | (flag)      | archived  |
+
+A task additionally carries a `blocked_reason` orthogonal to status —
+retries exhausted, a gate that failed, a `when` that would not evaluate,
+or a rejection. Design it as a badge, not a sixth status.
 
 UI MUST render the canonical name. Do NOT leak storage names.
 
@@ -94,8 +97,8 @@ tlc://<project>/<type>:<id>
 Examples:
 - `tlc://hop-top/tlc/task:T-0042`
 - `tlc://hop-top/tlc/track:adopt-kit-tui`
-- `tlc://hop-top/tlc/flow-def:code-review:1.0`
-- `tlc://hop-top/tlc/flow-run:run-3b2c1d4e`
+- `tlc://hop-top/tlc/recipe:code-review`
+- `tlc://hop-top/tlc/run:run_01hx3b2c1d4e`
 
 Global shorthand (current project): `tlc://task:T-0042`.
 
@@ -108,12 +111,12 @@ These are decisions engineering will not make. Specifics, not
 hand-waves.
 
 ### A. Information architecture
-1. Top-level navigation: tasks | tracks | flows | runs | settings —
+1. Top-level navigation: tasks | tracks | recipes | runs | settings —
    or a unified inbox/timeline metaphor? Pick one. Justify with
    persona walkthroughs (P1 solo dev, P2 ai agent ops, P3 team lead).
 2. Cross-entity views: a track page must show its linked tasks +
-   flow runs in one place. Design the linkage UI: tabs, embedded
-   tables, sidecar?
+   the recipe runs that created them in one place. Design the linkage
+   UI: tabs, embedded tables, sidecar?
 3. Project switcher: tlc is multi-project. Where does the project
    selector live? What does "All projects" view look like?
 
@@ -150,7 +153,7 @@ Required sections per entity:
 - Status + Transition controls (canonical verbs only)
 - Metadata: assignee, created/updated/by
 - Body: description (markdown render)
-- Relations: linked tasks/track/flow runs
+- Relations: linked tasks/track/recipe runs
 - Activity log: from `GetLogs` RPC (tasks only today; design as if
   every entity will have one — engineering will add)
 - Raw / debug: collapsed JSON of the proto message (power-user)
@@ -248,7 +251,7 @@ Deliverables go in `docs/product/web-desktop/v1/` once started.
 
 ## Open product questions (need answers before wireframes)
 
-- [ ] Single unified app or separate "tasks app" vs "flows app"?
+- [ ] Single unified app or separate "tasks app" vs "recipes app"?
       (Recommend: unified — the canonical grammar makes it cheap.)
 - [ ] Web-first or desktop-first? (Affects component choices,
       offline assumptions, auth model.)
@@ -258,7 +261,7 @@ Deliverables go in `docs/product/web-desktop/v1/` once started.
       complement? (CLI is staying — but does the web app need
       feature parity day one, or 80%?)
 - [ ] What's the v1 launch surface: read-only dashboard, full CRUD,
-      or full CRUD + flow execution?
+      or full CRUD + recipe execution?
 - [ ] Theming: light/dark/system, or pick one and ship it?
 - [ ] Localization: in scope for v1 or not?
 
@@ -285,7 +288,7 @@ Deliverables go in `docs/product/web-desktop/v1/` once started.
 Product team review this brief. Push back on assumptions. Then
 schedule a 1h kickoff with engineering to lock:
 
-1. v1 launch surface (read-only / full CRUD / + flow exec)
+1. v1 launch surface (read-only / full CRUD / + recipe exec)
 2. Web-first vs desktop-first vs both
 3. Day-one persona
 4. Timeline relative to engineering's track family ETA

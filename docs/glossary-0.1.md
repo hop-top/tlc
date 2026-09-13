@@ -27,32 +27,38 @@ This glossary defines canonical terms used across all TLC specs.
 - **E2E Test**
   - An end-to-end validation of user-visible behavior across multiple steps/components.
 
-- **Flow**
-  - An orchestration graph composed of steps that reference tasks or control logic. Flows define the structure and control flow but do not directly own task execution semantics.
-
-- **Flow Definition**
-  - A declarative JSON specification defining the structure of a flow, including entry_step, steps map, and metadata.
-
-- **Flow Instance / Flow Run**
-  - A single execution of a flow definition with a unique run_id. Multiple runs of the same flow definition are possible.
+- **Recipe**
+  - A versioned YAML template that materializes into a track and its tasks the same way every time: an ordered list of steps with dependencies, a kind per step, retries, gates and due dates, plus the variables a run binds. Recipes only create tasks; they do not own execution semantics.
 
 - **Step**
-  - A node inside a flow. Steps can represent a task execution (`task` step), control flow construct (`parallel`, `branch`, `join`, `retry`), or nested flow execution (`subflow`).
+  - One entry in a recipe's `steps` list. A step is a task step (it becomes a task), an `include` block (another recipe spliced in) or a `repeat` block (a sub-list unrolled a fixed number of times).
 
-- **Step Type**
-  - The kind of step: `task`, `parallel`, `branch`, `join`, `retry`, or `subflow`.
+- **Kind**
+  - What a task step is executed by: `agent` (the default; the named agent, else the recipe's, else `track execute --agent`), `exec` (the executor runs `exec.argv` itself) or `human` (a person decides it with `tlc task approve` / `tlc task reject`).
 
-- **entry_step**
-  - The step_id where flow execution begins. Every flow MUST have exactly one entry_step.
-
-- **task_ref**
-  - A reference from a flow step to a task in the task store. Format: `task:<task_id>` or task ID directly.
+- **Materialize**
+  - Create the tasks a recipe declares, rendering every placeholder and recording the result as a run. `tlc track create --recipe`, `tlc task create --recipe` and `tlc task execute --recipe` all materialize.
 
 - **Run**
-  - A single execution instance of a task or flow. For flows, synonymous with "flow run" or "flow instance".
+  - One materialization of a recipe: which recipe at which version and hash, with which vars, for which subject, into which track, by whom, and which task each step became. Rows live in `recipe_runs` and `recipe_run_tasks`.
 
 - **run_id**
-  - A correlation identifier for a specific flow run, used for traceability in logs and outputs. Format: `run:<unique_id>`.
+  - The identifier of a recipe run. Carried on every task the run created, alongside `step_id` and `step_ordinal`, so a task's provenance is readable from the task itself.
+
+- **Reconcile**
+  - Compare a track against a recipe's run ledger and create only the steps that have no ledger row, in a new run whose `parent_run` is the track's latest run of that recipe. `tlc track execute --recipe` reconciles before it runs.
+
+- **Subject**
+  - The task or track a recipe is applied to, named with `--for` and bound as `subject.*` in templates. A task subject is blocked on the run's leaves and completes automatically once they are done.
+
+- **Result**
+  - What a finished task reports for downstream `when` conditions, read as `results.<step>.<path>`. An exec task's result is `exit_code`, `stdout`, `stderr`, `duration_ms` and `truncated`; an agent task's result is the `outputs` object its results file reports.
+
+- **Gate**
+  - An eva contract evaluated on a task's output before it may reach DONE, declared per step as `gate.contract` with an optional `gate.eva_url`.
+
+- **Ledger**
+  - The run ledger: `recipe_runs` plus `recipe_run_tasks`. It, not the task table, is the record of which steps a track already has, and what `tlc recipe runs` and `tlc recipe diff` read.
 
 - **Attempt**
   - A single execution attempt of a task or step. Retry creates multiple attempts of the same step/task.
@@ -79,55 +85,31 @@ This glossary defines canonical terms used across all TLC specs.
   - A system process that automatically archives tasks that have been in a terminal status (DONE, SKIPPED) for longer than a configured threshold.
 
 - **Dependency**
-  - A relationship where a task/step must not start until another completes successfully. In flows, expressed via `depends_on` field.
+  - A relationship where a task must not start until another reaches a terminal status. Declared per step as `depends_on` and stored on the created task as `blocked_by`.
 
 - **depends_on**
-  - An array of step IDs that must reach `succeeded` status before the dependent step can start.
+  - An array of step IDs a step waits for. Inside an `include` or `repeat` block, an edge on the block means "after every leaf of the block".
 
-- **Sequential Execution**
-  - Steps that execute one after another based on dependency order. Not a step type, but a pattern achieved via `depends_on`.
-
-- **Parallel Execution**
-  - Multiple steps executing concurrently without enforced ordering. Implemented via `parallel` step type.
-
-- **max_concurrency**
-  - Maximum number of child steps that may be in `running` state simultaneously within a `parallel` step.
+- **Batch**
+  - One round of the executor loop: the set of tasks whose blockers are all terminal, dispatched together up to `--concurrency`. Ordering within a batch follows step order.
 
 - **Determinism**
-  - The guarantee that the same inputs produce the same structural decisions and outcomes. Flow execution order is deterministic where specified by dependencies.
+  - The guarantee that the same recipe and the same vars produce the same tasks, the same dependency edges and the same dispatch order.
 
 - **Idempotency**
-  - The property that repeating the same operation produces the same effective outcome without harm. Important for retry safety.
-
-- **Join / Barrier**
-  - A synchronization point that waits for multiple upstream steps to complete before allowing downstream progress. Implemented via `join` step type with `wait_for` field.
-
-- **wait_for**
-  - An array of step IDs that a `join` step must wait for before succeeding. All steps in wait_for must reach terminal success state.
-
-- **Branch**
-  - A conditional decision point that selects exactly one downstream execution path based on condition evaluation. Implemented via `branch` step type.
+  - The property that repeating the same operation produces the same effective outcome without harm. Reconciliation relies on it: a step whose ledger row exists is never materialized twice.
 
 - **Condition / when**
-  - An expression evaluated by a `branch` step to select which path to execute. Format: `<variable> == "<value>"`.
+  - A single comparison `lhs OP rhs` (`==`, `!=`, `<`, `<=`, `>`, `>=`) evaluated at readiness. The left side reads an upstream `results.<step>.<path>` or a `vars.<name>`. False skips the task; an evaluation error blocks it.
 
-- **default_next**
-  - The step to execute if no branch cases match. If omitted and no cases match, branch fails.
+- **Attempts**
+  - The count of dispatches a task has had. `retry.max_attempts` bounds it and `retry.backoff` spaces them; once exhausted the task is blocked with the failure as its reason.
 
-- **Retry (Execution-level)**
-  - Retrying a task attempt within the runner/executor. Owned by task-exec-spec-0.1.md.
+- **Include**
+  - A step that splices another recipe in, binding its vars through `with`. Included steps get ids `<block>/<child>`; nesting is capped at 8 and cycles are refused.
 
-- **Retry (Orchestration-level)**
-  - Retrying a step or subflow as a control mechanism in the flow engine. Implemented via `retry` step type.
-
-- **Retry Policy**
-  - Configuration for retry step including `max_attempts` and `backoff_ms`.
-
-- **Subflow**
-  - A nested flow executed as a step within a parent flow. Implemented via `subflow` step type with `flow_ref`.
-
-- **flow_ref**
-  - Reference to another flow definition to execute as a subflow. Format: `flow:<name>:<version>`.
+- **Repeat / until**
+  - A block unrolled a fixed number of times, stopping early once a result satisfies `until`. Iterations become `<block>/<n>/<child>`, each chained after the previous iteration's leaves.
 
 - **Lease / TTL**
   - A time-bounded ownership lock that prevents tasks from being stuck due to dead owners. Optional but recommended for multi-agent systems.
@@ -146,40 +128,18 @@ Durable task state stored in task persistence (UPPERCASE):
 - **DONE** - Task completed successfully (terminal, immutable)
 - **SKIPPED** - Task intentionally abandoned (terminal, immutable)
 
-### Step Status (FLOW-level)
+A recipe step has no status of its own. The task it materialized into carries
+the state, and the run ledger says which step that task came from — so a run's
+progress is read by listing the tasks of its run, not by a separate status
+machine.
 
-Transient state of a step within a flow run (lowercase):
+### Blocked
 
-- **pending** - Step exists but dependencies not yet satisfied
-- **queued** - Dependencies satisfied, waiting to start execution
-- **running** - Step is actively executing
-- **succeeded** - Step completed successfully (terminal)
-- **failed** - Step encountered an error (terminal)
-- **canceled** - Step was explicitly canceled (terminal)
-- **skipped** - Step was not executed due to branching or control flow (terminal)
-
-### Flow Status (FLOW-level)
-
-Transient state of a flow run (lowercase):
-
-- **queued** - Flow instantiated, waiting to start
-- **running** - Flow execution in progress
-- **succeeded** - All required steps succeeded (terminal)
-- **failed** - One or more required steps failed (terminal)
-- **canceled** - Flow execution was explicitly canceled (terminal)
-
-### Execution Status (EXEC-level - DEPRECATED)
-
-Note: These statuses were originally defined for task execution protocol but are superseded by:
-- Task statuses (CRUD-level) for durable state
-- Step statuses (FLOW-level) for orchestration state
-
-For backward compatibility reference:
-- QUEUED → Use `pending` or `queued` at step level
-- RUNNING → Use `IN_PROGRESS` at task level, `running` at step level
-- SUCCEEDED → Use `DONE` at task level, `succeeded` at step level
-- FAILED → Use FAILURE log action + status revert at task level, `failed` at step level
-- CANCELED → Use `canceled` at step level
+Orthogonal to status: a task carries a `blocked_reason` when the executor
+could not take it further — a `when` that would not evaluate, a gate that
+failed, retries exhausted, or a `tlc task reject`. The status stays where it
+was; a blocked task is never dispatched, and everything behind it waits until
+someone unblocks or skips it.
 
 ---
 
@@ -215,12 +175,10 @@ Complete list of valid log action keywords across TLC system (34 actions total):
 - **FAILURE** - Blocking issue encountered
 - **RETRY** - Action retried with changes
 
-### Flow Orchestration Actions
-- **FLOW_START** - Flow execution started
-- **FLOW_END** - Flow execution completed
-- **STEP_START** - Flow step started
-- **STEP_END** - Flow step completed
-- **BRANCH_EVAL** - Branch condition evaluated and path selected
+### Recipe Execution Actions
+- **APPROVED** - Human task approved, completing it
+- **REJECTED** - Human task rejected, blocking it with the reason
+- **RECLAIMED** - Claim taken over from a stale actor and re-dispatched
 
 ### System Actions
 - **SYSTEM_START** - System/agent process started
@@ -250,8 +208,11 @@ Complete list of valid log action keywords across TLC system (34 actions total):
 - **Task Store**
   - The persistence layer for task entities. May be file-per-task, JSON array, SQLite database, or hybrid.
 
-- **Flow Registry**
-  - Storage location for flow definitions, referenced by flow_ref in subflow steps.
+- **Recipe Search Path**
+  - Where recipe files are looked up, in order: `recipe.dir` from config (relative to the project root), the project's `.tlc/recipes`, then `~/.config/tlc/recipes`. An unpinned name resolves to the first layer that has it, highest version in that layer; a pinned `name@version` is searched across every layer.
+
+- **Run Ledger Tables**
+  - `recipe_runs` holds one row per materialization; `recipe_run_tasks` maps each of its steps to the task it created.
 
 - **Prepend**
   - Write policy for CHANGELOG where new log entries are added to the beginning of the file.
@@ -330,20 +291,17 @@ Complete list of valid log action keywords across TLC system (34 actions total):
 ## Notes
 
 - **Status Capitalization Convention:**
-  - Task statuses are UPPERCASE to reflect durable CRUD state stored in persistence
-  - Step/Flow statuses are lowercase to reflect transient orchestration run state
-  - This convention helps distinguish between persistent task state and ephemeral execution state
+  - Task statuses are UPPERCASE to reflect durable state stored in persistence
+  - A step has no status of its own; the task it materialized into carries the state
 
 - **Action Capitalization Convention:**
   - All log actions are UPPERCASE for consistency and visibility in logs
 
 - **Format Conventions:**
-  - `flow:<name>:<version>` - Flow ID format
+  - `<name>@<version>` - Pinned recipe reference
+  - `tlc://recipe/<name>` - Recipe URI (see identifiers-spec-0.1.md)
   - `task:<task_id>` - Task reference format (or task ID directly)
-  - `run:<unique_id>` - Flow run ID format
   - `T-0001` - Task ID format (recommended pattern)
 
-- **Retry Levels:**
-  - Execution-level retry is owned by runners (task-exec-spec-0.1.md)
-  - Orchestration-level retry is owned by flow engine (task-flow-spec-0.1.md)
-  - Both levels can coexist but must be clearly distinguished to avoid confusion
+- **Retry:**
+  - Declared per step as `retry.max_attempts` and `retry.backoff`, applied by the executor and counted on the task as `attempts` (see task-exec-spec-0.1.md)

@@ -13,7 +13,6 @@ An AI agent or autonomous system that integrates with TLC via CLI commands, MCP 
 - [005 - Task Update](../stories/005-task-update.md) (update status; force transitions)
 - [007 - Task Reopen](../stories/007-task-reopen.md) (reopen when blocked or regressed)
 - [011 - AI Agent Task State Transitions](../stories/011-ai-agent-task-state-transitions.md) (planned)
-- [020 - Flow Execution](../stories/020-flow-execution.md) (agent orchestrates flow steps)
 - [040 - MCP Integration & Tool Use](../stories/040-mcp-integration-tool-use.md) (planned)
 - [042 - CLI Command Integration](../stories/042-cli-command-integration.md) (planned)
 - [090 - HTTP API Server Lifecycle](../stories/090-http-api-server-lifecycle.md)

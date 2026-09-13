@@ -4,7 +4,7 @@
 - Author: jadb
 - Date: 2026-04-30
 - Supersedes: none
-- Related: `task-log-spec-0.1.md`, `task-flow-spec-0.1.md`, `architecture.md`
+- Related: `task-log-spec-0.1.md`, `recipe-spec-0.1.md`, `architecture.md`
 
 ## 1. Purpose
 
@@ -15,7 +15,7 @@ shape without reading tlc source.
 
 Consumers in scope:
 
-- aps listener daemon — profile-aware reactions to task/track/flow life
+- aps listener daemon — profile-aware reactions to task/track life
 - future webhook bridge — fan-out to GitHub/Slack/Linear
 - cross-tool audit replay — reconstruct timelines from bus capture
 - dpkms hub clients — any process attached to the cross-process bus
@@ -36,7 +36,7 @@ Authoritative when in conflict with code: this spec. Code drift = bug.
 
 Format: `tlc.<entity>.<verb>` — lowercase, dot-separated, ASCII only.
 
-- `<entity>` ∈ { `task`, `track`, `flow` } (extensible — future entities
+- `<entity>` ∈ { `task`, `track` } (extensible — future entities
   MUST register here before publishing)
 - `<verb>` — past-tense lifecycle action; finite set:
   `created`, `updated`, `claimed`, `unclaimed`, `assigned`,
@@ -237,37 +237,13 @@ set. Minimum required fields:
 { "track_id": "tlc-new-bus-topics", "task_count": 7, "duration_sec": 86400 }
 ```
 
-### 6.3 Flows
-
-| Topic                       | When emitted                             | Status     |
-|-----------------------------|------------------------------------------|------------|
-| `tlc.flow.started`          | Flow run begins                          | Stable     |
-| `tlc.flow.step-completed`   | Single step exits OK (legacy hyphen)     | v0.1 only  |
-| `tlc.flow.completed`        | Run reaches terminal success             | Stable     |
-| `tlc.flow.failed`           | Run aborts on error                      | Stable     |
-
-Payload shape today: `events.EntityEvent` (generic) keyed by `id =
-flow_run_id`. Per-flow typed payloads tracked for v0.2.
-
-```json
-{
-  "id": "flow-run-7f3a",
-  "old_state": "running",
-  "new_state": "succeeded",
-  "actor": "tlc-flow",
-  "timestamp": "2026-04-30T12:01:00Z",
-  "meta": { "flow_id": "flow:onboard:1.0", "step_id": "publish" }
-}
-```
-
-### 6.4 Wildcard subscriptions (consumer reference)
+### 6.3 Wildcard subscriptions (consumer reference)
 
 | Pattern              | Matches                                  |
 |----------------------|------------------------------------------|
 | `tlc.#`              | Every tlc-emitted event                  |
 | `tlc.task.#`         | All task lifecycle                       |
 | `tlc.task.*`         | Single-segment task verbs only           |
-| `tlc.flow.#`         | All flow events incl. legacy hyphen form |
 
 ## 7. Source identifier
 
@@ -281,10 +257,9 @@ deployments. Consumers MUST treat `source` as opaque.
   bump. Consumers MUST ignore unknown fields.
 - Renames / type changes / removed fields = new topic version
   (`tlc.task.created.v2`) OR major spec bump (v1.0 retires v0.x).
-- Hyphen→underscore migration (`status-changed` → `status_changed`,
-  `step-completed` → `step_completed`) ships in v0.2 with both
-  forms emitted in parallel for one minor cycle, then hyphen form
-  retired.
+- Hyphen→underscore migration (`status-changed` → `status_changed`)
+  ships in v0.2 with both forms emitted in parallel for one minor
+  cycle, then hyphen form retired.
 - Subscribers SHOULD pin to a wildcard (`tlc.task.#`) rather than
   individual topic strings to ride additive growth.
 
@@ -316,7 +291,7 @@ Required consumer behaviour:
 
 - `docs/architecture.md` §Events — runtime wiring
 - `docs/task-log-spec-0.1.md` — durable audit shape (mirrors envelope)
-- `docs/task-flow-spec-0.1.md` — flow run lifecycle source-of-truth
+- `docs/recipe-spec-0.1.md` — recipe grammar and step semantics
 - `internal/events/topics.go` — canonical topic + payload constants
 - `internal/events/audit.go` — `AuditSubscriber` impl, dogfood consumer
 - `internal/events/adapter.go` — `BusPublisher` (domain → kit/bus)

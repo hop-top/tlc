@@ -24,7 +24,7 @@ Personas provide user-centered context for:
 
 | Persona | Role | Focus Areas |
 |---------|------|------------|
-| [P1 — Solo Developer](solo-developer.md) | Individual contributor | Task CRUD, flow execution, local workflows |
+| [P1 — Solo Developer](solo-developer.md) | Individual contributor | Task CRUD, recipe execution, local workflows |
 | [P2 — AI Agent](ai-agent.md) | Autonomous system | CLI commands, task claiming, state transitions, MCP/API integration |
 | [P3 — Team Lead](team-lead.md) | Project manager | Multi-project sync, team visibility, governance |
 | [P4 — Test Engineer](test-engineer.md) | QA specialist | Test coverage, validation, CI integration |

@@ -10,8 +10,8 @@ This guide walks you through TLC concepts progressively, from basic task managem
   - [Stage 3: AI Agent Integration](#stage-3-ai-agent-integration-10-minutes)
   - [Stage 4: Multi-Agent Collaboration](#stage-4-multi-agent-collaboration-15-minutes)
   - [Stage 5: GitHub Sync](#stage-5-github-sync-15-minutes)
-  - [Stage 6: Flows & Assignees](#stage-6-flows--assignees-20-minutes)
-  - [Stage 7: Advanced Flows](#stage-7-advanced-flows-30-minutes)
+  - [Stage 6: Recipes & Assignees](#stage-6-recipes--assignees-20-minutes)
+  - [Stage 7: Running a Recipe](#stage-7-running-a-recipe-30-minutes)
   - [Stage 8: Interactive TUI](#stage-8-interactive-tui-10-minutes)
   - [Stage 9: Git Conventions](#stage-9-git-conventions-optional-15-minutes)
   - [Stage 10: Stale & Blocked Detection](#stage-10-stale--blocked-detection-5-minutes)
@@ -126,58 +126,98 @@ tlc sync push github
 
 ---
 
-### Stage 6: Flows & Assignees (20 minutes)
-**Goal**: Automate workflows with procedural task generation
+### Stage 6: Recipes & Assignees (20 minutes)
+**Goal**: Create a track and its tasks from a template, the same way every time
 
-**Concepts**: Flow definitions, capability-based assignment
-**Docs**: [Flows & Assignees](flows-and-assignees.md)
+**Concepts**: Recipes, steps and kinds, vars, capability-based assignment
+**Docs**: [Recipes & Assignees](recipes.md)
 **Try**:
 ```bash
-# List available flows
-tlc flow list
+# Write a recipe: two steps, one machine, one person
+mkdir -p .tlc/recipes
+cat > .tlc/recipes/smoke.yaml <<'EOF'
+recipe: smoke
+version: 0.1.0
+description: Build and sign off
+vars:
+  target:
+    default: build
+track:
+  title: "Smoke {{target}}"
+  type: chore
+steps:
+  - id: build
+    kind: exec
+    title: "Build {{target}}"
+    exec:
+      argv: [make, "{{target}}"]
+  - id: sign-off
+    kind: human
+    title: "Sign off on {{target}}"
+    depends_on: [build]
+EOF
 
-# Invoke a brainstorming flow
-tlc flow invoke examples/flows/brainstorming.yaml
+# Check it parses, validates and expands
+tlc recipe validate smoke
 
-# See generated tasks with auto-assignment
-tlc task list --tag flow
+# See every recipe on the search path, and this one's steps
+tlc recipe list
+tlc recipe show smoke
+
+# Create the track and its tasks, assigning steps that name no assignee
+tlc track create --recipe smoke --var target=test --assign
 
 # Check assignee capabilities
 tlc assignee list
 tlc assignee show assignee:code-analyst:1.0
 ```
 
-**When to move on**: You've invoked a flow and understand how tasks get auto-assigned.
+**When to move on**: You've materialized a recipe into a track and understand how tasks get auto-assigned.
 
 ---
 
-### Stage 7: Advanced Flows (30 minutes)
-**Goal**: Create custom workflows for your team
+### Stage 7: Running a Recipe (30 minutes)
+**Goal**: Execute the tasks a recipe created
 
-**Concepts**: Sequential/parallel execution, branching, retries
-**Docs**: [Task Flow Spec](task-flow-spec-0.1.md#canonical-examples)
-**Examples to study**:
-- `examples/flows/test-driven-development.yaml` - Sequential with dependencies
-- `examples/flows/systematic-debugging.yaml` - Conditional branching
-- `examples/flows/code-review.yaml` - Parallel checks with join
+**Concepts**: Dependency batches, `when` conditions, retries, gates, human approval
+**Docs**: [Recipe Spec](recipe-spec-0.1.md)
+**Try**:
+```bash
+# See the batch plan and the ready set without dispatching anything
+tlc track execute smoke-test --dry-run
 
-**Try**: Create your own flow YAML for your team's workflow
+# Run it: exec steps run as their argv, agent steps go to --agent
+tlc track execute smoke-test --agent claude
 
-**When to move on**: You understand flow structure and can write basic flows.
+# The human step waits for a decision
+tlc task approve T-0002 --note "output looks right"
+
+# Every materialization is in the run ledger
+tlc recipe runs smoke
+tlc recipe diff smoke-test
+```
+
+Substitute your own track id for `smoke-test` — `tlc track list` shows it.
+
+**Next**: add `depends_on` to fan steps out, a `when:` to skip a step on
+an upstream result, a `retry:` block to give a flaky step a second
+attempt, and a `gate:` to hold a step at an eva contract before DONE.
+
+**When to move on**: You understand step kinds, dependencies and the run ledger.
 
 ---
 
 ### Stage 8: Interactive TUI (10 minutes)
 **Goal**: Use the visual terminal interface
 
-**Concepts**: Dashboard, Kanban board, flow monitoring
+**Concepts**: Dashboard, Kanban board, run monitoring
 **Docs**: [TUI Spec](tlc-tui-spec-0.1.md)
 **Try**:
 ```bash
 tlc tui
 
 # Keybindings:
-# v - cycle views (Dashboard → Kanban → Flows)
+# v - cycle views (Dashboard → Kanban → Runs)
 # n - create new task (interactive form)
 # c - claim task
 # s - cycle status
@@ -346,7 +386,7 @@ After completing stages 1-3, you should be able to:
 After completing stages 4-6, you should be able to:
 - ✅ Coordinate work across multiple agents/humans
 - ✅ Sync tasks with GitHub/Jira/Linear
-- ✅ Automate workflows with flows
+- ✅ Automate procedures with recipes
 
 After completing stages 7-8, you should be able to:
 - ✅ Design custom workflows for your team
@@ -376,9 +416,9 @@ After completing stages 7-8, you should be able to:
 **Solution**: Edit `todo.txt` or use CLI commands. Let TLC manage the database.
 **Docs**: [Task CRUD Spec](task-crud-spec-0.1.md)
 
-### Mistake 5: Using flows before understanding basic tasks
-**Problem**: Flows feel overwhelming and confusing
-**Solution**: Master stages 1-4 first. Flows are just automated task creation.
+### Mistake 5: Using recipes before understanding basic tasks
+**Problem**: Recipes feel overwhelming and confusing
+**Solution**: Master stages 1-4 first. A recipe is just a template for creating tasks.
 **Docs**: This guide (follow the stages)
 
 ---
@@ -387,7 +427,7 @@ After completing stages 7-8, you should be able to:
 
 ### For Solo Developers
 **Learn**: Stages 1-2, 8 (CLI + TUI)
-**Skip**: Stages 4, 6-7 (collaboration, flows)
+**Skip**: Stages 4, 6-7 (collaboration, recipes)
 **Maybe**: Stage 5 (GitHub sync if you use issues)
 
 ### For AI Agent Developers
@@ -397,12 +437,12 @@ After completing stages 7-8, you should be able to:
 
 ### For Team Leads
 **Learn**: All stages
-**Focus**: Stages 6-7 (flows for team workflows)
-**Customize**: Create team-specific flows in `examples/flows/`
+**Focus**: Stages 6-7 (recipes for team procedures)
+**Customize**: Create team-specific recipes in `.tlc/recipes/`
 
 ### For DevOps Engineers
 **Learn**: Stages 1-5, 9 (basics through GitHub sync + Git integration)
-**Skip**: Stages 6-7 (flows, unless automating deployments)
+**Skip**: Stages 6-7 (recipes, unless automating deployments)
 **Consider**: Stage 13 (custom extensions for CI/CD)
 
 ---
@@ -413,7 +453,7 @@ After completing this guide:
 
 1. **Read the specs** that interest you (see [docs/README.md](README.md))
 2. **Customize your setup** (`.tlc/config.yaml`)
-3. **Create team flows** (`examples/flows/your-workflow.yaml`)
+3. **Create team recipes** (`.tlc/recipes/your-procedure.yaml`)
 4. **Contribute** (see [CONTRIBUTING.md](../CONTRIBUTING.md))
 
 ## ❓ Still Confused?

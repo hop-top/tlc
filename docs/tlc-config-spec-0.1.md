@@ -458,7 +458,7 @@ implemented; there is no connection-string key to go with it.
 
 **Two databases**: TLC maintains two distinct SQLite files:
 - **Project DB** — `.tlc/db.sqlite` (or `.hop/tlc/db.sqlite` in hop mode); stores tasks,
-  logs, flow runs, sequences for a single project.
+  logs, recipe runs, sequences for a single project.
 - **Global DB** — user-level data dir (`<XDG_DATA_HOME>/tlc/db.sqlite`); stores the
   `projects` registry tracking all known projects across clones/worktrees. Created
   automatically on first `tlc init`.

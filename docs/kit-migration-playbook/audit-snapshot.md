@@ -23,7 +23,7 @@ Generated: 2026-04-28
 | internal/cli/agent_run.go | 14 | hop.top/kit/output |
 | internal/cli/config_interactive_llm.go | 13 | hop.top/kit/llm |
 | internal/cli/config_interactive_llm.go | 14 | hop.top/kit/llm/errors |
-| internal/cli/flow.go | 13 | hop.top/kit/output |
+| internal/cli/recipe.go | 13 | hop.top/kit/output |
 | internal/cli/formatter.go | 12 | hop.top/kit/markdown |
 | internal/cli/formatter.go | 13 | hop.top/kit/output |
 | internal/cli/help.go | 9 | hop.top/kit/toolspec |
@@ -205,7 +205,7 @@ Verified by `find /Users/jadb/.w/ideacrafterslabs/kit/hops/main/go -type d -name
 - internal/cli/agent_async.go:11
 - internal/cli/agent_list.go:11
 - internal/cli/agent_run.go:14
-- internal/cli/flow.go:13
+- internal/cli/recipe.go:13
 - internal/cli/formatter.go:13
 - internal/cli/hints.go:6
 - internal/cli/log.go:12

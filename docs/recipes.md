@@ -266,8 +266,8 @@ A recipe that decomposes something names it with `--for`; the reference
 is bound as `subject.*` for templates and recorded on the run:
 
 ```bash
-tlc task create --recipe fix-flow --for T-0042    # into T-0042's track
-tlc task create --recipe fix-flow --for auth      # into the auth track
+tlc task create --recipe fix-bug --for T-0042    # into T-0042's track
+tlc task create --recipe fix-bug --for auth      # into the auth track
 ```
 
 With a task subject, the task is blocked on the run's leaves (the steps
@@ -367,8 +367,8 @@ task as subject, into the task's track, and runs the created tasks
 straight away; the task completes once every leaf is done:
 
 ```bash
-tlc task execute T-0042 --recipe fix-flow --var branch=main
-tlc task execute T-0042 --recipe fix-flow --dry-run
+tlc task execute T-0042 --recipe fix-bug --var branch=main
+tlc task execute T-0042 --recipe fix-bug --dry-run
 ```
 
 ## Keep a track in sync with its recipe

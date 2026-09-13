@@ -8,7 +8,7 @@
 ## Summary
 
 Task Execution Spec defines the contract between:
-- a caller (CLI / flow engine / agent)
+- a caller (CLI / executor / agent)
 and
 - a runner (executor)
 
@@ -22,7 +22,7 @@ This spec OWNS:
 This spec DOES NOT own:
 - task schema (see task-crud-spec-0.1.md)
 - ownership/claiming/reassignment (see task-collab-spec-1.0.md)
-- flow orchestration graphs (see task-flow-spec-0.1.md)
+- recipe grammar and step semantics (see recipe-spec-0.1.md)
 
 This spec references:
 - task-log-spec-0.1.md for audit logs

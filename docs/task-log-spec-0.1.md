@@ -11,7 +11,7 @@ Defines the canonical log entry schema and log write policy used across:
 - Task CRUD
 - Task Execution
 - Collaboration
-- Flow Orchestration
+- Recipe Execution
 
 ## Log Entry Schema
 
@@ -20,9 +20,8 @@ Each log entry MUST include:
 - `timestamp`: ISO8601 UTC string
 - `entity_type`: one of
   - `task`
-  - `flow`
-  - `step`
-- `entity_id`: string identifier (task_id / flow_id / step_id)
+  - `track`
+- `entity_id`: string identifier (task_id / track_id)
 - `by`: actor identifier (agent_id / runner_id / system)
 - `action`: string action keyword
 - `note`: string, human-readable justification/context
@@ -411,13 +410,17 @@ All valid action keywords across the TLC system:
 - **FAILURE**: Blocking issue encountered
 - **RETRY**: Action retried with changes
 
-### Flow Orchestration Actions
+### Recipe Execution Actions
 
-- **FLOW_START**: Flow execution started
-- **FLOW_END**: Flow execution completed
-- **STEP_START**: Flow step started
-- **STEP_END**: Flow step completed
-- **BRANCH_EVAL**: Branch condition evaluated and path selected
+- **APPROVED**: Human task approved, completing it
+- **REJECTED**: Human task rejected, blocking it with the reason
+- **RECLAIMED**: Claim taken over from a stale actor and re-dispatched
+
+Everything else an executed step logs reuses the actions above:
+**CLAIMED** when the executor takes a ready task, **DONE** when it passes
+its gate, **SKIPPED** when its `when` is false, **RETRY** between
+attempts, and **BLOCKED** when attempts are exhausted or a condition
+cannot be evaluated.
 
 ### System Actions
 
@@ -536,10 +539,10 @@ After compaction:
 ### Example 1: Multi-Entity Log Stream
 
 ```jsonl
-{"timestamp":"2025-01-15T12:05:00Z","entity_type":"step","entity_id":"deploy","flow_id":"flow:ci:1.0","run_id":"run:abc","by":"system","action":"STEP_END","note":"Deployment succeeded"}
-{"timestamp":"2025-01-15T12:04:30Z","entity_type":"step","entity_id":"deploy","flow_id":"flow:ci:1.0","run_id":"run:abc","by":"system","action":"STEP_START","note":"Starting deployment"}
+{"timestamp":"2025-01-15T12:05:00Z","entity_type":"task","entity_id":"T-0044","by":"system","action":"DONE","meta":{"run_id":"run_01hx","step_id":"deploy"},"note":"Deployment succeeded"}
+{"timestamp":"2025-01-15T12:04:30Z","entity_type":"task","entity_id":"T-0044","by":"system","action":"CLAIMED","meta":{"run_id":"run_01hx","step_id":"deploy"},"note":"(TODO → IN_PROGRESS, assigned to @system)"}
 {"timestamp":"2025-01-15T12:04:00Z","entity_type":"task","entity_id":"T-0042","by":"codex","action":"DONE","note":"Build completed"}
-{"timestamp":"2025-01-15T12:00:00Z","entity_type":"flow","entity_id":"flow:ci:1.0","run_id":"run:abc","by":"system","action":"FLOW_START","note":"Starting CI pipeline"}
+{"timestamp":"2025-01-15T12:02:00Z","entity_type":"task","entity_id":"T-0043","by":"system","action":"SKIPPED","meta":{"run_id":"run_01hx","step_id":"notify"},"note":"when false: results.build.exit_code == 1"}
 {"timestamp":"2025-01-15T11:55:00Z","entity_type":"task","entity_id":"T-0042","by":"codex","action":"CLAIMED","note":"Starting build"}
 ```
 
