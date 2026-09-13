@@ -696,9 +696,21 @@ func newTestInitCmd() *cobra.Command {
 // --source from one test does not leak into the next.
 func resetRecipeFlags() {
 	recipeListSource = ""
-	for _, cmd := range []*cobra.Command{recipeListCmd, recipeShowCmd, recipeValidateCmd} {
+	recipeImportVars = nil
+	recipeImportName, recipeImportVersion, recipeImportOutput = "", "", ""
+	recipeImportInstall, recipeImportForce, recipeImportExternal = false, false, false
+	recipeRunsAllProjects, recipeRunsTrack = false, ""
+	recipeDiffRecipe = ""
+	for _, cmd := range []*cobra.Command{
+		recipeListCmd, recipeShowCmd, recipeValidateCmd, recipeImportCmd, recipeRunsCmd, recipeDiffCmd,
+	} {
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
 			f.Changed = false
+			// A test root's persistent --dry-run stays merged into the leaf's
+			// flag set; put it back to its default so it cannot leak.
+			if f.Name == "dry-run" {
+				_ = f.Value.Set(f.DefValue) //nolint:errcheck // bool default always parses
+			}
 		})
 	}
 }

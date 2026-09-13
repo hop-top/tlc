@@ -298,6 +298,6 @@ func recipeNameCompletion(_ *cobra.Command, _ []string, toComplete string) ([]st
 
 func init() {
 	recipeListCmd.Flags().StringVar(&recipeListSource, "source", "", "Only this layer: a directory path, or \"builtin\"")
-	RecipeCmd.AddCommand(recipeListCmd, recipeShowCmd, recipeValidateCmd)
+	RecipeCmd.AddCommand(recipeListCmd, recipeShowCmd, recipeValidateCmd, recipeImportCmd, recipeRunsCmd, recipeDiffCmd)
 	RootCmd.AddCommand(RecipeCmd)
 }
