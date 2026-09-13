@@ -57,13 +57,17 @@ type ArgvResult struct {
 // expressions, eva gates and the flow adapter read.
 func (r *ArgvResult) Map() map[string]any {
 	return map[string]any{
-		"exit_code":   r.ExitCode,
-		"stdout":      r.Stdout,
-		"stderr":      r.Stderr,
-		"duration_ms": r.DurationMs,
-		"truncated":   r.Truncated,
+		ResultKeyExitCode: r.ExitCode,
+		"stdout":          r.Stdout,
+		"stderr":          r.Stderr,
+		"duration_ms":     r.DurationMs,
+		"truncated":       r.Truncated,
 	}
 }
+
+// ResultKeyExitCode is the result field every exec-kind run reports and
+// `when:` conditions read as results.<step>.exit_code.
+const ResultKeyExitCode = "exit_code"
 
 // ArgvRunner runs one literal argv and reports an ArgvResult, wherever
 // the command actually runs: HostArgvRunner on this machine,
