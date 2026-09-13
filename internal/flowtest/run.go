@@ -1,4 +1,6 @@
-// Package flowtest provides deterministic e2e testing for tlc flow definitions.
+// Package flowtest provides deterministic e2e testing for tlc recipes:
+// a hermetic sandbox, cassette-backed tool shims, and the named runs that
+// drive `tlc recipe test`.
 package flowtest
 
 import (
@@ -11,13 +13,14 @@ import (
 
 // RunManifest is the optional test.yaml manifest inside a run directory.
 type RunManifest struct {
-	Name         string   `yaml:"name,omitempty"`
-	Description  string   `yaml:"description,omitempty"`
-	ExpectedExit int      `yaml:"expected_exit"`
-	Passthrough  []string `yaml:"passthrough,omitempty"`
+	Name         string            `yaml:"name,omitempty"`
+	Description  string            `yaml:"description,omitempty"`
+	ExpectedExit int               `yaml:"expected_exit"`
+	Passthrough  []string          `yaml:"passthrough,omitempty"`
+	Vars         map[string]string `yaml:"vars,omitempty"`
 }
 
-// Run describes one named test run for a flow.
+// Run describes one named test run for a recipe.
 type Run struct {
 	Name         string
 	Dir          string // path to run dir
@@ -25,6 +28,7 @@ type Run struct {
 	ContractsDir string // path to contracts/ subdir
 	ExpectedExit int
 	Passthrough  []string
+	Vars         map[string]string // recipe vars the run binds
 }
 
 // options holds optional parameters for DiscoverRuns.
@@ -40,26 +44,26 @@ func WithRunName(name string) Option {
 	return func(o *options) { o.runName = name }
 }
 
-// DiscoverRuns finds all named runs for flowName in baseDir.
+// DiscoverRuns finds all named runs for recipeName in baseDir.
 //
-// baseDir is the parent of the fixtures/<flowName>/ directory (typically the
-// flow file's directory or the project root). The fixtures directory is
-// resolved as baseDir/fixtures/<flowName>/. Each subdirectory of that
+// baseDir is the parent of the fixtures/<recipeName>/ directory (the
+// recipe file's directory). The fixtures directory is resolved as
+// baseDir/fixtures/<recipeName>/. Each subdirectory of that
 // fixtures dir is a named run. A test.yaml manifest inside the run dir can
 // override defaults. If WithRunName is set, only that run is returned.
-func DiscoverRuns(flowName, baseDir string, opts ...Option) ([]Run, error) {
+func DiscoverRuns(recipeName, baseDir string, opts ...Option) ([]Run, error) {
 	o := &options{}
 	for _, fn := range opts {
 		fn(o)
 	}
 
-	fixturesDir := filepath.Join(baseDir, "fixtures", flowName)
+	fixturesDir := filepath.Join(baseDir, "fixtures", recipeName)
 	entries, err := os.ReadDir(fixturesDir)
 	if err != nil {
+		// A recipe with no fixtures has no runs; that is not an error, so
+		// the caller can report where it looked.
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf(
-				"flowtest: fixtures dir not found for %q: %s", flowName, fixturesDir,
-			)
+			return nil, nil
 		}
 		return nil, fmt.Errorf("flowtest: DiscoverRuns %q: %w", fixturesDir, err)
 	}
@@ -75,7 +79,7 @@ func DiscoverRuns(flowName, baseDir string, opts ...Option) ([]Run, error) {
 		}
 
 		runDir := filepath.Join(fixturesDir, dirName)
-		run, err := loadRun(flowName, runDir, dirName)
+		run, err := loadRun(runDir, dirName)
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +94,7 @@ func DiscoverRuns(flowName, baseDir string, opts ...Option) ([]Run, error) {
 }
 
 // loadRun constructs a Run from a run directory, optionally reading test.yaml.
-func loadRun(flowName, runDir, dirName string) (Run, error) {
+func loadRun(runDir, dirName string) (Run, error) {
 	run := Run{
 		Name:         dirName,
 		Dir:          runDir,
@@ -110,11 +114,11 @@ func loadRun(flowName, runDir, dirName string) (Run, error) {
 		}
 		run.ExpectedExit = m.ExpectedExit
 		run.Passthrough = m.Passthrough
+		run.Vars = m.Vars
 	} else if !os.IsNotExist(err) {
 		return Run{}, fmt.Errorf("flowtest: read manifest %s: %w", manifestPath, err)
 	}
 
-	_ = flowName // reserved for future manifest validation
 	return run, nil
 }
 

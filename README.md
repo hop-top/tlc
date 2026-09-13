@@ -712,6 +712,16 @@ tlc recipe show code-review -f json   # the expanded document
 tlc recipe validate ./my-recipe.yaml  # exit 1 with the first problem
 ```
 
+**Testing a recipe** — `tlc recipe test <recipe> [run]` materializes the
+recipe into a throwaway store and executes it inside a sandbox: a clone of
+the working tree, shim binaries ahead of the real ones on PATH, and a home
+of its own. Replay serves every tool call from a recorded cassette, so a run
+is deterministic and offline; `--record` reaches the real binaries and writes
+the cassettes. Runs live in `fixtures/<recipe>/<run>/` beside the recipe,
+with `record/` cassettes per step id, optional `contracts/` for eva
+assertions, and a `test.yaml` declaring `expected_exit` and `vars`. A missing
+cassette exits 2.
+
 **Creating from a recipe** — four verbs share one pipeline: locate, expand,
 bind vars, select steps, render, materialize. Each pass is recorded as a
 run (which recipe, version, vars, subject, selection) so a later pass can

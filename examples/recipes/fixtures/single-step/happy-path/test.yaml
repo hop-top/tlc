@@ -1,0 +1,3 @@
+name: happy-path
+description: the single agent step completes from its cassette
+expected_exit: 0

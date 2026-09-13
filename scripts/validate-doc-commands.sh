@@ -92,14 +92,14 @@ check "flow invoke"      $TLC flow invoke
 check "flow list"        $TLC flow list
 check "flow run"         $TLC flow run
 check "flow status"      $TLC flow status
-check "flow test"        $TLC flow test
 
 echo
-echo "-- flow test flags --"
-check_flag "flow test --record"        $TLC flow test --record
-check_flag "flow test --passthrough"   $TLC flow test --passthrough
-check_flag "flow test --keep-sandbox"  $TLC flow test --keep-sandbox
-check_flag "flow test --steps"         $TLC flow test --steps
+echo "-- recipe test flags --"
+check "recipe test"      $TLC recipe test
+check_flag "recipe test --record"        $TLC recipe test --record
+check_flag "recipe test --passthrough"   $TLC recipe test --passthrough
+check_flag "recipe test --keep-sandbox"  $TLC recipe test --keep-sandbox
+check_flag "recipe test --task"          $TLC recipe test --task
 
 echo
 echo "-- recipe subcommands --"

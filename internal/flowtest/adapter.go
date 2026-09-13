@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"hop.top/tlc/internal/core"
 )
 
 // AgentAdapter abstracts a CLI agent binary: binary path, argument construction,
@@ -36,10 +34,10 @@ type AgentAdapter interface {
 	// binPath is the resolved binary (from sandbox BinDir or PATH).
 	// Called once per session; result cached by AdapterResolver.
 	Probe(ctx context.Context, binPath string) (*AdapterCapabilities, error)
-	// Operation returns the logical operation name for a step (e.g. "prompt", "embed").
+	// Operation returns the logical operation name for a step (e.g. "prompt", "exec").
 	// Used to extract the right sub-map from config before BuildArgs.
 	// Return "" for single-mode adapters.
-	Operation(step core.Step) string
+	Operation(step StepRef) string
 }
 
 // buildFlagsFromConfig converts a config map to a --key val slice.
@@ -281,7 +279,7 @@ func (a *claudeAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapa
 }
 
 // Operation returns "" — claude is single-mode.
-func (a *claudeAdapter) Operation(_ core.Step) string { return "" }
+func (a *claudeAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- GeminiAdapter ----
 
@@ -347,7 +345,7 @@ func (a *geminiAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapa
 	return caps, nil
 }
 
-func (a *geminiAdapter) Operation(_ core.Step) string { return "" }
+func (a *geminiAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- FabricAdapter ----
 
@@ -422,7 +420,7 @@ func (a *fabricAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapa
 	return caps, nil
 }
 
-func (a *fabricAdapter) Operation(_ core.Step) string { return "" }
+func (a *fabricAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- LLMAdapter ----
 
@@ -495,23 +493,9 @@ func (a *llmAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabil
 	return caps, nil
 }
 
-// Operation returns "embed" if the step requires embed (via Capabilities or Tools), else "prompt".
-func (a *llmAdapter) Operation(step core.Step) string {
-	if step.TaskTemplate != nil && step.TaskTemplate.Requirements != nil {
-		req := step.TaskTemplate.Requirements
-		for _, cap := range req.Capabilities {
-			if cap == "embed" {
-				return "embed"
-			}
-		}
-		for _, tool := range req.Tools {
-			if tool == "embed" {
-				return "embed"
-			}
-		}
-	}
-	return "prompt"
-}
+// Operation returns "prompt": a recipe step carries no capability that
+// would select the embed sub-map, so the prompt config namespace applies.
+func (a *llmAdapter) Operation(_ StepRef) string { return "prompt" }
 
 // ---- CodexAdapter ----
 
@@ -611,7 +595,7 @@ func (a *codexAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapab
 }
 
 // Operation returns "exec" — codex requires the exec subcommand for non-interactive use.
-func (a *codexAdapter) Operation(_ core.Step) string { return "exec" }
+func (a *codexAdapter) Operation(_ StepRef) string { return "exec" }
 
 // ---- OpenCodeAdapter ----
 
@@ -676,7 +660,7 @@ func (a *openCodeAdapter) Probe(ctx context.Context, binPath string) (*AdapterCa
 }
 
 // Operation returns "run" — opencode requires the run subcommand for non-interactive use.
-func (a *openCodeAdapter) Operation(_ core.Step) string { return "run" }
+func (a *openCodeAdapter) Operation(_ StepRef) string { return "run" }
 
 // ---- RouteLLMAdapter ----
 
@@ -729,12 +713,11 @@ func (a *routeLLMAdapter) Probe(ctx context.Context, binPath string) (*AdapterCa
 }
 
 // Operation returns "" — routeLLM is single-mode.
-func (a *routeLLMAdapter) Operation(_ core.Step) string { return "" }
+func (a *routeLLMAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- CrewAIAdapter ----
 
 // CrewAIAdapter wraps the crewai CLI (crewAIInc/crewAI).
-// Capability mappings: capabilities: [multi-agent, role-based, task-orchestration]
 // Default config: ~/.config/crewai. Override: CREWAI_HOME.
 type crewAIAdapter struct{}
 
@@ -766,7 +749,7 @@ func (a *crewAIAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapa
 }
 
 // Operation returns "" — crewai is single-mode.
-func (a *crewAIAdapter) Operation(_ core.Step) string { return "" }
+func (a *crewAIAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- LangChainAdapter ----
 
@@ -775,9 +758,6 @@ func (a *crewAIAdapter) Operation(_ core.Step) string { return "" }
 //
 // Default config dir: ~/.config/langchain (LANGCHAIN_HOME env var).
 // Override with config["dir"].
-//
-// Capability mappings: use `capabilities: [llm, chain, tool-use]` in flow
-// YAML adapter mappings to route steps to this adapter.
 type langchainAdapter struct{}
 
 // NewLangChainAdapter returns an adapter for LangChain agents.
@@ -818,11 +798,9 @@ func (a *langchainAdapter) Probe(ctx context.Context, binPath string) (*AdapterC
 }
 
 // Operation returns "" — LangChain adapter is single-mode.
-func (a *langchainAdapter) Operation(_ core.Step) string { return "" }
+func (a *langchainAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- GoogleADKAdapter ----
-
-// Capability mappings: capabilities: [llm, tool-use, multi-agent, streaming]
 
 // googleADKAdapter wraps the Google Agent Development Kit CLI (adk).
 // Default config: ~/.config/adk. Override: ADK_HOME or GOOGLE_ADK_HOME env var.
@@ -875,12 +853,11 @@ func (a *googleADKAdapter) Probe(ctx context.Context, binPath string) (*AdapterC
 }
 
 // Operation returns "" — google-adk is single-mode.
-func (a *googleADKAdapter) Operation(_ core.Step) string { return "" }
+func (a *googleADKAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- MastraAdapter ----
 
 // MastraAdapter wraps the mastra CLI (mastra-ai/mastra).
-// Capability mappings: capabilities: [llm, tool-use, workflow, memory]
 // Default config: ~/.mastra. Override: MASTRA_HOME.
 type mastraAdapter struct{}
 
@@ -916,14 +893,13 @@ func (a *mastraAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapa
 }
 
 // Operation returns "" — mastra is single-mode.
-func (a *mastraAdapter) Operation(_ core.Step) string { return "" }
+func (a *mastraAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- OpenAIAgentsAdapter ----
 
 // OpenAIAgentsAdapter wraps the OpenAI Agents SDK (formerly Swarm) via
 // `python -m <module> --input <prompt>`.
 // Default config dir: ~/.config/openai. Override: OPENAI_CONFIG_DIR.
-// Capability mappings: capabilities: [llm, tool-use, handoff, guardrails]
 type openAIAgentsAdapter struct{}
 
 // NewOpenAIAgentsAdapter returns an adapter for the OpenAI Agents SDK.
@@ -959,12 +935,11 @@ func (a *openAIAgentsAdapter) Probe(_ context.Context, _ string) (*AdapterCapabi
 }
 
 // Operation returns "" — openai-agents is single-mode.
-func (a *openAIAgentsAdapter) Operation(_ core.Step) string { return "" }
+func (a *openAIAgentsAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- N8NAdapter ----
 
 // n8nAdapter wraps the n8n CLI workflow automation tool.
-// Capability mappings: capabilities: [workflow, automation, webhook, integration]
 // Default config: ~/.n8n. Override: N8N_USER_FOLDER.
 type n8nAdapter struct{}
 
@@ -1003,12 +978,11 @@ func (a *n8nAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapabil
 }
 
 // Operation returns "" — n8n is single-mode.
-func (a *n8nAdapter) Operation(_ core.Step) string { return "" }
+func (a *n8nAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- BedrockAdapter ----
 
 // bedrockAdapter wraps the AWS CLI to invoke Bedrock models via the converse API.
-// Capability mappings: capabilities: [llm, converse, streaming, guardrails]
 // Default config: ~/.aws. Override via config["dir"] (sets AWS_CONFIG_FILE).
 // Region: config["region"] or AWS_DEFAULT_REGION.
 // Model: config["model"] or "anthropic.claude-3-5-sonnet-20241022-v2:0".
@@ -1059,12 +1033,11 @@ func (a *bedrockAdapter) Probe(ctx context.Context, binPath string) (*AdapterCap
 }
 
 // Operation returns "" — bedrock is single-mode.
-func (a *bedrockAdapter) Operation(_ core.Step) string { return "" }
+func (a *bedrockAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- AutoGenAdapter ----
 
 // AutoGenAdapter wraps the autogenstudio CLI (microsoft/autogen).
-// Capability mappings: capabilities: [multi-agent, code-execution, tool-use, conversation]
 // Default config: ~/.autogen. Override: AUTOGEN_HOME.
 // Invocation: `autogenstudio run --task <prompt>` (autogenstudio package).
 // Fallback (if autogenstudio unavailable): `python -m <module> --input <prompt>`.
@@ -1099,7 +1072,7 @@ func (a *autoGenAdapter) Probe(ctx context.Context, binPath string) (*AdapterCap
 }
 
 // Operation returns "" — autogen is single-mode.
-func (a *autoGenAdapter) Operation(_ core.Step) string { return "" }
+func (a *autoGenAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- DSPyAdapter ----
 
@@ -1108,8 +1081,6 @@ func (a *autoGenAdapter) Operation(_ core.Step) string { return "" }
 //
 // Default config cache dir: ~/.cache/dspy (DSPY_CACHEDIR env var).
 // Override with config["dir"].
-//
-// Capability mappings: capabilities: [llm, optimization, chain-of-thought, retrieval]
 type dspyAdapter struct{}
 
 // NewDSPyAdapter returns an adapter for DSPy programs.
@@ -1148,12 +1119,11 @@ func (a *dspyAdapter) Probe(_ context.Context, _ string) (*AdapterCapabilities, 
 }
 
 // Operation returns "" — DSPy adapter is single-mode.
-func (a *dspyAdapter) Operation(_ core.Step) string { return "" }
+func (a *dspyAdapter) Operation(_ StepRef) string { return "" }
 
 // ---- OllamaAdapter ----
 
 // ollamaAdapter wraps the ollama CLI (ollama/ollama).
-// Capability mappings: capabilities: [llm, local, embedding, vision]
 // Default config: ~/.ollama. Override: OLLAMA_HOME.
 // Server override: OLLAMA_HOST (default localhost:11434).
 type ollamaAdapter struct{}
@@ -1214,4 +1184,24 @@ func (a *ollamaAdapter) Probe(ctx context.Context, binPath string) (*AdapterCapa
 }
 
 // Operation returns "" — ollama is single-mode.
-func (a *ollamaAdapter) Operation(_ core.Step) string { return "" }
+func (a *ollamaAdapter) Operation(_ StepRef) string { return "" }
+
+// DefaultAdapters is the adapter set `recipe test` dispatches through,
+// keyed by the agent name a step or recipe asks for.
+func DefaultAdapters() map[string]AgentAdapter {
+	return map[string]AgentAdapter{
+		"claude":        NewClaudeAdapter(),
+		"gemini":        NewGeminiAdapter(),
+		"fabric":        NewFabricAdapter(),
+		"llm":           NewLLMAdapter(),
+		"codex":         NewCodexAdapter(),
+		"opencode":      NewOpenCodeAdapter(),
+		"routellm":      NewRouteLLMAdapter(),
+		"crewai":        NewCrewAIAdapter(),
+		"langchain":     NewLangChainAdapter(),
+		"openai-agents": NewOpenAIAgentsAdapter(),
+		"autogen":       NewAutoGenAdapter(),
+		"n8n":           NewN8NAdapter(),
+		"bedrock":       NewBedrockAdapter(),
+	}
+}
