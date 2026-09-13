@@ -14,11 +14,18 @@ import (
 )
 
 // GlobalAdapterConfig holds the user-level adapter defaults loaded from
-// <config-dir>/adapters.yaml. Missing file is not an error — results in
-// empty config. Only Default and Configs apply to recipe steps: Mappings
-// key on flow capabilities a recipe step does not declare.
+// <config-dir>/adapters.yaml. A missing file is not an error: it reads as
+// an empty config.
 type GlobalAdapterConfig struct {
-	Adapters core.FlowAdapters `json:"adapters" yaml:"adapters"`
+	Adapters AdapterDefaults `json:"adapters" yaml:"adapters"`
+}
+
+// AdapterDefaults is the adapter half of adapters.yaml: which adapter to
+// use when a step names none, and the per-adapter config keyed by adapter
+// name (the key "dir" is that adapter's config directory).
+type AdapterDefaults struct {
+	Default string                    `json:"default,omitempty" yaml:"default,omitempty"`
+	Configs map[string]map[string]any `json:"configs,omitempty" yaml:"configs,omitempty"`
 }
 
 // LoadGlobalAdapterConfig reads <config-dir>/adapters.yaml.
@@ -48,12 +55,11 @@ func LoadGlobalAdapterConfig() (*GlobalAdapterConfig, error) {
 // Adapter resolution (first non-empty wins):
 //  1. the task's agent (step.Agent, from the recipe step)
 //  2. recipe.Agent
-//  3. global.Adapters.Default.Name
+//  3. global.Adapters.Default
 //  4. fatal error
 //
 // Config resolution (first non-nil wins):
-//  1. global.Adapters.Default.Config, when the default selected the adapter
-//  2. global.Adapters.Configs[adapterName]
+//  1. global.Adapters.Configs[adapterName]
 //  3. nil → adapter auto-detects
 type AdapterResolver struct {
 	adapters   map[string]AgentAdapter
@@ -140,9 +146,8 @@ func (r *AdapterResolver) resolveRef(step StepRef) (resolvedRef, error) {
 	if r.recipe != nil && r.recipe.Agent != "" {
 		return resolvedRef{name: r.recipe.Agent}, nil
 	}
-	if r.global != nil && !r.global.Adapters.Default.IsZero() {
-		d := r.global.Adapters.Default
-		return resolvedRef{name: d.Name, config: d.Config}, nil
+	if r.global != nil && r.global.Adapters.Default != "" {
+		return resolvedRef{name: r.global.Adapters.Default}, nil
 	}
 	return resolvedRef{}, fmt.Errorf(
 		"adapter resolver: step %q: no adapter resolved; "+

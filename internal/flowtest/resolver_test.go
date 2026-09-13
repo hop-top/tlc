@@ -40,7 +40,7 @@ func resolve(t *testing.T, r *AdapterResolver, s StepRef) (AgentAdapter, map[str
 }
 
 func globalDefault(name string) *GlobalAdapterConfig {
-	return &GlobalAdapterConfig{Adapters: core.FlowAdapters{Default: core.AgentRef{Name: name}}}
+	return &GlobalAdapterConfig{Adapters: AdapterDefaults{Default: name}}
 }
 
 // --- Resolution step 1: the task's own agent ---
@@ -115,22 +115,22 @@ func TestResolverUnknownRecipeAgentIsNotMaskedByGlobal(t *testing.T) {
 
 // --- Config resolution chain ---
 
-// Config step 1: the global default's inline config when it selected the adapter.
-func TestResolverConfigGlobalDefaultInline(t *testing.T) {
-	global := &GlobalAdapterConfig{Adapters: core.FlowAdapters{
-		Default: core.AgentRef{Name: "claude", Config: map[string]any{"dir": "/inline/.claude"}},
+// The default adapter still reads its config from Configs, keyed by name.
+func TestResolverConfigGlobalDefaultUsesConfigs(t *testing.T) {
+	global := &GlobalAdapterConfig{Adapters: AdapterDefaults{
+		Default: "claude",
 		Configs: map[string]map[string]any{"claude": {"dir": "/configs/.claude"}},
 	}}
 	r := NewAdapterResolver(builtins(), &core.Recipe{}, global)
 	_, cfg := resolve(t, r, step("s", ""))
-	if cfg["dir"] != "/inline/.claude" {
-		t.Errorf("cfg[dir]=%q, want /inline/.claude", cfg["dir"])
+	if cfg["dir"] != "/configs/.claude" {
+		t.Errorf("cfg[dir]=%q, want /configs/.claude", cfg["dir"])
 	}
 }
 
-// Config step 2: global.Adapters.Configs[name] for an adapter named elsewhere.
+// global.Adapters.Configs[name] for an adapter named elsewhere.
 func TestResolverConfigGlobalConfigs(t *testing.T) {
-	global := &GlobalAdapterConfig{Adapters: core.FlowAdapters{
+	global := &GlobalAdapterConfig{Adapters: AdapterDefaults{
 		Configs: map[string]map[string]any{"claude": {"dir": "/global-configs/.claude"}},
 	}}
 	r := NewAdapterResolver(builtins(), &core.Recipe{Agent: "claude"}, global)

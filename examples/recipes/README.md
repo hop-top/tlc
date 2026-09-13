@@ -66,3 +66,7 @@ fixtures/<recipe>/<run>/
 A run directory named `happy-path` is the convention for the case where
 everything succeeds. Cassettes are keyed by step id, so renaming a step
 orphans its recordings.
+
+`contracts/` beside the recipes holds the EVA contracts a recipe's
+`gate:` refers to by name. Those are the gate definitions; the
+`contracts/` inside a run holds that run's own assertions.
