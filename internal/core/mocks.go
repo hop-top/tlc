@@ -91,22 +91,93 @@ func (m *MockRepository) UpdateTaskWithLog(ctx context.Context, task *Task, entr
 func (m *MockRepository) ListTasks(ctx context.Context, query Query) ([]*Task, error) {
 	var tasks []*Task
 	for _, t := range m.Tasks {
-		matches := true
-		for _, filter := range query.Filters {
-			if !m.applyFilter(t, filter) {
-				matches = false
-				break
-			}
-		}
-		if matches {
+		if m.matchesQuery(t, query) {
 			tasks = append(tasks, t)
 		}
 	}
 	return tasks, nil
 }
 
+// matchesQuery applies the field filters plus the column predicates the
+// SQL store pushes down (archive exclusion, blocked, run id, claim age),
+// so executor tests on the mock exercise the same predicates.
+func (m *MockRepository) matchesQuery(t *Task, query Query) bool {
+	for _, filter := range query.Filters {
+		if !m.applyFilter(t, filter) {
+			return false
+		}
+	}
+	if !query.IncludeArchived && t.Archived {
+		return false
+	}
+	if query.Blocked != nil {
+		blocked := t.BlockedReason != nil && *t.BlockedReason != ""
+		if blocked != *query.Blocked {
+			return false
+		}
+	}
+	if query.HasRunID != nil && (t.RunID != "") != *query.HasRunID {
+		return false
+	}
+	if query.ClaimedBefore != nil && (t.ClaimedAt == nil || !t.ClaimedAt.Before(*query.ClaimedBefore)) {
+		return false
+	}
+	return true
+}
+
+// ClaimTask mirrors the SQL compare-and-set: one claimant wins, the rest
+// see false.
+func (m *MockRepository) ClaimTask(ctx context.Context, id, projectID string, from, to TaskStatus, actor string, now time.Time) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.Tasks[id]
+	if !ok {
+		return false, nil
+	}
+	pid := ""
+	if t.ProjectID != nil {
+		pid = *t.ProjectID
+	}
+	if pid != projectID || t.Status != from {
+		return false, nil
+	}
+	if t.AssignedTo != nil && *t.AssignedTo != "" && *t.AssignedTo != actor {
+		return false, nil
+	}
+	owner, claimed := actor, now
+	t.Status = to
+	t.AssignedTo = &owner
+	t.ClaimedAt = &claimed
+	t.UpdatedAt = now
+	return true, nil
+}
+
+// Field names of the recipe-era column filters the mock understands.
+const (
+	filterKind      = "kind"
+	filterRunID     = "run_id"
+	filterProjectID = "project_id"
+)
+
 func (m *MockRepository) applyFilter(task *Task, filter FieldFilter) bool {
 	switch filter.Field {
+	case filterKind, filterRunID, filterProjectID:
+		val, ok := filter.Value.(string)
+		if !ok || filter.Operator != OpEq {
+			return false
+		}
+		switch filter.Field {
+		case filterKind:
+			return string(task.EffectiveKind()) == val
+		case filterRunID:
+			return task.RunID == val
+		default:
+			pid := ""
+			if task.ProjectID != nil {
+				pid = *task.ProjectID
+			}
+			return pid == val
+		}
 	case "tags":
 		tags, ok := filter.Value.(string)
 		if !ok {

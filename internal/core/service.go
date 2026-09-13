@@ -509,6 +509,12 @@ const (
 	ActionDone       = "DONE"
 	ActionSkipped    = "SKIPPED"
 
+	// Recipe Execution Actions: human-gate decisions and a claim taken
+	// over from a stale actor. Retries reuse ActionRetry below.
+	ActionApproved  = "APPROVED"
+	ActionRejected  = "REJECTED"
+	ActionReclaimed = "RECLAIMED"
+
 	// Task Execution Actions.
 	ActionExecStart   = "EXEC_START"
 	ActionExecEnd     = "EXEC_END"
