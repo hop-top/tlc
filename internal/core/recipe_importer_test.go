@@ -49,7 +49,7 @@ func TestParseImportedRecipe_Valid(t *testing.T) {
 		}
 	}
 	if strings.Contains(llm.prompts[0], "flow_id") || strings.Contains(llm.prompts[0], "entry_step") {
-		t.Errorf("prompt still describes the flow format:\n%s", llm.prompts[0])
+		t.Errorf("prompt describes keys no recipe has:\n%s", llm.prompts[0])
 	}
 }
 

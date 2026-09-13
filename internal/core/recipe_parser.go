@@ -61,7 +61,7 @@ func decodeRecipeYAML(data []byte, rec *Recipe) error {
 	if root.Kind != 0 && root.Kind != yaml.MappingNode {
 		return fmt.Errorf("a recipe is a mapping with recipe, version and steps keys")
 	}
-	if err := rejectFlowShapeYAML(root); err != nil {
+	if err := rejectUnknownShapeYAML(root); err != nil {
 		return err
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -72,33 +72,34 @@ func decodeRecipeYAML(data []byte, rec *Recipe) error {
 	return nil
 }
 
-// rejectFlowShapeYAML refuses the flow format's header keys and map-form
-// steps with a pointer to the recipe format, instead of decoding them into
-// an empty recipe.
-func rejectFlowShapeYAML(root *yaml.Node) error {
+// rejectUnknownShapeYAML refuses documents shaped like something other
+// than a recipe, pointing at the keys a recipe uses instead of decoding
+// them into an empty one.
+func rejectUnknownShapeYAML(root *yaml.Node) error {
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		key, val := root.Content[i], root.Content[i+1]
-		if err := rejectFlowKey(key.Value, val.Kind == yaml.MappingNode); err != nil {
+		if err := rejectUnknownKey(key.Value, val.Kind == yaml.MappingNode); err != nil {
 			return fmt.Errorf("line %d: %w", key.Line, err)
 		}
 	}
 	return nil
 }
 
-// Header keys of the retired flow format, refused with a hint.
+// Keys no recipe has. They are refused by name rather than by the
+// unknown-field error so the message can say what to write instead.
 const (
-	flowKeyID    = "flow_id"
-	flowKeyEntry = "entry_step"
-	flowKeyFlow  = "flow"
+	rejectedKeyID    = "flow_id"
+	rejectedKeyEntry = "entry_step"
+	rejectedKeyFlow  = "flow"
 )
 
-func rejectFlowKey(key string, stepsIsMap bool) error {
+func rejectUnknownKey(key string, stepsIsMap bool) error {
 	switch key {
-	case flowKeyID, flowKeyEntry, flowKeyFlow:
-		return fmt.Errorf("%q is a flow key; flows are now recipes: name the document with \"recipe:\" and list its steps under \"steps:\"", key)
+	case rejectedKeyID, rejectedKeyEntry, rejectedKeyFlow:
+		return fmt.Errorf("unknown key %q: name the document with \"recipe:\" and list its steps under \"steps:\"", key)
 	case nsSteps:
 		if stepsIsMap {
-			return fmt.Errorf("steps must be a list of steps with ids, not a map; flows are now recipes")
+			return fmt.Errorf("a recipe's steps must be a list of steps with ids, not a map")
 		}
 	}
 	return nil
@@ -111,7 +112,7 @@ func decodeRecipeJSON(data []byte, rec *Recipe) error {
 	}
 	for key, val := range raw {
 		trimmed := bytes.TrimSpace(val)
-		if err := rejectFlowKey(key, len(trimmed) > 0 && trimmed[0] == '{'); err != nil {
+		if err := rejectUnknownKey(key, len(trimmed) > 0 && trimmed[0] == '{'); err != nil {
 			return err
 		}
 	}

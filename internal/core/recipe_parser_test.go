@@ -92,8 +92,8 @@ func TestParseRecipe_JSON(t *testing.T) {
 	}
 }
 
-// TestParseRecipe_ExtensionlessStillValidates closes the flow parser's
-// hole: a file without an extension must go through validation too.
+// TestParseRecipe_ExtensionlessStillValidates: a file without an
+// extension must go through validation too.
 func TestParseRecipe_ExtensionlessStillValidates(t *testing.T) {
 	_, err := ParseRecipe(strings.NewReader("recipe: x\nversion: 1\nsteps:\n  - id: a\n    depends_on: [nope]\n"), "recipe")
 	if err == nil || !strings.Contains(err.Error(), "nope") {
@@ -101,10 +101,10 @@ func TestParseRecipe_ExtensionlessStillValidates(t *testing.T) {
 	}
 }
 
-// TestParseRecipe_RejectsFlowShapes: the flow format's map-form steps and
-// header keys are refused with a pointer to the recipe spec, not decoded
-// into an empty recipe.
-func TestParseRecipe_RejectsFlowShapes(t *testing.T) {
+// TestParseRecipe_RejectsForeignShapes: map-form steps and header keys no
+// recipe has are refused with a pointer to the keys a recipe uses, not
+// decoded into an empty recipe.
+func TestParseRecipe_RejectsForeignShapes(t *testing.T) {
 	cases := map[string]string{
 		"map steps":  "recipe: x\nversion: 1\nsteps:\n  a:\n    title: A\n",
 		"flow_id":    "flow_id: flow:x:1\nversion: 1\nsteps:\n  - id: a\n",
@@ -112,8 +112,8 @@ func TestParseRecipe_RejectsFlowShapes(t *testing.T) {
 	}
 	for name, yamlText := range cases {
 		_, err := parseRecipeString(t, yamlText)
-		if err == nil || !strings.Contains(err.Error(), "flow") || !strings.Contains(err.Error(), "recipe") {
-			t.Errorf("%s: err = %v; want a flows-are-now-recipes error", name, err)
+		if err == nil || !strings.Contains(err.Error(), "recipe") {
+			t.Errorf("%s: err = %v; want an error naming the recipe keys", name, err)
 		}
 	}
 }
