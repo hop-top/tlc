@@ -63,9 +63,12 @@ func runTaskExecRecipe(ctx context.Context, cmd *cobra.Command, s *storage.SQLit
 		return err
 	}
 	agent, _ := parseAgentExpr(taskExecAgentExpr)
-	executor := newTrackExecutor(s, core.DefaultWorkflow(), core.ExecutorOpts{
+	executor, err := newTrackExecutor(cmd, s, core.DefaultWorkflow(), core.ExecutorOpts{
 		Actor: core.GetCurrentUser(), Concurrency: 1, EvaKey: os.Getenv("EVA_KEY"), Out: w,
 	}, registry, executorSetup{agent: agent, withPod: taskExecWithPod, ctxtRefs: taskExecCtxtRefs})
+	if err != nil {
+		return err
+	}
 	if taskExecTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, taskExecTimeout)

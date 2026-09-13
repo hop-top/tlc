@@ -65,6 +65,23 @@ func (r *ArgvResult) Map() map[string]any {
 	}
 }
 
+// ArgvRunner runs one literal argv and reports an ArgvResult, wherever
+// the command actually runs: HostArgvRunner on this machine,
+// PodArgvRunner inside a pod. The result shape is the same either way.
+type ArgvRunner interface {
+	Run(ctx context.Context, opts ArgvOpts) (*ArgvResult, error)
+}
+
+// HostArgvRunner runs argv on the host through RunArgv.
+type HostArgvRunner struct{}
+
+// Run implements ArgvRunner.
+func (HostArgvRunner) Run(ctx context.Context, opts ArgvOpts) (*ArgvResult, error) {
+	return RunArgv(ctx, opts)
+}
+
+var _ ArgvRunner = HostArgvRunner{}
+
 // RunArgv executes opts.Argv literally. Spawn failures (binary not found,
 // bad cwd) return a nil result and an error; a run that started returns
 // its result, with ErrArgvTimeout when the deadline killed it.

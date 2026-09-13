@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
@@ -48,11 +49,20 @@ run merged under --var, drift from that run's version is warned about,
 then execution proceeds as usual. --dry-run prints the reconcile plan
 and the batch plan without writing.
 
+Exec tasks run on the host by default. Pass --with-pod (true, or an
+image) to run each in a fresh pod from that image, else the --agent's:
+the working tree is copied to /workspace, exec.env is set at creation
+and exec.cwd resolves under /workspace. The pod protocol cannot signal
+the remote command nor cap its output at the source, so exec.timeout
+only ends the wait (the command dies with the pod) and exec.stdout_max
+cuts the output after it was transferred.
+
 Examples:
   tlc track execute my-feature --agent claude
   tlc track execute my-feature --recipe release --recreate
   tlc track execute my-feature --agent claude --concurrency 4
   tlc track execute my-feature --dry-run
+  tlc track execute my-feature --with-pod=ghcr.io/org/tools:1   # exec tasks in a pod too
   tlc track execute my-feature --reclaim 30m     # take over claims older than 30m
   tlc track execute my-feature --wait --poll 30s`,
 	Annotations: map[string]string{
@@ -67,7 +77,8 @@ func init() {
 	f := trackExecuteCmd.Flags()
 	f.StringVar(&trackExecuteAgent, "agent", "", "Agent for agent-kind tasks that name none")
 	f.StringVar(&trackExecuteWithPod, "with-pod", "true",
-		"Run agents in a container (true), locally (false), or in the given image")
+		"Run agents in a container (true), locally (false), or in the given image; "+
+			"when passed, exec tasks run in a container too")
 	f.IntVar(&trackExecuteConcurrency, "concurrency", 1, "In-flight dispatches (exec tasks; agent tasks run one at a time)")
 	f.BoolVar(&trackExecutePermissive, "permissive", false, "Also dispatch tasks not created by a recipe run")
 	f.DurationVar(&trackExecuteReclaim, "reclaim", 0, "Re-dispatch tasks whose claim is older than this")
@@ -99,6 +110,7 @@ func resetTrackExecuteFlags() {
 	trackExecuteTrustProject = false
 	trackExecuteCtxtRefs = nil
 	trackExecuteTimeout = 0
+	trackExecuteCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
 }
 
 func runTrackExecute(cmd *cobra.Command, args []string) error {
@@ -160,9 +172,12 @@ func runTrackExecute(cmd *cobra.Command, args []string) error {
 		return printTrackExecuteDryRun(ctx, cmd, s, wm, trackDisplay, trackID, projectID, opts)
 	}
 
-	executor := newTrackExecutor(s, wm, opts, registry, executorSetup{
+	executor, err := newTrackExecutor(cmd, s, wm, opts, registry, executorSetup{
 		agent: trackExecuteAgent, withPod: trackExecuteWithPod, ctxtRefs: trackExecuteCtxtRefs,
 	})
+	if err != nil {
+		return err
+	}
 	_, _ = fmt.Fprintf(out, "Executing track %s\n", trackDisplay)
 	report, err := executor.RunTrack(ctx, trackID, projectID)
 	if err != nil {
@@ -182,9 +197,9 @@ type executorSetup struct {
 // newTrackExecutor wires the executor with the agent and exec
 // dispatchers `track execute` uses.
 func newTrackExecutor(
-	s *storage.SQLiteStorage, wm *core.WorkflowManager, opts core.ExecutorOpts,
+	cmd *cobra.Command, s *storage.SQLiteStorage, wm *core.WorkflowManager, opts core.ExecutorOpts,
 	registry *core.AgentRegistry, setup executorSetup,
-) *core.Executor {
+) (*core.Executor, error) {
 	local, imageOverride := withPodMode(setup.withPod)
 	executor := core.NewExecutor(s, s, s, wm, opts)
 	executor.Register(core.TaskKindAgent, &agentDispatcher{
@@ -196,9 +211,12 @@ func newTrackExecutor(
 		imageOverride: imageOverride,
 		updater:       core.NewStateUpdater(core.NewTaskService(s, s), GetEventBus()),
 	})
-	// Exec-kind tasks run on the host in the working directory.
-	executor.Register(core.TaskKindExec, core.NewExecDispatcher(repoRootForMode(true)))
-	return executor
+	execDispatcher, err := execDispatcherForMode(cmd, registry, local, imageOverride)
+	if err != nil {
+		return nil, err
+	}
+	executor.Register(core.TaskKindExec, execDispatcher)
+	return executor, nil
 }
 
 // printExecReport summarizes a run under a label ("Track L-0003", "Task
