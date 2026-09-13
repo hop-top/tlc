@@ -81,6 +81,8 @@ func (m *MockRepository) UpdateTask(ctx context.Context, task *Task) error {
 }
 
 func (m *MockRepository) UpdateTaskWithLog(ctx context.Context, task *Task, entry *LogEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Tasks[task.ID] = task
 	if entry != nil {
 		m.logs = append(m.logs, entry)
@@ -89,6 +91,8 @@ func (m *MockRepository) UpdateTaskWithLog(ctx context.Context, task *Task, entr
 }
 
 func (m *MockRepository) ListTasks(ctx context.Context, query Query) ([]*Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var tasks []*Task
 	for _, t := range m.Tasks {
 		if m.matchesQuery(t, query) {
@@ -151,13 +155,6 @@ func (m *MockRepository) ClaimTask(ctx context.Context, id, projectID string, fr
 	t.UpdatedAt = now
 	return true, nil
 }
-
-// Field names of the recipe-era column filters the mock understands.
-const (
-	filterKind      = "kind"
-	filterRunID     = "run_id"
-	filterProjectID = "project_id"
-)
 
 func (m *MockRepository) applyFilter(task *Task, filter FieldFilter) bool {
 	switch filter.Field {

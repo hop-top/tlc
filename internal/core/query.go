@@ -25,6 +25,14 @@ type FieldFilter struct {
 	Value    interface{}
 }
 
+// Column names used as FieldFilter.Field by the executor and the mock.
+const (
+	filterKind      = "kind"
+	filterRunID     = "run_id"
+	filterProjectID = "project_id"
+	filterTrackID   = "track_id"
+)
+
 type Query struct {
 	Filters         []FieldFilter
 	Search          string // Full-text search term
