@@ -40,28 +40,21 @@ func EvalCondition(expr string, inputs map[string]any) (bool, error) {
 // operators require both sides to be numbers. An unknown step, path or
 // key is an error so callers fail loudly rather than silently skip.
 func EvalConditionEnv(expr string, env CondEnv) (bool, error) {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
+	if strings.TrimSpace(expr) == "" {
 		return true, nil
 	}
-
-	op, opIdx := findOperator(expr)
-	if opIdx < 0 {
-		return false, fmt.Errorf("invalid condition %q: expected one of == != < <= > >=", expr)
-	}
-	lhsRaw := strings.TrimSpace(expr[:opIdx])
-	rhsRaw := strings.TrimSpace(expr[opIdx+len(op):])
-	if lhsRaw == "" || rhsRaw == "" {
-		return false, fmt.Errorf("invalid condition %q: empty operand", expr)
+	c, err := parseCondition(expr)
+	if err != nil {
+		return false, err
 	}
 
-	val, err := env.lookup(lhsRaw)
+	val, err := env.lookup(c.lhs)
 	if err != nil {
 		return false, fmt.Errorf("condition %q: %w", expr, err)
 	}
-	rhsVal := unquote(rhsRaw)
+	rhsVal := unquote(c.rhs)
 
-	switch op {
+	switch c.op {
 	case "==":
 		return fmt.Sprintf("%v", val) == rhsVal, nil
 	case "!=":
@@ -70,13 +63,13 @@ func EvalConditionEnv(expr string, env CondEnv) (bool, error) {
 
 	lhsNum, ok := toFloat(val)
 	if !ok {
-		return false, fmt.Errorf("condition %q: %s is not a number (%v), cannot compare with %s", expr, lhsRaw, val, op)
+		return false, fmt.Errorf("condition %q: %s is not a number (%v), cannot compare with %s", expr, c.lhs, val, c.op)
 	}
 	rhsNum, err := strconv.ParseFloat(rhsVal, 64)
 	if err != nil {
-		return false, fmt.Errorf("condition %q: %q is not a number, cannot compare with %s", expr, rhsVal, op)
+		return false, fmt.Errorf("condition %q: %q is not a number, cannot compare with %s", expr, rhsVal, c.op)
 	}
-	switch op {
+	switch c.op {
 	case "<":
 		return lhsNum < rhsNum, nil
 	case "<=":
@@ -86,6 +79,55 @@ func EvalConditionEnv(expr string, env CondEnv) (bool, error) {
 	default: // ">="
 		return lhsNum >= rhsNum, nil
 	}
+}
+
+// condition is a parsed `lhs OP rhs` expression. rhs keeps its quotes so
+// String round-trips the author's spelling.
+type condition struct {
+	lhs, op, rhs string
+}
+
+// parseCondition splits expr into its three tokens without evaluating
+// it. Validation uses it to check grammar and to find results.<step>
+// references; expansion uses it to derive a negated `until`.
+func parseCondition(expr string) (condition, error) {
+	expr = strings.TrimSpace(expr)
+	op, opIdx := findOperator(expr)
+	if opIdx < 0 {
+		return condition{}, fmt.Errorf("invalid condition %q: expected one of == != < <= > >=", expr)
+	}
+	c := condition{
+		lhs: strings.TrimSpace(expr[:opIdx]),
+		op:  op,
+		rhs: strings.TrimSpace(expr[opIdx+len(op):]),
+	}
+	if c.lhs == "" || c.rhs == "" {
+		return condition{}, fmt.Errorf("invalid condition %q: empty operand", expr)
+	}
+	if step, rest, isResult := c.resultsRef(); isResult && (step == "" || rest == "") {
+		return condition{}, fmt.Errorf("invalid condition %q: want results.<step>.<field>", expr)
+	}
+	return c, nil
+}
+
+// String renders the condition with single spaces around the operator.
+func (c condition) String() string { return c.lhs + " " + c.op + " " + c.rhs }
+
+// negate flips the operator so the condition is true exactly when the
+// original is false.
+func (c condition) negate() condition {
+	flip := map[string]string{"==": "!=", "!=": "==", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
+	return condition{lhs: c.lhs, op: flip[c.op], rhs: c.rhs}
+}
+
+// resultsRef splits a results.<step>.<path> lhs into its step and path.
+func (c condition) resultsRef() (step, path string, ok bool) {
+	rest, isResult := strings.CutPrefix(c.lhs, "results.")
+	if !isResult {
+		return "", "", false
+	}
+	step, path, _ = strings.Cut(rest, ".")
+	return step, path, true
 }
 
 // lookup resolves an lhs reference in the environment.
