@@ -725,12 +725,12 @@ tlc track create "Review 42" --recipe code-review --var pr=42,depth=deep
 
 # Tasks only: into a track, for a subject, or trackless.
 tlc task create --recipe code-review --var pr=42 --track review-42
-tlc task create --recipe fix-flow --for T-0042      # into T-0042's track
-tlc task create --recipe fix-flow --for auth        # into the auth track
+tlc task create --recipe fix-bug --for T-0042      # into T-0042's track
+tlc task create --recipe fix-bug --for auth        # into the auth track
 tlc task create --recipe code-review --var pr=42    # trackless
 
 # Create for a task, then run the created tasks.
-tlc task execute T-0042 --recipe fix-flow --var branch=main
+tlc task execute T-0042 --recipe fix-bug --var branch=main
 
 # Bring a track up to date with its recipe, then run it.
 tlc track execute review-42 --recipe code-review
