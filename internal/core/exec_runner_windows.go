@@ -1,6 +1,6 @@
 //go:build windows
 
-package flowtest
+package core
 
 import "os/exec"
 
