@@ -30,7 +30,7 @@ var (
 	taskExecTrustProject   bool
 )
 
-// TaskExecCmd implements `tlc task exec <id>`.
+// TaskExecCmd implements `tlc task execute <id>` (alias `exec`).
 //
 // The agent is resolved (in order) from --agent, the task's assignee, or
 // the current user. Names are fuzzy-matched against the agent registry;
@@ -42,8 +42,9 @@ var (
 // overrides can also be supplied repeatedly via -A/--agent-config; -A
 // values are applied last, so they win on duplicate keys.
 var TaskExecCmd = &cobra.Command{
-	Use:   "exec <task-id>",
-	Short: "Execute a task via an agent",
+	Use:     "execute <task-id>",
+	Aliases: []string{"exec"},
+	Short:   "Execute a task via an agent",
 	Long: `Execute a task by dispatching it to an agent.
 
 The agent is resolved from --agent, the task's assignee, or the current
@@ -59,16 +60,16 @@ the agent's default container, any other value is taken as a container
 image reference.
 
 Examples:
-  tlc task exec T-0042
-  tlc task exec T-0042 --agent claude
-  tlc task exec T-0042 --agent claude:env.MODEL=opus
-  tlc task exec T-0042 --agent claude:image=ghcr.io/me/agent:dev
-  tlc task exec T-0042 --agent claude -A env.MODEL=opus -A default_timeout=10m
-  tlc task exec T-0042 --agent claude --force
-  tlc task exec T-0042 --with-pod false
-  tlc task exec T-0042 --with-pod ghcr.io/me/agent:dev
-  tlc task exec T-0042 --ctxt 'engineering?tag=runtime'
-  tlc task exec T-0042 --dry-run`,
+  tlc task execute T-0042
+  tlc task execute T-0042 --agent claude
+  tlc task execute T-0042 --agent claude:env.MODEL=opus
+  tlc task execute T-0042 --agent claude:image=ghcr.io/me/agent:dev
+  tlc task execute T-0042 --agent claude -A env.MODEL=opus -A default_timeout=10m
+  tlc task execute T-0042 --agent claude --force
+  tlc task execute T-0042 --with-pod false
+  tlc task execute T-0042 --with-pod ghcr.io/me/agent:dev
+  tlc task execute T-0042 --ctxt 'engineering?tag=runtime'
+  tlc task execute T-0042 --dry-run`,
 	Annotations: map[string]string{
 		"kit/side-effect": "interactive",
 		"kit/idempotent":  "no",
@@ -341,13 +342,42 @@ func taskExecForTrack(
 	local bool,
 	noState bool,
 ) error {
+	result, err := execTaskWithAgent(ctx, agentName, taskID, ac, cfg, updater, local)
+	if err != nil {
+		return fmt.Errorf("agent execution failed for %s: %w", taskDisplay, err)
+	}
+	if err := updater.Update(ctx, result, "task", taskID, core.UpdateOpts{
+		NoStateUpdate: noState,
+	}); err != nil {
+		return fmt.Errorf("state update: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s (%s)\n",
+		taskDisplay, result.Status, result.Summary)
+	_ = os.Stdout.Sync()
+	return nil
+}
+
+// execTaskWithAgent runs one task through the agent runtime and records
+// the audit run, returning the agent's result without touching task
+// state. taskExecForTrack applies the state update for `task execute`;
+// the track executor applies its own.
+func execTaskWithAgent(
+	ctx context.Context,
+	agentName string,
+	taskID string,
+	ac *core.AgentContext,
+	cfg *core.AgentConfig,
+	updater *core.StateUpdater,
+	local bool,
+) (*core.AgentResult, error) {
 	// Stash/restore the agentRun* globals that execute{Local,Container}
 	// + repoRoot() read. Without this, result.Agent ends up empty and
 	// repoRoot() falls back to whatever the last `tlc agent run`
 	// invocation left in the process state (or its zero value, which
 	// for agentRunLocal=false routes through "/workspace" but never
 	// gets the per-call mode flip). Restored on return so re-entrancy
-	// from sequential track-exec calls is safe.
+	// from sequential calls is safe.
 	prevAgent, prevLocal := agentRunAgent, agentRunLocal
 	agentRunAgent = agentName
 	agentRunLocal = local
@@ -364,12 +394,12 @@ func taskExecForTrack(
 	}
 
 	if err := updater.CreateRun(ctx, record); err != nil {
-		return fmt.Errorf("create audit record: %w", err)
+		return nil, fmt.Errorf("create audit record: %w", err)
 	}
 
 	contextJSON, err := json.Marshal(ac)
 	if err != nil {
-		return fmt.Errorf("marshal context: %w", err)
+		return nil, fmt.Errorf("marshal context: %w", err)
 	}
 
 	collector := core.NewResultCollector()
@@ -388,20 +418,11 @@ func taskExecForTrack(
 			Summary:  err.Error(),
 		}
 		_ = updater.UpdateRun(ctx, runID, failResult, record)
-		return fmt.Errorf("agent execution failed for %s: %w", taskDisplay, err)
+		return nil, err
 	}
 
 	if err := updater.UpdateRun(ctx, runID, result, record); err != nil {
-		return fmt.Errorf("update audit: %w", err)
+		return nil, fmt.Errorf("update audit: %w", err)
 	}
-	if err := updater.Update(ctx, result, "task", taskID, core.UpdateOpts{
-		NoStateUpdate: noState,
-	}); err != nil {
-		return fmt.Errorf("state update: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s (%s)\n",
-		taskDisplay, result.Status, result.Summary)
-	_ = os.Stdout.Sync()
-	return nil
+	return result, nil
 }

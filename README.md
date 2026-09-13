@@ -703,8 +703,8 @@ tlc agent run --agent code-analyst --flow deploy.yaml
 
 **Execute from task/track/flow context:**
 ```bash
-tlc task exec T-0042 --agent code-analyst
-tlc track exec browser-rendering --agent code-analyst
+tlc task execute T-0042 --agent code-analyst
+tlc track execute browser-rendering --agent code-analyst
 tlc flow run deploy.yaml --agent code-analyst
 ```
 

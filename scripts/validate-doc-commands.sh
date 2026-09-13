@@ -136,7 +136,7 @@ check "track archive"    $TLC track archive
 check "track abandon"    $TLC track abandon
 check "track delete"     $TLC track delete
 check "track summary"    $TLC track summary
-check "track exec"       $TLC track exec
+check "track execute"    $TLC track execute
 
 echo
 echo "-- agent subcommands --"
@@ -148,8 +148,8 @@ check "agent cancel"     $TLC agent cancel
 check "agent list"       $TLC agent list
 
 echo
-echo "-- task exec --"
-check "task exec"        $TLC task exec
+echo "-- task execute --"
+check "task execute"     $TLC task execute
 
 echo
 echo "-- agent/exec flag checks --"
@@ -157,13 +157,13 @@ check_flag "agent run --agent"          $TLC agent run --agent
 check_flag "agent run --async"          $TLC agent run --async
 check_flag "agent run --local"          $TLC agent run --local
 check_flag "agent run --trust-project"  $TLC agent run --trust-project
-check_flag "task exec --agent"          $TLC task exec --agent
-check_flag "task exec --with-pod"       $TLC task exec --with-pod
-check_flag "task exec --force"          $TLC task exec --force
-check_flag "task exec --ctxt"           $TLC task exec --ctxt
-check_flag "track exec --agent"         $TLC track exec --agent
-check_flag "track exec --local"         $TLC track exec --local
-check_flag "track exec --ctxt"          $TLC track exec --ctxt
+check_flag "task execute --agent"       $TLC task execute --agent
+check_flag "task execute --with-pod"    $TLC task execute --with-pod
+check_flag "task execute --force"       $TLC task execute --force
+check_flag "task execute --ctxt"        $TLC task execute --ctxt
+check_flag "track execute --agent"      $TLC track execute --agent
+check_flag "track execute --with-pod"   $TLC track execute --with-pod
+check_flag "track execute --ctxt"       $TLC track execute --ctxt
 
 echo
 echo "-- schema command --"

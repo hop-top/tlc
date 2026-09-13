@@ -469,7 +469,7 @@ func resetTaskFlags() {
 	// Reset track flags.
 	resetTrackFlags()
 	resetTrackGraphFlags()
-	resetTrackExecFlags()
+	resetTrackExecuteFlags()
 
 	// Reset flow flags.
 	resetFlowFlags()

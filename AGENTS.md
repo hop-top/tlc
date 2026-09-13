@@ -158,8 +158,8 @@ tlc agent list --source config   # agents declared in agents.yaml
 
 Shorthand exec (delegates to `agent run` internally):
 ```bash
-tlc task exec <id> --agent <name>
-tlc track exec <id> --agent <name>
+tlc task execute <id> --agent <name>
+tlc track execute <id> [--agent <name>]
 ```
 
 The `--agent <name>` flag is also accepted on `tlc flow run`:

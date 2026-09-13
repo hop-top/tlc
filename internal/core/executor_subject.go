@@ -5,6 +5,13 @@ import (
 	"fmt"
 )
 
+// CompleteSubjectIfDone applies the executor's subject rule from outside
+// a run — after `task approve` finishes the last human leaf, for one.
+func CompleteSubjectIfDone(ctx context.Context, repo Repository, runs RecipeRunStore, wm *WorkflowManager, actor string, task *Task) error {
+	e := NewExecutor(repo, nil, runs, wm, ExecutorOpts{Actor: actor})
+	return e.maybeCompleteSubject(ctx, task)
+}
+
 // maybeCompleteSubject completes the subject a run decomposes once every
 // leaf of the run is done. The subject is left alone when it is already
 // terminal or claimed by another actor; the run's provenance names the
