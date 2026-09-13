@@ -17,4 +17,3 @@ User stories that Test Engineer validates:
 - [001 - Task Creation](../stories/001-task-creation.md) (E2E validation)
 - [002 - Task Listing](../stories/002-task-listing.md) (query validation)
 - [009 - Task Audit Log](../stories/009-task-audit-log.md) (audit log validation)
-- [020 - Flow Execution](../stories/020-flow-execution.md) (orchestration validation)

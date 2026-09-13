@@ -11,7 +11,6 @@ A solo developer managing personal projects, side work, or small team tasks. The
 - [004 - Task Management](../stories/004-task-management.md)
 - [005 - Task Update](../stories/005-task-update.md)
 - [006 - Task Deletion](../stories/006-task-deletion.md)
-- [020 - Flow Execution](../stories/020-flow-execution.md)
 - [030 - TUI Navigation](../stories/030-tui-navigation.md)
 
 ## Related Stories

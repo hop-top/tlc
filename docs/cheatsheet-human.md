@@ -231,15 +231,26 @@ Config (`tracks:` section in `.tlc/config.yaml`):
 
 ---
 
-## Flows
+## Recipes
 
 ```bash
-tlc flow run flow.yaml                   # execute flow from file
-tlc flow run tlc://owner/repo/flow:id:1.0  # from URI
-tlc flow invoke flow.yaml                # generate + assign tasks from template
-tlc flow list                            # list flow runs
-tlc flow status <run-id>                 # status of a specific run
-tlc flow import <uri>                    # import flow from GitHub or URI
+tlc recipe list                          # recipes on the search path
+tlc recipe show <recipe>                 # header, vars, expanded steps
+tlc recipe validate <recipe>             # exit 0 valid, 1 with the problem
+tlc recipe import <track>                # capture a track as a recipe file
+tlc recipe runs [<recipe>]               # the run ledger
+tlc recipe diff <track>                  # steps vs. ledger vs. tasks
+```
+
+Create tasks from one, then run them:
+
+```bash
+tlc track create --recipe <r> --var pr=42        # new track + its tasks
+tlc task create --recipe <r> --var pr=42 --track <id>
+tlc track execute <track> --agent claude         # run the ready tasks
+tlc track execute <track> --recipe <r>           # reconcile, then run
+tlc task approve <id> --note "looks good"        # decide a human step
+tlc task reject <id> --reason "scope creep"
 ```
 
 ---

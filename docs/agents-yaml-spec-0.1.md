@@ -6,12 +6,13 @@
 
 ## Purpose
 
-`agents.yaml` is the agent registry consulted by `tlc flow run --agent
-<name>` and `tlc agent run --agent <name>` to map a human-friendly
-agent name to an executable binary or container image. Without this
-file, `tlc flow run` cannot dispatch `task_template` or `exec` steps
-(failure mode: "no agent runner registered"). The registry is the
-single source of truth for agent dispatch in the local install.
+`agents.yaml` is the agent registry consulted by `tlc track execute
+--agent <name>`, `tlc task execute --agent <name>` and `tlc agent run
+--agent <name>` to map a human-friendly agent name to an executable
+binary or container image. Without this file, the executor cannot
+dispatch agent-kind tasks (failure mode: "no agent runner registered").
+The registry is the single source of truth for agent dispatch in the
+local install.
 
 ## Locations
 
@@ -107,15 +108,15 @@ When a project-local config exists, calling `Get(name)` returns
 ## Backward compat
 
 - Missing both files → registry returns "agent not found" with the
-  list of known agents (empty list). Flow run with `--agent` fails
+  list of known agents (empty list). `track execute --agent` fails
   with actionable error pointing to `tlc agent register`.
-- Missing `--agent` flag on `tlc flow run` → no runner registered →
-  `task_template` steps fall back to DB-only ephemeral path; `exec`
-  steps fail fast (per spec — exec requires a runner).
+- Missing `--agent` flag on `tlc track execute` → no runner registered
+  → agent-kind tasks fall back to the DB-only ephemeral path; exec-kind
+  tasks fail fast (per spec — exec requires a runner).
 
 ## Future (post-0.1)
 
-- `capabilities: [...]` per agent for capability-based step dispatch.
+- `capabilities: [...]` per agent for capability-based dispatch.
 - `agents.lock` for pinning image digests.
 - Sourcing from external secret managers (1Password, Doppler) via
   loader hooks.

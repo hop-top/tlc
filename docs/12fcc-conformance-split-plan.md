@@ -98,11 +98,11 @@ Each agent annotates its commands end-to-end. Edits are confined to `internal/cl
 - `tlc track archive`
 - `tlc track delete`
 
-### Batch C2 — workflow (agent / flow / inbox / project / prompt / sync)
+### Batch C2 — workflow (agent / recipe / inbox / project / prompt / sync)
 
-**Verbs**: `agent`, `flow`, `inbox`, `project`, `prompt`, `sync`
+**Verbs**: `agent`, `recipe`, `inbox`, `project`, `prompt`, `sync`
 
-**Leaf count**: 29
+**Leaf count**: 25
 
 | Command | Missing | Source |
 |---|---|---|
@@ -114,16 +114,12 @@ Each agent annotates its commands end-to-end. Edits are confined to `internal/cl
 | `tlc agent show` | side-effect | `internal/cli/agent_registry.go:80` |
 | `tlc agent status` | Long, idempotent, side-effect | `internal/cli/agent_async.go:83` |
 | `tlc agent watch` | idempotent, side-effect | `internal/cli/agent_async.go:154` |
-| `tlc flow approve` | idempotent, side-effect | `internal/cli/flow_human.go:31` |
-| `tlc flow cancel` | idempotent, side-effect | `internal/cli/flow_human.go:95` |
-| `tlc flow import` | idempotent, side-effect | `internal/cli/flow_import.go:13` |
-| `tlc flow invoke` | idempotent, side-effect | `internal/cli/flow.go:302` |
-| `tlc flow list` | side-effect | `internal/cli/flow.go:188` |
-| `tlc flow reject` | idempotent, side-effect | `internal/cli/flow_human.go:61` |
-| `tlc flow run` | idempotent, side-effect | `internal/cli/flow.go:33` |
-| `tlc flow status` | idempotent, side-effect | `internal/cli/flow.go:134` |
-| `tlc flow test` | idempotent, side-effect | `internal/cli/flow_test_cmd.go:35` |
-| `tlc flow validate` | idempotent, side-effect | `internal/cli/flow_validate.go:11` |
+| `tlc recipe diff` | idempotent, side-effect | `internal/cli/recipe_diff.go:28` |
+| `tlc recipe import` | idempotent, side-effect | `internal/cli/recipe_import.go:30` |
+| `tlc recipe list` | side-effect | `internal/cli/recipe.go:31` |
+| `tlc recipe runs` | side-effect | `internal/cli/recipe_runs.go:22` |
+| `tlc recipe show` | idempotent, side-effect | `internal/cli/recipe.go:46` |
+| `tlc recipe validate` | idempotent, side-effect | `internal/cli/recipe.go:61` |
 | `tlc inbox process` | idempotent, side-effect | `internal/cli/inbox.go:23` |
 | `tlc project export` | idempotent, side-effect | `internal/cli/project.go:30` |
 | `tlc project import` | idempotent, side-effect | `internal/cli/project.go:101` |
@@ -136,10 +132,8 @@ Each agent annotates its commands end-to-end. Edits are confined to `internal/cl
 | `tlc sync push` | Long, idempotent, side-effect | `internal/cli/sync.go:386` |
 | `tlc sync status` | Long, idempotent, side-effect | `internal/cli/sync.go:572` |
 
-**Destructive commands** (4; exercises T-1392 `--confirm` bridge):
+**Destructive commands** (2; exercises the `--confirm` bridge):
 - `tlc agent cancel`
-- `tlc flow cancel`
-- `tlc flow reject`
 - `tlc project prune`
 
 ### Batch C3 — admin (alias / assignee / auth / config / doctor / init / label / log / schema / tag / tui / upgrade / uri / version / workflow / workspace)
@@ -259,8 +253,6 @@ Helper: `internal/cli/confirm_bridge.go` — `installConfirmBridge(cmd, names...
 | `track archive` | destructive-local | none | kit gate only |
 | `track delete` | destructive-local | none | kit gate only |
 | `agent cancel` | destructive-local | none | kit gate only |
-| `flow cancel` | destructive-local | none | kit gate only |
-| `flow reject` | destructive-local | none | kit gate only |
 | `project prune` | destructive-local | `--yes` / `-y` | `installConfirmBridge(ProjectPruneCmd, "yes")` |
 | `alias remove` | destructive-local | none | kit gate only |
 | `auth logout` | destructive-local | none | kit gate only (also: converted `Run` → `RunE` so the wrapper installs) |
@@ -275,6 +267,6 @@ Helper: `internal/cli/confirm_bridge.go` — `installConfirmBridge(cmd, names...
 ### Tests
 
 - Unit: `internal/cli/confirm_bridge_test.go` — synthetic cobra root, three subtests.
-- E2E: `internal/cli/confirm_bridge_e2e_test.go` — exec'd tlc binary in a non-TTY pipe, three representative destructives (`task delete`, `flow cancel`, `auth logout`).
+- E2E: `internal/cli/confirm_bridge_e2e_test.go` — exec'd tlc binary in a non-TTY pipe, three representative destructives (`task delete`, `agent cancel`, `auth logout`).
 
 Run with: `go test -run "TestConfirm" ./internal/cli/...`

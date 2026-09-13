@@ -1,10 +1,10 @@
 # Typeid display convention
 
-Durable typeids (`task_01...`, `track_01...`, `flow_01...`) are
+Durable typeids (`task_01...`, `track_01...`, `run_01...`) are
 *system-layer* identifiers. They are the primary key, rename-safe, and
 correct for storage, sync targets, and machine output — but they are
 **noise** in human output where the user already knows the entity by
-its alias (`T-NNNN`, slug, flow name).
+its alias (`T-NNNN`, slug, recipe name).
 
 ## The rule
 
@@ -26,8 +26,8 @@ typeid display set `output.show_typeid: true` separately.
 
 Typeids must **not** appear in:
 
-- Default `task show` / `track show` / `flow show` output.
-- Default `task list` / `track list` / `flow list` table columns.
+- Default `task show` / `track show` / `recipe show` output.
+- Default `task list` / `track list` / `recipe list` table columns.
 - Confirmation messages (`Updated task ...`, `Deleted task ...`,
   `Created task ...`, `Syncing task ... to ...`).
 - Warning / error messages on user-visible paths.

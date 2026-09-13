@@ -270,16 +270,32 @@ tracks:
 
 ---
 
-## Flows (Orchestration)
+## Recipes
 
 ```bash
-tlc flow run flow.yaml                   # execute declarative flow
-tlc flow run tlc://owner/repo/flow:id:1.0
-tlc flow invoke flow.yaml                # generate + auto-assign tasks from template
-tlc flow list                            # list runs
-tlc flow status <run-id>                 # check run status
-tlc flow import <uri>                    # import flow definition
+tlc recipe list                          # recipes on the search path
+tlc recipe show <recipe>                 # header, vars, expanded steps
+tlc recipe validate <recipe>             # parse + validate + expand
+tlc recipe import <track|url>            # capture or convert into a recipe
+tlc recipe runs [<recipe>[@<ver>]]       # the run ledger
+tlc recipe diff <track>                  # steps vs. ledger vs. tasks
 ```
+
+Materialize, then execute:
+
+```bash
+tlc track create --recipe <r> --var k=v [--task 1-3 --with-deps --for <id> --assign]
+tlc task create --recipe <r> --var k=v [--track <id> --for <id>]
+tlc task execute <task> --recipe <r>     # decompose a task, run its steps
+tlc track execute <track> [--recipe <r> --recreate] [--agent <name>
+  --with-pod --concurrency N --permissive --reclaim 30m --wait --poll 30s
+  --timeout --dry-run]
+tlc task approve <id> [--by --note]      # human-kind steps
+tlc task reject <id> --reason "<why>"
+```
+
+A recipe is referenced by name, `name@version`, or file path. Search path:
+`recipe.dir` → `.tlc/recipes` → `~/.config/tlc/recipes`.
 
 ---
 

@@ -117,7 +117,7 @@ Sequence allocation must be transactional with the insert to prevent duplicates 
 
 ## Display
 
-Anywhere tlc renders a task ID for humans (TUI tables, log entries, dep_render mermaid nodes, error messages, plan files, flow specs), use the alias:
+Anywhere tlc renders a task ID for humans (TUI tables, log entries, dep_render mermaid nodes, error messages, plan files, recipes), use the alias:
 
 | Code path | Render |
 |---|---|
@@ -131,9 +131,9 @@ Anywhere tlc renders a task ID for humans (TUI tables, log entries, dep_render m
 
 The TUI/CLI **input** parser accepts both. The **output** renders alias except where durability matters (logs, sync metadata, vtodo).
 
-## Plan files and flow specs
+## Plan files and recipes
 
-Plan files (`docs/plans/*.md`) and flow specs reference tasks by `T-NNNN`. Keep using the alias — it's the human-friendly form. Resolution to typeid happens at parse time via the lookup table.
+Plan files (`docs/plans/*.md`) and recipes reference tasks by `T-NNNN`. Keep using the alias — it's the human-friendly form. Resolution to typeid happens at parse time via the lookup table.
 
 ## RFC 5545 UID (forward reference for vtodo work)
 

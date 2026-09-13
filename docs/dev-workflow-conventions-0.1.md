@@ -226,7 +226,7 @@ Individual convention documents:
 - [github-milestone-convention-0.1.md](github-milestone-convention-0.1.md)
 
 Related specifications:
-- [task-flow-spec-0.1-dev.md](task-flow-spec-0.1-dev.md) — Development flow patterns
+- [recipe-spec-0.1.md](recipe-spec-0.1.md) — Recipe grammar and step semantics
 - [task-crud-spec-0.1.md](task-crud-spec-0.1.md) — Task metadata
 
 External references:

@@ -16,7 +16,7 @@ This spec OWNS:
 This spec DOES NOT own:
 - execution protocol (see task-exec-spec-0.1.md)
 - collaboration/claiming rules (see task-collab-spec-1.0.md)
-- flow orchestration semantics (see task-flow-spec-0.1.md)
+- recipe grammar and step semantics (see recipe-spec-0.1.md)
 
 This spec references:
 - identifiers-spec-0.1.md for TypeID format and T-NNNN alias rules
