@@ -253,10 +253,6 @@ func formatLogAction(action string) string {
 		"SYNC_PUSHED":   lipgloss.Color("51"),  // cyan
 		"SYNC_CONFLICT": lipgloss.Color("196"), // red
 		"SYNC_ERROR":    lipgloss.Color("196"), // red
-		"FLOW_START":    lipgloss.Color("39"),  // blue
-		"FLOW_END":      lipgloss.Color("42"),  // green
-		"STEP_START":    lipgloss.Color("39"),  // blue
-		"STEP_END":      lipgloss.Color("42"),  // green
 	}
 
 	color, exists := actionColors[action]

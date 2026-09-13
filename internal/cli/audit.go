@@ -15,8 +15,8 @@ import (
 )
 
 // tlc audit — ledger for runs executed by EXTERNAL tools that use tlc
-// as their audit home. Third audit leg beside task logs (`tlc log`)
-// and tlc-executed flow runs (`tlc flow list`). External tools report
+// as their audit home. Second audit leg beside task logs (`tlc log`).
+// External tools report
 // a run after (or during) execution as one JSON record on stdin;
 // operators query it with list/show.
 
@@ -34,9 +34,9 @@ var auditCmd = &cobra.Command{
 	Short: "Audit ledger for external tool runs",
 	Long: `Audit ledger for runs executed by external tools.
 
-tlc audits its own tasks (tlc log) and its own flow runs (tlc flow
-list). The audit ledger is the third leg: external tools record their
-runs here so operators get one queryable history per project.
+tlc audits its own tasks (tlc log). The audit ledger is the second
+leg: external tools record their runs here so operators get one
+queryable history per project.
 
 Runs are keyed by (tool, run id) within the current project. Recording
 the same run again replaces it — tools may record once at the end, or
@@ -199,7 +199,8 @@ When the same run id exists for more than one tool, disambiguate with
 			}
 			return output.ConflictError(fmt.Sprintf(
 				"run id %q is ambiguous across tools (%s); re-run with --tool <name>",
-				runID, strings.Join(tools, ", ")))
+				runID, strings.Join(tools, ", "),
+			))
 		}
 		run := runs[0]
 
@@ -226,10 +227,12 @@ func (e *auditRunNotFoundError) Error() string {
 	if e.tool != "" {
 		return fmt.Sprintf(
 			"audit run %q for tool %q not found; run 'tlc audit list --tool %s' to see recorded runs",
-			e.runID, e.tool, e.tool)
+			e.runID, e.tool, e.tool,
+		)
 	}
 	return fmt.Sprintf(
-		"audit run %q not found; run 'tlc audit list' to see recorded runs", e.runID)
+		"audit run %q not found; run 'tlc audit list' to see recorded runs", e.runID,
+	)
 }
 
 func (e *auditRunNotFoundError) Unwrap() error { return ErrNotFound }
@@ -262,7 +265,8 @@ func parseAuditRecord(raw []byte, tool string) (*core.AuditRun, error) {
 	}
 	if doc.Tool != "" && doc.Tool != tool {
 		return nil, fmt.Errorf(
-			"document tool %q does not match --tool %q", doc.Tool, tool)
+			"document tool %q does not match --tool %q", doc.Tool, tool,
+		)
 	}
 	if doc.RunID == "" {
 		return nil, fmt.Errorf("audit record is missing required field \"run_id\"")

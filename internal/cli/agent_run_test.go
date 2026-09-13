@@ -13,7 +13,6 @@ import (
 
 func TestValidateAgentRunFlags_noTarget(t *testing.T) {
 	agentRunTasks = nil
-	agentRunFlow = ""
 	agentRunTrack = ""
 	err := validateAgentRunFlags()
 	assert.Error(t, err)
@@ -22,7 +21,6 @@ func TestValidateAgentRunFlags_noTarget(t *testing.T) {
 
 func TestValidateAgentRunFlags_taskOnly(t *testing.T) {
 	agentRunTasks = []string{"T-0042"}
-	agentRunFlow = ""
 	agentRunTrack = ""
 	err := validateAgentRunFlags()
 	assert.NoError(t, err)
@@ -30,15 +28,6 @@ func TestValidateAgentRunFlags_taskOnly(t *testing.T) {
 
 func TestValidateAgentRunFlags_multipleTasks(t *testing.T) {
 	agentRunTasks = []string{"T-0042", "T-0043"}
-	agentRunFlow = ""
-	agentRunTrack = ""
-	err := validateAgentRunFlags()
-	assert.NoError(t, err)
-}
-
-func TestValidateAgentRunFlags_flowOnly(t *testing.T) {
-	agentRunTasks = nil
-	agentRunFlow = "flow:example:1.0"
 	agentRunTrack = ""
 	err := validateAgentRunFlags()
 	assert.NoError(t, err)
@@ -46,27 +35,9 @@ func TestValidateAgentRunFlags_flowOnly(t *testing.T) {
 
 func TestValidateAgentRunFlags_trackOnly(t *testing.T) {
 	agentRunTasks = nil
-	agentRunFlow = ""
 	agentRunTrack = "my-track"
 	err := validateAgentRunFlags()
 	assert.NoError(t, err)
-}
-
-func TestValidateAgentRunFlags_flowAndTrack(t *testing.T) {
-	agentRunTasks = nil
-	agentRunFlow = "flow:example:1.0"
-	agentRunTrack = "my-track"
-	err := validateAgentRunFlags()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "mutually exclusive")
-}
-
-func TestValidateAgentRunFlags_taskAndFlow(t *testing.T) {
-	agentRunTasks = []string{"T-0042"}
-	agentRunFlow = "flow:example:1.0"
-	agentRunTrack = ""
-	err := validateAgentRunFlags()
-	assert.Error(t, err)
 }
 
 func TestParseMounts(t *testing.T) {
@@ -148,14 +119,10 @@ func TestSplitMount(t *testing.T) {
 	assert.Equal(t, []string{"/src", "/workspace"}, parts)
 }
 
-func TestContainerAgentRunner_CanHandle(t *testing.T) {
-	r := &ContainerAgentRunner{AgentName: "claude"}
-	step := core.Step{}
-	assert.True(t, r.CanHandle(step))
-
-	r2 := &ContainerAgentRunner{}
-	assert.False(t, r2.CanHandle(step))
-
-	step.Agent = core.AgentRef{Name: "custom"}
-	assert.True(t, r2.CanHandle(step))
+func TestValidateAgentRunFlags_taskAndTrack(t *testing.T) {
+	agentRunTasks = []string{"T-0042"}
+	agentRunTrack = "my-track"
+	err := validateAgentRunFlags()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "mutually exclusive")
 }

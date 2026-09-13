@@ -13,7 +13,7 @@ import (
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Launch the interactive TUI",
-	Long:  "TLC TUI provides an interactive interface for task management and flow monitoring.",
+	Long:  "TLC TUI provides an interactive interface for task management.",
 	Annotations: map[string]string{
 		"kit/side-effect":    "interactive",
 		"kit/idempotent":     "conditional",

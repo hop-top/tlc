@@ -16,7 +16,6 @@ type NounDomain string
 const (
 	DomainTask    NounDomain = "task"
 	DomainTrack   NounDomain = "track"
-	DomainFlow    NounDomain = "flow"
 	DomainProject NounDomain = "project"
 )
 
@@ -54,9 +53,6 @@ var nounAliases = map[string]NounDomain{
 	"features": DomainTrack,
 	"epic":     DomainTrack,
 	"epics":    DomainTrack,
-	"flow":     DomainFlow,
-	"flows":    DomainFlow,
-	"pipeline": DomainFlow,
 	"project":  DomainProject,
 	"projects": DomainProject,
 }

@@ -12,8 +12,7 @@ import (
 
 // Regression — the config_dirs helpers match the RecipeConfig{} accessor
 // defaults when viper has no overrides set: no repo-relative recipe layer
-// (only the absolute user dir remains), the assignees default, and the
-// legacy flows dir that stays until the flow commands are removed.
+// (only the absolute user dir remains) and the assignees default.
 func TestConfigDirs_MatchAccessorDefaults(t *testing.T) {
 	viper.Reset()
 	core.ResetDetectionCache()
@@ -39,13 +38,10 @@ func TestConfigDirs_MatchAccessorDefaults(t *testing.T) {
 		t.Errorf("assigneesDirFromConfig() = %q, want %q (RecipeConfig{}.AssigneesDirectory())",
 			gotAssignees, wantAssignees)
 	}
-	if got := flowsDirFromConfig(); got != filepath.Join("examples", "flows") {
-		t.Errorf("flowsDirFromConfig() = %q, want the legacy examples/flows default", got)
-	}
 }
 
 // Overrides propagate through the config_dirs helpers: recipe.dir is the
-// first search layer and also serves the remaining flow commands.
+// first search layer.
 func TestConfigDirs_OverridePropagates(t *testing.T) {
 	viper.Reset()
 	core.ResetDetectionCache()
@@ -57,9 +53,6 @@ func TestConfigDirs_OverridePropagates(t *testing.T) {
 
 	if dirs := recipeDirsFromConfig(); len(dirs) == 0 || dirs[0] != "custom-recipes" {
 		t.Errorf("recipeDirsFromConfig() = %v, want custom-recipes first", dirs)
-	}
-	if got := flowsDirFromConfig(); got != "custom-recipes" {
-		t.Errorf("flowsDirFromConfig() = %q, want %q", got, "custom-recipes")
 	}
 	if got := assigneesDirFromConfig(); got != "custom-assignees" {
 		t.Errorf("assigneesDirFromConfig() = %q, want %q", got, "custom-assignees")

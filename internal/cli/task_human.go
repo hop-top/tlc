@@ -147,3 +147,21 @@ func init() {
 	TaskRejectCmd.Flags().StringVar(&taskRejectReason, "reason", "", "Why the task is rejected (required)")
 	TaskCmd.AddCommand(TaskApproveCmd, TaskRejectCmd)
 }
+
+// approvalBy resolves the approver identity: the explicit flag when set,
+// otherwise the current user.
+func approvalBy(flag string) string {
+	if flag != "" {
+		return flag
+	}
+	return core.GetCurrentUser()
+}
+
+// cmdContext returns the cobra command's context, falling back to
+// context.Background when nil (tests bypass cobra's full lifecycle).
+func cmdContext(cmd *cobra.Command) context.Context {
+	if c := cmd.Context(); c != nil {
+		return c
+	}
+	return context.Background()
+}

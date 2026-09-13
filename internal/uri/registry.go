@@ -3,7 +3,6 @@ package uri
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -19,7 +18,6 @@ const trackTypeName = "track"
 
 // TypesDirConfig holds configurable directory paths for URI type registration.
 type TypesDirConfig struct {
-	FlowsDir     string   // empty = "examples/flows"
 	AssigneesDir string   // empty = "examples/assignees"
 	RecipeDirs   []string // recipe search path in precedence order; nil = no recipes
 }
@@ -29,13 +27,6 @@ func (c *TypesDirConfig) recipeDirs() []string {
 		return nil
 	}
 	return c.RecipeDirs
-}
-
-func (c *TypesDirConfig) flowsDir() string {
-	if c != nil && c.FlowsDir != "" {
-		return c.FlowsDir
-	}
-	return filepath.Join("examples", "flows")
 }
 
 func (c *TypesDirConfig) assigneesDir() string {
@@ -58,7 +49,6 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 		trackCompletion(s),
 		assigneeCompletion(dc),
 		tagCompletion(s),
-		flowCompletion(dc),
 		recipeCompletion(dc),
 	}
 	for _, r := range registrations {
@@ -188,48 +178,3 @@ func tagCompletion(s *storage.SQLiteStorage) scheme.TypeRegistration {
 	}
 }
 
-func flowCompletion(dc *TypesDirConfig) scheme.TypeRegistration {
-	return scheme.TypeRegistration{
-		Name: "flow",
-		Completer: func(_ context.Context, prefix string) ([]string, error) {
-			flowsDir := dc.flowsDir()
-			entries, err := os.ReadDir(flowsDir)
-			if err != nil {
-				return nil, fmt.Errorf("read flows dir %s: %w", flowsDir, err)
-			}
-			ids := make([]string, 0, len(entries))
-			for _, entry := range entries {
-				if !flowFileCandidate(entry) {
-					continue
-				}
-				id, ok := parseFlowID(filepath.Join(flowsDir, entry.Name()))
-				if !ok || !strings.HasPrefix(id, prefix) {
-					continue
-				}
-				ids = append(ids, id)
-			}
-			return ids, nil
-		},
-	}
-}
-
-func flowFileCandidate(entry os.DirEntry) bool {
-	if entry.IsDir() {
-		return false
-	}
-	name := entry.Name()
-	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
-}
-
-func parseFlowID(path string) (string, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", false
-	}
-	defer func() { _ = f.Close() }()
-	flow, err := core.ParseFlow(f, filepath.Base(path))
-	if err != nil {
-		return "", false
-	}
-	return flow.ID, true
-}

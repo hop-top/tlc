@@ -12,13 +12,9 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// Compile-time check: ContainerAgentRunner satisfies core.AgentRunner.
-var _ core.AgentRunner = (*ContainerAgentRunner)(nil)
-
 var (
 	agentRunAgent        string
 	agentRunTasks        []string
-	agentRunFlow         string
 	agentRunTrack        string
 	agentRunImage        string
 	agentRunMounts       []string
@@ -41,10 +37,10 @@ var (
 // AgentRunCmd implements `tlc agent run`.
 var AgentRunCmd = &cobra.Command{
 	Use:   "run",
-	Short: "Execute an agent against tasks, a flow, or a track",
+	Short: "Execute an agent against tasks or a track",
 	Long: `Execute an agent in a container (or locally with --local).
 
-The orchestration flow is:
+The orchestration sequence is:
   validate → load agent config → build context →
   create container (or local exec) → claim task →
   create audit record → upload context → exec agent →
@@ -59,7 +55,6 @@ and TLC_RESULTS_PATH.
 Examples:
   tlc agent run --agent claude --task T-0042
   tlc agent run --agent claude --task T-0042 --task T-0043
-  tlc agent run --agent claude --flow flow:example:1.0
   tlc agent run --agent claude --track my-feature
   tlc agent run --agent claude --task T-0042 --local
   tlc agent run --agent claude --task T-0042 --dry-run`,
@@ -74,7 +69,6 @@ func init() {
 	f := AgentRunCmd.Flags()
 	f.StringVar(&agentRunAgent, "agent", "", "Agent name (required)")
 	f.StringSliceVar(&agentRunTasks, "task", nil, "Task ID(s) (repeatable)")
-	f.StringVar(&agentRunFlow, "flow", "", "Flow reference")
 	f.StringVar(&agentRunTrack, "track", "", "Track ID")
 	f.StringVar(&agentRunImage, "image", "", "Override container image")
 	f.StringSliceVar(&agentRunMounts, "mount", nil, "Bind mount (source:target[:mode])")
@@ -118,7 +112,6 @@ func agentRunParams() execParams {
 func resetAgentRunFlags() {
 	agentRunAgent = ""
 	agentRunTasks = nil
-	agentRunFlow = ""
 	agentRunTrack = ""
 	agentRunImage = ""
 	agentRunMounts = nil
@@ -215,21 +208,6 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 		}
 		targetID = agentRunTasks[0]
 
-	case agentRunFlow != "":
-		targetType = "flow"
-		targetID = agentRunFlow
-		// For flow, we build a single context with flow metadata.
-		ac := &core.AgentContext{
-			Version:  core.AgentContextVersion,
-			FlowID:   agentRunFlow,
-			RepoRoot: p.repoRoot,
-			Prompt:   agentRunPrompt,
-		}
-		if ac.Prompt == "" {
-			ac.Prompt = fmt.Sprintf("Execute flow %s", agentRunFlow)
-		}
-		contexts = append(contexts, ac)
-
 	case agentRunTrack != "":
 		targetType = "track"
 		targetID = agentRunTrack
@@ -300,21 +278,18 @@ func validateAgentRunFlags() error {
 	if len(agentRunTasks) > 0 {
 		targets++
 	}
-	if agentRunFlow != "" {
-		targets++
-	}
 	if agentRunTrack != "" {
 		targets++
 	}
 
 	if targets == 0 {
 		return fmt.Errorf(
-			"at least one target required; use --task, --flow, or --track",
+			"at least one target required; use --task or --track",
 		)
 	}
-	if targets > 1 && (agentRunFlow != "" || agentRunTrack != "") {
+	if targets > 1 && agentRunTrack != "" {
 		return fmt.Errorf(
-			"--flow and --track are mutually exclusive and cannot combine " +
+			"--track is mutually exclusive and cannot combine " +
 				"with --task; use only one target type",
 		)
 	}
@@ -332,9 +307,6 @@ func printDryRun(cmd *cobra.Command, cfg *core.AgentConfig) error {
 
 	if len(agentRunTasks) > 0 {
 		_, _ = fmt.Fprintf(out, "  Tasks:   %v\n", agentRunTasks)
-	}
-	if agentRunFlow != "" {
-		_, _ = fmt.Fprintf(out, "  Flow:    %s\n", agentRunFlow)
 	}
 	if agentRunTrack != "" {
 		_, _ = fmt.Fprintf(out, "  Track:   %s\n", agentRunTrack)

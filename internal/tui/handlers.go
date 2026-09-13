@@ -173,8 +173,8 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.fetchTasks
 		case "v":
 			m.selected = 0
-			m.view = viewFlows
-			return m, m.fetchFlowRuns
+			m.view = viewDashboard
+			return m, m.fetchTasks
 		case "c":
 			if len(m.tasks) > 0 {
 				return m, m.claimTask(m.tasks[m.selected].ID)
@@ -200,44 +200,6 @@ func handleKanbanUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		case keyBackspace:
 			m.view = viewDashboard
 			m.viewport.GotoTop()
-			return m, nil
-		}
-	}
-
-	var vpCmd tea.Cmd
-	m.viewport, vpCmd = m.viewport.Update(msg)
-	return m, vpCmd
-}
-
-func handleFlowsUpdate(m Model, msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", keyCtrlC:
-			return m, tea.Quit
-		case "j", keyDown:
-			if m.selected < len(m.flowRuns)-1 {
-				m.selected++
-			}
-			m = m.syncViewport()
-			return m, nil
-		case "k", "up":
-			if m.selected > 0 {
-				m.selected--
-			}
-			m = m.syncViewport()
-			return m, nil
-		case "r":
-			return m, m.fetchFlowRuns
-		case "v":
-			m.selected = 0
-			m.view = viewDashboard
-			return m, m.fetchTasks
-		case keyEsc:
-			m.view = viewDashboard
-			return m, nil
-		case keyBackspace:
-			m.view = viewDashboard
 			return m, nil
 		}
 	}

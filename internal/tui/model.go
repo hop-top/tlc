@@ -15,16 +15,14 @@ import (
 )
 
 type (
-	tasksMsg    []*core.Task
-	flowRunsMsg []*core.FlowRun
-	logsMsg     []*core.LogEntry
+	tasksMsg []*core.Task
+	logsMsg  []*core.LogEntry
 )
 
 type Model struct {
 	service          *core.TaskService
-	view             string // "dashboard", "list", "detail", "search", "form", "kanban", "flows"
+	view             string // "dashboard", "list", "detail", "search", "form", "kanban"
 	tasks            []*core.Task
-	flowRuns         []*core.FlowRun
 	selected         int
 	width            int
 	height           int
@@ -40,8 +38,6 @@ type Model struct {
 
 	// taskList is the kit/tui.List used for dashboard and kanban views.
 	taskList kittui.List
-	// flowList is the kit/tui.List used for flow runs view.
-	flowList kittui.List
 
 	// theme is the kit/cli.Theme used for styling.
 	theme kitcli.Theme
@@ -83,7 +79,6 @@ func NewModel(service *core.TaskService, theme kitcli.Theme) Model {
 		theme:            theme,
 		styles:           styles.NewFromTheme(theme),
 		taskList:         kittui.NewList(1),
-		flowList:         kittui.NewList(1),
 		tagColors:        tc,
 	}
 }
@@ -99,7 +94,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	vh := m.effectiveViewportHeight()
 	m.viewport.SetHeight(vh)
 	m.taskList = m.taskList.SetHeight(vh)
-	m.flowList = m.flowList.SetHeight(vh)
 	return m, cmd
 }
 
@@ -113,7 +107,6 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		vh := m.effectiveViewportHeight()
 		m.viewport.SetHeight(vh)
 		m.taskList = m.taskList.SetHeight(vh)
-		m.flowList = m.flowList.SetHeight(vh)
 
 		// Rebuild cached markdown renderer when width changes.
 		wrapWidth := msg.Width - 10
@@ -140,10 +133,6 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		m = m.syncViewport()
 		// Persist any newly-assigned tag colors asynchronously.
 		return m, m.persistTagColors
-	case flowRunsMsg:
-		m.flowRuns = msg
-		m = m.rebuildFlowList()
-		return m, nil
 	case logsMsg:
 		m.taskLogs = msg
 		m = m.syncViewport()
@@ -158,8 +147,6 @@ func (m Model) updateInner(msg tea.Msg) (Model, tea.Cmd) {
 		return handleDetailUpdate(m, msg)
 	case "kanban":
 		return handleKanbanUpdate(m, msg)
-	case "flows":
-		return handleFlowsUpdate(m, msg)
 	case "search":
 		return handleSearchUpdate(m, msg)
 	case "form":
@@ -216,25 +203,9 @@ func (m Model) rebuildTaskList() Model {
 	return m
 }
 
-// rebuildFlowList rebuilds the kit/tui.List items from the current flow runs.
-func (m Model) rebuildFlowList() Model {
-	items := make([]kittui.Item, len(m.flowRuns))
-	for i, run := range m.flowRuns {
-		items[i] = &flowRunItem{
-			run:      run,
-			selected: i == m.selected,
-			styles:   m.styles,
-			theme:    m.theme,
-		}
-	}
-	m.flowList = m.flowList.SetItems(items)
-	return m
-}
-
 func (m Model) syncViewport() Model {
 	// Rebuild list items to reflect new selection state.
 	m = m.rebuildTaskList()
-	m = m.rebuildFlowList()
 
 	line := m.getLineOfSelected()
 	if line < m.viewport.YOffset() {
@@ -246,10 +217,6 @@ func (m Model) syncViewport() Model {
 }
 
 func (m Model) getLineOfSelected() int {
-	if m.view == "flows" {
-		return m.selected
-	}
-
 	// For dashboard, we need to account for headers and spacing
 	groups := make(map[core.TaskStatus][]*core.Task)
 	for _, t := range m.tasks {

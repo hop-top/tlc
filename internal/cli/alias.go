@@ -233,7 +233,7 @@ func validateAliasName(name string) error {
 	// Prevent direct shadowing of built-in top-level commands.
 	builtins := map[string]bool{
 		"alias": true, "task": true, "config": true, "sync": true,
-		"init": true, "doctor": true, "log": true, "flow": true,
+		"init": true, "doctor": true, "log": true,
 		"project": true, "tag": true, "workspace": true,
 		"upgrade": true, "version": true, "help": true,
 		"auth": true, "summary": true, "uri": true,

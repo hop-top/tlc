@@ -472,9 +472,6 @@ func resetTaskFlags() {
 	resetTrackExecuteFlags()
 	resetRecipeCreateFlags()
 
-	// Reset flow flags.
-	resetFlowFlags()
-
 	tasksSyncDryRun = false
 	taskSyncProjectionDryRun = false
 
@@ -517,29 +514,9 @@ func resetTaskFlags() {
 	busPublisher = nil
 }
 
-// resetFlowFlags clears the package-level state bound to flow.go's Cobra
-// flags. Without this, --var values (and --by) leak between tests because
-// FlowRunCmd / FlowInvokeCmd are package globals shared across test commands.
-func resetFlowFlags() {
-	flowDryRun = false
-	flowRunBy = ""
-	flowRunVars = nil
-	flowStatusAll = false
-
-	for _, cmd := range []*cobra.Command{
-		FlowRunCmd, FlowInvokeCmd, FlowStatusCmd, FlowListCmd,
-	} {
-		if cmd != nil {
-			cmd.Flags().VisitAll(func(f *pflag.Flag) {
-				f.Changed = false
-			})
-		}
-	}
-}
-
 // setupProjectScopedTestDir creates a fresh tmpDir, chdirs into it, writes
 // a minimal .tlc/config.yaml with the given project ID, and wires viper so
-// DetectProject() returns InProject=true with that ID. Used by flow tests
+// DetectProject() returns InProject=true with that ID. Used by tests
 // that need to exercise the project-scoped path of CreateTask + AddLog.
 //
 // Returns (tmpDir, dbPath). All cleanup is registered via t.Cleanup.
@@ -579,7 +556,7 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 	viper.Set("config", projectCfgPath)
 	viper.Set("storage.backend", "sqlite")
 	viper.Set("storage.db_path", dbPath)
-	resetTaskFlags() // also resets flow flags via resetFlowFlags()
+	resetTaskFlags()
 	t.Cleanup(func() {
 		cfgFile = ""
 		viper.Reset()
@@ -587,7 +564,6 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 		core.ResetDefaultWorkflow()
 		dbSyncOnce = sync.Once{}
 		touchOnce = sync.Once{}
-		resetFlowFlags()
 	})
 
 	return tmpDir, dbPath

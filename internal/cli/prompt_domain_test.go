@@ -17,8 +17,6 @@ func TestRouteNounToDomain_ExactMatch(t *testing.T) {
 		{"task", DomainTask, 1.0},
 		{"track", DomainTrack, 1.0},
 		{"tracks", DomainTrack, 1.0},
-		{"flow", DomainFlow, 1.0},
-		{"flows", DomainFlow, 1.0},
 		{"project", DomainProject, 1.0},
 		{"projects", DomainProject, 1.0},
 	}
@@ -227,44 +225,6 @@ func TestClassifyPromptCrossDomain_ListTracks(t *testing.T) {
 	}
 }
 
-// --- T-0304: Flow domain ---
-
-func TestClassifyPromptCrossDomain_ListFlows(t *testing.T) {
-	cmds := ClassifyPromptCrossDomain("list flows")
-	if len(cmds) == 0 {
-		t.Fatal("expected result")
-	}
-	if cmds[0].Cmd != "flow" || cmds[0].Args[0] != "list" {
-		t.Errorf("expected flow list, got %+v", cmds[0])
-	}
-}
-
-func TestClassifyPromptCrossDomain_ShowFlows(t *testing.T) {
-	cmds := ClassifyPromptCrossDomain("show flows")
-	if len(cmds) == 0 {
-		t.Fatal("expected result")
-	}
-	if cmds[0].Cmd != "flow" || cmds[0].Args[0] != "list" {
-		t.Errorf("expected flow list, got %+v", cmds[0])
-	}
-}
-
-func TestClassifyPromptCrossDomain_RunDeployFlow(t *testing.T) {
-	cmds := ClassifyPromptCrossDomain("run deploy flow")
-	if len(cmds) == 0 {
-		t.Fatal("expected result")
-	}
-	if cmds[0].Cmd != "flow" {
-		t.Errorf("expected cmd=flow, got %q", cmds[0].Cmd)
-	}
-	if cmds[0].Args[0] != "run" {
-		t.Errorf("expected subcommand=run, got %q", cmds[0].Args[0])
-	}
-	if len(cmds[0].Args) < 2 || cmds[0].Args[1] != "deploy" {
-		t.Errorf("expected flow name=deploy, got args %v", cmds[0].Args)
-	}
-}
-
 // --- T-0305: Project domain ---
 
 func TestClassifyPromptCrossDomain_ListProjects(t *testing.T) {
@@ -360,7 +320,7 @@ func TestBuildCommand_ConfidenceMultiplied(t *testing.T) {
 // --- Run verb guard ---
 
 func TestClassifyPromptCrossDomain_RunTasksReturnsNil(t *testing.T) {
-	// "run" is a flow verb; must not leak into task domain.
+	// "run" is not a classifier verb; it must not resolve to any domain.
 	cmds := ClassifyPromptCrossDomain("run tasks")
 	if cmds != nil {
 		t.Errorf("expected nil for 'run tasks', got %+v", cmds)

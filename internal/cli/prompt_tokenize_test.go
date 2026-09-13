@@ -42,10 +42,10 @@ func TestTokenizePromptBasic(t *testing.T) {
 			wantMods: []string{"blocked"},
 		},
 		{
-			name:     "my stale flows",
-			input:    "my stale flows",
+			name:     "my stale tracks",
+			input:    "my stale tracks",
 			wantVerb: "",
-			wantNoun: "flows",
+			wantNoun: "tracks",
 			wantMods: []string{"mine", "stale"},
 		},
 		{
@@ -56,10 +56,10 @@ func TestTokenizePromptBasic(t *testing.T) {
 			wantMods: nil,
 		},
 		{
-			name:     "new flow",
-			input:    "new flow",
+			name:     "new track",
+			input:    "new track",
 			wantVerb: "new",
-			wantNoun: "flow",
+			wantNoun: "track",
 			wantMods: nil,
 		},
 		{

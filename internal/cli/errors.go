@@ -10,7 +10,7 @@ import (
 // 0 — success (no error)
 // 1 — generic failure (default for any unmapped error)
 // 2 — usage error (cobra default; unknown flag / bad args)
-// 3 — not found (task/track/flow/project missing)
+// 3 — not found (task/track/recipe/project missing)
 // 4 — conflict (policy denial, duplicate ID, state-machine refusal)
 // 5 — unauthorized (auth failure, sync 401/403)
 //

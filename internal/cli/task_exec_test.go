@@ -467,11 +467,3 @@ func TestTaskExecParams_FromFlags(t *testing.T) {
 		assert.Equal(t, filepath.Join(cwd, ".tlc", "runs"), p.runsDir)
 	})
 }
-
-// TestBuildFlowAgentRunner_empty is preserved from the legacy file —
-// unrelated to task exec but lived here.
-func TestBuildFlowAgentRunner_empty(t *testing.T) {
-	flowRunAgent = ""
-	runner := buildFlowAgentRunner()
-	assert.Nil(t, runner)
-}

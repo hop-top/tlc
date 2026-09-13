@@ -37,7 +37,7 @@ func RouteNounToDomain(tokens PromptTokens) (NounDomain, float64) {
 //   - "stale"         → ["--state", "stale"]
 //   - "mine"          → (skipped — no --mine on track)
 //
-// Flow/Project domains: no modifier flags (returns empty).
+// Project domain: no modifier flags (returns empty).
 func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 	var out []string
 	switch domain {
@@ -74,7 +74,7 @@ func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 				// "mine" is not supported on track — skip
 			}
 		}
-		// Flow and Project domains: no modifier flags
+		// Project domain: no modifier flags
 	}
 	return out
 }
@@ -110,8 +110,6 @@ func BuildCommand(tokens PromptTokens, domain NounDomain, domainConf float64) []
 		return buildTaskCommand(tokens, vc, confidence)
 	case DomainTrack:
 		return buildTrackCommand(tokens, vc, confidence)
-	case DomainFlow:
-		return buildFlowCommand(tokens, vc, confidence)
 	case DomainProject:
 		return buildProjectCommand(tokens, vc, confidence)
 	}
@@ -129,9 +127,6 @@ func resolveVerbCategory(verb string) (VerbCategory, float64) {
 	if verb == "summary" {
 		return VerbQuery, 1.0
 	}
-	if verb == "run" {
-		return VerbCreate, 1.0
-	}
 	if vc, ok := LookupVerb(verb); ok {
 		return vc, 1.0
 	}
@@ -144,10 +139,6 @@ func resolveVerbCategory(verb string) (VerbCategory, float64) {
 
 // buildTaskCommand produces task sub-commands.
 func buildTaskCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
-	// "run" belongs to flow domain only; guard against leakage.
-	if tokens.Verb == "run" {
-		return nil
-	}
 	var subCmd string
 	switch vc {
 	case VerbQuery:
@@ -170,10 +161,6 @@ func buildTaskCommand(tokens PromptTokens, vc VerbCategory, confidence float64) 
 
 // buildTrackCommand produces track sub-commands.
 func buildTrackCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
-	// "run" belongs to flow domain only; guard against leakage.
-	if tokens.Verb == "run" {
-		return nil
-	}
 	if vc != VerbQuery {
 		return nil
 	}
@@ -184,34 +171,6 @@ func buildTrackCommand(tokens PromptTokens, vc VerbCategory, confidence float64)
 	// Filter out --counters: track list has no --counters flag.
 	args = filterArg(args, "--counters")
 	return []ResolvedCommand{{Cmd: "track", Args: args, Confidence: confidence}}
-}
-
-// buildFlowCommand produces flow sub-commands.
-func buildFlowCommand(tokens PromptTokens, vc VerbCategory, confidence float64) []ResolvedCommand {
-	switch vc {
-	case VerbQuery:
-		return []ResolvedCommand{{Cmd: "flow", Args: []string{"list"}, Confidence: confidence}}
-	case VerbCreate: // "run"
-		// flow run requires a concrete flow name — cobra.ExactArgs(1).
-		// Scan Rest for a word that isn't a generic verb/noun placeholder.
-		var flowRef string
-		for _, w := range tokens.Rest {
-			switch w {
-			case "", "run", "flow", "pipeline", "workflow":
-				continue
-			default:
-				flowRef = w
-			}
-			if flowRef != "" {
-				break
-			}
-		}
-		if flowRef == "" {
-			return nil
-		}
-		return []ResolvedCommand{{Cmd: "flow", Args: []string{"run", flowRef}, Confidence: confidence}}
-	}
-	return nil
 }
 
 // buildProjectCommand produces project sub-commands.
@@ -288,15 +247,13 @@ func ClassifyPromptCrossDomain(prompt string) []ResolvedCommand {
 		tokens.Verb = extractSpecialVerb(tokens.Rest)
 	}
 
-	// "run" in Rest means flow run; promote it to Verb and strip from Rest.
-	if tokens.Verb == "" {
-		tokens.Verb, tokens.Rest = extractRunVerb(tokens.Rest)
-	}
-
 	// When no verb is found but there are modifiers or a noun, default to
 	// an implicit list/query (e.g., "active tracks", "blocked tasks",
-	// "incomplete tasks", bare "tasks").
-	if tokens.Verb == "" && (len(tokens.Modifiers) > 0 || tokens.Noun != "") {
+	// "incomplete tasks", bare "tasks"). An unsupported action word in
+	// Rest blocks the default: the user asked for an action, and quietly
+	// listing instead would answer a question they did not ask.
+	if tokens.Verb == "" && !hasUnsupportedAction(tokens.Rest) &&
+		(len(tokens.Modifiers) > 0 || tokens.Noun != "") {
 		tokens.Verb = "list"
 	}
 
@@ -321,6 +278,22 @@ func ClassifyPromptCrossDomain(prompt string) []ResolvedCommand {
 	return cmds
 }
 
+// unsupportedActions are action words the classifier deliberately does
+// not route. Seeing one means the prompt asked for something tlc's NL
+// surface cannot resolve, so it must not fall through to a list.
+var unsupportedActions = map[string]bool{"run": true}
+
+// hasUnsupportedAction reports whether rest contains an action word the
+// classifier refuses to route.
+func hasUnsupportedAction(rest []string) bool {
+	for _, w := range rest {
+		if unsupportedActions[w] {
+			return true
+		}
+	}
+	return false
+}
+
 // extractSpecialVerb returns a special verb ("switch") if found in rest, otherwise "".
 func extractSpecialVerb(rest []string) string {
 	for _, w := range rest {
@@ -329,20 +302,6 @@ func extractSpecialVerb(rest []string) string {
 		}
 	}
 	return ""
-}
-
-// extractRunVerb returns ("run", remaining_rest) if "run" is in rest.
-// Otherwise returns ("", original_rest).
-func extractRunVerb(rest []string) (string, []string) {
-	for i, w := range rest {
-		if w == "run" {
-			remaining := make([]string, 0, len(rest)-1)
-			remaining = append(remaining, rest[:i]...)
-			remaining = append(remaining, rest[i+1:]...)
-			return "run", remaining
-		}
-	}
-	return "", rest
 }
 
 // filterArg removes all occurrences of flag from args.

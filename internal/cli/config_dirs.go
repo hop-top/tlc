@@ -77,16 +77,6 @@ func projectRelativePath(cfgDir, p string) string {
 	return filepath.Join(root, p)
 }
 
-// flowsDirFromConfig returns the directory the remaining flow commands
-// scan: recipe.dir when set, else the legacy "examples/flows" default.
-// It goes away with the flow commands.
-func flowsDirFromConfig() string {
-	if d := viper.GetString("recipe.dir"); d != "" {
-		return d
-	}
-	return filepath.Join("examples", "flows")
-}
-
 // projectionDirFromConfig returns the projection directory name from
 // config or the default "tasks".
 func projectionDirFromConfig() string {
@@ -103,7 +93,6 @@ func tracksDir() string {
 // uriDirsConfig returns a TypesDirConfig populated from viper settings.
 func uriDirsConfig() *uri.TypesDirConfig {
 	return &uri.TypesDirConfig{
-		FlowsDir:     flowsDirFromConfig(),
 		AssigneesDir: assigneesDirFromConfig(),
 		RecipeDirs:   recipeDirsFromConfig(),
 	}
