@@ -1,7 +1,0 @@
-name: production
-description: >
-  Conditional flow with target=production. Only production steps execute;
-  staging steps are SKIPPED.
-expected_exit: 0
-inputs:
-  target: production

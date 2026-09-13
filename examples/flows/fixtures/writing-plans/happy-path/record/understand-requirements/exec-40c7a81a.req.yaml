@@ -1,7 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 40c7a81a
-recorded_at: "2026-04-02T08:38:35Z"
-payload:
-    argv:
-        - /private/tmp/claude-501/-private-var-folders-x6-lrc3lbzd1gs0wvmn-z-t76780000gn-T-tlc-flow-test-761267373-repo/d661df37-820d-4dee-aea4-28e83c562f14/tasks/b04d3cv6j.output

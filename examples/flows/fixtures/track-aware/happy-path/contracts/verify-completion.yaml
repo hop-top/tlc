@@ -1,9 +1,0 @@
-name: verify_track_completion
-provider: filesystem
-evaluators:
-  - name: regex
-    pattern: 'track.*done\b|all tasks.*done'
-    mode: binary
-  - name: contains
-    substring: "track"
-    mode: binary

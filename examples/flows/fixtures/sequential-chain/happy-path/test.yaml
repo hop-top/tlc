@@ -1,3 +1,0 @@
-name: happy-path
-description: Sequential chain A->B->C — all steps succeed in order, run SUCCEEDED
-expected_exit: 0

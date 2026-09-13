@@ -1,7 +1,0 @@
-name: happy-path
-description: >
-  Standalone child flow run. Lint then test both SUCCEED; test_report
-  output produced for parent-flow consumption.
-expected_exit: 0
-inputs:
-  working_dir: /tmp/test-repo

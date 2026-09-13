@@ -1,9 +1,0 @@
-name: quality_check
-provider: filesystem
-evaluators:
-  - name: contains
-    substring: '"quality": "high"'
-    mode: binary
-  - name: regex
-    pattern: '"artifact"\s*:\s*"[^"]+'
-    mode: binary

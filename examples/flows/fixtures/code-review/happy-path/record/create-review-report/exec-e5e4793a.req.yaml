@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: e5e4793a
-recorded_at: "2026-04-02T18:26:46Z"
-payload:
-    argv:
-        - /Users/jadb/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/using-superpowers/SKILL.md
-    stdin: |
-        {"session_id":"a5610028-cc66-48ba-9e83-5e002ec32ffd","transcript_path":"/Users/jadb/.claude/projects/-private-var-folders-x6-lrc3lbzd1gs0wvmn-z-t76780000gn-T-tlc-flow-test-2202282094-repo/a5610028-cc66-48ba-9e83-5e002ec32ffd.jsonl","cwd":"/private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-2202282094/repo","hook_event_name":"SessionStart","source":"startup"}

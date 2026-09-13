@@ -1,3 +1,0 @@
-name: happy-path
-description: Single-step flow — step completes, run status SUCCEEDED
-expected_exit: 0

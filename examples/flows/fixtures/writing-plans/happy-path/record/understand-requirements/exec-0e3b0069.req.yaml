@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 0e3b0069
-recorded_at: "2026-04-02T08:31:12Z"
-payload:
-    argv:
-        - /opt/homebrew/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js
-        - rebuild

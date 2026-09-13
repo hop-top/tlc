@@ -1,8 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 47d3aed5
-recorded_at: "2026-04-02T18:22:22Z"
-payload:
-    stdout: |
-        Sync started in background...
-    exit_code: 0

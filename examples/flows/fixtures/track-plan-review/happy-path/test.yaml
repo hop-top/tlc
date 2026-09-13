@@ -1,7 +1,0 @@
-name: happy-path
-description: >
-  Track plan review with all six analysis lenses passing, synthesised
-  report produced, no BLOCKERs surfaced — operator gate exits cleanly.
-expected_exit: 0
-inputs:
-  track_id: example-track

@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 5ee43716
-recorded_at: "2026-04-02T18:27:50Z"
-payload:
-    stdout: |
-        {"type":"result","subtype":"error_max_budget_usd","duration_ms":4046,"duration_api_ms":0,"is_error":false,"num_turns":2,"stop_reason":"tool_use","session_id":"a5610028-cc66-48ba-9e83-5e002ec32ffd","total_cost_usd":0.29707875,"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[],"speed":"standard"},"modelUsage":{"claude-opus-4-6[1m]":{"inputTokens":2,"outputTokens":183,"cacheReadInputTokens":0,"cacheCreationInputTokens":46799,"webSearchRequests":0,"costUSD":0.29707875,"contextWindow":1000000,"maxOutputTokens":64000}},"permission_denials":[],"fast_mode_state":"off","uuid":"505e0b34-6775-47d1-b2ce-e5475ef2281b","errors":[]}
-    exit_code: 0
-    duration_ms: 64742

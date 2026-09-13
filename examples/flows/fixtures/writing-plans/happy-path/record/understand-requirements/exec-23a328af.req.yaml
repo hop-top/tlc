@@ -1,9 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 23a328af
-recorded_at: "2026-04-02T08:36:20Z"
-payload:
-    argv:
-        - -n
-        - flow test\|flow_test
-        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo/scripts/validate-doc-commands.sh

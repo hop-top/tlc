@@ -1,3 +1,0 @@
-name: happy-path
-description: exec steps run, join aggregates outputs, run status SUCCEEDED
-expected_exit: 0

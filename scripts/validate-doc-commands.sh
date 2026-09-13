@@ -52,7 +52,6 @@ echo
 
 echo "-- top-level subcommands --"
 check "tlc task"         $TLC task
-check "tlc flow"         $TLC flow
 check "tlc recipe"       $TLC recipe
 check "tlc assignee"     $TLC assignee
 check "tlc log"          $TLC log
@@ -84,14 +83,6 @@ check "task show"        $TLC task show
 check "task unassign"    $TLC task unassign
 check "task unclaim"     $TLC task unclaim
 check "task update"      $TLC task update
-
-echo
-echo "-- flow subcommands --"
-check "flow import"      $TLC flow import
-check "flow invoke"      $TLC flow invoke
-check "flow list"        $TLC flow list
-check "flow run"         $TLC flow run
-check "flow status"      $TLC flow status
 
 echo
 echo "-- recipe test flags --"

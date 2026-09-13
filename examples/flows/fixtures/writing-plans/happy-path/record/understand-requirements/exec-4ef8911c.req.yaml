@@ -1,7 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: 4ef8911c
-recorded_at: "2026-04-02T08:32:00Z"
-payload:
-    argv:
-        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo/docs/plans/

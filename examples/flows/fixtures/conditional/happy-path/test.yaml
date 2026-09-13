@@ -1,7 +1,0 @@
-name: happy-path
-description: >
-  Conditional flow with target=staging. Validate-config + staging
-  branch SUCCEEDED; production branch SKIPPED. Default scenario.
-expected_exit: 0
-inputs:
-  target: staging

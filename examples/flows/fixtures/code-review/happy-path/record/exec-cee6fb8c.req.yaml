@@ -1,7 +1,0 @@
-xrr: "1"
-adapter: exec
-fingerprint: cee6fb8c
-recorded_at: "2026-04-02T18:20:08Z"
-payload:
-    argv:
-        - --help
