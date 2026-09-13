@@ -59,8 +59,15 @@ overrides, use the repeatable -A/--agent-config flag.
 the agent's default container, any other value is taken as a container
 image reference.
 
+With --recipe the task is the subject: the recipe's steps are created
+in the task's track with the task blocked on the run's leaves, then run
+through the task executor, which completes the task once every leaf is
+done. --var binds the recipe's vars; --dry-run prints the steps that
+would be created without writing or running anything.
+
 Examples:
   tlc task execute T-0042
+  tlc task execute T-0042 --recipe fix-flow --var branch=main
   tlc task execute T-0042 --agent claude
   tlc task execute T-0042 --agent claude:env.MODEL=opus
   tlc task execute T-0042 --agent claude:image=ghcr.io/me/agent:dev
@@ -100,6 +107,7 @@ func init() {
 	f.StringVar(&taskExecNetwork, "network", "", "Container network")
 	f.BoolVar(&taskExecTrustProject, "trust-project", false,
 		"Trust project-local agent config without prompting")
+	registerRecipeRefFlags(TaskExecCmd)
 
 	TaskCmd.AddCommand(TaskExecCmd)
 }
@@ -121,6 +129,19 @@ func resetTaskExecFlags() {
 	taskExecMounts = nil
 	taskExecNetwork = ""
 	taskExecTrustProject = false
+}
+
+// loadAgentRegistry loads the agent registry defaults, trusting the
+// project-local config when asked.
+func loadAgentRegistry(trustProject bool) (*core.AgentRegistry, error) {
+	registry := core.NewAgentRegistry()
+	if err := registry.LoadDefaults(); err != nil {
+		return nil, fmt.Errorf("load agent config: %w", err)
+	}
+	if trustProject {
+		registry.TrustProject(registry.ProjectConfigPath())
+	}
+	return registry, nil
 }
 
 // withPodMode parses the --with-pod value into (local bool, imageOverride
@@ -161,6 +182,9 @@ func runTaskExec(cmd *cobra.Command, args []string) error {
 	if task == nil {
 		return fmt.Errorf("task %s not found", args[0])
 	}
+	if recipeFlagRecipe != "" {
+		return runTaskExecRecipe(ctx, cmd, s, task)
+	}
 
 	// 1) Resolve agent name + inline overrides from --agent, with
 	// fall-throughs to the task's assignee, then current user.
@@ -181,12 +205,9 @@ func runTaskExec(cmd *cobra.Command, args []string) error {
 	}
 
 	// 2) Load registry + fuzzy-resolve the canonical agent name.
-	registry := core.NewAgentRegistry()
-	if err := registry.LoadDefaults(); err != nil {
-		return fmt.Errorf("load agent config: %w", err)
-	}
-	if taskExecTrustProject {
-		registry.TrustProject(registry.ProjectConfigPath())
+	registry, err := loadAgentRegistry(taskExecTrustProject)
+	if err != nil {
+		return err
 	}
 
 	resolvedAgent, err := resolveAgentName(registry, queryName)

@@ -631,3 +631,27 @@ func TestMaterialize_NilRecipe(t *testing.T) {
 		t.Error("nil recipe succeeded; want an error")
 	}
 }
+
+func TestMaterialize_HonorsGivenRunID(t *testing.T) {
+	f := newMatFixture()
+	in := matInput(matSteps())
+	in.RunID = "run_01k4zq9x8b2c3d4e5f6g7h8j9k"
+	res := f.materialize(t, in)
+
+	if res.RunID != in.RunID {
+		t.Fatalf("RunID = %q; want the caller's %q", res.RunID, in.RunID)
+	}
+	if _, ok := f.runs.runs[in.RunID]; !ok {
+		t.Errorf("run %s not recorded under the given id; runs = %v", in.RunID, f.runs.order)
+	}
+	for _, c := range res.Created {
+		if task := f.repo.Tasks[c.TaskID]; task.RunID != in.RunID {
+			t.Errorf("task %s run_id = %q; want %q", c.StepID, task.RunID, in.RunID)
+		}
+	}
+
+	minted := f.materialize(t, matInput(matSteps()))
+	if minted.RunID == "" || minted.RunID == in.RunID || !IsRecipeRunID(minted.RunID) {
+		t.Errorf("empty RunID minted %q; want a fresh run id", minted.RunID)
+	}
+}

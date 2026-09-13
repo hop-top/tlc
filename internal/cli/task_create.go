@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,13 +23,29 @@ var TaskCreateCmd = &cobra.Command{
 Without a title argument or with --interactive, prompts for fields
 through an interactive form. Mints a durable TypeID and allocates a
 per-project monotonic sequence number for the human-facing alias.
-Each invocation creates a fresh task, so the operation is not idempotent.`,
+Each invocation creates a fresh task, so the operation is not idempotent.
+
+With --recipe the recipe's steps become the tasks instead of a title:
+into --track, into the track of the task named by --for (which is
+bound as subject.* and blocked on the run's leaves), into a track named
+by --for, or trackless. --var binds the recipe's vars, --task keeps a
+subset of the steps, --assign picks assignees for steps that name none.
+--dry-run prints what would be created without writing.
+
+Examples:
+  tlc task create "Fix login" --track auth
+  tlc task create --recipe fix-flow --for T-0042
+  tlc task create --recipe code-review --var pr=42 --track review-42
+  tlc task create --recipe code-review --var pr=42 --task lint,review`,
 	Annotations: map[string]string{
 		"kit/side-effect": "write-local",
 		"kit/idempotent":  "no",
 	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if recipeFlagRecipe != "" {
+			return runTaskCreateRecipe(cmd, args)
+		}
 		var title string
 		if len(args) > 0 {
 			title = trimMatchingQuotes(args[0])
@@ -390,16 +405,8 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 	// Link to track if specified.
 	var parentTrackType string
 	if taskTrack != "" {
-		resolved, trackErr := resolveTrackID(ctx, s, taskTrack)
-		if trackErr != nil && errors.Is(trackErr, ErrTrackNotFound) {
-			created, createErr := maybeAutoCreateTrackFromWriter(
-				ctx, w, s, taskTrack,
-			)
-			if createErr != nil {
-				return createErr
-			}
-			resolved = created
-		} else if trackErr != nil {
+		resolved, trackErr := resolveOrCreateTrack(ctx, w, s, taskTrack)
+		if trackErr != nil {
 			return trackErr
 		}
 		task.TrackID = &resolved
@@ -585,6 +592,7 @@ func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&taskRRule, "rrule", "", "Recurring reminder RRULE (e.g. FREQ=DAILY, FREQ=WEEKLY;BYDAY=MO,WE,FR)")
 	cmd.Flags().BoolVar(&taskNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
 	cmd.Flags().StringSliceVar(&taskEva, "eva", []string{}, "Eva annotations (repeatable)")
+	registerRecipeFlags(cmd)
 }
 
 func init() {

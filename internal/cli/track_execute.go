@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 var (
@@ -40,8 +41,16 @@ set. Human tasks are never dispatched: when only human tasks remain
 ready the command reports them and exits 0 (or keeps polling with
 --wait); resolve them with 'tlc task approve|reject'.
 
+With --recipe the track is reconciled first: steps the track's run
+ledger does not cover are created (a step whose task was deleted is
+reported and left alone unless --recreate), vars come from the latest
+run merged under --var, drift from that run's version is warned about,
+then execution proceeds as usual. --dry-run prints the reconcile plan
+and the batch plan without writing.
+
 Examples:
   tlc track execute my-feature --agent claude
+  tlc track execute my-feature --recipe release --recreate
   tlc track execute my-feature --agent claude --concurrency 4
   tlc track execute my-feature --dry-run
   tlc track execute my-feature --reclaim 30m     # take over claims older than 30m
@@ -70,6 +79,8 @@ func init() {
 	f.StringSliceVar(&trackExecuteCtxtRefs, "ctxt", nil,
 		"ctxt query handle (id[?filter], repeatable) the agent may query")
 	f.DurationVar(&trackExecuteTimeout, "timeout", 0, "Total timeout")
+	registerRecipeRefFlags(trackExecuteCmd)
+	f.BoolVar(&recipeFlagRecreate, "recreate", false, "With --recipe: create steps again whose task was deleted")
 
 	TrackCmd.AddCommand(trackExecuteCmd)
 }
@@ -112,14 +123,10 @@ func runTrackExecute(cmd *cobra.Command, args []string) error {
 	}
 	projectID := currentProjectID()
 
-	registry := core.NewAgentRegistry()
-	if err := registry.LoadDefaults(); err != nil {
-		return fmt.Errorf("load agent config: %w", err)
+	registry, err := loadAgentRegistry(trackExecuteTrustProject)
+	if err != nil {
+		return err
 	}
-	if trackExecuteTrustProject {
-		registry.TrustProject(registry.ProjectConfigPath())
-	}
-	local, imageOverride := withPodMode(trackExecuteWithPod)
 
 	wm := core.DefaultWorkflow()
 	out := cmd.OutOrStdout()
@@ -133,39 +140,72 @@ func runTrackExecute(cmd *cobra.Command, args []string) error {
 		EvaKey:      os.Getenv("EVA_KEY"),
 		Out:         out,
 	}
-	trackDisplay := trackDisplayID(ctx, core.NewTrackService(s, s), trackID)
+	track, err := s.GetTrack(ctx, trackID)
+	if err != nil {
+		return fmt.Errorf("load track %s: %w", trackID, err)
+	}
+	if track == nil {
+		// Pre-typeid rows resolve by literal id but not through GetTrack;
+		// the executor only needs the id, so degrade to it.
+		track = &core.Track{ID: trackID}
+	}
+	trackDisplay := formatTrackAlias(track)
 
+	if recipeFlagRecipe != "" {
+		if err := reconcileTrackRecipe(ctx, cmd, s, track, projectID, trackExecuteDryRun); err != nil {
+			return err
+		}
+	}
 	if trackExecuteDryRun {
 		return printTrackExecuteDryRun(ctx, cmd, s, wm, trackDisplay, trackID, projectID, opts)
 	}
 
+	executor := newTrackExecutor(s, wm, opts, registry, executorSetup{
+		agent: trackExecuteAgent, withPod: trackExecuteWithPod, ctxtRefs: trackExecuteCtxtRefs,
+	})
+	_, _ = fmt.Fprintf(out, "Executing track %s\n", trackDisplay)
+	report, err := executor.RunTrack(ctx, trackID, projectID)
+	if err != nil {
+		return fmt.Errorf("execute track %s: %w", trackDisplay, err)
+	}
+	printExecReport(ctx, out, s, "Track "+trackDisplay, report)
+	return nil
+}
+
+// executorSetup is what the dispatchers need beyond the executor options.
+type executorSetup struct {
+	agent    string
+	withPod  string
+	ctxtRefs []string
+}
+
+// newTrackExecutor wires the executor with the agent and exec
+// dispatchers `track execute` uses.
+func newTrackExecutor(
+	s *storage.SQLiteStorage, wm *core.WorkflowManager, opts core.ExecutorOpts,
+	registry *core.AgentRegistry, setup executorSetup,
+) *core.Executor {
+	local, imageOverride := withPodMode(setup.withPod)
 	executor := core.NewExecutor(s, s, s, wm, opts)
 	executor.Register(core.TaskKindAgent, &agentDispatcher{
 		s:             s,
 		registry:      registry,
-		defaultAgent:  trackExecuteAgent,
-		ctxtRefs:      trackExecuteCtxtRefs,
+		defaultAgent:  setup.agent,
+		ctxtRefs:      setup.ctxtRefs,
 		local:         local,
 		imageOverride: imageOverride,
 		updater:       core.NewStateUpdater(core.NewTaskService(s, s), GetEventBus()),
 	})
 	// Exec-kind tasks run on the host in the working directory.
 	executor.Register(core.TaskKindExec, core.NewExecDispatcher(repoRootForMode(true)))
-
-	_, _ = fmt.Fprintf(out, "Executing track %s\n", trackDisplay)
-	report, err := executor.RunTrack(ctx, trackID, projectID)
-	if err != nil {
-		return fmt.Errorf("execute track %s: %w", trackDisplay, err)
-	}
-	printExecReport(ctx, out, s, trackDisplay, report)
-	return nil
+	return executor
 }
 
-// printExecReport summarizes a run and names the human tasks that are
-// waiting on a decision.
-func printExecReport(ctx context.Context, out io.Writer, s core.Repository, trackDisplay string, report *core.ExecReport) {
-	_, _ = fmt.Fprintf(out, "\nTrack %s: %d done, %d skipped, %d retried, %d blocked, %d reclaimed\n",
-		trackDisplay, len(report.Done), len(report.Skipped), len(report.Failed), len(report.Blocked), len(report.Reclaimed))
+// printExecReport summarizes a run under a label ("Track L-0003", "Task
+// T-0042") and names the human tasks that are waiting on a decision.
+func printExecReport(ctx context.Context, out io.Writer, s core.Repository, label string, report *core.ExecReport) {
+	_, _ = fmt.Fprintf(out, "\n%s: %d done, %d skipped, %d retried, %d blocked, %d reclaimed\n",
+		label, len(report.Done), len(report.Skipped), len(report.Failed), len(report.Blocked), len(report.Reclaimed))
 	for _, id := range report.WaitingHuman {
 		display := id
 		if t, err := s.GetTask(ctx, id); err == nil && t != nil {

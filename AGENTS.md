@@ -52,6 +52,9 @@ tlc task delete <id>                     # delete task
 tlc task create "title" --due tomorrow   # set due date
 tlc task create "title" --due "in 3d" --remind-every 1h  # due + recurring
 tlc task create "title" --due friday --no-auto-remind     # suppress 12h auto-remind
+tlc task create --recipe <recipe> --var key=val           # recipe steps as tasks (trackless)
+tlc task create --recipe <recipe> --for T-0041            # into T-0041's track, T-0041 blocked on the leaves
+tlc task create --recipe <recipe> --var k=v --track <id> --task 1-3 --with-deps
 tlc task update <id> --due "2025-05-01"  # set/change due date
 tlc task update <id> --due -             # clear due date
 tlc task update <id> --remind-at "2025-05-01T14:00:00Z"   # one-shot
@@ -86,6 +89,8 @@ Conventions:
 ```bash
 tlc track create "Title" --type feature         # create track (type required)
 tlc track create "Title" --type bug --id slug    # custom ID
+tlc track create --recipe <recipe> --var key=val # track + tasks from a recipe (title/type/plan from its track block)
+tlc track create "Title" --recipe <recipe> --var k=v --task lint,review --assign
 tlc track list                                   # list with progress/state
 tlc track list --status active --type feature    # filtered
 tlc track show <id>                              # detail + phase breakdown
@@ -160,6 +165,14 @@ Shorthand exec (delegates to `agent run` internally):
 ```bash
 tlc task execute <id> --agent <name>
 tlc track execute <id> [--agent <name>]
+```
+
+Recipe-driven exec: `task execute` creates the recipe's tasks for the task
+(the subject) and runs them; `track execute` reconciles the track against
+the recipe's run ledger (creates only the missing steps) and then runs it.
+```bash
+tlc task execute <id> --recipe <recipe> [--var key=val]
+tlc track execute <id> --recipe <recipe> [--recreate]
 ```
 
 The `--agent <name>` flag is also accepted on `tlc flow run`:

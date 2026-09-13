@@ -712,6 +712,58 @@ tlc recipe show code-review -f json   # the expanded document
 tlc recipe validate ./my-recipe.yaml  # exit 1 with the first problem
 ```
 
+**Creating from a recipe** — four verbs share one pipeline: locate, expand,
+bind vars, select steps, render, materialize. Each pass is recorded as a
+run (which recipe, version, vars, subject, selection) so a later pass can
+tell what already exists.
+
+```bash
+# A new track: title from the argument or the recipe's track.title,
+# type from --type or track.type, plan.md from track.plan.
+tlc track create --recipe release --var version=1.4.0
+tlc track create "Review 42" --recipe code-review --var pr=42,depth=deep
+
+# Tasks only: into a track, for a subject, or trackless.
+tlc task create --recipe code-review --var pr=42 --track review-42
+tlc task create --recipe fix-flow --for T-0042      # into T-0042's track
+tlc task create --recipe fix-flow --for auth        # into the auth track
+tlc task create --recipe code-review --var pr=42    # trackless
+
+# Create for a task, then run the created tasks.
+tlc task execute T-0042 --recipe fix-flow --var branch=main
+
+# Bring a track up to date with its recipe, then run it.
+tlc track execute review-42 --recipe code-review
+tlc track execute review-42 --recipe code-review --recreate
+```
+
+- **Vars**: `--var key=value[,key=value]` (repeatable). A required var
+  without a value is prompted for on a terminal; otherwise the command
+  fails naming every missing var and the `--var` fix. `--infer` is
+  reserved and errors as not implemented yet.
+- **Selection**: `--task 1-5,7`, `--task lint` (repeatable) keeps a subset
+  of the expanded steps; ordinals are the ones `recipe show` prints. A
+  dependency on an unselected step is dropped and warned about, or pulled
+  in with its closure by `--with-deps`. The selection and the dropped
+  edges are recorded on the run.
+- **Subjects**: `--for <task-or-track>` binds `{{subject.id}}`,
+  `{{subject.title}}`, `{{subject.description}}`, `{{subject.track}}`,
+  `{{subject.tags}}` and `{{subject.project}}`. `requires: {subject: task}`
+  makes a task subject mandatory, `track` a track one. A task subject is
+  blocked on the run's leaves (steps nothing else in the run depends on),
+  and `track execute` / `task execute` complete it once they are done.
+- **Assignment**: `--assign` runs the assignment engine over
+  `recipe.assignees_dir` for every step that names no assignee.
+- **Reconcile**: `track execute <track> --recipe <r>` reads the track's run
+  ledger for that recipe, creates only the steps not materialized yet, and
+  warns when the recipe's version or content changed since the latest run.
+  A step whose task was deleted is reported and left alone unless
+  `--recreate`. Vars are the latest run's, overridden by `--var`.
+- **Dry run**: `--dry-run` on any of the four prints what would be created
+  (and, on `track execute`, the batch plan) without writing.
+- **Output**: `--format json` renders the run id, created and skipped steps
+  with their task ids, warnings, and the track.
+
 ### Flows & Assignees
 
 TLC includes a comprehensive workflow suite with capability-based task assignment:

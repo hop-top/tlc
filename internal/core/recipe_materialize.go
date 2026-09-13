@@ -62,6 +62,10 @@ type MaterializeInput struct {
 	// ParentRun links the run to the one it continues; Reconcile sets it
 	// to the latest run of the same recipe on the track.
 	ParentRun string
+	// RunID, when set, is the id the run is recorded under, so a caller
+	// that rendered {{run.id}} into the steps records the same id; empty
+	// mints one.
+	RunID string
 
 	// PreCreate, when set, gates every task before it is persisted; an
 	// error aborts the batch.
@@ -124,7 +128,10 @@ func (m *Materializer) run(ctx context.Context, in MaterializeInput, plan materi
 	if err != nil {
 		return nil, err
 	}
-	res.RunID = NewRecipeRunID()
+	res.RunID = in.RunID
+	if res.RunID == "" {
+		res.RunID = NewRecipeRunID()
+	}
 	if in.DryRun {
 		for _, step := range plan.create {
 			res.Created = append(res.Created, StepTask{StepID: step.ID, Ordinal: step.Ordinal})

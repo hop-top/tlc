@@ -107,6 +107,16 @@ check "recipe list"      $TLC recipe list
 check "recipe show"      $TLC recipe show
 check "recipe validate"  $TLC recipe validate
 check_flag "recipe list --source"      $TLC recipe list --source
+check_flag "track create --recipe"     $TLC track create --recipe
+check_flag "track create --var"        $TLC track create --var
+check_flag "track create --task"       $TLC track create --task
+check_flag "track create --with-deps"  $TLC track create --with-deps
+check_flag "track create --assign"     $TLC track create --assign
+check_flag "task create --recipe"      $TLC task create --recipe
+check_flag "task create --for"         $TLC task create --for
+check_flag "task execute --recipe"     $TLC task execute --recipe
+check_flag "track execute --recipe"    $TLC track execute --recipe
+check_flag "track execute --recreate"  $TLC track execute --recreate
 
 echo
 echo "-- key flag checks --"

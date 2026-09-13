@@ -470,6 +470,7 @@ func resetTaskFlags() {
 	resetTrackFlags()
 	resetTrackGraphFlags()
 	resetTrackExecuteFlags()
+	resetRecipeCreateFlags()
 
 	// Reset flow flags.
 	resetFlowFlags()
@@ -699,5 +700,35 @@ func resetRecipeFlags() {
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
 			f.Changed = false
 		})
+	}
+}
+
+// resetRecipeCreateFlags zeroes the --recipe surface shared by track
+// create, task create, task execute and track execute. The create
+// commands' Changed bits are cleared by resetTaskFlags; the execute
+// commands' are cleared here.
+func resetRecipeCreateFlags() {
+	recipeFlagRecipe = ""
+	recipeFlagVars = nil
+	recipeFlagTasks = nil
+	recipeFlagWithDeps = false
+	recipeFlagFor = ""
+	recipeFlagAssign = false
+	recipeFlagInfer = false
+	recipeFlagRecreate = false
+	for _, cmd := range []*cobra.Command{TaskExecCmd, trackExecuteCmd} {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+		})
+	}
+	// A test root's persistent --dry-run is merged into the global
+	// create commands' flag sets on first parse and stays there, value
+	// included; clear it so a later test without the flag is not a dry
+	// run.
+	for _, cmd := range []*cobra.Command{trackCreateCmd, TaskCreateCmd} {
+		if f := cmd.Flags().Lookup("dry-run"); f != nil {
+			_ = f.Value.Set("false") //nolint:errcheck // bool flag; "false" always parses
+			f.Changed = false
+		}
 	}
 }
