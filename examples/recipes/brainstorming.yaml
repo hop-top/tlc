@@ -1,0 +1,59 @@
+recipe: brainstorming
+version: 1.0.0
+description: Transform ideas into designs through collaborative dialogue
+track:
+  title: Brainstorming
+  type: feature
+steps:
+  - id: explore-context
+    title: Explore codebase for context
+    description: |
+      Review current project state:
+      - Recent commits
+      - Existing files and structure
+      - Related documentation
+
+  - id: gather-requirements
+    title: Gather requirements through questions
+    depends_on: [explore-context]
+    description: |
+      Ask questions one at a time to understand:
+      - Purpose of the feature
+      - Constraints (technical, business, timeline)
+      - Success criteria
+
+  - id: analyze-approaches
+    title: Analyze 2-3 implementation approaches
+    depends_on: [gather-requirements]
+    description: |
+      Propose multiple approaches:
+      - Approach A (recommended)
+      - Approach B (alternative)
+      - Approach C (alternative)
+
+      For each, describe:
+      - Implementation strategy
+      - Trade-offs
+      - Why recommended or not
+
+      Present them conversationally, with a recommendation.
+
+  - id: write-design
+    title: Document validated design
+    depends_on: [analyze-approaches]
+    description: |
+      Present the design in 200-300 word sections and ask after each
+      section whether it looks right. Cover architecture, components,
+      data flow, error handling and testing.
+
+      Write the validated design to docs/plans/YYYY-MM-DD-<topic>-design.md
+
+      Include:
+      - Architecture overview
+      - Component breakdown
+      - Data flow
+      - Error handling strategy
+      - Testing approach
+
+      Then set up implementation: create a git worktree and write the
+      implementation plan (writing-plans recipe).

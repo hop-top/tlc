@@ -1,0 +1,28 @@
+recipe: composition
+version: 1.0.0
+description: |
+  Build pipeline that includes the composition-child recipe (lint + test)
+  as one step, then reports on its results.
+vars:
+  repo:
+    description: Repository path
+    required: true
+steps:
+  - id: checkout
+    title: Checkout repository
+    description: |
+      Clone or update the repository at {{repo}} into the working directory.
+
+  - id: quality-gate
+    title: Run quality gate (lint + test)
+    depends_on: [checkout]
+    include: composition-child@1.0.0
+    with:
+      working_dir: "{{repo}}"
+
+  - id: report-results
+    title: Generate pipeline report
+    depends_on: [quality-gate]
+    description: |
+      Summarize the pipeline results from the quality gate.
+      Test report: {{results.quality-gate/test.test_report}}

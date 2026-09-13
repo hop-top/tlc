@@ -1,0 +1,3 @@
+name: happy-path
+description: Parallel fan-out (3 steps) + fan-in — all pass, run SUCCEEDED
+expected_exit: 0

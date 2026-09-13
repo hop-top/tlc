@@ -1,0 +1,28 @@
+recipe: gate-checkpoint
+version: 1.0.0
+description: Three steps with an EVA quality gate between producer and consumer
+agent: claude
+steps:
+  - id: produce-output
+    title: Generate artifact
+    description: |
+      Produce an output artifact that will be evaluated by the
+      quality-check gate before the next steps run.
+
+  - id: gated-step
+    title: Pass quality gate
+    depends_on: [produce-output]
+    gate:
+      contract: quality-check
+      eva_url: http://localhost:8080
+    description: |
+      This step is gated by the quality-check EVA contract.
+      The step output must satisfy the contract before the
+      downstream steps can run.
+
+  - id: final-step
+    title: Continue after gate
+    depends_on: [gated-step]
+    description: |
+      This step only runs if the quality gate passed.
+      If the gate rejected the output, this step is never reached.

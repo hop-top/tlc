@@ -1,0 +1,132 @@
+recipe: pr-review-loop
+version: 1.0.0
+description: |
+  Review a pull request, apply the feedback, review again. The cycle is
+  bounded and stops early once the reviewer approves, so every iteration
+  is a visible task rather than a loop inside a running process.
+agent: claude
+vars:
+  repo:
+    description: "GitHub repo slug, e.g. owner/repo"
+    required: true
+  pr:
+    description: "PR number"
+    required: true
+  working_dir:
+    description: "Local clone path"
+    default: "."
+  rounds:
+    description: "How many review and fix cycles to create"
+    default: 3
+track:
+  title: "Review {{repo}}#{{pr}}"
+  type: quality
+  plan: |
+    # PR review loop
+
+    Reviewer and fixer alternate until the PR is approved or the rounds
+    run out. Each round is two tasks: a read-only review that emits a
+    verdict, and a fix that applies the blocking feedback.
+
+    ## Roles
+
+    The reviewer never writes: it reads the diff, the checks and the bot
+    comments, then posts a structured verdict. The fixer edits files and
+    commits locally, with the destructive git operations off limits.
+
+    ## Stopping
+
+    A round only runs when the previous round's review asked for changes.
+    Once a review approves, the remaining rounds are skipped and the
+    summary reports the round that approved.
+steps:
+  - id: load-pr-context
+    kind: exec
+    title: "Fetch PR metadata, diff and checks"
+    exec:
+      argv:
+        - sh
+        - -c
+        - >-
+          gh pr view {{pr}} --repo {{repo}}
+          --json number,title,body,headRefName,baseRefName,headRefOid
+          > pr-meta.json &&
+          gh pr diff {{pr}} --repo {{repo}} > pr-diff.patch &&
+          gh pr checks {{pr}} --repo {{repo}} --json name,status,conclusion
+          > pr-checks.json &&
+          gh api repos/{{repo}}/pulls/{{pr}}/comments --paginate
+          --jq '[.[] | select(.user.login | endswith("[bot]"))]'
+          > pr-bot-comments.json
+      cwd: "{{working_dir}}"
+      timeout: 2m
+    description: |
+      Collect everything the reviewer and fixer read: PR metadata, the
+      full diff, CI status and any bot comments already on the PR.
+
+  - id: review-loop
+    depends_on: [load-pr-context]
+    repeat: 3
+    until: "results.review.verdict == 'approve'"
+    steps:
+      - id: review
+        title: "Review {{repo}}#{{pr}} (round {{run.iteration}})"
+        description: |
+          Read pr-meta.json, pr-diff.patch and pr-bot-comments.json in
+          {{working_dir}}. Judge correctness, security, performance,
+          style, and missing tests or docs. Read only: no file edits, no
+          git writes, and only read-only `gh` calls.
+
+          Emit this JSON as the last line of stdout:
+
+          ```json
+          {
+            "verdict": "approve|request_changes|comment",
+            "summary": "<one paragraph>",
+            "comments": [
+              {
+                "path": "src/foo.go",
+                "line": 42,
+                "body": "<specific feedback>",
+                "severity": "critical|major|minor|suggestion"
+              }
+            ],
+            "blocking_issues": ["<issue>"]
+          }
+          ```
+
+          Treat `comment` with blocking issues as `request_changes`. Post
+          the review to the PR with a single
+          `gh api repos/{{repo}}/pulls/{{pr}}/reviews --method POST`.
+
+      - id: fix
+        title: "Apply review feedback (round {{run.iteration}})"
+        depends_on: [review]
+        description: |
+          Read the review verdict of this round: {{results.review.summary}}
+
+          Apply every blocking issue and every major comment. Allowed:
+          file edits, and the safe git subset (status, diff, add, commit,
+          log, show, branch, switch, stash). Never run `git reset --hard`,
+          `git clean -fd`, or any form of push unless the request names it
+          explicitly.
+
+          Commit each batch locally with a `fix:` subject, then post a
+          summary of what changed with `gh pr comment`.
+
+          Emit this JSON as the last line of stdout:
+
+          ```json
+          {
+            "status": "completed|needs_clarification|error",
+            "summary": "<what was done>",
+            "files_modified": ["src/foo.go"]
+          }
+          ```
+
+  - id: summarize
+    title: "Report the review outcome"
+    depends_on: [review-loop]
+    description: |
+      Report whether {{repo}}#{{pr}} was approved, which round approved
+      it, and what the final review said. When no round approved, say so
+      and list the issues that are still blocking.

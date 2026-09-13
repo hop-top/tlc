@@ -1,0 +1,70 @@
+recipe: conditional
+version: 1.0.0
+description: |
+  One recipe for both staging and production deploys. The target var
+  selects which steps run; the steps for the other target are skipped,
+  not failed.
+vars:
+  target:
+    description: "Deploy target: staging or production"
+    required: true
+steps:
+  - id: validate-config
+    title: Validate deploy config
+    description: |
+      Check that required config files exist and environment
+      variables are set for the {{target}} target.
+
+  - id: deploy-staging
+    title: Deploy to staging environment
+    depends_on: [validate-config]
+    when: "vars.target == 'staging'"
+    description: |
+      Push build artifacts to the staging environment.
+
+  - id: verify-staging
+    title: Run smoke tests on staging
+    depends_on: [deploy-staging]
+    when: "vars.target == 'staging'"
+    description: |
+      Hit staging health endpoint, verify version matches.
+
+  - id: deploy-production
+    title: Deploy to production environment
+    depends_on: [validate-config]
+    when: "vars.target == 'production'"
+    description: |
+      Push build artifacts to the production environment with
+      canary rollout.
+
+  - id: verify-production
+    title: Run smoke tests on production
+    depends_on: [deploy-production]
+    when: "vars.target == 'production'"
+    description: |
+      Hit production health endpoint, verify version matches,
+      check error rates.
+
+  - id: staging-only
+    title: Collect staging deploy results
+    depends_on: [deploy-staging, verify-staging, deploy-production, verify-production]
+    when: "vars.target == 'staging'"
+    gate:
+      contract: staging-only
+      eva_url: http://localhost:8080
+    description: |
+      Report the terminal state of every deploy step, one line per step
+      in the form `<step>: <STATE>`. Only the staging steps ran; the
+      production steps are SKIPPED.
+
+  - id: production-only
+    title: Collect production deploy results
+    depends_on: [deploy-staging, verify-staging, deploy-production, verify-production]
+    when: "vars.target == 'production'"
+    gate:
+      contract: production-only
+      eva_url: http://localhost:8080
+    description: |
+      Report the terminal state of every deploy step, one line per step
+      in the form `<step>: <STATE>`. Only the production steps ran; the
+      staging steps are SKIPPED.

@@ -1,0 +1,9 @@
+xrr: "1"
+adapter: exec
+fingerprint: a948732b
+recorded_at: "2026-04-02T18:25:39Z"
+payload:
+    stdout: |
+        {"type":"result","subtype":"error_max_budget_usd","duration_ms":5660,"duration_api_ms":0,"is_error":false,"num_turns":4,"stop_reason":"tool_use","session_id":"c7f34261-69fc-4e11-9708-df7b4e57d3ff","total_cost_usd":0.29716,"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[],"speed":"standard"},"modelUsage":{"claude-opus-4-6[1m]":{"inputTokens":2,"outputTokens":215,"cacheReadInputTokens":0,"cacheCreationInputTokens":46684,"webSearchRequests":0,"costUSD":0.29716,"contextWindow":1000000,"maxOutputTokens":64000}},"permission_denials":[],"fast_mode_state":"off","uuid":"77e5e693-a099-4b20-8079-e8f75e498e82","errors":[]}
+    exit_code: 0
+    duration_ms: 66284

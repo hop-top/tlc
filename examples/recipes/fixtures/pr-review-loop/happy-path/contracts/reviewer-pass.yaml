@@ -1,0 +1,9 @@
+name: reviewer_pass_gate
+provider: filesystem
+evaluators:
+  - name: regex
+    pattern: '"status"\s*:\s*"[^"]+'
+    mode: binary
+  - name: regex
+    pattern: '"summary"\s*:\s*"[^"]+'
+    mode: binary

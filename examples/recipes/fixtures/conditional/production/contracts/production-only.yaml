@@ -1,0 +1,15 @@
+name: production_steps_only
+provider: filesystem
+evaluators:
+  - name: contains
+    substring: "deploy-production: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "verify-production: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "deploy-staging: SKIPPED"
+    mode: binary
+  - name: contains
+    substring: "verify-staging: SKIPPED"
+    mode: binary

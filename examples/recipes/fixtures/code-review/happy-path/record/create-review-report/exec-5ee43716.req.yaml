@@ -1,0 +1,49 @@
+xrr: "1"
+adapter: exec
+fingerprint: 5ee43716
+recorded_at: "2026-04-02T18:27:50Z"
+payload:
+    argv:
+        - -p
+        - |
+          Step: create-review-report
+
+          Create comprehensive review report:
+
+          Structure:
+          1. Summary
+             - What was reviewed
+             - Overall assessment
+
+          2. What's Done Well
+             - Acknowledge good work
+             - Specific positive examples
+
+          3. Issues Found
+             - CRITICAL (blocks merge):
+               - Security vulnerabilities
+               - Data loss risks
+               - Complete feature breakage
+
+             - IMPORTANT (should fix before merge):
+               - Plan deviations
+               - Missing error handling
+               - Incomplete functionality
+
+             - SUGGESTIONS (nice to have):
+               - Code style improvements
+               - Refactoring opportunities
+               - Performance optimizations
+
+          4. Next Steps
+             - What needs to be done
+             - Priority order
+
+          Tone: Constructive and specific.
+          Provide code examples where helpful.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

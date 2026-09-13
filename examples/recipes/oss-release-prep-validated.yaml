@@ -1,0 +1,192 @@
+recipe: oss-release-prep-validated
+version: 1.0.0
+description: |
+  The open-source release preparation, with an EVA contract closing each
+  phase. A phase cannot start until the contract on the phase before it
+  passes, so a missing LICENSE or an unparsable workflow stops the line
+  instead of surfacing at the tag.
+agent: claude
+track:
+  title: "Open-source release prep"
+  type: delivery
+  plan: |
+    # Open-source release preparation
+
+    Five phases, each gated on the one before it: audit the history,
+    then legal and identity, core docs, community files, and the
+    pipelines. The last three tasks review the result, run the suite and
+    cut the tag.
+
+    ## Gates
+
+    Each phase ends on a contract: oss-audit, oss-legal, oss-docs,
+    oss-community, oss-pipelines, oss-release. The evaluators are
+    structural, so no phase waits on a model to decide whether it passed.
+steps:
+  - id: audit-repo
+    title: "Audit the repo for secrets, private references and binary blobs"
+    gate:
+      contract: oss-audit
+    description: |
+      Scan the full history, then read the findings:
+
+      ```bash
+      gitleaks detect --source . --report-format json \
+        --report-path gitleaks-report.json
+      git rev-list --objects --all \
+        | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
+        | awk '/^blob/ && $3 > 1048576 { print $3, $4 }' | sort -rn | head -20
+      ```
+
+      Block the release on any HIGH finding. Decide keep or remove for
+      each large binary. Grep for internal hostnames, IP addresses, and
+      TODOs that name internal systems or people; a scanner cannot judge
+      intent, so read them.
+
+  - id: add-license
+    title: "Add the LICENSE file"
+    depends_on: [audit-repo]
+    description: |
+      Pick the license with the owner (MIT, Apache-2.0, BSD-3-Clause are
+      the usual choices), then write LICENSE with the correct copyright
+      holder and year.
+
+  - id: add-copyright-headers
+    title: "Add copyright and license headers to source files"
+    depends_on: [audit-repo]
+    description: |
+      Add the header the chosen license expects to every source file
+      that needs one. Keep generated files and vendored code out.
+
+  - id: add-codeowners
+    title: "Add the CODEOWNERS file"
+    depends_on: [audit-repo]
+    gate:
+      contract: oss-legal
+    description: |
+      Map each area of the tree to the team or person who reviews it.
+      Verify every handle resolves in the target organization.
+
+  - id: write-readme
+    title: "Write README.md"
+    depends_on: [add-license, add-copyright-headers, add-codeowners]
+    description: |
+      What the project is, who it is for, how to install it, and a
+      working quick start. Check that it renders on GitHub, including
+      every relative link and image.
+
+  - id: write-contributing
+    title: "Write CONTRIBUTING.md"
+    depends_on: [add-license, add-copyright-headers, add-codeowners]
+    description: |
+      How to set up the development environment, run the tests, and open
+      a pull request. State the commit convention and the review
+      expectations.
+
+  - id: write-security-policy
+    title: "Write SECURITY.md"
+    depends_on: [add-license, add-copyright-headers, add-codeowners]
+    gate:
+      contract: oss-docs
+    description: |
+      Which versions are supported, how to report a vulnerability
+      privately, and the response time the project commits to.
+
+  - id: add-issue-templates
+    title: "Add the GitHub issue templates"
+    depends_on: [write-readme, write-contributing, write-security-policy]
+    description: |
+      Bug report and feature request forms under .github/ISSUE_TEMPLATE,
+      with the labels the triage process expects.
+
+  - id: add-pr-template
+    title: "Add the pull request template"
+    depends_on: [write-readme, write-contributing, write-security-policy]
+    description: |
+      A short checklist: what changed, why, how it was tested, and the
+      issue it closes.
+
+  - id: add-code-of-conduct
+    title: "Add CODE_OF_CONDUCT.md"
+    depends_on: [write-readme, write-contributing, write-security-policy]
+    description: |
+      Adopt the Contributor Covenant and fill in a contact address that
+      is actually monitored.
+
+  - id: init-changelog
+    title: "Initialize CHANGELOG.md"
+    depends_on: [write-readme, write-contributing, write-security-policy]
+    gate:
+      contract: oss-community
+    description: |
+      Keep a Changelog format with an Unreleased section, or the file the
+      release tooling expects if one is already in use.
+
+  - id: add-ci-workflow
+    title: "Add the CI workflow: lint, test, build"
+    depends_on: [add-issue-templates, add-pr-template, add-code-of-conduct, init-changelog]
+    description: |
+      Run the linter, the test suite and the build on every push and
+      pull request, across the platforms the project claims to support.
+
+  - id: add-release-workflow
+    title: "Add the release workflow: tag to publish"
+    depends_on: [add-issue-templates, add-pr-template, add-code-of-conduct, init-changelog]
+    description: |
+      Build the artifacts on a tag, attach them to a GitHub Release, and
+      publish to the package registry when the project has one.
+
+  - id: add-dependency-bot
+    title: "Configure Dependabot or Renovate"
+    depends_on: [add-issue-templates, add-pr-template, add-code-of-conduct, init-changelog]
+    gate:
+      contract: oss-pipelines
+    description: |
+      Weekly updates for the package ecosystems in use and for the
+      GitHub Actions themselves, grouped so the noise stays manageable.
+
+  - id: final-review
+    title: "Final review: walk the release checklist"
+    depends_on: [add-ci-workflow, add-release-workflow, add-dependency-bot]
+    description: |
+      Walk the checklist and fix what fails:
+
+      - no secrets or private references in the history (rerun the scanner)
+      - LICENSE present and correct
+      - README renders on GitHub
+      - every CI workflow passes on the branch
+      - CHANGELOG has an Unreleased or first-version entry
+      - issue and pull request templates render in the GitHub UI
+      - description, topics and homepage set in the repo settings
+      - branch protection enabled on the default branch
+      - Issues and Discussions enabled as intended
+
+  - id: run-full-test-suite
+    kind: exec
+    title: "Run the full test suite"
+    depends_on: [final-review]
+    exec:
+      argv: [make, test]
+      timeout: 30m
+    description: |
+      Run the project's own test target. Replace the argv with the real
+      runner when the project has no Makefile: `go test ./...`,
+      `npm test`, `pytest`, and so on. A nonzero exit stops the release.
+
+  - id: cut-initial-tag
+    title: "Cut the first release tag"
+    depends_on: [run-full-test-suite]
+    gate:
+      contract: oss-release
+    description: |
+      Confirm the version with the owner, then tag and publish:
+
+      ```bash
+      VERSION="v0.1.0"
+      git tag -a "$VERSION" -m "Initial public release"
+      git push origin "$VERSION"
+      gh release create "$VERSION" --generate-notes
+      ```
+
+      Check that the release workflow ran and that the artifacts are
+      attached before telling anyone the release is out.

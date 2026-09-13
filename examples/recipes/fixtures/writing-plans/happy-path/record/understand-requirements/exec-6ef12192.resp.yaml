@@ -1,0 +1,12 @@
+xrr: "1"
+adapter: exec
+fingerprint: 6ef12192
+recorded_at: "2026-04-02T08:31:51Z"
+payload:
+    stdout: |
+        ℹ Analyzing repo at: /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo
+        ℹ Found 235 files.
+        ℹ Top 5 ranked nodes:
+          internal/cli/test_helpers.go::newTestCmd: 0.0147
+          internal/cli/root.go::getStorageRaw: 0.0135
+    exit_code: 0

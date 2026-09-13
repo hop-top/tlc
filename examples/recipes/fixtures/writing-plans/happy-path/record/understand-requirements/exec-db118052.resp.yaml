@@ -1,0 +1,19 @@
+xrr: "1"
+adapter: exec
+fingerprint: db118052
+recorded_at: "2026-04-02T08:35:51Z"
+payload:
+    stdout: |
+        === RUN   TestRunResolutionByDirName
+        --- PASS: TestRunResolutionByDirName (0.00s)
+        === RUN   TestRunResolutionWithManifest
+        --- PASS: TestRunResolutionWithManifest (0.00s)
+        === RUN   TestRunResolutionSingleNamed
+        --- PASS: TestRunResolutionSingleNamed (0.00s)
+        === RUN   TestRunResolutionNotFound
+        --- PASS: TestRunResolutionNotFound (0.00s)
+        PASS
+        ok  	hop.top/tlc/internal/flowtest	0.203s
+        ?   	hop.top/tlc/internal/flowtest/shims/shimlib	[no test files]
+        ?   	hop.top/tlc/internal/flowtest/shims/shims	[no test files]
+    exit_code: 0

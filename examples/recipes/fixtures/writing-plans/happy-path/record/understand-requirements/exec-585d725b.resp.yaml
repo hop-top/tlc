@@ -1,0 +1,21 @@
+xrr: "1"
+adapter: exec
+fingerprint: 585d725b
+recorded_at: "2026-04-02T08:35:52Z"
+payload:
+    stdout: |
+        === RUN   TestHookNoContract
+        --- PASS: TestHookNoContract (0.00s)
+        === RUN   TestHookMissingContractsDir
+        --- PASS: TestHookMissingContractsDir (0.00s)
+        === RUN   TestHookNoEVAURL
+        --- PASS: TestHookNoEVAURL (0.00s)
+        === RUN   TestHookContractPass
+        --- PASS: TestHookContractPass (0.00s)
+        === RUN   TestHookContractFail
+        --- PASS: TestHookContractFail (0.00s)
+        PASS
+        ok  	hop.top/tlc/internal/flowtest	0.205s
+        ?   	hop.top/tlc/internal/flowtest/shims/shimlib	[no test files]
+        ?   	hop.top/tlc/internal/flowtest/shims/shims	[no test files]
+    exit_code: 0

@@ -1,0 +1,11 @@
+xrr: "1"
+adapter: exec
+fingerprint: "79078727"
+recorded_at: "2026-04-02T08:36:00Z"
+payload:
+    argv:
+        - "-20"
+    stdin: |
+        testing: warning: no tests to run
+        PASS
+        ok  	hop.top/tlc/internal/cli	0.325s [no tests to run]
