@@ -737,6 +737,20 @@ agents:
 - Container mode is the default (uses `image` from agents.yaml)
 - `--local` — opt-in: run agent in-process using `binary` path
 
+**Exec-kind tasks under `tlc track execute`:**
+- Host by default: the argv runs in the working directory with `exec.cwd`,
+  `env`, `timeout` and `stdout_max` all enforced.
+- `--with-pod` passed explicitly (`--with-pod` or `--with-pod=<image>`) runs
+  each exec task in a fresh pod from that image, else the `--agent`'s image:
+  the working tree is copied to `/workspace`, `exec.env` is set at pod
+  creation and `exec.cwd` resolves under `/workspace`.
+- What the pod path cannot cap: `exec.timeout` ends the wait and kills the
+  local pod client, but the protocol cannot signal the remote command (it
+  dies with the pod, destroyed right after); `exec.stdout_max` is applied
+  after the transfer, so the whole output is still buffered on the host
+  before it is cut; an empty `env` value cannot unset a variable the image
+  provides; files the command writes stay in the pod.
+
 See [docs/plans/2026-04-02-flowtest-agent-dispatch.md](docs/plans/2026-04-02-flowtest-agent-dispatch.md) for design details.
 
 ### Interactive TUI
