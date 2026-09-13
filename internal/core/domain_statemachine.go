@@ -14,12 +14,10 @@ import (
 //	                              transition committed.
 //
 // Sibling tools subscribe to "tlc.task.status.*" / "tlc.track.status.*"
-// / "tlc.flow.status.*" to react to lifecycle changes without coupling
-// to tlc internals.
+// to react to lifecycle changes without coupling to tlc internals.
 const (
 	stateMachinePrefixTask  = "tlc.task.status"
 	stateMachinePrefixTrack = "tlc.track.status"
-	stateMachinePrefixFlow  = "tlc.flow.status"
 )
 
 // NewTaskStateMachine builds a domain.StateMachine from a TaskConfig.
@@ -85,30 +83,6 @@ func NewTrackStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *d
 	return domain.NewStateMachine(
 		rules, pub,
 		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixTrack)}, opts...)...,
-	)
-}
-
-// NewFlowStateMachine builds a domain.StateMachine for flow run lifecycle.
-// Rules: queued->running, running->succeeded/failed/canceled/paused,
-// paused->running/canceled. Succeeded/failed/canceled are terminal.
-func NewFlowStateMachine(pub domain.EventPublisher, opts ...domain.SMOption) *domain.StateMachine {
-	rules := map[domain.State][]domain.State{
-		domain.State(FlowStatusQueued): {domain.State(FlowStatusRunning)},
-		domain.State(FlowStatusRunning): {
-			domain.State(FlowStatusSucceeded),
-			domain.State(FlowStatusFailed),
-			domain.State(FlowStatusCanceled),
-			domain.State(FlowStatusPaused),
-		},
-		domain.State(FlowStatusPaused): {
-			domain.State(FlowStatusRunning),
-			domain.State(FlowStatusCanceled),
-		},
-		// succeeded, failed, canceled: terminal — no outgoing transitions
-	}
-	return domain.NewStateMachine(
-		rules, pub,
-		append([]domain.SMOption{domain.WithSMTopicPrefix(stateMachinePrefixFlow)}, opts...)...,
 	)
 }
 

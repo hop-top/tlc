@@ -469,10 +469,8 @@ func resetTaskFlags() {
 	// Reset track flags.
 	resetTrackFlags()
 	resetTrackGraphFlags()
-	resetTrackExecFlags()
-
-	// Reset flow flags.
-	resetFlowFlags()
+	resetTrackExecuteFlags()
+	resetRecipeCreateFlags()
 
 	tasksSyncDryRun = false
 	taskSyncProjectionDryRun = false
@@ -516,29 +514,9 @@ func resetTaskFlags() {
 	busPublisher = nil
 }
 
-// resetFlowFlags clears the package-level state bound to flow.go's Cobra
-// flags. Without this, --var values (and --by) leak between tests because
-// FlowRunCmd / FlowInvokeCmd are package globals shared across test commands.
-func resetFlowFlags() {
-	flowDryRun = false
-	flowRunBy = ""
-	flowRunVars = nil
-	flowStatusAll = false
-
-	for _, cmd := range []*cobra.Command{
-		FlowRunCmd, FlowInvokeCmd, FlowStatusCmd, FlowListCmd,
-	} {
-		if cmd != nil {
-			cmd.Flags().VisitAll(func(f *pflag.Flag) {
-				f.Changed = false
-			})
-		}
-	}
-}
-
 // setupProjectScopedTestDir creates a fresh tmpDir, chdirs into it, writes
 // a minimal .tlc/config.yaml with the given project ID, and wires viper so
-// DetectProject() returns InProject=true with that ID. Used by flow tests
+// DetectProject() returns InProject=true with that ID. Used by tests
 // that need to exercise the project-scoped path of CreateTask + AddLog.
 //
 // Returns (tmpDir, dbPath). All cleanup is registered via t.Cleanup.
@@ -578,7 +556,7 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 	viper.Set("config", projectCfgPath)
 	viper.Set("storage.backend", "sqlite")
 	viper.Set("storage.db_path", dbPath)
-	resetTaskFlags() // also resets flow flags via resetFlowFlags()
+	resetTaskFlags()
 	t.Cleanup(func() {
 		cfgFile = ""
 		viper.Reset()
@@ -586,7 +564,6 @@ func setupProjectScopedTestDir(t *testing.T, prefix, projectID string) (string, 
 		core.ResetDefaultWorkflow()
 		dbSyncOnce = sync.Once{}
 		touchOnce = sync.Once{}
-		resetFlowFlags()
 	})
 
 	return tmpDir, dbPath
@@ -689,4 +666,57 @@ func newTestInitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&duplicateIDStrategy, "duplicate-id-strategy", "", "Duplicate ID strategy: share, unique, prompt (default: share)")
 
 	return cmd
+}
+
+// resetRecipeFlags zeroes recipe flag state between in-process runs so a
+// --source from one test does not leak into the next.
+func resetRecipeFlags() {
+	recipeListSource = ""
+	recipeImportVars = nil
+	recipeImportName, recipeImportVersion, recipeImportOutput = "", "", ""
+	recipeImportInstall, recipeImportForce, recipeImportExternal = false, false, false
+	recipeRunsAllProjects, recipeRunsTrack = false, ""
+	recipeDiffRecipe = ""
+	for _, cmd := range []*cobra.Command{
+		recipeListCmd, recipeShowCmd, recipeValidateCmd, recipeImportCmd, recipeRunsCmd, recipeDiffCmd,
+	} {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+			// A test root's persistent --dry-run stays merged into the leaf's
+			// flag set; put it back to its default so it cannot leak.
+			if f.Name == "dry-run" {
+				_ = f.Value.Set(f.DefValue) //nolint:errcheck // bool default always parses
+			}
+		})
+	}
+}
+
+// resetRecipeCreateFlags zeroes the --recipe surface shared by track
+// create, task create, task execute and track execute. The create
+// commands' Changed bits are cleared by resetTaskFlags; the execute
+// commands' are cleared here.
+func resetRecipeCreateFlags() {
+	recipeFlagRecipe = ""
+	recipeFlagVars = nil
+	recipeFlagTasks = nil
+	recipeFlagWithDeps = false
+	recipeFlagFor = ""
+	recipeFlagAssign = false
+	recipeFlagInfer = false
+	recipeFlagRecreate = false
+	for _, cmd := range []*cobra.Command{TaskExecCmd, trackExecuteCmd} {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+		})
+	}
+	// A test root's persistent --dry-run is merged into the global
+	// create commands' flag sets on first parse and stays there, value
+	// included; clear it so a later test without the flag is not a dry
+	// run.
+	for _, cmd := range []*cobra.Command{trackCreateCmd, TaskCreateCmd} {
+		if f := cmd.Flags().Lookup("dry-run"); f != nil {
+			_ = f.Value.Set("false") //nolint:errcheck // bool flag; "false" always parses
+			f.Changed = false
+		}
+	}
 }

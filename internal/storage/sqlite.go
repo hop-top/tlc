@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -122,58 +123,15 @@ func (s *SQLiteStorage) withWriteTransaction(ctx context.Context, fn func(*sql.T
 
 func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		metaJSON, _ := json.Marshal(task.Meta)
-		tagsJSON, _ := json.Marshal(task.Tags)
-
-		var lastSyncAt *string
-		if task.LastSyncAt != nil {
-			s := util.FormatStorageTime(*task.LastSyncAt)
-			lastSyncAt = &s
-		}
-
-		var staleTimeout *int64
-		if task.StaleTimeout != nil {
-			ns := int64(*task.StaleTimeout)
-			staleTimeout = &ns
-		}
-		var staleFiredAt *string
-		if task.StaleFiredAt != nil {
-			s := util.FormatStorageTime(*task.StaleFiredAt)
-			staleFiredAt = &s
-		}
-
-		var dueAt *string
-		if task.DueAt != nil {
-			s := util.FormatStorageTime(*task.DueAt)
-			dueAt = &s
-		}
-		var remindAt *string
-		if task.RemindAt != nil {
-			s := util.FormatStorageTime(*task.RemindAt)
-			remindAt = &s
-		}
-		var rrule *string
-		if task.RRule != "" {
-			s := task.RRule
-			rrule = &s
-		}
-		noAutoRemind := 0
-		if task.NoAutoRemind {
-			noAutoRemind = 1
-		}
-
-		// Coalesce nil ProjectID to empty string for consistent scoping.
-		var projectID string
-		if task.ProjectID != nil {
-			projectID = *task.ProjectID
-		}
+		// encodeTask coalesces a nil ProjectID to "" for consistent scoping.
+		row := encodeTask(task)
 
 		// Allocate a sequence number for the T-NNNN+ display alias if one
 		// hasn't already been assigned. Allocation runs in the same write
 		// transaction as the insert so concurrent creates can never collide
 		// on (project_id, seq).
 		if task.Seq == 0 {
-			seq, err := allocSeqInTx(ctx, tx, projectID)
+			seq, err := allocSeqInTx(ctx, tx, row.projectID)
 			if err != nil {
 				return fmt.Errorf("failed to allocate task sequence: %w", err)
 			}
@@ -181,14 +139,8 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 		}
 
 		_, err := tx.ExecContext(
-			ctx, `
-			INSERT INTO tasks (id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			task.ID, task.Seq, task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			util.FormatStorageTime(task.CreatedAt), util.FormatStorageTime(task.UpdatedAt),
-			string(metaJSON), string(tagsJSON), task.OriginSystem, lastSyncAt, task.Archived, projectID,
-			string(task.Effort), string(task.Priority), staleTimeout, task.BlockedReason, staleFiredAt,
-			task.TrackID, dueAt, remindAt, rrule, noAutoRemind,
+			ctx, "INSERT INTO tasks ("+taskColumns+") VALUES ("+taskPlaceholders+")",
+			row.insertArgs(task)...,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert task: %w", err)
@@ -206,89 +158,19 @@ func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, err
 	proj := core.DetectProject()
 	var row *sql.Row
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
-		row = s.db.QueryRowContext(ctx, "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
+		row = s.db.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM tasks WHERE id = ? AND project_id = ?", id, proj.ProjectID)
 	} else {
 		// Prefer the global bucket (project_id='') over project-scoped rows so that
 		// tasks created outside any project context are consistently resolved even
 		// when sync has duplicated them into project-specific rows.
-		row = s.db.QueryRowContext(ctx, "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
+		row = s.db.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM tasks WHERE id = ? ORDER BY CASE WHEN project_id = '' THEN 0 ELSE 1 END LIMIT 1", id)
 	}
 
-	var task core.Task
-	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
-	var staleTimeoutNs sql.NullInt64
-	var blockedReasonStr, staleFiredAtStr, trackIDStr sql.NullString
-	var dueAtStr, remindAtStr, rruleStr sql.NullString
-	var noAutoRemindInt sql.NullInt64
-
-	err := row.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &rruleStr, &noAutoRemindInt)
-	if err == sql.ErrNoRows {
+	task, err := scanTask(row)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan task row: %w", err)
-	}
-
-	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
-	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
-
-	if metaStr.Valid {
-		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
-		}
-	}
-	if tagsStr.Valid {
-		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
-		}
-	}
-	if originSystemStr.Valid {
-		task.OriginSystem = &originSystemStr.String
-	}
-	if lastSyncAtStr.Valid {
-		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
-		task.LastSyncAt = &t
-	}
-	if projectIDStr.Valid {
-		task.ProjectID = &projectIDStr.String
-	}
-	if effortStr.Valid {
-		task.Effort = core.Effort(effortStr.String)
-	}
-	if priorityStr.Valid {
-		task.Priority = core.Priority(priorityStr.String)
-	}
-	if staleTimeoutNs.Valid {
-		d := time.Duration(staleTimeoutNs.Int64)
-		task.StaleTimeout = &d
-	}
-	if blockedReasonStr.Valid {
-		task.BlockedReason = &blockedReasonStr.String
-	}
-	if staleFiredAtStr.Valid {
-		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
-		task.StaleFiredAt = &t
-	}
-	if trackIDStr.Valid {
-		task.TrackID = &trackIDStr.String
-	}
-	if dueAtStr.Valid {
-		t, _ := util.ParseStorageTime(dueAtStr.String)
-		task.DueAt = &t
-	}
-	if remindAtStr.Valid {
-		t, _ := util.ParseStorageTime(remindAtStr.String)
-		task.RemindAt = &t
-	}
-	if rruleStr.Valid {
-		task.RRule = rruleStr.String
-	}
-	if noAutoRemindInt.Valid && noAutoRemindInt.Int64 != 0 {
-		task.NoAutoRemind = true
-	}
-
-	return &task, nil
+	return task, err
 }
 
 // TaskIDExists reports whether any row exists with the given task ID,
@@ -311,86 +193,14 @@ func (s *SQLiteStorage) TaskIDExists(ctx context.Context, id string) (bool, erro
 
 func (s *SQLiteStorage) GetTaskInProject(ctx context.Context, id, projectID string) (*core.Task, error) {
 	row := s.db.QueryRowContext(
-		ctx,
-		"SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks WHERE id = ? AND project_id = ?",
-		id, projectID,
+		ctx, "SELECT "+taskColumns+" FROM tasks WHERE id = ? AND project_id = ?", id, projectID,
 	)
 
-	var task core.Task
-	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
-	var staleTimeoutNs sql.NullInt64
-	var blockedReasonStr, staleFiredAtStr, trackIDStr sql.NullString
-	var dueAtStr, remindAtStr, rruleStr sql.NullString
-	var noAutoRemindInt sql.NullInt64
-
-	err := row.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &rruleStr, &noAutoRemindInt)
-	if err == sql.ErrNoRows {
+	task, err := scanTask(row)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan task row: %w", err)
-	}
-
-	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
-	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
-
-	if metaStr.Valid {
-		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
-		}
-	}
-	if tagsStr.Valid {
-		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
-		}
-	}
-	if originSystemStr.Valid {
-		task.OriginSystem = &originSystemStr.String
-	}
-	if lastSyncAtStr.Valid {
-		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
-		task.LastSyncAt = &t
-	}
-	if projectIDStr.Valid {
-		task.ProjectID = &projectIDStr.String
-	}
-	if effortStr.Valid {
-		task.Effort = core.Effort(effortStr.String)
-	}
-	if priorityStr.Valid {
-		task.Priority = core.Priority(priorityStr.String)
-	}
-	if staleTimeoutNs.Valid {
-		d := time.Duration(staleTimeoutNs.Int64)
-		task.StaleTimeout = &d
-	}
-	if blockedReasonStr.Valid {
-		task.BlockedReason = &blockedReasonStr.String
-	}
-	if staleFiredAtStr.Valid {
-		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
-		task.StaleFiredAt = &t
-	}
-	if trackIDStr.Valid {
-		task.TrackID = &trackIDStr.String
-	}
-	if dueAtStr.Valid {
-		t, _ := util.ParseStorageTime(dueAtStr.String)
-		task.DueAt = &t
-	}
-	if remindAtStr.Valid {
-		t, _ := util.ParseStorageTime(remindAtStr.String)
-		task.RemindAt = &t
-	}
-	if rruleStr.Valid {
-		task.RRule = rruleStr.String
-	}
-	if noAutoRemindInt.Valid && noAutoRemindInt.Int64 != 0 {
-		task.NoAutoRemind = true
-	}
-
-	return &task, nil
+	return task, err
 }
 
 // GetTaskBySeq retrieves a task by its (project_id, seq) display alias.
@@ -420,79 +230,7 @@ func (s *SQLiteStorage) GetTaskBySeq(ctx context.Context, projectID string, seq 
 
 func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		metaJSON, _ := json.Marshal(task.Meta)
-		tagsJSON, _ := json.Marshal(task.Tags)
-
-		var lastSyncAt *string
-		if task.LastSyncAt != nil {
-			s := util.FormatStorageTime(*task.LastSyncAt)
-			lastSyncAt = &s
-		}
-
-		var staleTimeout *int64
-		if task.StaleTimeout != nil {
-			ns := int64(*task.StaleTimeout)
-			staleTimeout = &ns
-		}
-		var staleFiredAt *string
-		if task.StaleFiredAt != nil {
-			s := util.FormatStorageTime(*task.StaleFiredAt)
-			staleFiredAt = &s
-		}
-
-		var dueAt *string
-		if task.DueAt != nil {
-			s := util.FormatStorageTime(*task.DueAt)
-			dueAt = &s
-		}
-		var remindAt *string
-		if task.RemindAt != nil {
-			s := util.FormatStorageTime(*task.RemindAt)
-			remindAt = &s
-		}
-		var rrule *string
-		if task.RRule != "" {
-			s := task.RRule
-			rrule = &s
-		}
-		noAutoRemind := 0
-		if task.NoAutoRemind {
-			noAutoRemind = 1
-		}
-
-		projectID := ""
-		if task.ProjectID != nil {
-			projectID = *task.ProjectID
-		}
-		res, err := tx.ExecContext(
-			ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?, track_id = ?, due_at = ?, remind_at = ?, rrule = ?, no_auto_remind = ?
-			WHERE id = ? AND project_id = ?`,
-			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			util.FormatStorageTime(task.UpdatedAt), string(metaJSON), string(tagsJSON),
-			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority),
-			staleTimeout, task.BlockedReason, staleFiredAt, task.TrackID,
-			dueAt, remindAt, rrule, noAutoRemind, task.ID, projectID,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to update task: %w", err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("failed to get rows affected: %w", err)
-		}
-		if n == 0 {
-			var exists int
-			err = tx.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`, task.ID, projectID).Scan(&exists)
-			if err == sql.ErrNoRows {
-				return fmt.Errorf("task %s not found (project_id=%q)", task.ID, projectID)
-			}
-			if err != nil {
-				return fmt.Errorf("failed to verify task existence: %w", err)
-			}
-			// row exists, values were unchanged — not an error
-		}
-		return nil
+		return updateTaskInTx(ctx, tx, task)
 	}); err != nil {
 		return err
 	}
@@ -503,83 +241,19 @@ func (s *SQLiteStorage) UpdateTask(ctx context.Context, task *core.Task) error {
 
 func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, entry *core.LogEntry) error {
 	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		// Update Task
-		metaJSON, _ := json.Marshal(task.Meta)
-		tagsJSON, _ := json.Marshal(task.Tags)
-		var lastSyncAt *string
-		if task.LastSyncAt != nil {
-			s := util.FormatStorageTime(*task.LastSyncAt)
-			lastSyncAt = &s
-		}
-
-		var staleTimeout *int64
-		if task.StaleTimeout != nil {
-			ns := int64(*task.StaleTimeout)
-			staleTimeout = &ns
-		}
-		var staleFiredAt *string
-		if task.StaleFiredAt != nil {
-			s := util.FormatStorageTime(*task.StaleFiredAt)
-			staleFiredAt = &s
-		}
-
-		var dueAt *string
-		if task.DueAt != nil {
-			s := util.FormatStorageTime(*task.DueAt)
-			dueAt = &s
-		}
-		var remindAt *string
-		if task.RemindAt != nil {
-			s := util.FormatStorageTime(*task.RemindAt)
-			remindAt = &s
-		}
-		var rrule *string
-		if task.RRule != "" {
-			s := task.RRule
-			rrule = &s
-		}
-		noAutoRemind := 0
-		if task.NoAutoRemind {
-			noAutoRemind = 1
+		if err := updateTaskInTx(ctx, tx, task); err != nil {
+			return err
 		}
 
 		projectID := ""
 		if task.ProjectID != nil {
 			projectID = *task.ProjectID
 		}
-		res, err := tx.ExecContext(
-			ctx, `
-			UPDATE tasks SET title = ?, description = ?, status = ?, assigned_to = ?, reference = ?, updated_at = ?, meta = ?, tags = ?, origin_system = ?, last_sync_at = ?, archived = ?, effort = ?, priority = ?, stale_timeout = ?, blocked_reason = ?, stale_fired_at = ?, track_id = ?, due_at = ?, remind_at = ?, rrule = ?, no_auto_remind = ?
-			WHERE id = ? AND project_id = ?`,
-			task.Title, task.Description, task.Status, task.AssignedTo, task.Reference,
-			util.FormatStorageTime(task.UpdatedAt), string(metaJSON), string(tagsJSON),
-			task.OriginSystem, lastSyncAt, task.Archived, string(task.Effort), string(task.Priority),
-			staleTimeout, task.BlockedReason, staleFiredAt, task.TrackID,
-			dueAt, remindAt, rrule, noAutoRemind, task.ID, projectID,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to update task: %w", err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("failed to get rows affected: %w", err)
-		}
-		if n == 0 {
-			var exists int
-			err = tx.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`, task.ID, projectID).Scan(&exists)
-			if err == sql.ErrNoRows {
-				return fmt.Errorf("task %s not found (project_id=%q)", task.ID, projectID)
-			}
-			if err != nil {
-				return fmt.Errorf("failed to verify task existence: %w", err)
-			}
-			// row exists, values were unchanged — not an error
-		}
 
 		// Add Log
 		logMetaJSON, _ := json.Marshal(entry.Meta)
 
-		_, err = tx.ExecContext(
+		_, err := tx.ExecContext(
 			ctx, `
 			INSERT INTO task_logs (project_id, task_id, timestamp, by, action, note, meta)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -763,7 +437,7 @@ func vocabRankOrder(query core.Query, order string) (string, []any) {
 }
 
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
-	sqlQuery := "SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind FROM tasks"
+	sqlQuery := "SELECT " + taskColumns + " FROM tasks"
 
 	whereClauses, args := buildTaskWhereClauses(query)
 
@@ -813,7 +487,7 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 
 	var tasks []*core.Task
 	for rows.Next() {
-		task, err := scanTaskFromRow(rows)
+		task, err := scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -939,89 +613,19 @@ func (s *SQLiteStorage) DeleteTask(ctx context.Context, id string) error {
 }
 
 func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID string) (*core.Task, error) {
-	sqlQuery := `
-		SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind
-		FROM tasks
+	sqlQuery := "SELECT " + taskColumns + ` FROM tasks
 		WHERE origin_system = ? AND json_extract(meta, '$.origin_id') = ?
-		LIMIT 1
-	`
+		LIMIT 1`
 	row := s.db.QueryRowContext(ctx, sqlQuery, system, originID)
 
-	var task core.Task
-	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
-	var staleTimeoutNs sql.NullInt64
-	var blockedReasonStr, staleFiredAtStr, trackIDStr sql.NullString
-	var dueAtStr, remindAtStr, rruleStr sql.NullString
-	var noAutoRemindInt sql.NullInt64
-
-	err := row.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &rruleStr, &noAutoRemindInt)
-	if err == sql.ErrNoRows {
+	task, err := scanTask(row)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan task by origin: %w", err)
 	}
-
-	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
-	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
-
-	if metaStr.Valid {
-		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
-		}
-	}
-	if tagsStr.Valid {
-		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
-		}
-	}
-	if originSystemStr.Valid {
-		task.OriginSystem = &originSystemStr.String
-	}
-	if lastSyncAtStr.Valid {
-		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
-		task.LastSyncAt = &t
-	}
-	if projectIDStr.Valid {
-		task.ProjectID = &projectIDStr.String
-	}
-	if effortStr.Valid {
-		task.Effort = core.Effort(effortStr.String)
-	}
-	if priorityStr.Valid {
-		task.Priority = core.Priority(priorityStr.String)
-	}
-	if staleTimeoutNs.Valid {
-		d := time.Duration(staleTimeoutNs.Int64)
-		task.StaleTimeout = &d
-	}
-	if blockedReasonStr.Valid {
-		task.BlockedReason = &blockedReasonStr.String
-	}
-	if staleFiredAtStr.Valid {
-		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
-		task.StaleFiredAt = &t
-	}
-	if trackIDStr.Valid {
-		task.TrackID = &trackIDStr.String
-	}
-	if dueAtStr.Valid {
-		t, _ := util.ParseStorageTime(dueAtStr.String)
-		task.DueAt = &t
-	}
-	if remindAtStr.Valid {
-		t, _ := util.ParseStorageTime(remindAtStr.String)
-		task.RemindAt = &t
-	}
-	if rruleStr.Valid {
-		task.RRule = rruleStr.String
-	}
-	if noAutoRemindInt.Valid && noAutoRemindInt.Int64 != 0 {
-		task.NoAutoRemind = true
-	}
-
-	return &task, nil
+	return task, nil
 }
 
 func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
@@ -1051,13 +655,10 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, error) {
 	// A task needs push if it has an origin system AND (it has never been synced OR updated_at > last_sync_at)
 	// AND it is NOT archived.
-	sqlQuery := `
-		SELECT id, seq, title, description, status, assigned_to, reference, created_at, updated_at, meta, tags, origin_system, last_sync_at, archived, project_id, effort, priority, stale_timeout, blocked_reason, stale_fired_at, track_id, due_at, remind_at, rrule, no_auto_remind
-		FROM tasks
+	sqlQuery := "SELECT " + taskColumns + ` FROM tasks
 		WHERE origin_system IS NOT NULL AND origin_system != ''
 		AND (last_sync_at IS NULL OR updated_at > last_sync_at)
-		AND archived = 0
-	`
+		AND archived = 0`
 	rows, err := s.db.QueryContext(ctx, sqlQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query tasks needing push: %w", err)
@@ -1066,7 +667,7 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 
 	var tasks []*core.Task
 	for rows.Next() {
-		task, err := scanTaskFromRow(rows)
+		task, err := scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -1076,132 +677,6 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 		return nil, fmt.Errorf("failed to iterate tasks needing push: %w", err)
 	}
 	return tasks, nil
-}
-
-func (s *SQLiteStorage) CreateFlowRun(ctx context.Context, run *core.FlowRun) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		resultsJSON, _ := json.Marshal(run.Results)
-		_, err := tx.ExecContext(
-			ctx, `
-			INSERT INTO flow_runs (id, flow_id, status, started_at, ended_at, results)
-			VALUES (?, ?, ?, ?, ?, ?)`,
-			run.ID, run.FlowID, run.Status, util.FormatStorageTime(run.StartedAt),
-			nil, string(resultsJSON),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert flow run: %w", err)
-		}
-		return nil
-	})
-}
-
-func (s *SQLiteStorage) GetFlowRun(ctx context.Context, id string) (*core.FlowRun, error) {
-	row := s.db.QueryRowContext(ctx, "SELECT id, flow_id, status, started_at, ended_at, results FROM flow_runs WHERE id = ?", id)
-
-	var run core.FlowRun
-	var startedAtStr string
-	var endedAtStr, resultsStr sql.NullString
-
-	err := row.Scan(&run.ID, &run.FlowID, &run.Status, &startedAtStr, &endedAtStr, &resultsStr)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan flow run: %w", err)
-	}
-
-	run.StartedAt, _ = util.ParseStorageTime(startedAtStr)
-	if endedAtStr.Valid {
-		t, _ := util.ParseStorageTime(endedAtStr.String)
-		run.EndedAt = &t
-	}
-	if resultsStr.Valid {
-		if err := json.Unmarshal([]byte(resultsStr.String), &run.Results); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal results: %w", err)
-		}
-	}
-
-	return &run, nil
-}
-
-func (s *SQLiteStorage) UpdateFlowRun(ctx context.Context, run *core.FlowRun) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		resultsJSON, _ := json.Marshal(run.Results)
-		var endedAt interface{}
-		if run.EndedAt != nil {
-			endedAt = util.FormatStorageTime(*run.EndedAt)
-		}
-
-		_, err := tx.ExecContext(
-			ctx, `
-			UPDATE flow_runs SET status = ?, ended_at = ?, results = ?
-			WHERE id = ?`,
-			run.Status, endedAt, string(resultsJSON), run.ID,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to update flow run: %w", err)
-		}
-		return nil
-	})
-}
-
-func (s *SQLiteStorage) ListFlowRuns(ctx context.Context, query core.Query) ([]*core.FlowRun, error) {
-	sqlQuery := "SELECT id, flow_id, status, started_at, ended_at, results FROM flow_runs"
-	var args []interface{}
-
-	// Basic implementation, can be extended like ListTasks
-	sqlQuery += " ORDER BY started_at DESC"
-
-	if query.Limit > 0 {
-		sqlQuery += " LIMIT ?"
-		args = append(args, query.Limit)
-	}
-
-	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query flow runs: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var runs []*core.FlowRun
-	for rows.Next() {
-		var run core.FlowRun
-		var startedAtStr string
-		var endedAtStr, resultsStr sql.NullString
-		if err := rows.Scan(&run.ID, &run.FlowID, &run.Status, &startedAtStr, &endedAtStr, &resultsStr); err != nil {
-			return nil, fmt.Errorf("failed to scan flow run row: %w", err)
-		}
-		run.StartedAt, _ = util.ParseStorageTime(startedAtStr)
-		if endedAtStr.Valid {
-			t, _ := util.ParseStorageTime(endedAtStr.String)
-			run.EndedAt = &t
-		}
-		if resultsStr.Valid {
-			if err := json.Unmarshal([]byte(resultsStr.String), &run.Results); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal results: %w", err)
-			}
-		}
-		runs = append(runs, &run)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate flow run rows: %w", err)
-	}
-	return runs, nil
-}
-
-// deleteFlowRun removes a flow run by ID.
-func (s *SQLiteStorage) deleteFlowRun(ctx context.Context, id string) error {
-	return s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, "DELETE FROM flow_runs WHERE id = ?", id)
-		if err != nil {
-			return fmt.Errorf("failed to delete flow run: %w", err)
-		}
-		n, _ := res.RowsAffected()
-		if n == 0 {
-			return fmt.Errorf("flow run %s not found", id)
-		}
-		return nil
-	})
 }
 
 func (s *SQLiteStorage) ListLogs(ctx context.Context, query core.LogQuery) ([]*core.LogEntry, error) {
@@ -1344,76 +819,6 @@ func allocCounterSeqInTx(
 	}
 
 	return nextID, nil
-}
-
-func scanTaskFromRow(rows *sql.Rows) (*core.Task, error) {
-	var task core.Task
-	var createdAtStr, updatedAtStr string
-	var metaStr, tagsStr, originSystemStr, lastSyncAtStr, projectIDStr, effortStr, priorityStr sql.NullString
-	var staleTimeoutNs sql.NullInt64
-	var blockedReasonStr, staleFiredAtStr, trackIDStr sql.NullString
-	var dueAtStr, remindAtStr, rruleStr sql.NullString
-	var noAutoRemindInt sql.NullInt64
-	if err := rows.Scan(&task.ID, &task.Seq, &task.Title, &task.Description, &task.Status, &task.AssignedTo, &task.Reference, &createdAtStr, &updatedAtStr, &metaStr, &tagsStr, &originSystemStr, &lastSyncAtStr, &task.Archived, &projectIDStr, &effortStr, &priorityStr, &staleTimeoutNs, &blockedReasonStr, &staleFiredAtStr, &trackIDStr, &dueAtStr, &remindAtStr, &rruleStr, &noAutoRemindInt); err != nil {
-		return nil, fmt.Errorf("failed to scan task row: %w", err)
-	}
-	task.CreatedAt, _ = util.ParseStorageTime(createdAtStr)
-	task.UpdatedAt, _ = util.ParseStorageTime(updatedAtStr)
-	if metaStr.Valid {
-		if err := json.Unmarshal([]byte(metaStr.String), &task.Meta); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
-		}
-	}
-	if tagsStr.Valid {
-		if err := json.Unmarshal([]byte(tagsStr.String), &task.Tags); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal tags: %w", err)
-		}
-	}
-	if originSystemStr.Valid {
-		task.OriginSystem = &originSystemStr.String
-	}
-	if lastSyncAtStr.Valid {
-		t, _ := util.ParseStorageTime(lastSyncAtStr.String)
-		task.LastSyncAt = &t
-	}
-	if projectIDStr.Valid {
-		task.ProjectID = &projectIDStr.String
-	}
-	if effortStr.Valid {
-		task.Effort = core.Effort(effortStr.String)
-	}
-	if priorityStr.Valid {
-		task.Priority = core.Priority(priorityStr.String)
-	}
-	if staleTimeoutNs.Valid {
-		d := time.Duration(staleTimeoutNs.Int64)
-		task.StaleTimeout = &d
-	}
-	if blockedReasonStr.Valid {
-		task.BlockedReason = &blockedReasonStr.String
-	}
-	if staleFiredAtStr.Valid {
-		t, _ := util.ParseStorageTime(staleFiredAtStr.String)
-		task.StaleFiredAt = &t
-	}
-	if trackIDStr.Valid {
-		task.TrackID = &trackIDStr.String
-	}
-	if dueAtStr.Valid {
-		t, _ := util.ParseStorageTime(dueAtStr.String)
-		task.DueAt = &t
-	}
-	if remindAtStr.Valid {
-		t, _ := util.ParseStorageTime(remindAtStr.String)
-		task.RemindAt = &t
-	}
-	if rruleStr.Valid {
-		task.RRule = rruleStr.String
-	}
-	if noAutoRemindInt.Valid && noAutoRemindInt.Int64 != 0 {
-		task.NoAutoRemind = true
-	}
-	return &task, nil
 }
 
 func (s *SQLiteStorage) RegisterProject(ctx context.Context, projectID, dbPath, spaceURI, label string) error {

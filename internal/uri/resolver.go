@@ -3,8 +3,6 @@ package uri
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"hop.top/cite/scheme"
@@ -15,8 +13,11 @@ import (
 
 // Resolver handles resolution of TLC resource URIs.
 type Resolver struct {
-	storage  *storage.SQLiteStorage
-	FlowsDir string // overrides default flows directory; empty = "examples/flows"
+	storage *storage.SQLiteStorage
+
+	// RecipeDirs is the recipe search path in precedence order. A
+	// project-scoped recipe URI prepends that project's own recipes dir.
+	RecipeDirs []string
 
 	// DBCache caches cross-project DB handles. When nil, ResolveTask
 	// opens a fresh handle on every cross-DB lookup and the caller (or
@@ -37,14 +38,6 @@ func (r *Resolver) WithDBCache(cache *ProjectDBCache) *Resolver {
 	cp := *r
 	cp.DBCache = cache
 	return &cp
-}
-
-// defaultFlowsDir returns the configured or default flows directory.
-func (r *Resolver) defaultFlowsDir() string {
-	if r.FlowsDir != "" {
-		return r.FlowsDir
-	}
-	return filepath.Join("examples", "flows")
 }
 
 // ResolvedTask represents a task and the storage it was found in.
@@ -225,74 +218,6 @@ func isTrackNamespace(ns string) bool {
 		return true
 	}
 	return false
-}
-
-// ResolvedFlow represents a flow and the directory it was found in.
-type ResolvedFlow struct {
-	Flow *core.Flow
-	Path string
-}
-
-// ResolveFlow resolves a flow ID or URI into a Flow object.
-func (r *Resolver) ResolveFlow(ctx context.Context, input string) (*ResolvedFlow, error) {
-	u, err := splitTaskInput(input)
-	if err != nil {
-		return nil, err
-	}
-
-	projectID, flowID := uriutil.SplitProjectTask(u.Namespace, u.ID)
-
-	// If it's a file path, just parse it
-	if _, err := os.Stat(input); err == nil {
-		f, err := os.Open(input)
-		if err != nil {
-			return nil, fmt.Errorf("open flow file %s: %w", input, err)
-		}
-		defer f.Close()
-		flow, err := core.ParseFlow(f, input)
-		if err != nil {
-			return nil, err
-		}
-		return &ResolvedFlow{Flow: flow, Path: input}, nil
-	}
-
-	// Determine flows directory
-	flowsDir := r.defaultFlowsDir()
-	if projectID != "" {
-		regProj, err := r.storage.LookupProject(ctx, projectID)
-		if err == nil && regProj != nil {
-			// If we have a project, the flows should be in its directory
-			projectRoot := filepath.Dir(filepath.Dir(regProj.DBPath))
-			flowsDir = filepath.Join(projectRoot, r.defaultFlowsDir())
-		}
-	}
-
-	// Search for flow ID in flows directory
-	entries, err := os.ReadDir(flowsDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read flows directory %q: %w", flowsDir, err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		path := filepath.Join(flowsDir, entry.Name())
-		f, err := os.Open(path)
-		if err != nil {
-			continue
-		}
-		flow, err := core.ParseFlow(f, entry.Name())
-		_ = f.Close()
-		if err != nil {
-			continue
-		}
-		if flow.ID == flowID {
-			return &ResolvedFlow{Flow: flow, Path: path}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("flow %q not found", flowID)
 }
 
 // splitTaskInput decomposes a task ref into the same shape the legacy

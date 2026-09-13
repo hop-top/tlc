@@ -76,13 +76,10 @@ func TestFuzzyMatchNoun(t *testing.T) {
 	}{
 		// Exact
 		{"task", DomainTask, 1.0, false},
-		{"flow", DomainFlow, 1.0, false},
 		{"tracks", DomainTrack, 1.0, false},
 		// Distance 1 → confidence 0.9
 		// "taks" is closest to "tasks" (dist 1) not "task" (dist 2)
 		{"taks", DomainTask, 0.9, false},
-		// "flws" is closest to "flows" (dist 1) not "flow" (dist 2)
-		{"flws", DomainFlow, 0.9, false},
 		// Distance 2 → confidence 0.8
 		// "trakcs" vs "tracks" = dist 2, vs "track" = dist 2
 		{"trakcs", DomainTrack, 0.8, false},

@@ -1,0 +1,8 @@
+recipe: single-step
+version: 1.0.0
+description: Minimal recipe with one agent step; validates sandbox bootstrap and the run lifecycle.
+agent: claude
+steps:
+  - id: do-work
+    title: Do work
+    description: Run a single unit of work and report completion.

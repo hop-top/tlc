@@ -11,8 +11,9 @@ This directory contains comprehensive documentation for TLC (Task Line CLI), a t
 - tasks as durable work units
 - deterministic execution
 - multi-agent or AI-assisted collaboration
-- flow orchestration (sequence, branching, parallelism, joins, retries)
-- workflow automation with capability-based assignment (flows & assignees)
+- recipes: versioned templates that materialize into a track and its tasks
+- recipe execution with dependency batches, conditions, retries and gates
+- capability-based assignment to specialized executors
 - E2E testability from user stories
 - a shared glossary to eliminate coordination ambiguity
 
@@ -36,16 +37,15 @@ The System persona (P5) validates configuration and environment at startup to en
 ### User Stories
 - `stories/` - User stories organized by feature area
   - [User Stories Index](stories/README.md) - All stories with quick navigation by feature, persona, and priority
-  - Example stories: [Task Creation](stories/001-task-creation.md), [Task Listing](stories/002-task-listing.md), [Flow Execution](stories/020-flow-execution.md)
+  - Example stories: [Task Creation](stories/001-task-creation.md), [Task Listing](stories/002-task-listing.md), [Task Assignment](stories/008-task-assignment.md)
 
 ### Design Documents
 
-- [Flows & Assignees Design](plans/2026-01-17-flows-and-assignees-design.md) - Complete design for workflow automation system
 - [TUI Refactoring Design](plans/2026-01-16-tui-refactoring-design.md) - Terminal UI architecture
 
-## Spec Map (Non-Overlapping Ownership)
+## Features & Guides
 
-- [Flows & Assignees](flows-and-assignees.md) - Workflow automation and capability-based task assignment
+- [Recipes & Assignees](recipes.md) - Recipe templates, execution and capability-based assignment
 - [Policies](policies.md) - Declarative state-change guards (`--note` enforcement, custom rules) via kit/runtime/policy
 - [Development Setup](development-setup.md) - Development workflow, watch modes, and tooling
 - [Editor Setup](editor-setup.md) - IDE/editor integration guides
@@ -53,7 +53,6 @@ The System persona (P5) validates configuration and environment at startup to en
 
 ## Design Documents
 
-- [Flows & Assignees Design](plans/2026-01-17-flows-and-assignees-design.md) - Complete design for workflow automation system
 - [TUI Refactoring Design](plans/2026-01-16-tui-refactoring-design.md) - Terminal UI architecture
 
 ## Spec Map (Non-Overlapping Ownership)
@@ -68,15 +67,15 @@ The System persona (P5) validates configuration and environment at startup to en
 
 - `task-collab-spec-1.0.md`
   - Owns: agent identity, claiming/reassignment, action vocabulary, handoff rules
-  - Does NOT own: canonical task schema fields (CRUD) or orchestration semantics (FLOW)
+  - Does NOT own: canonical task schema fields (CRUD) or recipe semantics (RECIPE)
 
-- `task-flow-spec-0.1.md`
-  - Owns: orchestration graph semantics (seq/parallel/join/branch/retry/subflow)
+- `recipe-spec-0.1.md`
+  - Owns: recipe grammar — steps, kinds, `depends_on`, `when`, retries, gates, includes, loops, vars and templates
   - Does NOT own: agent claiming or base task schema
 
 - `task-log-spec-0.1.md`
   - Owns: log schema and shared write policy (prepend vs append)
-  - Referenced by: CRUD, EXEC, COLLAB, FLOW
+  - Referenced by: CRUD, EXEC, COLLAB, RECIPE
 
 - `glossary-0.1.md`
   - Owns: canonical definitions for shared terms and states
@@ -85,11 +84,11 @@ The System persona (P5) validates configuration and environment at startup to en
 
 Recommended dependency direction:
 
-- FLOW -> EXEC
+- RECIPE -> EXEC
 - COLLAB -> CRUD + LOG
 - EXEC -> LOG
 - CRUD -> LOG
-- FLOW -> LOG
+- RECIPE -> LOG
 - All -> GLOSSARY
 
 This ensures:

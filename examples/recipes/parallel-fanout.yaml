@@ -1,0 +1,35 @@
+recipe: parallel-fanout
+version: 1.0.0
+description: Fan out to three independent checks, then fan in to one report
+agent: claude
+steps:
+  - id: prepare
+    title: Prepare shared workspace
+    description: |
+      Set up the environment and inputs needed by
+      the parallel analysis steps.
+
+  - id: lint
+    title: Lint source files
+    depends_on: [prepare]
+    description: |
+      Run static analysis and linting on all source files.
+
+  - id: test
+    title: Execute test suite
+    depends_on: [prepare]
+    description: |
+      Run the full test suite and collect results.
+
+  - id: security-scan
+    title: Scan for security vulnerabilities
+    depends_on: [prepare]
+    description: |
+      Run dependency audit and static security analysis.
+
+  - id: merge-results
+    title: Merge all analysis results
+    depends_on: [lint, test, security-scan]
+    description: |
+      Combine lint, test, and security results into
+      a single pass/fail report.

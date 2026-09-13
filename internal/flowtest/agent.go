@@ -2,7 +2,9 @@ package flowtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,78 +15,114 @@ import (
 	xrr "hop.top/xrr"
 )
 
-// SandboxAgentRunner implements core.AgentRunner by dispatching to the adapter
-// resolved for each step. In record mode the shim proxies to the real binary and
-// writes cassettes; in replay mode it serves from cassettes.
-type SandboxAgentRunner struct {
+// SandboxAgentExec runs agent-kind tasks through the adapter shim resolved
+// for each step. In record mode the shim proxies to the real binary and
+// writes cassettes; in replay mode it serves from cassettes. The CLI wraps
+// Run into the executor's agent dispatcher.
+type SandboxAgentExec struct {
 	sandbox  *Sandbox
 	mode     xrr.Mode
 	run      *Run
 	resolver *AdapterResolver
+	// Log receives one line per dispatch; nil discards.
+	Log io.Writer
 }
 
-// NewSandboxAgentRunner creates a runner bound to the given sandbox, run, and
-// resolver. Must be called before sandbox env vars are injected into the process.
-// The sandbox is wired into the resolver so Probe is called on first resolution.
-func NewSandboxAgentRunner(sb *Sandbox, mode xrr.Mode, run *Run, resolver *AdapterResolver) *SandboxAgentRunner {
+// NewSandboxAgentExec binds a sandbox, run and resolver. The sandbox is
+// wired into the resolver so Probe runs on first resolution.
+func NewSandboxAgentExec(sb *Sandbox, mode xrr.Mode, run *Run, resolver *AdapterResolver) *SandboxAgentExec {
 	resolver.WithSandbox(sb)
-	return &SandboxAgentRunner{
-		sandbox:  sb,
-		mode:     mode,
-		run:      run,
-		resolver: resolver,
-	}
+	return &SandboxAgentExec{sandbox: sb, mode: mode, run: run, resolver: resolver, Log: io.Discard}
 }
 
-// CanHandle returns true for task steps with a TaskTemplate (i.e. steps that
-// require agent dispatch). Structural steps (parallel/branch/join/retry/subflow)
-// are not dispatched by this runner.
-func (r *SandboxAgentRunner) CanHandle(step core.Step) bool {
-	return step.Type == core.StepTypeTask && step.TaskTemplate != nil
-}
-
-// Run dispatches the agent for stepID and returns the parsed step output.
-func (r *SandboxAgentRunner) Run(ctx context.Context, step core.Step, prompt string) (map[string]any, error) {
-	adapter, cfg, operation, err := r.resolver.ResolveCtx(ctx, step)
+// Run dispatches the adapter for step with prompt and reports the outcome.
+// A nonzero exit is a failed result that keeps the exit code and the raw
+// output; only a spawn failure or an unresolvable adapter is an error.
+func (x *SandboxAgentExec) Run(ctx context.Context, step StepRef, prompt string) (*core.AgentResult, error) {
+	adapter, cfg, operation, err := x.resolver.ResolveCtx(ctx, step)
 	if err != nil {
-		return nil, fmt.Errorf("sandbox agent runner: %w", err)
+		return nil, fmt.Errorf("sandbox agent exec: %w", err)
+	}
+	if err := ensureCassetteDir(x.run, step.ID, x.mode); err != nil {
+		return nil, fmt.Errorf("sandbox agent exec: %w", err)
 	}
 
-	binaryPath := filepath.Join(r.sandbox.BinDir, adapter.Binary())
-
-	// Pre-create per-step cassette dir so xrr.FileCassette can write to it.
-	if r.run != nil {
-		cassetteDir := filepath.Join(r.run.RecordDir, step.ID)
-		if err := os.MkdirAll(cassetteDir, 0o755); err != nil {
-			return nil, fmt.Errorf("sandbox agent runner: mkdir cassette dir: %w", err)
-		}
-	}
-
-	env := r.sandbox.Env(step.ID, r.mode, r.run)
-	env = adapter.BuildEnv(env, cfg)
-
-	cmd := exec.CommandContext(ctx, binaryPath, adapter.BuildArgs(prompt, cfg, operation)...)
-	cmd.Dir = r.sandbox.RepoDir
-	cmd.Env = env
+	// The binary is the adapter's own name under the sandbox bin dir, and
+	// the args come from the adapter, not from user input.
+	cmd := exec.CommandContext(ctx, filepath.Join(x.sandbox.BinDir, adapter.Binary()), //nolint:gosec // resolved shim path, adapter-built args
+		adapter.BuildArgs(prompt, cfg, operation)...)
+	cmd.Dir = x.sandbox.RepoDir
+	cmd.Env = adapter.BuildEnv(x.sandbox.Env(step.ID, x.mode, x.run), cfg)
 	// Explicit empty stdin so agents don't wait for piped input.
 	cmd.Stdin = strings.NewReader("")
 
-	modeLabel := "replay"
-	if r.mode == xrr.ModeRecord {
-		modeLabel = "record"
-	}
 	t0 := time.Now()
-	fmt.Fprintf(os.Stderr, "  [%s] dispatching %s (%s)...\n", step.ID, adapter.Name(), modeLabel)
+	fmt.Fprintf(x.log(), "  [%s] dispatching %s (%s)...\n", step.ID, adapter.Name(), x.mode)
+	combined, runErr := cmd.CombinedOutput()
+	elapsed := time.Since(t0)
+	fmt.Fprintf(x.log(), "  [%s] done in %.1fs\n", step.ID, elapsed.Seconds())
 
-	combined, err := cmd.CombinedOutput()
-	fmt.Fprintf(os.Stderr, "  [%s] done in %.1fs\n", step.ID, time.Since(t0).Seconds())
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("sandbox agent runner: step %q: %s exited %d: %s",
-				step.ID, adapter.Name(), exitErr.ExitCode(), string(combined))
+	exitCode := 0
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) {
+			return nil, fmt.Errorf("sandbox agent exec: step %q: %s: %w", step.ID, adapter.Name(), runErr)
 		}
-		return nil, fmt.Errorf("sandbox agent runner: step %q: %w", step.ID, err)
+		exitCode = exitErr.ExitCode()
 	}
+	return agentResult(adapter, combined, exitCode, elapsed, t0), nil
+}
 
-	return adapter.ParseOutput(combined)
+func (x *SandboxAgentExec) log() io.Writer {
+	if x.Log == nil {
+		return io.Discard
+	}
+	return x.Log
+}
+
+// agentResult folds the adapter's parsed output and the process exit code
+// into the result the executor stores on the task. exit_code is always
+// present so `when:` and eva gates read agent steps like exec steps.
+func agentResult(adapter AgentAdapter, combined []byte, exitCode int, elapsed time.Duration, startedAt time.Time) *core.AgentResult {
+	outputs, err := adapter.ParseOutput(combined)
+	if err != nil || outputs == nil {
+		outputs = map[string]any{resultKeyOutput: string(combined)}
+	}
+	outputs[core.ResultKeyExitCode] = exitCode
+	res := &core.AgentResult{
+		Version:   core.AgentResultVersion,
+		Status:    core.AgentStatusSucceeded,
+		ExitCode:  exitCode,
+		Summary:   fmt.Sprintf("%s ok in %.1fs", adapter.Name(), elapsed.Seconds()),
+		Agent:     adapter.Name(),
+		StartedAt: startedAt.UTC().Format(time.RFC3339),
+		EndedAt:   startedAt.Add(elapsed).UTC().Format(time.RFC3339),
+		Outputs:   outputs,
+	}
+	if exitCode != 0 {
+		res.Status = core.AgentStatusFailed
+		res.Summary = fmt.Sprintf("%s exited %d: %s", adapter.Name(), exitCode, firstLine(string(combined)))
+	}
+	return res
+}
+
+// ensureCassetteDir creates the step's cassette dir in record mode so the
+// shim can write into it; replay reads a missing dir as a miss already.
+func ensureCassetteDir(run *Run, stepID string, mode xrr.Mode) error {
+	if run == nil || mode != xrr.ModeRecord {
+		return nil
+	}
+	dir := filepath.Join(run.RecordDir, stepID)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("mkdir cassette dir %s: %w", dir, err)
+	}
+	return nil
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }

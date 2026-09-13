@@ -5,9 +5,11 @@ import "fmt"
 // AgentContextVersion is the current schema version for AgentContext.
 const AgentContextVersion = 1
 
-// AgentContext carries all metadata an agent needs to execute a task,
-// flow step, or track. Serialised as JSON and uploaded to the container
-// at /workspace/.tlc/context.json.
+// AgentContext carries all metadata an agent needs to execute a task
+// or track. Serialized as JSON and handed to the agent as a
+// file — /workspace/.tlc/context.json in a container, a per-run
+// .tlc/runs/<run-id>/context.json on the host — whose path the agent
+// reads from EnvContextPath.
 type AgentContext struct {
 	Version         int      `json:"version"`
 	TaskID          string   `json:"task_id,omitempty"`
@@ -15,10 +17,6 @@ type AgentContext struct {
 	TaskDescription string   `json:"task_description,omitempty"`
 	Tags            []string `json:"tags,omitempty"`
 	TrackID         string   `json:"track_id,omitempty"`
-	FlowID          string   `json:"flow_id,omitempty"`
-	FlowStepID      string   `json:"flow_step_id,omitempty"`
-	StepType        string   `json:"step_type,omitempty"`
-	StepTitle       string   `json:"step_title,omitempty"`
 	RepoRoot        string   `json:"repo_root"`
 	Files           []string `json:"files,omitempty"`
 	CtxtRefs        []string `json:"ctxt_refs,omitempty"`

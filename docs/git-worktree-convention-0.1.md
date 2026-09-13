@@ -433,36 +433,40 @@ git worktree add .worktrees/feat-0042-api-rate-limiting -b feat/0042-api-rate-li
 
 ## Integration with TLC Workflows
 
-### Flow Definition
+### Recipe
 
-```json
-{
-  "flow_id": "flow:feature-dev:1.0",
-  "name": "Feature Development with Worktree",
-  "steps": {
-    "create-worktree": {
-      "step_id": "create-worktree",
-      "type": "task",
-      "task_ref": "task:setup-worktree",
-      "meta": {
-        "branch": "feat/0042-api-rate-limiting",
-        "worktree_path": ".worktrees/feat-0042-api-rate-limiting"
-      }
-    },
-    "implement": {
-      "step_id": "implement",
-      "type": "task",
-      "task_ref": "task:implement",
-      "depends_on": ["create-worktree"]
-    },
-    "cleanup": {
-      "step_id": "cleanup",
-      "type": "task",
-      "task_ref": "task:cleanup-worktree",
-      "depends_on": ["implement"]
-    }
-  }
-}
+```yaml
+recipe: feature-dev
+version: 1.0.0
+description: Feature development in a dedicated worktree
+vars:
+  branch:
+    required: true
+track:
+  title: "Feature: {{branch}}"
+  type: feature
+steps:
+  - id: create-worktree
+    kind: exec
+    title: "Create worktree for {{branch}}"
+    exec:
+      argv: [git, worktree, add, ".worktrees/{{branch}}", "{{branch}}"]
+
+  - id: implement
+    title: "Implement {{branch}}"
+    depends_on: [create-worktree]
+
+  - id: cleanup
+    kind: exec
+    title: "Remove worktree for {{branch}}"
+    depends_on: [implement]
+    exec:
+      argv: [git, worktree, remove, ".worktrees/{{branch}}"]
+```
+
+```bash
+tlc track create --recipe feature-dev --var branch=feat/0042-api-rate-limiting
+tlc track execute feature-feat-0042-api-rate-limiting --agent claude
 ```
 
 ---
@@ -519,7 +523,7 @@ git worktree remove .worktrees/hotfix-critical-bug
 
 - git-branch-convention-0.1.md — Branch naming format
 - git-commit-convention-0.1.md — Commit message format
-- task-flow-spec-0.1-dev.md — Development flow patterns
+- recipe-spec-0.1.md — Recipe grammar and step semantics
 - [Git Worktree Documentation](https://git-scm.com/docs/git-worktree)
 
 ---

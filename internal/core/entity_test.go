@@ -16,11 +16,4 @@ func TestTrackGetID(t *testing.T) {
 	}
 }
 
-func TestFlowRunGetID(t *testing.T) {
-	run := &FlowRun{ID: "run-abc-123"}
-	if got := run.GetID(); got != "run-abc-123" {
-		t.Errorf("FlowRun.GetID() = %q, want %q", got, "run-abc-123")
-	}
-}
-
 // strPtr is declared in plan_tasks_project_scope_test.go

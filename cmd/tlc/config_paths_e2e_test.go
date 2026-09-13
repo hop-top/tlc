@@ -168,7 +168,7 @@ func TestConfigPath_E2E_PrefersProjectFile(t *testing.T) {
 		t.Fatalf("mkdir .tlc: %v", err)
 	}
 	projConfig := filepath.Join(projDir, "config.yaml")
-	if err := os.WriteFile(projConfig, []byte("flow:\n  dir: examples/flows\n"), 0o644); err != nil {
+	if err := os.WriteFile(projConfig, []byte("recipe:\n  dir: examples/recipes\n"), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
 

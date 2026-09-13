@@ -11,19 +11,17 @@ import (
 )
 
 type MockRepository struct {
-	mu       sync.Mutex
-	Tasks    map[string]*Task
-	FlowRuns map[string]*FlowRun
-	logs     []*LogEntry
-	seqs     map[string]int
+	mu    sync.Mutex
+	Tasks map[string]*Task
+	logs  []*LogEntry
+	seqs  map[string]int
 }
 
 func NewMockRepository() *MockRepository {
 	return &MockRepository{
-		Tasks:    make(map[string]*Task),
-		FlowRuns: make(map[string]*FlowRun),
-		logs:     make([]*LogEntry, 0),
-		seqs:     make(map[string]int),
+		Tasks: make(map[string]*Task),
+		logs:  make([]*LogEntry, 0),
+		seqs:  make(map[string]int),
 	}
 }
 
@@ -81,6 +79,8 @@ func (m *MockRepository) UpdateTask(ctx context.Context, task *Task) error {
 }
 
 func (m *MockRepository) UpdateTaskWithLog(ctx context.Context, task *Task, entry *LogEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Tasks[task.ID] = task
 	if entry != nil {
 		m.logs = append(m.logs, entry)
@@ -89,24 +89,90 @@ func (m *MockRepository) UpdateTaskWithLog(ctx context.Context, task *Task, entr
 }
 
 func (m *MockRepository) ListTasks(ctx context.Context, query Query) ([]*Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var tasks []*Task
 	for _, t := range m.Tasks {
-		matches := true
-		for _, filter := range query.Filters {
-			if !m.applyFilter(t, filter) {
-				matches = false
-				break
-			}
-		}
-		if matches {
+		if m.matchesQuery(t, query) {
 			tasks = append(tasks, t)
 		}
 	}
 	return tasks, nil
 }
 
+// matchesQuery applies the field filters plus the column predicates the
+// SQL store pushes down (archive exclusion, blocked, run id, claim age),
+// so executor tests on the mock exercise the same predicates.
+func (m *MockRepository) matchesQuery(t *Task, query Query) bool {
+	for _, filter := range query.Filters {
+		if !m.applyFilter(t, filter) {
+			return false
+		}
+	}
+	if !query.IncludeArchived && t.Archived {
+		return false
+	}
+	if query.Blocked != nil {
+		blocked := t.BlockedReason != nil && *t.BlockedReason != ""
+		if blocked != *query.Blocked {
+			return false
+		}
+	}
+	if query.HasRunID != nil && (t.RunID != "") != *query.HasRunID {
+		return false
+	}
+	if query.ClaimedBefore != nil && (t.ClaimedAt == nil || !t.ClaimedAt.Before(*query.ClaimedBefore)) {
+		return false
+	}
+	return true
+}
+
+// ClaimTask mirrors the SQL compare-and-set: one claimant wins, the rest
+// see false.
+func (m *MockRepository) ClaimTask(ctx context.Context, id, projectID string, from, to TaskStatus, actor string, now time.Time) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.Tasks[id]
+	if !ok {
+		return false, nil
+	}
+	pid := ""
+	if t.ProjectID != nil {
+		pid = *t.ProjectID
+	}
+	if pid != projectID || t.Status != from {
+		return false, nil
+	}
+	if t.AssignedTo != nil && *t.AssignedTo != "" && *t.AssignedTo != actor {
+		return false, nil
+	}
+	owner, claimed := actor, now
+	t.Status = to
+	t.AssignedTo = &owner
+	t.ClaimedAt = &claimed
+	t.UpdatedAt = now
+	return true, nil
+}
+
 func (m *MockRepository) applyFilter(task *Task, filter FieldFilter) bool {
 	switch filter.Field {
+	case filterKind, filterRunID, filterProjectID:
+		val, ok := filter.Value.(string)
+		if !ok || filter.Operator != OpEq {
+			return false
+		}
+		switch filter.Field {
+		case filterKind:
+			return string(task.EffectiveKind()) == val
+		case filterRunID:
+			return task.RunID == val
+		default:
+			pid := ""
+			if task.ProjectID != nil {
+				pid = *task.ProjectID
+			}
+			return pid == val
+		}
 	case "tags":
 		tags, ok := filter.Value.(string)
 		if !ok {
@@ -203,34 +269,6 @@ func (m *MockRepository) ArchiveTasks(ctx context.Context, threshold time.Durati
 	return count, nil
 }
 
-func (m *MockRepository) CreateFlowRun(ctx context.Context, run *FlowRun) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.FlowRuns[run.ID] = run
-	return nil
-}
-
-func (m *MockRepository) GetFlowRun(ctx context.Context, id string) (*FlowRun, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.FlowRuns[id], nil
-}
-
-func (m *MockRepository) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.FlowRuns[run.ID] = run
-	return nil
-}
-
-func (m *MockRepository) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error) {
-	runs := make([]*FlowRun, 0, len(m.FlowRuns))
-	for _, r := range m.FlowRuns {
-		runs = append(runs, r)
-	}
-	return runs, nil
-}
-
 type MockLogRepository struct {
 	mu   sync.Mutex
 	Logs []*LogEntry
@@ -286,31 +324,4 @@ func (m *MockLogRepository) UpdateLogNote(_ context.Context, logID int64, note s
 		}
 	}
 	return fmt.Errorf("log entry %d not found", logID)
-}
-
-// MockAgentRunner is a configurable AgentRunner for unit tests.
-// CanHandleFunc defaults to always-true when nil.
-// RunFunc defaults to returning an empty output map when nil.
-type MockAgentRunner struct {
-	CanHandleFunc func(Step) bool
-	RunFunc       func(context.Context, Step, string) (map[string]any, error)
-	Calls         []Step
-	mu            sync.Mutex
-}
-
-func (m *MockAgentRunner) CanHandle(step Step) bool {
-	if m.CanHandleFunc != nil {
-		return m.CanHandleFunc(step)
-	}
-	return true
-}
-
-func (m *MockAgentRunner) Run(ctx context.Context, step Step, prompt string) (map[string]any, error) {
-	m.mu.Lock()
-	m.Calls = append(m.Calls, step)
-	m.mu.Unlock()
-	if m.RunFunc != nil {
-		return m.RunFunc(ctx, step, prompt)
-	}
-	return map[string]any{"mock": fmt.Sprintf("step:%s", step.ID)}, nil
 }

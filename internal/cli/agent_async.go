@@ -26,8 +26,6 @@ func enqueueAgentJob(cmd *cobra.Command) (string, error) {
 	switch {
 	case len(agentRunTasks) > 0:
 		jobType = core.JobTypeAgentTask
-	case agentRunFlow != "":
-		jobType = core.JobTypeAgentFlow
 	case agentRunTrack != "":
 		jobType = core.JobTypeAgentTrack
 	}
@@ -35,7 +33,6 @@ func enqueueAgentJob(cmd *cobra.Command) (string, error) {
 	payload := &core.JobPayload{
 		AgentName:        agentRunAgent,
 		Tasks:            agentRunTasks,
-		FlowRef:          agentRunFlow,
 		TrackID:          agentRunTrack,
 		Image:            agentRunImage,
 		Local:            agentRunLocal,
@@ -245,7 +242,6 @@ func processJob(
 	// Wire up agent run flags from payload.
 	agentRunAgent = payload.AgentName
 	agentRunTasks = payload.Tasks
-	agentRunFlow = payload.FlowRef
 	agentRunTrack = payload.TrackID
 	agentRunImage = payload.Image
 	agentRunLocal = payload.Local

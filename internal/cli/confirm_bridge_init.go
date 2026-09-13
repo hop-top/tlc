@@ -20,9 +20,9 @@ func init() {
 	// confirmation surface.
 	installConfirmBridge(trackAbandonCmd, "no-prompt")
 
-	// Workflow destructives. None of agent cancel, flow cancel, or
-	// flow reject ship a local skip flag — the kit --confirm gate is
-	// already their single source of truth. Project prune has -y/--yes.
+	// Orchestration destructives. agent cancel ships no local skip
+	// flag — the kit --confirm gate is already its single source of
+	// truth. Project prune has -y/--yes.
 	installConfirmBridge(ProjectPruneCmd, "yes")
 
 	// Admin destructives. alias remove and auth logout ship no local

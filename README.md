@@ -35,8 +35,8 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
 ## 🚀 Key Features
 
 - **Hybrid Storage Model**: Edit tasks directly in a human-friendly `todo.txt` (Task Line Syntax) or use the synchronized SQLite database for high-performance querying.
-- **Complex Orchestration (Task Flows)**: Define declarative workflows with support for sequential and parallel execution, conditional branching, synchronization joins, and automated retries.
-- **Flows & Assignees**: Procedural workflow templates that generate task sequences with capability-based auto-assignment to specialized executors.
+- **Recipes**: Versioned YAML templates that materialize into a track and its tasks the same way every time — ordered steps with dependencies, a kind per step (agent, exec, human), conditions, retries, gates and due dates, plus the variables a run binds.
+- **Recipe Execution**: One executor runs the tasks in dependency batches, skipping on `when`, retrying to a bound, holding a step at an eva gate and waiting on human approval — with every materialization recorded in a run ledger.
 - **Multi-Agent Collaboration**: Safe coordination between humans and AI agents using task claiming, responsibility transfer, delegation protocols, and time-bounded ownership leases (TTL).
 - **Deterministic Task Execution**: Robust execution contract with stdout/stderr capture, error normalization, and configurable timeouts.
 - **Audit-Ready Logging**: A canonical, reverse-chronological `CHANGELOG` capturing every state transition, collaboration action, and execution attempt.
@@ -67,7 +67,7 @@ TLC is a high-performance, multi-agent task orchestration tool designed for deve
   claim. Project health pulse with overcommit warnings.
 - **Modern TUI & CLI**: A keyboard-driven Terminal User Interface
   built with Bubble Tea, featuring a Kanban board, dashboard, and
-  real-time flow monitoring.
+  a Runs view over the recipe run ledger.
 - **XDG Specification Compliance**: Zero-config persistence
   following standard OS paths for data, logs, and configuration.
 
@@ -279,8 +279,8 @@ Configure the LLM provider:
 export TLC_PROMPT_LLM="ollama://llama3.2"  # or anthropic://, openai://
 ```
 
-**Cross-domain resolution (no LLM):** Common track, flow, and project queries resolve
-deterministically without LLM. Examples: `"list active tracks"`, `"run deploy flow"`,
+**Cross-domain resolution (no LLM):** Common track, recipe, and project queries resolve
+deterministically without LLM. Examples: `"list active tracks"`, `"list recipes"`,
 `"count active tracks"` → `track list --status active`. Typo-tolerant:
 `"list trakcs"` resolves to `track list` (fuzzy match, confidence 0.8).
 
@@ -663,9 +663,152 @@ tracks:
     min_progress_to_start: 50
 ```
 
-### Flows & Assignees
+### Recipes
 
-TLC includes a comprehensive workflow suite with capability-based task assignment:
+Recipes are versioned YAML templates that create tracks and tasks the same
+way every time: an ordered list of steps with dependencies, kinds (`agent`,
+`exec`, `human`), retries, gates and due dates, plus the variables a run binds.
+
+```yaml
+recipe: code-review
+version: 1.2.0
+description: Review a pull request
+vars:
+  pr: {description: PR number, required: true}
+  depth: {default: standard}
+steps:
+  - id: lint
+    kind: exec
+    exec: {argv: [golangci-lint, run], timeout: 5m}
+  - id: review
+    title: "Review {{pr}} ({{depth}})"
+    description: "Lint said: {{results.lint.stdout}}"
+    depends_on: [lint]
+    when: "results.lint.exit_code == 0"
+    retry: {max_attempts: 3, backoff: 30s}
+  - id: sign-off
+    kind: human
+    human: {assignee: "@lead", timeout: 48h, on_timeout: reject}
+    depends_on: [review]
+```
+
+- **Templates**: `{{var}}`, `{{subject.title}}`, `{{run.iteration}}` and
+  `{{steps.<id>.<field>}}` are rendered when tasks are created;
+  `{{results.<id>.<field>}}` and `when:` are evaluated at dispatch from
+  upstream task results. Due dates compose:
+  `due: "{{steps.planning.due}} + 5d"` or `due: {after: planning, offset: 5d}`.
+- **Composition**: `include: security-scan@1.0` with `with: {target: "{{pr}}"}`
+  splices another recipe in as `<id>/<step>`; `repeat: 3` with
+  `until: "results.review.verdict == 'approved'"` unrolls a block into
+  bounded iterations.
+- **Search path**: `recipe.dir` from `.tlc/config.yaml`, then `.tlc/recipes/`,
+  then `~/.config/tlc/recipes/`. Reference a recipe by name, `name@version`
+  or file path.
+
+```bash
+tlc recipe list                       # every recipe in the search path
+tlc recipe show code-review           # header, vars and expanded steps
+tlc recipe show code-review -f json   # the expanded document
+tlc recipe validate ./my-recipe.yaml  # exit 1 with the first problem
+```
+
+**Testing a recipe** — `tlc recipe test <recipe> [run]` materializes the
+recipe into a throwaway store and executes it inside a sandbox: a clone of
+the working tree, shim binaries ahead of the real ones on PATH, and a home
+of its own. Replay serves every tool call from a recorded cassette, so a run
+is deterministic and offline; `--record` reaches the real binaries and writes
+the cassettes. Runs live in `fixtures/<recipe>/<run>/` beside the recipe,
+with `record/` cassettes per step id, optional `contracts/` for eva
+assertions, and a `test.yaml` declaring `expected_exit` and `vars`. A missing
+cassette exits 2.
+
+**Creating from a recipe** — four verbs share one pipeline: locate, expand,
+bind vars, select steps, render, materialize. Each pass is recorded as a
+run (which recipe, version, vars, subject, selection) so a later pass can
+tell what already exists.
+
+```bash
+# A new track: title from the argument or the recipe's track.title,
+# type from --type or track.type, plan.md from track.plan.
+tlc track create --recipe release --var version=1.4.0
+tlc track create "Review 42" --recipe code-review --var pr=42,depth=deep
+
+# Tasks only: into a track, for a subject, or trackless.
+tlc task create --recipe code-review --var pr=42 --track review-42
+tlc task create --recipe fix-bug --for T-0042      # into T-0042's track
+tlc task create --recipe fix-bug --for auth        # into the auth track
+tlc task create --recipe code-review --var pr=42    # trackless
+
+# Create for a task, then run the created tasks.
+tlc task execute T-0042 --recipe fix-bug --var branch=main
+
+# Bring a track up to date with its recipe, then run it.
+tlc track execute review-42 --recipe code-review
+tlc track execute review-42 --recipe code-review --recreate
+```
+
+- **Vars**: `--var key=value[,key=value]` (repeatable). A required var
+  without a value is prompted for on a terminal; otherwise the command
+  fails naming every missing var and the `--var` fix. `--infer` is
+  reserved and errors as not implemented yet.
+- **Selection**: `--task 1-5,7`, `--task lint` (repeatable) keeps a subset
+  of the expanded steps; ordinals are the ones `recipe show` prints. A
+  dependency on an unselected step is dropped and warned about, or pulled
+  in with its closure by `--with-deps`. The selection and the dropped
+  edges are recorded on the run.
+- **Subjects**: `--for <task-or-track>` binds `{{subject.id}}`,
+  `{{subject.title}}`, `{{subject.description}}`, `{{subject.track}}`,
+  `{{subject.tags}}` and `{{subject.project}}`. `requires: {subject: task}`
+  makes a task subject mandatory, `track` a track one. A task subject is
+  blocked on the run's leaves (steps nothing else in the run depends on),
+  and `track execute` / `task execute` complete it once they are done.
+- **Assignment**: `--assign` runs the assignment engine over
+  `recipe.assignees_dir` for every step that names no assignee.
+- **Reconcile**: `track execute <track> --recipe <r>` reads the track's run
+  ledger for that recipe, creates only the steps not materialized yet, and
+  warns when the recipe's version or content changed since the latest run.
+  A step whose task was deleted is reported and left alone unless
+  `--recreate`. Vars are the latest run's, overridden by `--var`.
+- **Dry run**: `--dry-run` on any of the four prints what would be created
+  (and, on `track execute`, the batch plan) without writing.
+- **Output**: `--format json` renders the run id, created and skipped steps
+  with their task ids, warnings, and the track.
+#### Capturing and inspecting recipes
+
+A track that already works can be captured as a recipe: one step per task
+in dependency order, ids from recipe provenance or the task titles,
+`depends_on` from the blocked-by edges inside the track. `--var name=value`
+lifts every whole-word occurrence of `value` back into `{{name}}` and
+declares the var; the vars of the track's latest recipe run are lifted the
+same way. A markdown procedure reachable by URL is converted by the model
+behind `LLM_API_KEY` and kept verbatim as `track.plan`.
+
+```bash
+tlc recipe import release-flow                    # writes ./release-flow.yaml
+tlc recipe import release-flow --var pr=1234      # "Review PR 1234" → "Review PR {{pr}}"
+tlc recipe import release-flow --install          # into .tlc/recipes/release-flow.yaml
+tlc recipe import release-flow -o - --name release --version 1.0.0
+tlc recipe import https://github.com/org/repo/blob/main/docs/release.md
+```
+
+Every materialization is recorded in a run ledger. `recipe runs` lists it;
+`recipe diff` walks a recipe's steps against the runs on a track and reports
+each step as `materialized`, `missing` (never created), `deleted` (task since
+removed) or `extra` (created by the run but no longer in the recipe), noting
+version and content drift between the file and the run.
+
+```bash
+tlc recipe runs                                   # newest first, with task counts
+tlc recipe runs code-review --track release-flow  # one recipe, one track
+tlc recipe runs --all-projects
+tlc recipe diff release-flow                      # against the latest run's recipe
+tlc recipe diff release-flow --recipe ./code-review.yaml
+```
+
+### Assignees
+
+Assignees are specialized executor profiles that the assignment engine
+matches against a task's requirements:
 
 **List available assignees:**
 ```bash
@@ -677,36 +820,31 @@ TLC includes a comprehensive workflow suite with capability-based task assignmen
 ./bin/tlc assignee show assignee:code-analyst:1.0
 ```
 
-**Invoke a flow to generate tasks:**
-```bash
-./bin/tlc flow invoke examples/flows/brainstorming.yaml
-```
-
-**Available workflow flows:**
-- **Creative & Planning**: brainstorming, writing-plans
-- **Development**: test-driven-development, executing-plans
-- **Quality Assurance**: systematic-debugging, code-review, verification-before-completion
-- **Workflow**: finishing-development-branch
-
-See [docs/flows-and-assignees.md](docs/flows-and-assignees.md) for complete documentation.
+See [docs/recipes.md](docs/recipes.md) for how `--assign` picks one.
 
 ### Agent Execution
 
-TLC supports delegating tasks, tracks, and flows to registered AI agents:
+TLC supports delegating tasks and tracks to registered AI agents:
 
 **Run agents directly:**
 ```bash
 tlc agent run --agent code-analyst --task T-0042
 tlc agent run --agent code-analyst --track browser-rendering
-tlc agent run --agent code-analyst --flow deploy.yaml
 ```
 
-**Execute from task/track/flow context:**
+**Execute from task/track context:**
 ```bash
-tlc task exec T-0042 --agent code-analyst
-tlc track exec browser-rendering --agent code-analyst
-tlc flow run deploy.yaml --agent code-analyst
+tlc task execute T-0042 --agent code-analyst
+tlc track execute browser-rendering --agent code-analyst
 ```
+
+**Agent protocol:** every run receives its context file path in
+`TLC_CONTEXT_PATH` and must write its results file to `TLC_RESULTS_PATH`
+(container: `/workspace/.tlc/context.json` and `results.json`; local: a
+per-run `.tlc/runs/<run-id>/` directory under the repo root), then print
+a JSON status line on stdout. `tlc track execute --concurrency N` runs
+container agents in parallel, one pod each; local agents share the
+working tree and run one at a time.
 
 **Monitor and manage agent runs:**
 ```bash
@@ -737,7 +875,19 @@ agents:
 - Container mode is the default (uses `image` from agents.yaml)
 - `--local` — opt-in: run agent in-process using `binary` path
 
-See [docs/plans/2026-04-02-flowtest-agent-dispatch.md](docs/plans/2026-04-02-flowtest-agent-dispatch.md) for design details.
+**Exec-kind tasks under `tlc track execute`:**
+- Host by default: the argv runs in the working directory with `exec.cwd`,
+  `env`, `timeout` and `stdout_max` all enforced.
+- `--with-pod` passed explicitly (`--with-pod` or `--with-pod=<image>`) runs
+  each exec task in a fresh pod from that image, else the `--agent`'s image:
+  the working tree is copied to `/workspace`, `exec.env` is set at pod
+  creation and `exec.cwd` resolves under `/workspace`.
+- What the pod path cannot cap: `exec.timeout` ends the wait and kills the
+  local pod client, but the protocol cannot signal the remote command (it
+  dies with the pod, destroyed right after); `exec.stdout_max` is applied
+  after the transfer, so the whole output is still buffered on the host
+  before it is cut; an empty `env` value cannot unset a variable the image
+  provides; files the command writes stay in the pod.
 
 ### Interactive TUI
 Launch the interactive terminal interface:
@@ -753,7 +903,7 @@ Launch the interactive terminal interface:
 - `s`: Cycle task status
 - `/`: Search/Filter tasks
 - `t`: Open theme picker
-- `v`: Cycle views (Dashboard -> Kanban -> Flows)
+- `v`: Cycle views (Dashboard -> Kanban -> Runs)
 - `r`: Refresh data
 - `q`: Quit
 
@@ -975,8 +1125,8 @@ tracks:
   dir: docs/tracks             # default: "tracks" (relative to .tlc/)
   slug_max_len: 24             # default: 24 (new slugs only)
 
-flow:
-  dir: workflows               # default: "examples/flows"
+recipe:
+  dir: recipes                 # default: none; then .tlc/recipes, ~/.config/tlc/recipes
   assignees_dir: team           # default: "examples/assignees"
 
 task:
@@ -997,8 +1147,8 @@ repo root but artifacts live in a shared directory:
 # mono-repo example: .tlc/config.yaml at repo root
 tracks:
   dir: packages/project-a/tracks
-flow:
-  dir: packages/project-a/flows
+recipe:
+  dir: packages/project-a/recipes
 ```
 
 ## 📚 Documentation
@@ -1008,7 +1158,7 @@ flow:
 Detailed specifications can be found in the `docs/` directory:
 
 **Features & Guides:**
-- [Flows & Assignees](docs/flows-and-assignees.md) - Workflow automation and capability-based assignment
+- [Recipes & Assignees](docs/recipes.md) - Recipe templates, execution and capability-based assignment
 - [Development Setup](docs/development-setup.md) - Development workflow and watch modes
 - [Editor Setup](docs/editor-setup.md) - IDE/editor integration
 - [Docker Usage](docs/docker.md) - Container deployment
@@ -1020,7 +1170,7 @@ Detailed specifications can be found in the `docs/` directory:
 **Specifications:**
 - [Task CRUD Spec](docs/task-crud-spec-0.1.md)
 - [Task Line Syntax Spec](docs/task-line-spec-0.1.md)
-- [Task Flow Spec](docs/task-flow-spec-0.1.md)
+- [Recipe Spec](docs/recipe-spec-0.1.md)
 - [Task Log Spec](docs/task-log-spec-0.1.md)
 - [Sync Architecture](docs/sync-architecture-0.1.md)
 - [TUI Spec](docs/tlc-tui-spec-0.1.md)

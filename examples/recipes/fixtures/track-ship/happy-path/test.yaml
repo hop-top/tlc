@@ -1,0 +1,8 @@
+name: happy-path
+description: |
+  Track ship — end-to-end track delivery, happy path.
+
+  Scaffold only: the cassettes for the full procedure (worktree,
+  implement, push, review, merge, cleanup) have not been captured yet,
+  so replaying this run does not succeed until record/ is populated.
+expected_exit: 0

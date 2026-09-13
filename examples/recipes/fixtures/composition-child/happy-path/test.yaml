@@ -1,0 +1,7 @@
+name: happy-path
+description: >
+  Standalone child run. Lint then test both succeed; the test_report
+  output is produced for the parent recipe to consume.
+expected_exit: 0
+vars:
+  working_dir: /tmp/test-repo

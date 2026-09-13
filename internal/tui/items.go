@@ -5,17 +5,14 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	kitcli "hop.top/kit/go/console/cli"
 	kittui "hop.top/kit/go/console/tui"
 	"hop.top/tlc/internal/core"
-	"hop.top/tlc/internal/displaytime"
 	"hop.top/tlc/internal/tui/styles"
 )
 
 // Verify interface compliance.
 var (
 	_ kittui.Renderer = (*taskItem)(nil)
-	_ kittui.Renderer = (*flowRunItem)(nil)
 	_ kittui.Renderer = (*headerItem)(nil)
 	_ kittui.Renderer = (*spacerItem)(nil)
 	_ kittui.Renderer = (*kanbanCardItem)(nil)
@@ -62,59 +59,6 @@ func (ti *taskItem) Render(width int) string {
 		cursor, displayAlias(ti.task), status, title,
 		syncIcon, ti.styles.Muted.Render(assignee), tags,
 	)
-}
-
-// flowRunItem renders a single flow run row with status indicator
-// and kit/tui.Progress bar for running flows.
-type flowRunItem struct {
-	run      *core.FlowRun
-	selected bool
-	styles   *styles.Styles
-	theme    kitcli.Theme
-}
-
-func (fi *flowRunItem) Render(_ int) string {
-	cursor := " "
-	if fi.selected {
-		cursor = fi.styles.InProgress.Render("►")
-	}
-
-	// Status indicator with semantic colors.
-	var statusStr string
-	switch fi.run.Status {
-	case core.FlowStatusRunning:
-		statusStr = fi.styles.InProgress.Render("● " + string(fi.run.Status))
-	case core.FlowStatusSucceeded:
-		statusStr = fi.styles.Done.Render("✓ " + string(fi.run.Status))
-	case core.FlowStatusFailed:
-		statusStr = fi.styles.Error.Render("✗ " + string(fi.run.Status))
-	case core.FlowStatusQueued:
-		statusStr = fi.styles.Muted.Render("◌ " + string(fi.run.Status))
-	case core.FlowStatusPaused:
-		statusStr = fi.styles.Warning.Render("⏸ " + string(fi.run.Status))
-	default:
-		statusStr = string(fi.run.Status)
-	}
-
-	// Table cell: humanise StartedAt ("3m ago"). T-1384.
-	startedAt := displaytime.DisplayTimeRelative(fi.run.StartedAt)
-
-	line := fmt.Sprintf(
-		"%s %s %s %s (%s)",
-		cursor, fi.run.ID, fi.run.FlowID, statusStr, startedAt,
-	)
-
-	// Show progress bar for running or paused flows.
-	if fi.run.Status == core.FlowStatusRunning ||
-		fi.run.Status == core.FlowStatusPaused {
-		prog := kittui.NewProgress(fi.theme).
-			SetPercent(fi.run.Progress).
-			SetWidth(20)
-		pct := fmt.Sprintf(" %3.0f%%", fi.run.Progress*100)
-		line += " " + prog.View() + fi.styles.Muted.Render(pct)
-	}
-
-	return line
 }
 
 // headerItem renders a status group header.

@@ -401,7 +401,7 @@ func (s *TrackService) resolveOneTaskBlockedBy(
 	if task.Meta == nil {
 		task.Meta = make(map[string]any)
 	}
-	task.SetBlockedBy(mergePlanBlockedBy(task, blockedBy))
+	task.SetBlockedBy(mergeOwnedBlockedBy(task, metaKeyPlanOwned, blockedBy))
 	setStringSliceMeta(task, metaKeyPlanOwned, blockedBy)
 	setStringSliceMeta(task, metaKeyUnresolved, unresolved)
 	setStringSliceMeta(task, metaKeyCrossProject, crossProject)
@@ -410,32 +410,6 @@ func (s *TrackService) resolveOneTaskBlockedBy(
 		return nil, fmt.Errorf("update blocked-by for %s: %w", taskID, err)
 	}
 	return crossProject, nil
-}
-
-// mergePlanBlockedBy computes a task's new blocked_by set for a plan
-// ingest that declared planEdges.
-//
-// The plan owns only the edges a previous ingest recorded under
-// metaKeyPlanOwned. Those are dropped and replaced by planEdges; every
-// other current edge is out-of-band (added via `task update
-// --add-blocked-by` or a sync plugin) and is preserved untouched.
-//
-// Ordering keeps the surviving manual edges first so a plan re-ingest
-// does not churn unrelated entries.
-func mergePlanBlockedBy(task *Task, planEdges []string) []string {
-	priorPlanOwned := make(map[string]struct{})
-	for _, id := range NormalizeStringSliceMeta(task.Meta[metaKeyPlanOwned]) {
-		priorPlanOwned[id] = struct{}{}
-	}
-
-	merged := make([]string, 0, len(planEdges))
-	for _, id := range task.BlockedBy() {
-		if _, planAuthored := priorPlanOwned[id]; planAuthored {
-			continue // retractable — re-added below only if still declared
-		}
-		merged = append(merged, id)
-	}
-	return append(merged, planEdges...)
 }
 
 // setStringSliceMeta stores values under key, removing the key when the

@@ -18,7 +18,7 @@ This spec OWNS:
 This spec DOES NOT own:
 - canonical task schema fields (see task-crud-spec-0.1.md)
 - execution protocol and runner behavior (see task-exec-spec-0.1.md)
-- flow orchestration semantics (see task-flow-spec-0.1.md)
+- recipe grammar and step semantics (see recipe-spec-0.1.md)
 
 This spec references:
 - task-log-spec-0.1.md (log schema + ordering)

@@ -2,7 +2,7 @@
 
 // Package main is the catch-all shim for the flowtest sandbox.
 //
-// It is installed as tlc-shim-catchall and symlinked to any binary name not
+// It is installed as shim-catchall and symlinked to any binary name not
 // covered by a named shim. The tool name is derived from os.Args[0] via
 // filepath.Base — the symlink name IS the tool being intercepted.
 //

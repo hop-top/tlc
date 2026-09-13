@@ -1,7 +1,0 @@
-name: happy-path
-description: >
-  Flaky deploy-service step fails twice, succeeds on 3rd attempt.
-  Health check passes. Teardown runs. Flow exits 0.
-expected_exit: 0
-inputs:
-  service_url: https://staging.example.com

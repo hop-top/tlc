@@ -1,0 +1,7 @@
+name: staging
+description: >
+  Conditional recipe with target=staging. Only the staging steps run;
+  production steps are SKIPPED.
+expected_exit: 0
+vars:
+  target: staging

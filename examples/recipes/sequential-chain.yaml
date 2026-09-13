@@ -1,0 +1,23 @@
+recipe: sequential-chain
+version: 1.0.0
+description: Three-step A->B->C chain; each step builds on the previous output
+agent: claude
+steps:
+  - id: analyze
+    title: Analyze input data
+    description: |
+      Read input and produce a structured analysis summary.
+
+  - id: transform
+    title: Transform analysis into actionable items
+    depends_on: [analyze]
+    description: |
+      Take the analysis output and transform it into
+      a list of actionable items with priorities.
+
+  - id: report
+    title: Generate final report
+    depends_on: [transform]
+    description: |
+      Compile the transformed items into a final report
+      with summary and recommendations.

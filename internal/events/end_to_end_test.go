@@ -15,7 +15,7 @@ import (
 
 // TestStateMachine_FiresPrefixedTopics asserts each tlc state-machine
 // constructor publishes entity-specific transition topics (tlc.task.status.*,
-// tlc.track.status.*, tlc.flow.status.*) instead of the kit-generic
+// tlc.track.status.*) instead of the kit-generic
 // kit.runtime.state.* defaults. Sibling tools subscribe to these topics
 // to react to lifecycle changes.
 //
@@ -55,18 +55,6 @@ func TestStateMachine_FiresPrefixedTopics(t *testing.T) {
 			to:       domain.State(core.TrackStatusActive),
 			wantPre:  "tlc.track.status.pre_transitioned",
 			wantPost: "tlc.track.status.post_transitioned",
-		},
-		{
-			name: "flow",
-			makeSM: func(pub *recordingPublisher) interface {
-				Transition(ctx context.Context, from, to domain.State, force bool) error
-			} {
-				return core.NewFlowStateMachine(pub)
-			},
-			from:     domain.State(core.FlowStatusQueued),
-			to:       domain.State(core.FlowStatusRunning),
-			wantPre:  "tlc.flow.status.pre_transitioned",
-			wantPost: "tlc.flow.status.post_transitioned",
 		},
 	}
 

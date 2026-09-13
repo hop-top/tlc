@@ -119,10 +119,6 @@ func TestTopicToAction_Coverage(t *testing.T) {
 		{TrackCreated, "TRACK_CREATED"},
 		{TrackActivated, "TRACK_ACTIVATED"},
 		{TrackCompleted, "TRACK_COMPLETED"},
-		{FlowStarted, core.ActionFlowStart},
-		{FlowStepCompleted, core.ActionStepEnd},
-		{FlowCompleted, core.ActionFlowEnd},
-		{FlowFailed, core.ActionFailure},
 		{"unknown.topic", "unknown.topic"},
 	}
 	for _, tt := range tests {

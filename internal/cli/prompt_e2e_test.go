@@ -464,43 +464,6 @@ func TestCrossDomainE2E_FuzzyTypoNoLLM(t *testing.T) {
 	})
 }
 
-// TestCrossDomainE2E_FlowRunNoLLM verifies that "run deploy flow" resolves to
-// flow run deploy through the full NL pipeline, no LLM call.
-// The panic in noLLMRoutePromptFn proves LLM was not reached.
-func TestCrossDomainE2E_FlowRunNoLLM(t *testing.T) {
-	withTestLock(func() {
-		resetTaskFlags()
-		_, cleanup := setupTestDir(t)
-		defer cleanup()
-
-		origRoute := routePromptFn
-		routePromptFn = noLLMRoutePromptFn
-		defer func() { routePromptFn = origRoute }()
-
-		cmd := newTestNLRootCmd()
-		buf := new(bytes.Buffer)
-		cmd.SetOut(buf)
-		cmd.SetErr(buf)
-		// "deploy flow" → noun=flow, verb extracted from "run" in Rest by extractRunVerb
-		// → Stage2 cross-domain → flow run deploy. NL args go to root.
-		cmd.SetArgs([]string{"--dry-run", "deploy", "flow", "run"})
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		output := buf.String()
-		if !contains(output, "flow") {
-			t.Errorf("expected 'flow' in dry-run output, got:\n%s", output)
-		}
-		if !contains(output, "run") {
-			t.Errorf("expected 'run' in dry-run output, got:\n%s", output)
-		}
-		if !contains(output, "deploy") {
-			t.Errorf("expected 'deploy' in dry-run output, got:\n%s", output)
-		}
-	})
-}
-
 // TestCrossDomainE2E_CountActiveTracksNoLLM verifies that "count active tracks"
 // resolves to track list --status active through the full NL pipeline, no LLM call.
 // Track domain does not support --counters; it is dropped.

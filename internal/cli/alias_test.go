@@ -98,8 +98,8 @@ func TestExpandAliases_LocalOverridesGlobal(t *testing.T) {
 	xdgBase := t.TempDir()
 	setXDGConfig(t, xdgBase)
 
-	// Global says tl → flow list; local says tl → task list (project wins).
-	writeGlobalAlias(t, xdgBase, "tl", "flow list")
+	// Global says tl → track list; local says tl → task list (project wins).
+	writeGlobalAlias(t, xdgBase, "tl", "track list")
 	writeLocalAlias(t, dir, "tl", "task list")
 
 	args := []string{"tlc", "tl"}

@@ -160,22 +160,6 @@ func (m *mockRepo) ArchiveTasks(_ context.Context, threshold time.Duration) (int
 	return count, nil
 }
 
-func (m *mockRepo) CreateFlowRun(_ context.Context, _ *FlowRun) error {
-	return nil
-}
-
-func (m *mockRepo) GetFlowRun(_ context.Context, _ string) (*FlowRun, error) {
-	return nil, nil
-}
-
-func (m *mockRepo) UpdateFlowRun(_ context.Context, _ *FlowRun) error {
-	return nil
-}
-
-func (m *mockRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, error) {
-	return nil, nil
-}
-
 func (m *mockRepo) AddLog(_ context.Context, e *LogEntry) error {
 	m.logs = append(m.logs, e)
 	return nil

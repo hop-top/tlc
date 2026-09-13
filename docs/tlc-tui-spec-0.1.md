@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the Terminal User Interface (TUI) for TLC (Task Line CLI), providing an interactive, keyboard-driven interface for task management, flow execution monitoring, and collaboration.
+This document defines the Terminal User Interface (TUI) for TLC (Task Line CLI), providing an interactive, keyboard-driven interface for task management, recipe run browsing, and collaboration.
 
 ## Design Principles
 
@@ -35,7 +35,7 @@ This document defines the Terminal User Interface (TUI) for TLC (Task Line CLI),
 │  ┌──────────────────────────────┐  │
 │  │  tlc task list --format json │  │
 │  │  tlc task update ...         │  │
-│  │  tlc flow run ...            │  │
+│  │  tlc recipe runs ...         │  │
 │  └──────────────────────────────┘  │
 └─────────────────────────────────────┘
 ```
@@ -51,8 +51,8 @@ tasks := exec("tlc task list --format json")
 // Update task
 exec("tlc task update T-0042 --status DONE")
 
-// Run flow
-exec("tlc flow run flows/feature-dev.yaml --watch")
+// List recipe runs
+exec("tlc recipe runs --format json")
 ```
 
 **Benefits**:
@@ -232,70 +232,53 @@ Full task information with logs and metadata.
 
 ---
 
-### 4. Flow Execution View
+### 4. Runs View
 
-Live monitoring of flow execution with progress indicators.
+The recipe run ledger: every materialization, newest first, and the tasks
+each run created.
 
 ```
-┌─ Flow: Feature Development ─────────────────────────────────┐
+┌─ Runs ───────────────────────────────────────────────────────┐
 │                                                              │
-│ Execution ID: exec-1234                                     │
-│ Started: 2025-01-16 14:30:00  │  Duration: 4m 23s           │
+│ RUN ID       RECIPE           VER    TRACK        BY     CREATED      │
+│ run_01hx...  code-review      1.0.0  review-42    jadb   14:30:00     │
+│ run_01hw...  release          0.2.0  release-41   jadb   11:02:11     │
+│ run_01hv...  smoke            0.1.0  smoke-test   ci     09:48:03     │
 │                                                              │
-│ ┌─ Progress ───────────────────────────────────────────┐   │
-│ │ [████████████░░░░░░░░░░░░░░] 50%  (4/8 steps)       │   │
-│ └───────────────────────────────────────────────────────┘  │
-│                                                              │
-│ ┌─ Step Tree ──────────────────────────────────────────┐   │
-│ │ ✓ setup-worktree          [COMPLETED] 2.1s           │   │
-│ │ ✓ parallel-setup          [COMPLETED] 4.3s           │   │
-│ │   ✓ install-deps          [COMPLETED] 4.2s           │   │
-│ │   ✓ create-branch         [COMPLETED] 0.1s           │   │
-│ │ ▶ implement-feature       [RUNNING]   258.5s         │   │
-│ │ ⋯ run-tests               [PENDING]                  │   │
-│ │ ⋯ quality-checks          [PENDING]                  │   │
-│ │   ⋯ lint                  [PENDING]                  │   │
-│ │   ⋯ typecheck             [PENDING]                  │   │
-│ │   ⋯ unit-tests            [PENDING]                  │   │
-│ └───────────────────────────────────────────────────────┘  │
-│                                                              │
-│ ┌─ Current Step: implement-feature ────────────────────┐   │
-│ │ Task: T-0042                                          │   │
-│ │ Status: RUNNING                                       │   │
+│ ┌─ Run run_01hx… · code-review@1.0.0 ──────────────────┐   │
+│ │ Track:    review-42                                   │   │
+│ │ Subject:  task T-0042                                 │   │
+│ │ Vars:     pr=42  reviewer=alice                       │   │
+│ │ Parent:   —                                           │   │
 │ │                                                       │   │
-│ │ Output (last 10 lines):                              │   │
-│ │ > npm run build                                       │   │
-│ │ > Compiling TypeScript...                            │   │
-│ │ > ✓ src/middleware/rateLimit.ts                      │   │
-│ │ > ✓ src/config/redis.ts                              │   │
-│ │ > Build complete                                      │   │
+│ │ STEP        TASK    KIND   STATUS                     │   │
+│ │ fetch       T-0043  exec   DONE                       │   │
+│ │ lint        T-0044  exec   DONE                       │   │
+│ │ review      T-0045  agent  IN_PROGRESS                │   │
+│ │ sign-off    T-0046  human  TODO                       │   │
 │ └───────────────────────────────────────────────────────┘  │
 │                                                              │
-│ [p]ause  [x]cancel  [d]etails  [l]ogs  [r]efresh           │
+│ [Enter]tasks  [t]rack  [/]filter  [r]efresh  [Esc]back      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Features**:
-- Overall progress bar
-- Step tree with hierarchical display
-- Status indicators (✓=done, ▶=running, ⋯=pending, ✗=failed)
-- Timing for each step
-- Live output from current step
-- Real-time updates
+- Run list: id, recipe, version, track, who created it, when
+- Selected run's header: track, subject, bound vars, parent run
+- Its step rows, each resolved to the task it created and that task's status
+- Status is read from the tasks, not from the run: a run has no status of
+  its own
+- Filter by recipe or track
 
 **Keybindings**:
 | Key | Action |
 |-----|--------|
-| `j/k` or `↓/↑` | Navigate steps |
-| `Enter` | View step details |
-| `p` | Pause execution |
-| `x` | Cancel execution |
-| `d` | Show step details |
-| `l` | Full logs view |
+| `j/k` or `↓/↑` | Navigate runs |
+| `Enter` | Open the run's tasks in the task list |
+| `t` | Open the run's track |
+| `/` | Filter by recipe or track |
 | `r` | Manual refresh |
 | `Esc` | Back to dashboard |
-
-**Auto-refresh**: Updates every 1 second while flow is running.
 
 ---
 
@@ -414,8 +397,8 @@ Dashboard (main)
 │       └── Comment Dialog
 ├── Kanban Board
 │   └── Task Detail
-├── Flow Execution
-│   ├── Step Details
+├── Runs
+│   ├── Run Detail
 │   └── Logs View
 ├── Search/Filter
 │   └── Task Detail
@@ -448,7 +431,7 @@ Press `:` to open command palette with fuzzy search:
 │ task create                    Create new task              │
 │ task list                      Show task list               │
 │ task update                    Update task                  │
-│ flow run                       Run flow                     │
+│ recipe runs                    Browse the run ledger        │
 │ sync pull                      Pull from external systems   │
 │ view kanban                    Switch to kanban view        │
 │ help keybindings               Show all keybindings         │
@@ -831,7 +814,7 @@ tlc tui
 ```bash
 # Automated UI tests
 tlc tui test --scenario task-creation
-tlc tui test --scenario flow-execution
+tlc tui test --scenario recipe-runs
 tlc tui test --all
 
 # Output:
@@ -840,7 +823,7 @@ Running TUI tests...
 ✓ Status change
 ✓ Filter application
 ✓ Kanban drag-drop
-✓ Flow monitoring
+✓ Run ledger browsing
 ✓ Search functionality
 
 6/6 tests passed
@@ -856,7 +839,7 @@ Running TUI tests...
 - [ ] Apply filters
 - [ ] Search tasks
 - [ ] View task details
-- [ ] Monitor flow execution
+- [ ] Browse recipe runs
 - [ ] Handle errors gracefully
 - [ ] Sync with external systems
 - [ ] Resolve conflicts
@@ -1210,7 +1193,7 @@ T-0089 Refactor auth module   @codex  ✏️  codex (editing)
 
 - [tlc-config-spec-0.1.md](tlc-config-spec-0.1.md) — Configuration
 - [task-crud-spec-0.1.md](task-crud-spec-0.1.md) — Task schema
-- [task-flow-spec-0.1.md](task-flow-spec-0.1.md) — Flow execution
+- [recipe-spec-0.1.md](recipe-spec-0.1.md) — Recipe grammar and steps
 
 ---
 

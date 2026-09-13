@@ -2,7 +2,7 @@
 
 **Description**
 
-A team lead or project manager responsible for multi-project coordination, team visibility, and workflow standardization. This persona manages task templates, enforces flow policies, configures sync with GitHub/Jira, and needs clear reporting of team task state and assignments. They care about consistency, audit trails, team capacity planning, and the ability to enforce standard processes.
+A team lead or project manager responsible for multi-project coordination, team visibility, and workflow standardization. This persona manages recipes, enforces process policies, configures sync with GitHub/Jira, and needs clear reporting of team task state and assignments. They care about consistency, audit trails, team capacity planning, and the ability to enforce standard processes.
 
 ## Primary Stories
 
@@ -12,7 +12,6 @@ A team lead or project manager responsible for multi-project coordination, team 
 - [008 - Task Assignment](../stories/008-task-assignment.md)
 - [009 - Task Audit Log](../stories/009-task-audit-log.md)
 - [010 - GitHub Sync](../stories/010-github-sync.md)
-- [012 - Flow Templates](../stories/012-flow-templates.md) (planned)
 - [013 - Team Task Assignment](../stories/013-team-task-assignment.md) (planned)
 - [041 - Team Visibility Dashboard](../stories/041-team-visibility-dashboard.md) (planned)
 
@@ -20,4 +19,3 @@ A team lead or project manager responsible for multi-project coordination, team 
 
 Stories that support team lead workflows:
 
-- [020 - Flow Execution](../stories/020-flow-execution.md) (flow governance)

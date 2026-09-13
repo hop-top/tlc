@@ -288,31 +288,30 @@ func TestTrackConfig_TracksDir_Custom(t *testing.T) {
 	}
 }
 
-func TestFlowConfig_FlowsDir_Default(t *testing.T) {
-	fc := &FlowConfig{}
-	want := filepath.Join("examples", "flows")
-	if got := fc.FlowsDir(); got != want {
-		t.Errorf("FlowsDir() = %q, want %q", got, want)
+func TestRecipeConfig_RecipeDir_Default(t *testing.T) {
+	fc := &RecipeConfig{}
+	if got := fc.RecipeDir(); got != "" {
+		t.Errorf("RecipeDir() = %q, want empty (no repo-relative default)", got)
 	}
 }
 
-func TestFlowConfig_FlowsDir_Custom(t *testing.T) {
-	fc := &FlowConfig{Dir: "flows"}
-	if got := fc.FlowsDir(); got != "flows" {
-		t.Errorf("FlowsDir() = %q, want %q", got, "flows")
+func TestRecipeConfig_RecipeDir_Custom(t *testing.T) {
+	fc := &RecipeConfig{Dir: "recipes"}
+	if got := fc.RecipeDir(); got != "recipes" {
+		t.Errorf("RecipeDir() = %q, want %q", got, "recipes")
 	}
 }
 
-func TestFlowConfig_AssigneesDirectory_Default(t *testing.T) {
-	fc := &FlowConfig{}
+func TestRecipeConfig_AssigneesDirectory_Default(t *testing.T) {
+	fc := &RecipeConfig{}
 	want := filepath.Join("examples", "assignees")
 	if got := fc.AssigneesDirectory(); got != want {
 		t.Errorf("AssigneesDirectory() = %q, want %q", got, want)
 	}
 }
 
-func TestFlowConfig_AssigneesDirectory_Custom(t *testing.T) {
-	fc := &FlowConfig{AssigneesDir: "people"}
+func TestRecipeConfig_AssigneesDirectory_Custom(t *testing.T) {
+	fc := &RecipeConfig{AssigneesDir: "people"}
 	if got := fc.AssigneesDirectory(); got != "people" {
 		t.Errorf("AssigneesDirectory() = %q, want %q", got, "people")
 	}
@@ -380,8 +379,8 @@ func TestValidateRelativePath_RejectsAbsolute(t *testing.T) {
 		setup func(*Config)
 	}{
 		{"tracks.dir absolute", func(c *Config) { c.Tracks.Dir = "/abs/tracks" }},
-		{"flow.dir absolute", func(c *Config) { c.Flow.Dir = "/abs/flows" }},
-		{"flow.assignees_dir absolute", func(c *Config) { c.Flow.AssigneesDir = "/abs/people" }},
+		{"recipe.dir absolute", func(c *Config) { c.Recipe.Dir = "/abs/recipes" }},
+		{"recipe.assignees_dir absolute", func(c *Config) { c.Recipe.AssigneesDir = "/abs/people" }},
 		{"storage.inbox.dir absolute", func(c *Config) { c.Storage.Inbox.Dir = "/abs/inbox" }},
 		{"task.projection_dir absolute", func(c *Config) { c.Task.ProjectionDir = "/abs/tasks" }},
 	}

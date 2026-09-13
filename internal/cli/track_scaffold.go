@@ -58,6 +58,14 @@ func trackScaffoldDirName(track *core.Track) string {
 // configDir is the .tlc/ (or .hop/tlc/) directory containing config.yaml.
 // Scaffold errors are warnings — track creation already succeeded.
 func scaffoldTrackDir(w io.Writer, track *core.Track, configDir string) {
+	scaffoldTrackDirWithPlan(w, track, configDir, "")
+}
+
+// scaffoldTrackDirWithPlan is scaffoldTrackDir with plan.md supplied by
+// the caller — a recipe's rendered track.plan. Empty writes the template
+// and the manual next steps; a supplied plan has its tasks materialized
+// already, so the next step is to run the track.
+func scaffoldTrackDirWithPlan(w io.Writer, track *core.Track, configDir, plan string) {
 	trackDir := filepath.Join(configDir, tracksDir(), trackScaffoldDirName(track))
 	if err := os.MkdirAll(trackDir, 0o755); err != nil {
 		_, _ = fmt.Fprintf(w, "  Warning: could not create %s: %v\n", trackDir, err)
@@ -65,8 +73,12 @@ func scaffoldTrackDir(w io.Writer, track *core.Track, configDir string) {
 	}
 
 	writeMetadata(w, track, trackDir)
-	writePlanMD(w, track, configDir, trackDir)
+	writePlanMD(w, track, configDir, trackDir, plan)
 	updateTracksRegistry(w, track, configDir)
+	if plan != "" {
+		printRecipeNextSteps(w, track, trackDir)
+		return
+	}
 	printNextSteps(w, track, configDir, trackDir)
 }
 
@@ -100,12 +112,26 @@ func writeMetadata(w io.Writer, track *core.Track, trackDir string) {
 	}
 }
 
-func writePlanMD(w io.Writer, track *core.Track, configDir, trackDir string) {
+// writePlanMD writes plan.md: the given content when set, else the
+// scaffold template. An existing file is left alone (idempotent re-run).
+func writePlanMD(w io.Writer, track *core.Track, configDir, trackDir, content string) {
 	path := filepath.Join(trackDir, "plan.md")
-	// Skip if already exists (e.g. idempotent re-run).
 	if _, err := os.Stat(path); err == nil {
 		return
 	}
+	if content == "" {
+		content = planTemplate(track, configDir)
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: scaffold files are project-shared, same mode as metadata.json
+		_, _ = fmt.Fprintf(w, "  Warning: could not write %s: %v\n", path, err)
+	}
+}
+
+// planTemplate is the plan.md a hand-made track starts from.
+func planTemplate(track *core.Track, configDir string) string {
 	assignedTo := "-"
 	if track.AssignedTo != nil {
 		assignedTo = "@" + *track.AssignedTo
@@ -114,7 +140,7 @@ func writePlanMD(w io.Writer, track *core.Track, configDir, trackDir string) {
 	// In hop mode this is ".hop/tlc"; in standalone mode ".tlc".
 	relBase := configDirRelToCwd(configDir)
 	dirName := trackScaffoldDirName(track)
-	content := fmt.Sprintf(
+	return fmt.Sprintf(
 		`---
 title: %q
 tracks:
@@ -152,9 +178,19 @@ TODO: list what is in scope and out of scope.
 		track.Type,
 		assignedTo,
 	)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		_, _ = fmt.Fprintf(w, "  Warning: could not write %s: %v\n", path, err)
-	}
+}
+
+// printRecipeNextSteps follows a recipe-built track: its tasks exist, so
+// the plan needs no frontmatter ingest.
+func printRecipeNextSteps(w io.Writer, track *core.Track, trackDir string) {
+	dirName := trackScaffoldDirName(track)
+	_, _ = fmt.Fprintf(w, "\nScaffolded:\n")
+	_, _ = fmt.Fprintf(w, "  %s/\n", trackDir)
+	_, _ = fmt.Fprintf(w, "    metadata.json  — track identity\n")
+	_, _ = fmt.Fprintf(w, "    plan.md        — the recipe's plan\n")
+	_, _ = fmt.Fprintf(w, "\nNext steps:\n")
+	_, _ = fmt.Fprintf(w, "  tlc track show %s      — the materialized tasks\n", dirName)
+	_, _ = fmt.Fprintf(w, "  tlc track execute %s   — run them\n", dirName)
 }
 
 // updateTracksRegistry appends an entry to tracks/tracks.md.

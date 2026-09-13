@@ -15,7 +15,7 @@ type AuditStep struct {
 
 // AuditRun is an audit-ledger entry for a run executed by an external
 // tool that uses tlc as its audit home. Distinct from AgentRunRecord
-// (tlc-launched agents) and flow runs (tlc-executed flows): audit runs
+// (tlc-launched agents): audit runs
 // are reported after the fact by the external tool itself.
 type AuditRun struct {
 	ProjectID  string         `json:"project_id,omitempty" yaml:"project_id,omitempty"`

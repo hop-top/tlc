@@ -13,9 +13,19 @@ import (
 	"syscall"
 )
 
+// Env vars every locally executed agent receives: the context file tlc
+// wrote for it and the results file tlc reads back. Container runs export
+// the same two names for their /workspace paths, so an agent never has to
+// guess either path from its working directory.
+const (
+	EnvContextPath = "TLC_CONTEXT_PATH"
+	EnvResultsPath = "TLC_RESULTS_PATH"
+)
+
 // LocalExecManager executes an agent binary directly on the host,
 // bypassing container isolation. It implements the same result contract
-// as PodShell (stdout JSON status + results file).
+// as PodShell (stdout JSON status + results file) and announces the
+// contract's file paths through EnvContextPath and EnvResultsPath.
 type LocalExecManager struct {
 	runner      CommandRunner
 	resultsPath string // path to results.json (default: .tlc/results.json)
@@ -23,11 +33,12 @@ type LocalExecManager struct {
 
 // LocalExecOpts configures a local agent execution.
 type LocalExecOpts struct {
-	Binary     string            // agent binary name or path
-	Args       []string          // extra args for the binary
-	EnvVars    map[string]string // injected env vars
-	RepoRoot   string            // working directory for exec
-	ResultPath string            // override results file path
+	Binary      string            // agent binary name or path
+	Args        []string          // extra args for the binary
+	EnvVars     map[string]string // injected env vars
+	RepoRoot    string            // working directory for exec
+	ResultPath  string            // override results file path
+	ContextPath string            // context file the agent reads; exported as EnvContextPath when set
 }
 
 // NewLocalExecManager returns a LocalExecManager that delegates to runner.
@@ -71,13 +82,17 @@ func (m *LocalExecManager) Exec(
 		cmd.Dir = opts.RepoRoot
 	}
 
-	// Inject environment variables: inherit current env + overlay opts.EnvVars.
-	if len(opts.EnvVars) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range opts.EnvVars {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
+	// Inherit the current env, overlay opts.EnvVars, then announce the
+	// protocol paths last so they win over anything inherited.
+	env := os.Environ()
+	for k, v := range opts.EnvVars {
+		env = append(env, k+"="+v)
 	}
+	env = append(env, EnvResultsPath+"="+m.ResultsFilePath(opts.RepoRoot))
+	if opts.ContextPath != "" {
+		env = append(env, EnvContextPath+"="+opts.ContextPath)
+	}
+	cmd.Env = env
 
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

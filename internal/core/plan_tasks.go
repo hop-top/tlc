@@ -155,130 +155,22 @@ func (s *TrackService) CreateTasksFromPlan(
 		}
 	}
 
-	// --- Pre-allocate IDs and sequences -------------------------------
-	// Generate all IDs upfront so forward blocked-by refs (index > i)
-	// can be resolved during task creation without an extra pass.
-	createdIDs := make([]string, len(specs))
-	createdSeqs := make([]int64, len(specs))
-	for i := range specs {
-		seq, err := idGen.GetNextSequenceID(ctx, projectID)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"plan task %d (%q): failed to allocate sequence; %w",
-				i, specs[i].Title, err,
-			)
-		}
-		createdIDs[i] = NewTaskID()
-		createdSeqs[i] = int64(seq)
-	}
-
 	// --- Create tasks + resolve refs ---------------------------------
-	resolved := make(map[string]string)
-	unresolved := make([]string, 0)
-	now := time.Now().UTC()
-
-	for i, spec := range specs {
-		taskID := createdIDs[i]
-
-		var blockedBy []string
-		var taskUnresolved []string
-		var taskCrossProject []string
-		for _, ref := range spec.BlockedBy {
-			switch {
-			case ref.IsIndex():
-				blockedBy = append(blockedBy, createdIDs[ref.Index])
-			case ref.TaskID != "":
-				id, rErr := s.resolveTaskIDRef(ctx, projectID, ref.TaskID)
-				if rErr != nil {
-					return nil, fmt.Errorf(
-						"plan task %d (%q): %w", i, spec.Title, rErr,
-					)
-				}
-				blockedBy = append(blockedBy, id)
-			case ref.CrossTrack != nil:
-				id, deferred, rErr := s.resolveCrossTrackRef(
-					ctx, ref.CrossTrack,
-				)
-				if rErr != nil {
-					// Pre-flight should have caught hard errors,
-					// but keep the guard for defensive safety.
-					return nil, fmt.Errorf(
-						"plan task %d (%q): %w",
-						i, spec.Title, rErr,
-					)
-				}
-				if deferred {
-					raw := ref.Raw()
-					taskUnresolved = append(taskUnresolved, raw)
-					unresolved = append(unresolved, raw)
-				} else {
-					blockedBy = append(blockedBy, id)
-					resolved[ref.Raw()] = id
-				}
-			case ref.CrossProject != nil:
-				// Cross-project refs are always deferred; the
-				// external project's DB is not available during
-				// phase 1 ingestion. Store under a separate meta
-				// key so ResolvePendingCrossTrackRefs doesn't
-				// treat them as corrupted cross-track entries.
-				raw := ref.Raw()
-				taskCrossProject = append(taskCrossProject, raw)
-				unresolved = append(unresolved, raw)
-			}
-		}
-
-		meta := make(map[string]any)
-		if len(blockedBy) > 0 {
-			meta["blocked_by"] = blockedBy
-			// Every edge here came from plan frontmatter, so a later
-			// re-ingest is free to retract it.
-			meta[metaKeyPlanOwned] = blockedBy
-		}
-		if len(taskUnresolved) > 0 {
-			meta[metaKeyUnresolved] = taskUnresolved
-		}
-		if len(taskCrossProject) > 0 {
-			meta[metaKeyCrossProject] = taskCrossProject
-		}
-
-		var assignee *string
-		if spec.AssignedTo != "" {
-			a := spec.AssignedTo
-			if len(a) > 1 && a[0] == '@' {
-				a = a[1:]
-			}
-			assignee = &a
-		}
-
-		var projPtr *string
-		if projectID != "" {
-			projPtr = &projectID
-		}
-
-		task := &Task{
-			ID:          taskID,
-			Seq:         createdSeqs[i],
-			Title:       spec.Title,
-			Description: strings.TrimSpace(spec.Description),
-			Status:      StatusTodo,
-			AssignedTo:  assignee,
-			Tags:        spec.Tags,
-			Effort:      Effort(spec.Effort),
-			Priority:    Priority(spec.Priority),
-			CreatedAt:   now,
-			UpdatedAt:   now,
-			TrackID:     &trackID,
-			ProjectID:   projPtr,
-			Meta:        meta,
-		}
-
-		if err := s.taskRepo.CreateTask(ctx, task); err != nil {
-			return nil, fmt.Errorf(
-				"plan task %d (%q): failed to create; %w",
-				i, spec.Title, err,
-			)
-		}
+	// Every id and sequence is allocated up front so forward blocked-by
+	// refs (index > i) resolve during task creation without an extra pass.
+	ingest := &planIngest{
+		svc: s, ctx: ctx, trackID: trackID, projectID: projectID,
+		specs: specs, now: time.Now().UTC(),
+		resolved: make(map[string]string), unresolved: make([]string, 0),
 	}
+	createdIDs, err := createSpecTasks(ctx, s.taskRepo, specTasks{
+		IDGen: idGen, ProjectID: projectID, Count: len(specs),
+		Label: ingest.label, Build: ingest.build,
+	})
+	if err != nil {
+		return nil, err
+	}
+	resolved, unresolved := ingest.resolved, ingest.unresolved
 
 	// Persist plan mapping on the track: index → task ID.
 	mapping := make(map[int]string, len(createdIDs))
@@ -304,6 +196,100 @@ func (s *TrackService) CreateTasksFromPlan(
 	}
 
 	return result, nil
+}
+
+// planIngest carries the per-call state of CreateTasksFromPlan's build
+// loop: ref resolution accumulates into resolved/unresolved while each
+// spec becomes a task.
+type planIngest struct {
+	svc        *TrackService
+	ctx        context.Context
+	trackID    string
+	projectID  string
+	specs      []PlanTaskSpec
+	now        time.Time
+	resolved   map[string]string
+	unresolved []string
+}
+
+func (p *planIngest) label(i int) string {
+	return fmt.Sprintf("plan task %d (%q)", i, p.specs[i].Title)
+}
+
+// build resolves spec i's blocked-by refs — intra-track indices through
+// the batch ids, concrete and cross-track refs through the DB — and
+// returns its task. Deferred refs land in Meta for phase 2.
+func (p *planIngest) build(i int, ids []string, seqs []int64) (*Task, error) {
+	spec := p.specs[i]
+	var blockedBy, taskUnresolved, taskCrossProject []string
+	for _, ref := range spec.BlockedBy {
+		switch {
+		case ref.IsIndex():
+			blockedBy = append(blockedBy, ids[ref.Index])
+		case ref.TaskID != "":
+			id, rErr := p.svc.resolveTaskIDRef(p.ctx, p.projectID, ref.TaskID)
+			if rErr != nil {
+				return nil, fmt.Errorf("%s: %w", p.label(i), rErr)
+			}
+			blockedBy = append(blockedBy, id)
+		case ref.CrossTrack != nil:
+			id, deferred, rErr := p.svc.resolveCrossTrackRef(p.ctx, ref.CrossTrack)
+			if rErr != nil {
+				// Pre-flight should have caught hard errors,
+				// but keep the guard for defensive safety.
+				return nil, fmt.Errorf("%s: %w", p.label(i), rErr)
+			}
+			if deferred {
+				raw := ref.Raw()
+				taskUnresolved = append(taskUnresolved, raw)
+				p.unresolved = append(p.unresolved, raw)
+			} else {
+				blockedBy = append(blockedBy, id)
+				p.resolved[ref.Raw()] = id
+			}
+		case ref.CrossProject != nil:
+			// Cross-project refs are always deferred; the
+			// external project's DB is not available during
+			// phase 1 ingestion. Store under a separate meta
+			// key so ResolvePendingCrossTrackRefs doesn't
+			// treat them as corrupted cross-track entries.
+			raw := ref.Raw()
+			taskCrossProject = append(taskCrossProject, raw)
+			p.unresolved = append(p.unresolved, raw)
+		}
+	}
+
+	meta := make(map[string]any)
+	if len(blockedBy) > 0 {
+		meta["blocked_by"] = blockedBy
+		// Every edge here came from plan frontmatter, so a later
+		// re-ingest is free to retract it.
+		meta[metaKeyPlanOwned] = blockedBy
+	}
+	if len(taskUnresolved) > 0 {
+		meta[metaKeyUnresolved] = taskUnresolved
+	}
+	if len(taskCrossProject) > 0 {
+		meta[metaKeyCrossProject] = taskCrossProject
+	}
+
+	trackID := p.trackID
+	return &Task{
+		ID:          ids[i],
+		Seq:         seqs[i],
+		Title:       spec.Title,
+		Description: strings.TrimSpace(spec.Description),
+		Status:      StatusTodo,
+		AssignedTo:  assigneeFromSpec(spec.AssignedTo),
+		Tags:        spec.Tags,
+		Effort:      Effort(spec.Effort),
+		Priority:    Priority(spec.Priority),
+		CreatedAt:   p.now,
+		UpdatedAt:   p.now,
+		TrackID:     &trackID,
+		ProjectID:   optString(p.projectID),
+		Meta:        meta,
+	}, nil
 }
 
 // resolveTaskIDRef resolves a same-project "T-NNNN" blocked-by ref to

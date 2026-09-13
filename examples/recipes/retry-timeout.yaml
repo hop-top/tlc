@@ -1,0 +1,44 @@
+recipe: retry-timeout
+version: 1.0.0
+description: |
+  Retry with backoff and timeout enforcement. A flaky deploy step retries
+  up to 3 times with a 1s backoff; the health check is an exec step
+  killed after 5s; teardown runs last regardless of the outcome.
+vars:
+  service_url:
+    description: URL of the service to deploy and verify
+    required: true
+steps:
+  - id: setup
+    title: Prepare deployment environment
+    description: |
+      Provision temporary resources needed for the deploy.
+
+  - id: deploy-service
+    title: Deploy service with retry
+    depends_on: [setup]
+    retry:
+      max_attempts: 3
+      backoff: 1s
+    description: |
+      Push the service to {{service_url}}. This step is known to be
+      flaky (network timeouts, rate limits). The retry policy handles
+      transient failures.
+
+  - id: health-check
+    kind: exec
+    title: Verify service health
+    depends_on: [deploy-service]
+    exec:
+      argv: [curl, --fail, --silent, --show-error, "{{service_url}}/health"]
+      timeout: 5s
+    description: |
+      Hit the health endpoint and verify the service is responding.
+      If this times out, teardown still runs.
+
+  - id: teardown
+    title: Clean up temporary resources
+    depends_on: [health-check]
+    description: |
+      Destroy temporary infrastructure regardless of whether the
+      deploy or health check succeeded or failed.

@@ -6,8 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"hop.top/tlc/internal/core"
 )
 
 // allAdapters returns one instance of every built-in adapter.
@@ -341,56 +339,29 @@ func TestBuildFlagsFromConfigEmpty(t *testing.T) {
 
 // --- Operation dispatch ---
 
-func TestLLMAdapterOperationEmbed(t *testing.T) {
+func TestLLMAdapterOperationIsPrompt(t *testing.T) {
 	a := NewLLMAdapter()
-	step := core.Step{
-		ID:   "embed-step",
-		Type: core.StepTypeTask,
-		TaskTemplate: &core.TaskTemplate{
-			Title:        "embed",
-			Requirements: &core.TaskRequirements{Capabilities: []string{"embed"}},
-		},
-	}
-	if got := a.Operation(step); got != "embed" {
-		t.Errorf("Operation()=%q, want embed", got)
-	}
-}
-
-func TestLLMAdapterOperationPromptDefault(t *testing.T) {
-	a := NewLLMAdapter()
-	step := core.Step{
-		ID:   "plain-step",
-		Type: core.StepTypeTask,
-		TaskTemplate: &core.TaskTemplate{
-			Title:        "prompt",
-			Requirements: &core.TaskRequirements{Capabilities: []string{"planning"}},
-		},
-	}
-	if got := a.Operation(step); got != "prompt" {
-		t.Errorf("Operation()=%q, want prompt", got)
-	}
-}
-
-func TestLLMAdapterOperationNoTemplate(t *testing.T) {
-	a := NewLLMAdapter()
-	step := core.Step{ID: "s", Type: core.StepTypeTask}
-	if got := a.Operation(step); got != "prompt" {
-		t.Errorf("Operation()=%q, want prompt for no template", got)
+	for _, s := range []StepRef{
+		{ID: "plain-step", Title: "prompt", Kind: "agent"},
+		{ID: "bare"},
+	} {
+		if got := a.Operation(s); got != "prompt" {
+			t.Errorf("Operation(%+v)=%q, want prompt", s, got)
+		}
 	}
 }
 
 func TestClaudeAdapterOperationAlwaysEmpty(t *testing.T) {
 	a := NewClaudeAdapter()
-	step := core.Step{
-		ID:   "s",
-		Type: core.StepTypeTask,
-		TaskTemplate: &core.TaskTemplate{
-			Title:        "t",
-			Requirements: &core.TaskRequirements{Capabilities: []string{"embed"}},
-		},
-	}
-	if got := a.Operation(step); got != "" {
+	if got := a.Operation(StepRef{ID: "s", Title: "t", Kind: "agent"}); got != "" {
 		t.Errorf("claudeAdapter.Operation()=%q, want empty", got)
+	}
+}
+
+func TestCodexAdapterOperationIsExec(t *testing.T) {
+	a := NewCodexAdapter()
+	if got := a.Operation(StepRef{ID: "s"}); got != "exec" {
+		t.Errorf("codexAdapter.Operation()=%q, want exec", got)
 	}
 }
 
@@ -399,8 +370,7 @@ func TestAllAdaptersOperationReturnString(t *testing.T) {
 		a := a
 		t.Run(a.Name(), func(t *testing.T) {
 			// Operation must not panic and must return a string.
-			step := core.Step{ID: "s", Type: core.StepTypeTask}
-			_ = a.Operation(step)
+			_ = a.Operation(StepRef{ID: "s", Kind: "agent"})
 		})
 	}
 }
@@ -485,8 +455,7 @@ func TestFabricAdapterBuildArgsStreamNormalised(t *testing.T) {
 
 func TestFabricAdapterOperationAlwaysEmpty(t *testing.T) {
 	a := NewFabricAdapter()
-	step := core.Step{ID: "s", Type: core.StepTypeTask}
-	if got := a.Operation(step); got != "" {
+	if got := a.Operation(StepRef{ID: "s", Kind: "agent"}); got != "" {
 		t.Errorf("fabricAdapter.Operation()=%q, want empty", got)
 	}
 }

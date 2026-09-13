@@ -37,11 +37,6 @@ const (
 	TrackCreated   = string(TopicTrackCreated)
 	TrackActivated = string(TopicTrackActivated)
 	TrackCompleted = string(TopicTrackCompleted)
-
-	FlowStarted       = "tlc.flow.started"
-	FlowStepCompleted = "tlc.flow.step-completed"
-	FlowCompleted     = "tlc.flow.completed"
-	FlowFailed        = "tlc.flow.failed"
 )
 
 // State-machine transition topics, composed by domain.WithSMTopicPrefix
@@ -54,9 +49,6 @@ const (
 
 	TrackStatusPreTransitioned  = "tlc.track.status.pre_transitioned"
 	TrackStatusPostTransitioned = "tlc.track.status.post_transitioned"
-
-	FlowStatusPreTransitioned  = "tlc.flow.status.pre_transitioned"
-	FlowStatusPostTransitioned = "tlc.flow.status.post_transitioned"
 )
 
 // --- Typed payloads per domain-events.md ---

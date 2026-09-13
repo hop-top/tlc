@@ -502,7 +502,7 @@ func calculateProgress(taskID string) (int, int, int) {
 - Parent-child linking
 
 ### Integration Tests
-- Spec breakdown flow
+- Spec breakdown sequence
 - Hierarchy management
 - Spec reusability
 - AI import workflow

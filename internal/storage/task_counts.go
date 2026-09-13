@@ -78,7 +78,30 @@ func buildTaskWhereClauses(query core.Query) ([]string, []any) {
 	whereClauses = append(whereClauses, tClauses...)
 	args = append(args, tArgs...)
 
+	rClauses, rArgs := buildTaskRecipeClauses(query)
+	whereClauses = append(whereClauses, rClauses...)
+	args = append(args, rArgs...)
+
 	return whereClauses, args
+}
+
+// buildTaskRecipeClauses renders the recipe-era column predicates: run
+// id presence (the executor's strict mode) and claim age (its reclaim
+// query). claimed_at is RFC3339 UTC text like due_at, so the string
+// compare is chronological — see buildTaskTimeClauses.
+func buildTaskRecipeClauses(query core.Query) (clauses []string, args []any) {
+	if query.HasRunID != nil {
+		if *query.HasRunID {
+			clauses = append(clauses, "run_id IS NOT NULL AND run_id != ''")
+		} else {
+			clauses = append(clauses, "(run_id IS NULL OR run_id = '')")
+		}
+	}
+	if query.ClaimedBefore != nil {
+		clauses = append(clauses, "claimed_at IS NOT NULL AND claimed_at < ?")
+		args = append(args, query.ClaimedBefore.UTC().Format(time.RFC3339))
+	}
+	return clauses, args
 }
 
 // buildTaskTimeClauses assembles the due_at temporal predicates plus the two

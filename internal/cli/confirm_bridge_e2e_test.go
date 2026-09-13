@@ -13,7 +13,7 @@ package cli
 //
 // Three commands are picked, one per side-effect batch grouping:
 //   - task delete (C1, has local --yes/--no-prompt → bridge under test)
-//   - flow cancel (C2, no local flag → kit gate is the only surface)
+//   - agent cancel (C2, no local flag → kit gate is the only surface)
 //   - auth logout (C3, recently converted Run → RunE so the gate fires)
 
 import (
@@ -55,7 +55,7 @@ func TestConfirmGate_NonTTYRefuses(t *testing.T) {
 		args []string
 	}{
 		{"task delete", []string{"task", "delete", "T-NONE"}},
-		{"flow cancel", []string{"flow", "cancel", "run-X"}},
+		{"agent cancel", []string{"agent", "cancel", "job-X"}},
 		{"auth logout", []string{"auth", "logout", "github"}},
 	}
 	for _, tc := range cases {
@@ -87,7 +87,7 @@ func TestConfirmGate_NonTTYProceedsWithConfirmYes(t *testing.T) {
 		args []string
 	}{
 		{"task delete", []string{"task", "delete", "T-NONE", "--confirm=yes"}},
-		{"flow cancel", []string{"flow", "cancel", "run-X", "--confirm=yes"}},
+		{"agent cancel", []string{"agent", "cancel", "job-X", "--confirm=yes"}},
 		{"auth logout", []string{"auth", "logout", "github", "--confirm=yes"}},
 	}
 	for _, tc := range cases {

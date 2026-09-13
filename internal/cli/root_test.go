@@ -723,7 +723,7 @@ func TestApplyCommandGroups(t *testing.T) {
 	want := map[string]string{
 		"task":      "knowledge",
 		"track":     "knowledge",
-		"flow":      "knowledge",
+		"recipe":    "knowledge",
 		"log":       "knowledge",
 		"project":   "knowledge",
 		"prompt":    "knowledge",

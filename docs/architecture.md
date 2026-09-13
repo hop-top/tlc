@@ -15,9 +15,10 @@ bidirectional sync to GitHub / Jira / Linear.
 
 tlc is the operational backbone of the hop-top ecosystem. Every
 project keeps tasks in its own `.tlc/db.sqlite`; cross-project
-coordination happens via reference syntax. Workflows that span
-multiple agents are defined in `flow` YAML and executed
-deterministically with cassette-backed testing.
+coordination happens via reference syntax. Procedures that span
+multiple agents are declared in recipe YAML, materialized into
+tracks and tasks, and executed deterministically with
+cassette-backed testing.
 
 Cross-references:
 
@@ -33,7 +34,7 @@ Cross-references:
 |---|---|---|
 | `tlc` CLI | `cmd/tlc/` | Cobra-based CLI |
 | Plugins | `plugins/*/` | Per-feature pluggable binaries (compiled to `plugins/*/bin/`) |
-| Flow shims | `cmd/shims/` | Tool wrappers for deterministic flow execution (claude, git, docker, npm, uv, pip, etc.) |
+| Recipe shims | `cmd/shims/` | Tool wrappers for deterministic recipe testing (claude, git, docker, npm, uv, pip, etc.) |
 | SQLite DB | `.tlc/db.sqlite` (per project) | State + events; per-project; `~/.local/share/tlc/db.sqlite` for global registry |
 
 ## Components
@@ -44,7 +45,7 @@ Cross-references:
 |---|---|
 | `task` | CRUD, claim/unclaim, complete, assign, stale detection, scheduling, reminders, blocked-by relationships |
 | `track` | Lifecycle, plan ingestion, cross-track refs, health computation |
-| `flow` | Workflow exec with cassette testing; multi-agent dispatch; pause/resume; conditional branching; retry/timeout |
+| `recipe` | List, show, validate, import, diff; run ledger |
 | `project` | Registry, init, import/export, workspace scoping |
 | Other | `config`, `auth`, `sync`, `labels`, `assignee`, `agent`, `uri`, `prompt`, `tui`, `workspace`, `tag`, `inbox`, `version`, `doctor`, `upgrade` |
 
@@ -57,8 +58,12 @@ Cross-references:
 **Track** (`track.go`):
 - `id`, `title`, `type` (feature / fix / bug / refactor / chore / ci / docs / style / perf / test / build), `status` (pending / active / completed / abandoned / archived), `assigned_to`, timestamps, `meta`
 
-**Flow** (`flow.go`):
-- `AgentRef`, `FlowStatus` (queued / running / succeeded / failed / canceled / paused), `StepType` (task / exec / parallel / branch / join / retry / subflow), `StepStatus`
+**Recipe** (`recipe.go`):
+- `Recipe` (name, version, description, `requires.subject`, `vars`, `agent`, `track`, `steps`), `Step` (id, kind, title, description, `depends_on`, `when`, `assignee`, `due`, `retry`, `gate`, plus `include`/`with` and `repeat`/`until` blocks), `TaskKind` (agent / exec / human)
+
+**RecipeRun** (`recipe_run.go`):
+- `RecipeRun`: `id`, `recipe_id`, `version`, `hash`, `vars`, `subject_type`, `subject_id`, `track_id`, `selection`, `dropped_deps`, `parent_run`, `created_by`, `created_at`
+- `RecipeRunTask`: `run_id`, `step_id`, `task_id`
 
 **LogEntry** (`models.go`):
 - task log: `timestamp`, `by`, `action` (incl. SYNC_*), `note`, `meta`
@@ -66,11 +71,12 @@ Cross-references:
 ### Storage (`internal/storage/`)
 
 SQLite migrations v1-v7+. Tables: `tasks`, `task_logs`,
-`tracks`, `projects`, `flow_runs`, `task_sequences`. Indexes
+`tracks`, `projects`, `recipe_runs`, `recipe_run_tasks`,
+`task_sequences`. Indexes
 on status, assigned_to, created_at, origin_system, archived,
 project_id, track_id.
 
-Repos: `TaskDomainRepo`, `TrackDomainRepo`, `FlowDomainRepo`,
+Repos: `TaskDomainRepo`, `TrackDomainRepo`, `RecipeRunStore`,
 `AgentRunStore`, `JobStore`. Projection system in
 `projector.go` for denormalisation.
 
@@ -120,27 +126,56 @@ Cross-project ref normalisation: `<project-id>#<task-id>` and
 `<track-id>#<n>`. Resolver supports both intra-project and
 cross-project lookups.
 
-### Flow execution (`internal/core/flow*`, `internal/flowtest/`)
+### Recipes and the executor (`internal/core/recipe*`, `internal/core/executor*`, `internal/flowtest/`)
 
-`FlowParser` + `FlowExecutor` with deterministic execution
-contract. `FlowTest` sandbox uses cassette recording for
-replay testing. Shim binaries (`cmd/shims/`) intercept tool
-invocations (claude, git, docker, npm, uv, pip, etc.).
-`AgentRegistry` enforces trust policies.
+Two halves, in order. **Materialize** turns a recipe into tasks;
+**execute** runs the tasks that exist. Nothing runs during
+materialization, and the executor never reads a recipe file.
 
-#### Flow step types
+**Materialize** — `recipe_parser.go` parses the YAML,
+`recipe_validate.go` checks it, `recipe_expand.go` splices
+`include` blocks and unrolls `repeat` blocks into a flat step
+list, `recipe_template.go` + `recipe_render.go` bind vars,
+`subject.*`, `run.*` and `steps.*` placeholders, `recipe_select.go`
+applies `--task` / `--with-deps`, and `recipe_materialize.go`
+creates the tasks and writes the run to the ledger. Recipe files
+are found by `recipe_locator.go` over the three-layer search path.
+`recipe_reconcile.go` compares a track against the ledger so
+`tlc track execute --recipe` creates only the steps with no ledger
+row. `recipe_capture.go` and `recipe_importer.go` run the inverse:
+a track, or a markdown procedure, back out into a recipe file.
 
-| Type | Runner | What it does |
+**Execute** — `Executor` (`executor.go`) loops until nothing is
+ready. `executor_ready.go` recomputes readiness from `blocked_by`
+and evaluates each ready task's `when` against upstream
+`results.*`; `executor_dispatch.go` claims the task
+(`TODO` → `IN_PROGRESS`, stamping the actor and `claimed_at`),
+hands it to the dispatcher registered for its kind, and applies
+the outcome — done once the eva gate passes, retried up to
+`retry.max_attempts` with `retry.backoff`, or blocked with the
+failure as its reason once `attempts` is exhausted.
+`executor_human.go` applies `human.timeout` / `on_timeout` lazily,
+and `executor_subject.go` completes the run's subject once its
+leaves are done. Task provenance (`run_id`, `step_id`,
+`step_ordinal`) is what tells the executor a task belongs to a
+run; `--permissive` lifts that restriction.
+
+#### Task kinds
+
+Dispatchers are registered per kind in `internal/cli/track_execute.go`:
+
+| Kind | Dispatcher | What it does |
 |---|---|---|
-| `task` | `SandboxAgentRunner` | Dispatches an LLM agent subprocess (claude, codex, ...) to execute a task per `task-exec-spec-0.1`. Output is the agent's structured task result. |
-| `exec` | `ExecAgentRunner` | Runs a literal command (argv array) via `os/exec`. Captures `{exit_code, stdout, stderr, duration_ms, truncated}` as structured step output. **No LLM dispatch** — for deterministic CLI checks (smoke tests, lints, regex/exit-code gates). See `task-flow-spec-0.1-dev.md` and `examples/flows/exec-cli-smoke.yaml`. |
-| `parallel` | (control-flow) | Fan-out children with optional `max_concurrency`. Output ordering deterministic by `step_id`. |
-| `branch` | (control-flow) | Selects one path from `cases` based on condition expressions. Non-selected steps marked `skipped`. |
-| `join` | (control-flow) | Waits for multiple upstream steps; aggregates outputs for a single downstream consumer (e.g. an eva contract assertion). |
-| `retry` | (control-flow) | Re-runs a child step up to `max_attempts` with backoff. |
-| `subflow` | (control-flow) | Invokes another flow as a nested step (composition). |
+| `agent` | `agentDispatcher` | Dispatches an LLM agent subprocess (claude, codex, ...) to execute the task per `task-exec-spec-0.1`. The agent for the task is the one named on the step, else the recipe's `agent`, else `--agent`. Output is the agent's structured task result. |
+| `exec` | `ExecDispatcher` (`exec_dispatcher.go`, `exec_runner.go`) | Runs a literal command (`exec.argv`) via `os/exec`, honouring `exec.cwd`, `exec.env`, `exec.timeout` and `exec.stdout_max`. Captures `{exit_code, stdout, stderr, duration_ms, truncated}` as the task's result. **No LLM dispatch** — for deterministic CLI checks (smoke tests, lints, regex/exit-code gates). |
+| `human` | (never dispatched) | Waits for `tlc task approve` / `tlc task reject`. When only human tasks remain ready, the command lists them and exits 0, or keeps polling with `--wait --poll`. |
 
-The `exec` step type lets flows express deterministic checks (CLI
+With `--with-pod`, agent tasks each run in their own container up
+to `--concurrency`, and exec tasks run in a fresh pod too: the
+working tree is copied to `/workspace`, `exec.env` is set at
+creation and `exec.cwd` resolves under `/workspace`.
+
+The `exec` kind lets a recipe express deterministic checks (CLI
 smoke, branch-name regex, release-please file protection, etc.)
 without paying the LLM tax for work that doesn't need judgement.
 Cassettes still apply via the existing xrr catchall shim, so replay
@@ -148,17 +183,17 @@ remains hermetic.
 
 #### Contract evaluation (eva integration)
 
-Flows can attach an eva contract to any step via a `<stepID>.yaml`
-contract file in the flow's `contracts/` directory. After the step
-completes, `internal/flowtest/hook.go` POSTs the step output to the
-eva gateway at `{EVA_URL}/v1/contract/invoke`.
+A step declares a gate with `gate.contract` and an optional
+`gate.eva_url`. After the task completes, `internal/flowtest/hook.go`
+POSTs its output to the eva gateway at
+`{EVA_URL}/v1/contract/invoke`; the task only reaches DONE once the
+contract passes.
 
 **`EVA_URL` is required.** Without it, contract evaluation is
-**silently skipped** — the step's contract file is found, parsed,
-and then dropped on the floor. There is no warning logged. Set
-`EVA_URL` (and `EVA_KEY` if your gateway requires auth) in the
-environment before running `tlc flow test` if you want contracts
-to actually be checked.
+**silently skipped** — the contract is found, parsed, and then
+dropped on the floor. There is no warning logged. Set `EVA_URL`
+(and `EVA_KEY` if your gateway requires auth) in the environment if
+you want contracts to actually be checked.
 
 For CI use without standing up the full gateway, the standalone
 `eva run --contract foo.yaml --input data.json` CLI is the intended
@@ -206,7 +241,7 @@ Confidence-gated classifier:
 Bubble Tea v2 dashboard:
 
 - Kanban board view
-- Real-time flow monitoring
+- Runs view over the recipe run ledger
 - 250+ iTerm2 community themes
 - Keys: j/k navigate, enter view, n create, c/u claim/unclaim, s cycle status, / search, v cycle views
 
@@ -223,7 +258,7 @@ Bubble Tea v2 dashboard:
 ```
 tlc task {create\|list\|show\|update\|delete\|claim\|unclaim\|complete\|assign\|unassign\|stale\|remind\|exec\|prompt}
 tlc track {create\|list\|show\|update\|archive\|exec\|summary}
-tlc flow {invoke\|test\|validate\|dry-run\|list}
+tlc recipe {list\|show\|validate\|import\|runs\|diff}
 tlc project {init\|list\|import\|export}
 tlc {config\|auth\|sync\|init\|tui\|uri\|schema\|version\|doctor\|upgrade}
 ```
@@ -240,7 +275,10 @@ tracks (project_id, id) [title, type, status, assigned_to,
         timestamps, meta]
 projects (project_id PK) [db_path, space_uri, label, registered_at,
                           last_seen_at, status]
-flow_runs (id PK) [flow_id, status, started_at, ended_at, results]
+recipe_runs (id PK) [project_id, recipe_id, version, hash, vars,
+             subject_type, subject_id, track_id, selection,
+             dropped_deps, parent_run, created_by, created_at]
+recipe_run_tasks (run_id, step_id PK) [task_id]
 task_sequences (project_id PK) [next_id]
 ```
 
@@ -262,8 +300,8 @@ tracks:
   dir: "tracks"
   stale_threshold: "48h"
   health: { max_active: 3, min_progress_to_start: 50 }
-flow:
-  dir: "examples/flows"
+recipe:
+  dir: "recipes"
   assignees_dir: "examples/assignees"
 storage:
   db_path: "db.sqlite"
@@ -327,7 +365,7 @@ Per-feature specs at `docs/`:
 
 - [task-crud-spec-0.1](task-crud-spec-0.1.md) — CRUD lifecycle, soft delete, claim/unclaim/complete
 - [task-line-spec-0.1](task-line-spec-0.1.md) — TLS format `[status] <ID> <Title> @assignee #tag prio:<P>`
-- [task-flow-spec-0.1](task-flow-spec-0.1.md) — Flow YAML structure, step types, branching
+- [recipe-spec-0.1](recipe-spec-0.1.md) — Recipe YAML grammar, step kinds, includes, loops
 - [task-log-spec-0.1](task-log-spec-0.1.md) — Audit log actions and schema
 - [sync-architecture-0.1](sync-architecture-0.1.md) — Bidirectional sync, conflict resolution, meta fields
 - [tlc-tui-spec-0.1](tlc-tui-spec-0.1.md) — TUI keybindings and views
@@ -335,7 +373,7 @@ Per-feature specs at `docs/`:
 - [task-exec-spec-0.1](task-exec-spec-0.1.md) — Deterministic execution (stdout/stderr capture, timeouts)
 - [vtodo-sync-spec-0.1](vtodo-sync-spec-0.1.md) — RFC 5545 iCalendar VTODO export, RRULE recurrence, sync plugin
 
-Plans: [track-registry-design](plans/2026-04-03-track-registry-design.md), [task-prompt-design](plans/2026-04-04-task-prompt-design.md), [flowtest-agent-dispatch](plans/2026-04-02-flowtest-agent-dispatch.md).
+Plans: [track-registry-design](plans/2026-04-03-track-registry-design.md), [task-prompt-design](plans/2026-04-04-task-prompt-design.md).
 
 ## Evolution
 
@@ -347,7 +385,6 @@ Plans: [track-registry-design](plans/2026-04-03-track-registry-design.md), [task
 - Due dates / reminders / recurrence / auto-scheduling (`25efd73`) — v0.3 feature
 - Short refs for same-project blocked-by (`50ca32b`, T-0632) — fixes slash-split bug
 - Cross-project blocked-by in plan parser (`802abb3`, T-0631)
-- Flow use cases — 15 stories + fixtures + e2e tests (`b34a4a1`)
 - `--add-plan` idempotent with plan_mapping reconciliation (`24e0887`)
 - Dependency graph + execution strategy for tracks (`802abb3`)
 
@@ -358,29 +395,27 @@ Plans: [track-registry-design](plans/2026-04-03-track-registry-design.md), [task
 
 ### Troubleshooting
 
-**My flow's contract is not being checked / I changed the contract
+**My step's gate is not being checked / I changed the contract
 and nothing changed.**
 `EVA_URL` is probably not set. The hook in `internal/flowtest/hook.go`
-silently passes when `EVA_URL` is empty, even if a `<stepID>.yaml`
-contract file exists. Confirm with `echo $EVA_URL`. Set it (and
+silently passes when `EVA_URL` is empty, even if the step declares a
+`gate.contract`. Confirm with `echo $EVA_URL`. Set it (and
 `EVA_KEY` if needed), then re-run. For CI where you don't want to
 stand up the gateway, use the standalone `eva run` CLI
 (`hop-top/eva` T-0258) once it ships.
 
 **My `step_status` evaluator is rejected by eva.**
 `step_status` was an aspirational evaluator that never landed in eva.
-Existing fixtures in `examples/flows/fixtures/{conditional,
-composition-child}/` were rewritten 2026-04-27 to use `contains`
+Existing fixtures were rewritten 2026-04-27 to use `contains`
 against the joined step output. Use the same pattern, or wait for
-the `status_code` evaluator (`hop-top/eva#flow-exec-evaluators`
-T-0257) to ship.
+the `status_code` evaluator in `hop-top/eva` to ship.
 
 ### Known limits
 
 - Task ID sequences per-project; no global counter
 - `origin_system` field determines sync eligibility
 - Plan extraction one-way by default; rewrite requires explicit `--add-plan`
-- Flow cassettes project-scoped; no cross-project orchestration
+- Recipe test cassettes project-scoped; no cross-project execution
 - Workspace adapter pluggable but default is filesystem-based
 - TUI doesn't support multi-project views
 
@@ -389,5 +424,5 @@ T-0257) to ship.
 1. **Multi-segment project IDs** — `T-0717` documented; resolver currently splits on first `/`. Fix needed for `IdeaCraftersLabs/ocs-aaarrr-lineup` style IDs.
 2. **Stale handling defaults** — per-priority schedules in config; what's the right default cadence for P0/P1/P2/P3?
 3. **Plan rewrite safety** — `PlanRewrite` updates plan.md on disk; round-trip semantics under concurrent edits?
-4. **Cross-track flow orchestration** — flow cassettes are project-scoped; multi-project flows need either flat namespace or cross-DB resolver.
+4. **Cross-project recipes** — test cassettes are project-scoped; a recipe spanning projects needs either a flat namespace or a cross-DB resolver.
 5. **Bus topic naming** — informally `<tool>.<entity>.<action>`; formalise as kit/bus contract or stay convention-only?

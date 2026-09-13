@@ -1,0 +1,23 @@
+recipe: exec-cli-smoke
+version: 1.0.0
+description: |
+  Canonical example of the exec step kind. Runs `tlc --version` and
+  `tlc --help` as deterministic CLI subprocesses (no LLM dispatch) and
+  keeps `{exit_code, stdout, stderr, duration_ms, truncated}` on each
+  task as its result, where a `when:` expression or an eva contract in
+  the run's contracts/ dir can assert on it.
+steps:
+  - id: version
+    kind: exec
+    title: Capture tlc --version
+    exec:
+      argv: [tlc, --version]
+      timeout: 10s
+  - id: help
+    kind: exec
+    title: Capture tlc --help
+    depends_on: [version]
+    exec:
+      argv: [tlc, --help]
+      timeout: 10s
+      stdout_max: 65536

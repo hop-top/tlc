@@ -23,7 +23,6 @@ type JobType string
 
 const (
 	JobTypeAgentTask  JobType = "tlc.agent.task"
-	JobTypeAgentFlow  JobType = "tlc.agent.flow"
 	JobTypeAgentTrack JobType = "tlc.agent.track"
 )
 
@@ -46,7 +45,6 @@ type Job struct {
 type JobPayload struct {
 	AgentName        string   `json:"agent_name"`
 	Tasks            []string `json:"tasks,omitempty"`
-	FlowRef          string   `json:"flow_ref,omitempty"`
 	TrackID          string   `json:"track_id,omitempty"`
 	Image            string   `json:"image,omitempty"`
 	Local            bool     `json:"local,omitempty"`

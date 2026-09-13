@@ -8,7 +8,7 @@ react to specific failure modes without parsing error text.
 | 0    | OK               | Command succeeded.                                                                         |
 | 1    | GENERIC          | Default for any error tlc doesn't classify more specifically.                              |
 | 2    | USAGE            | Cobra default for unknown flags / wrong-arg-count. Not produced by tlc directly.           |
-| 3    | NOT_FOUND        | The thing you asked for doesn't exist (task, track, flow, project, alias).                 |
+| 3    | NOT_FOUND        | The thing you asked for doesn't exist (task, track, recipe, project, alias).               |
 | 4    | CONFLICT         | Policy denial, duplicate ID, state-machine refusal, deletion of non-existent record, etc.  |
 | 5    | UNAUTHORIZED     | Auth failure (login refusal, missing credential, sync 401/403).                            |
 | 64   | RATE_LIMITED     | Factor-10 max-ops budget exceeded (kit/output.ExitRateLimited).                            |

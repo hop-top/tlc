@@ -29,7 +29,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.0
-	hop.top/kit v0.5.0-alpha.5
+	hop.top/kit v0.5.0-alpha.7
 	hop.top/vstar v0.0.0-20260526030101-766e6e3a0692
 	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.53.0

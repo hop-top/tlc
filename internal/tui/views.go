@@ -21,7 +21,6 @@ const (
 	viewDashboard = "dashboard"
 	viewSearch    = "search"
 	viewKanban    = "kanban"
-	viewFlows     = "flows"
 	viewDetail    = "detail"
 	viewForm      = "form"
 	sortAsc       = "asc"
@@ -93,8 +92,6 @@ func (m Model) viewString() string {
 		content = m.detailView()
 	case viewKanban:
 		content = m.kanbanView()
-	case viewFlows:
-		content = m.flowsContent()
 	default: // dashboard or search
 		content = m.dashboardContent()
 	}
@@ -129,8 +126,6 @@ func (m Model) headerView() string {
 	switch m.view {
 	case viewKanban:
 		title = "Kanban Board"
-	case viewFlows:
-		title = "Flow Executions"
 	case viewDetail:
 		title = "Task Details"
 	}
@@ -175,8 +170,6 @@ func (m Model) helpView() string {
 		items = append(items, "[p] sync", "[v] cycle view", "[enter] details")
 	case viewKanban:
 		items = append(items, "[h/l] move", "[v] cycle view", "[enter] details")
-	case viewFlows:
-		items = append(items, "[v] cycle view")
 	case viewDetail:
 		items = append(
 			items,
@@ -327,11 +320,4 @@ func (m Model) kanbanView() string {
 
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
 	return s.String()
-}
-
-func (m Model) flowsContent() string {
-	if len(m.flowRuns) == 0 {
-		return "No flow runs found."
-	}
-	return m.flowList.View(m.width)
 }

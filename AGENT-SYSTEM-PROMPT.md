@@ -132,8 +132,8 @@ Updates TODO: T-0031 [ ] → [x]
 ## Task Breakdown by Engineer
 
 ### Engineer 1: Core Engine & Storage
-- **Focus**: Storage layer, state machine, audit logs, config system, flow engine, plugins
-- **Domains**: `domain:storage`, `domain:core`, `domain:config`, `domain:flow`, `domain:plugin`
+- **Focus**: Storage layer, state machine, audit logs, config system, recipe engine, plugins
+- **Domains**: `domain:storage`, `domain:core`, `domain:config`, `domain:recipe`, `domain:plugin`
 - **Filter**: `grep "@engineer-1" TODO`
 
 **Priority P0 Tasks** (critical path):
@@ -273,7 +273,7 @@ All specification documents are in `/sessions/vibrant-admiring-gates/mnt/tlc/doc
 - `tlc-plugin-spec-0.1.md` - Plugin system architecture
 - `tlc-auth-spec-0.1.md` - Authentication for external systems
 - `tlc-tui-spec-0.1.md` - Terminal UI design with Bubble Tea
-- `task-flow-spec-0.1.md` - Workflow automation
+- `recipe-spec-0.1.md` - Recipe grammar and step semantics
 - `task-log-spec-0.1.md` - Audit logging system
 
 Read these documents before starting work on related tasks.

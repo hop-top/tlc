@@ -176,12 +176,6 @@ func (r *testRepo) FindTaskByOrigin(_ context.Context, _, _ string) (*Task, erro
 func (r *testRepo) ArchiveTasks(_ context.Context, _ time.Duration) (int64, error) {
 	return 0, nil
 }
-func (r *testRepo) CreateFlowRun(_ context.Context, _ *FlowRun) error { return nil }
-func (r *testRepo) GetFlowRun(_ context.Context, _ string) (*FlowRun, error) {
-	return nil, nil
-}
-func (r *testRepo) UpdateFlowRun(_ context.Context, _ *FlowRun) error           { return nil }
-func (r *testRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, error) { return nil, nil }
 
 func (r *testRepo) CreateTrack(_ context.Context, _ *Track) error { return nil }
 func (r *testRepo) GetTrack(_ context.Context, id string) (*Track, error) {
@@ -200,6 +194,7 @@ func (r *testRepo) GetTrackBySlug(_ context.Context, projectID, slug string) (*T
 	}
 	return nil, nil
 }
+
 func (r *testRepo) GetTrackBySeq(_ context.Context, projectID string, seq int64) (*Track, error) {
 	for _, t := range r.tracks {
 		var pid string

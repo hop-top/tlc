@@ -53,17 +53,6 @@ func (m Model) fetchLogs() tea.Msg {
 	return logsMsg(logs)
 }
 
-func (m Model) fetchFlowRuns() tea.Msg {
-	query := core.Query{
-		Limit: 50,
-	}
-	runs, err := m.service.ListFlowRuns(context.Background(), query)
-	if err != nil {
-		return fmt.Errorf("failed to list flow runs: %w", err)
-	}
-	return flowRunsMsg(runs)
-}
-
 func (m Model) syncPull() tea.Msg {
 	// Not implemented yet - needs plugin integration
 	return nil
@@ -208,7 +197,8 @@ func (m Model) saveTask(title, description string) tea.Cmd {
 		if err != nil {
 			return fmt.Errorf(
 				"no initial status to create into: %w; "+
-					"set task.default_status or give a status role \"initial\"", err)
+					"set task.default_status or give a status role \"initial\"", err,
+			)
 		}
 
 		task := &core.Task{

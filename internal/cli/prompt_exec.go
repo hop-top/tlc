@@ -140,7 +140,7 @@ func resetAllFlags() {
 }
 
 // runCommand executes a single resolved command via the RootCmd cobra tree,
-// so any subcommand (task, track, flow, …) can be dispatched.
+// so any subcommand (task, track, recipe, …) can be dispatched.
 func runCommand(_ context.Context, cmd ResolvedCommand) error {
 	resetAllFlags()
 	RootCmd.SetArgs(append([]string{cmd.Cmd}, cmd.Args...))

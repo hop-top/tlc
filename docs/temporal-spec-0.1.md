@@ -32,7 +32,7 @@ Governs every temporal field on tlc entities:
 
 Out of scope:
 
-- `flow.timezone` and per-flow cron tick computation — a flow-level
+- Per-schedule cron tick computation and its timezone override — an
   override on the cron scheduler, not a display tz. See
   `internal/core/cron_scheduler.go` §`Register`. The TZ feeds the cron
   runner's wall-clock interpretation, not the storage or display path
@@ -217,7 +217,7 @@ bump and a parallel-write window per
 - `internal/cli/task_update.go` — update-side parse call sites
 - `internal/storage/sqlite.go` — RFC3339 write/read primitives
 - `internal/storage/migrations.go` — schema TEXT-column declarations
-- `internal/core/cron_scheduler.go` — flow-level tz override (out of scope)
+- `internal/core/cron_scheduler.go` — scheduler tz override (out of scope)
 - `hop.top/kit/go/core/util/until.go` — `ParseUntil`
 - `hop.top/kit/go/core/util/since.go` — `ParseSince`
 - `hop.top/kit/go/core/util/timezone.go` — `LoadTimezone`, `FormatInZone`

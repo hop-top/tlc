@@ -25,6 +25,14 @@ type FieldFilter struct {
 	Value    interface{}
 }
 
+// Column names used as FieldFilter.Field by the executor and the mock.
+const (
+	filterKind      = "kind"
+	filterRunID     = "run_id"
+	filterProjectID = "project_id"
+	filterTrackID   = "track_id"
+)
+
 type Query struct {
 	Filters         []FieldFilter
 	Search          string // Full-text search term
@@ -52,6 +60,14 @@ type Query struct {
 	// Blocked, when set, selects tasks by whether blocked_reason is a
 	// non-empty string. A column predicate, so it pushes down to SQL.
 	Blocked *bool
+
+	// HasRunID, when set, selects tasks by whether they were created by a
+	// recipe run (run_id set). The executor's strict mode is `true`.
+	HasRunID *bool
+
+	// ClaimedBefore selects tasks whose claimed_at is before the instant:
+	// the executor's reclaim query for claims a dead actor left behind.
+	ClaimedBefore *time.Time
 
 	// PriorityOrder is the priority vocabulary in rank order, most
 	// urgent first, used to make SortBy=="priority" mean urgency

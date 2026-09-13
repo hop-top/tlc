@@ -2,10 +2,7 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,13 +12,9 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// Compile-time check: ContainerAgentRunner satisfies core.AgentRunner.
-var _ core.AgentRunner = (*ContainerAgentRunner)(nil)
-
 var (
 	agentRunAgent        string
 	agentRunTasks        []string
-	agentRunFlow         string
 	agentRunTrack        string
 	agentRunImage        string
 	agentRunMounts       []string
@@ -44,19 +37,24 @@ var (
 // AgentRunCmd implements `tlc agent run`.
 var AgentRunCmd = &cobra.Command{
 	Use:   "run",
-	Short: "Execute an agent against tasks, a flow, or a track",
+	Short: "Execute an agent against tasks or a track",
 	Long: `Execute an agent in a container (or locally with --local).
 
-The orchestration flow is:
+The orchestration sequence is:
   validate → load agent config → build context →
   create container (or local exec) → claim task →
   create audit record → upload context → exec agent →
   collect results → update state → print summary
 
+Container runs upload the context to /workspace/.tlc/context.json and
+collect /workspace/.tlc/results.json. Local runs (--local) give each run
+its own .tlc/runs/<run-id>/ directory under the repo root for the same
+two files. In both modes the agent receives the paths as TLC_CONTEXT_PATH
+and TLC_RESULTS_PATH.
+
 Examples:
   tlc agent run --agent claude --task T-0042
   tlc agent run --agent claude --task T-0042 --task T-0043
-  tlc agent run --agent claude --flow flow:example:1.0
   tlc agent run --agent claude --track my-feature
   tlc agent run --agent claude --task T-0042 --local
   tlc agent run --agent claude --task T-0042 --dry-run`,
@@ -71,7 +69,6 @@ func init() {
 	f := AgentRunCmd.Flags()
 	f.StringVar(&agentRunAgent, "agent", "", "Agent name (required)")
 	f.StringSliceVar(&agentRunTasks, "task", nil, "Task ID(s) (repeatable)")
-	f.StringVar(&agentRunFlow, "flow", "", "Flow reference")
 	f.StringVar(&agentRunTrack, "track", "", "Track ID")
 	f.StringVar(&agentRunImage, "image", "", "Override container image")
 	f.StringSliceVar(&agentRunMounts, "mount", nil, "Bind mount (source:target[:mode])")
@@ -93,6 +90,45 @@ func init() {
 		"Trust project-local agent config without prompting")
 
 	_ = AgentRunCmd.MarkFlagRequired("agent")
+}
+
+// agentRunParams builds the exec-path parameters from this command's
+// flag bindings. RunE calls it once; the exec path never reads the
+// agentRun* variables itself.
+func agentRunParams() execParams {
+	p := newExecParams(agentRunAgent, agentRunLocal)
+	p.image = agentRunImage
+	p.mounts = parseMounts(agentRunMounts)
+	p.env = agentRunEnv
+	p.network = agentRunNetwork
+	p.keepPod = agentRunKeepPod
+	p.timeout = agentRunTimeout
+	return p
+}
+
+// resetAgentRunFlags restores the package-level flag state to the
+// defaults declared in init. Tests that poke the bindings directly call
+// it on the way out.
+func resetAgentRunFlags() {
+	agentRunAgent = ""
+	agentRunTasks = nil
+	agentRunTrack = ""
+	agentRunImage = ""
+	agentRunMounts = nil
+	agentRunEnv = nil
+	agentRunTimeout = 30 * time.Minute
+	agentRunTotalTimeout = 0
+	agentRunDryRun = false
+	agentRunPrompt = ""
+	agentRunContext = nil
+	agentRunNoState = false
+	agentRunKeepPod = false
+	agentRunLocal = false
+	agentRunAsync = false
+	agentRunRetries = 0
+	agentRunNetwork = ""
+	agentRunJSON = false
+	agentRunTrustProject = false
 }
 
 func runAgentRun(cmd *cobra.Command, _ []string) error {
@@ -153,6 +189,8 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 		defer cancel()
 	}
 
+	p := agentRunParams()
+
 	// Build context for each target.
 	builder := core.NewContextBuilder(s)
 	var contexts []*core.AgentContext
@@ -162,7 +200,7 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 	case len(agentRunTasks) > 0:
 		targetType = "task"
 		for _, tid := range agentRunTasks {
-			ac, err := builder.BuildForTask(ctx, tid, buildOpts())
+			ac, err := builder.BuildForTask(ctx, tid, buildOpts(p.repoRoot))
 			if err != nil {
 				return err
 			}
@@ -170,25 +208,10 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 		}
 		targetID = agentRunTasks[0]
 
-	case agentRunFlow != "":
-		targetType = "flow"
-		targetID = agentRunFlow
-		// For flow, we build a single context with flow metadata.
-		ac := &core.AgentContext{
-			Version:  core.AgentContextVersion,
-			FlowID:   agentRunFlow,
-			RepoRoot: repoRoot(),
-			Prompt:   agentRunPrompt,
-		}
-		if ac.Prompt == "" {
-			ac.Prompt = fmt.Sprintf("Execute flow %s", agentRunFlow)
-		}
-		contexts = append(contexts, ac)
-
 	case agentRunTrack != "":
 		targetType = "track"
 		targetID = agentRunTrack
-		trackContexts, err := builder.BuildForTrack(ctx, agentRunTrack, buildOpts())
+		trackContexts, err := builder.BuildForTrack(ctx, agentRunTrack, buildOpts(p.repoRoot))
 		if err != nil {
 			return err
 		}
@@ -217,16 +240,9 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("create audit record: %w", err)
 		}
 
-		result, err := executeAgent(ctx, agentCfg, ac, record)
+		result, err := executeAgent(ctx, p, agentCfg, ac, record)
 		if err != nil {
-			// Record failure.
-			failResult := &core.AgentResult{
-				Version:  core.AgentResultVersion,
-				Status:   core.AgentStatusFailed,
-				ExitCode: 1,
-				Summary:  err.Error(),
-			}
-			_ = updater.UpdateRun(ctx, runID, failResult, record)
+			_ = updater.UpdateRun(ctx, runID, failedResult(1, err.Error()), record) //nolint:errcheck // the exec error is returned; a failed audit write must not mask it
 			return fmt.Errorf("agent execution failed: %w", err)
 		}
 
@@ -257,192 +273,9 @@ func runAgentRun(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func executeAgent(
-	ctx context.Context,
-	cfg *core.AgentConfig,
-	ac *core.AgentContext,
-	record *core.AgentRunRecord,
-) (*core.AgentResult, error) {
-	if agentRunTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, agentRunTimeout)
-		defer cancel()
-	}
-
-	// Serialize context to temp file.
-	contextJSON, err := json.Marshal(ac)
-	if err != nil {
-		return nil, fmt.Errorf("marshal agent context: %w", err)
-	}
-
-	collector := core.NewResultCollector()
-
-	if agentRunLocal {
-		return executeLocal(ctx, cfg, ac, contextJSON, collector)
-	}
-	return executeContainer(ctx, cfg, ac, contextJSON, record, collector)
-}
-
-func executeLocal(
-	ctx context.Context,
-	cfg *core.AgentConfig,
-	ac *core.AgentContext,
-	contextJSON []byte,
-	collector *core.ResultCollector,
-) (*core.AgentResult, error) {
-	core.WarnIgnoredFlags(map[string]bool{
-		"image":    agentRunImage != "",
-		"mount":    len(agentRunMounts) > 0,
-		"network":  agentRunNetwork != "",
-		"keep-pod": agentRunKeepPod,
-	})
-
-	runner := &execRunner{}
-	mgr := core.NewLocalExecManager(runner, "")
-
-	// Write context file to repo root.
-	contextPath := filepath.Join(repoRoot(), ".tlc", "context.json")
-	if err := os.MkdirAll(filepath.Dir(contextPath), 0o750); err != nil {
-		return nil, fmt.Errorf("create context dir: %w", err)
-	}
-	if err := os.WriteFile(contextPath, contextJSON, 0o600); err != nil {
-		return nil, fmt.Errorf("write context file: %w", err)
-	}
-
-	binary := cfg.Binary
-	if binary == "" {
-		return nil, fmt.Errorf(
-			"agent %q has no binary configured; set binary in agents.yaml "+
-				"or use container mode (remove --local)",
-			agentRunAgent,
-		)
-	}
-
-	envVars := mergeEnvVars(cfg.Env)
-
-	stdout, _, exitCode, err := mgr.Exec(ctx, core.LocalExecOpts{
-		Binary:   binary,
-		EnvVars:  envVars,
-		RepoRoot: repoRoot(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	resultsPath := mgr.ResultsFilePath(repoRoot())
-	result, err := collector.CollectFromExec(stdout, resultsPath)
-	if err != nil {
-		return &core.AgentResult{
-			Version:  core.AgentResultVersion,
-			Status:   core.AgentStatusFailed,
-			ExitCode: exitCode,
-			Summary:  fmt.Sprintf("result collection failed: %v", err),
-		}, nil
-	}
-	result.ExitCode = exitCode
-	result.Agent = agentRunAgent
-	return result, nil
-}
-
-func executeContainer(
-	ctx context.Context,
-	cfg *core.AgentConfig,
-	ac *core.AgentContext,
-	contextJSON []byte,
-	record *core.AgentRunRecord,
-	collector *core.ResultCollector,
-) (*core.AgentResult, error) {
-	runner := &execRunner{}
-	pod := core.NewPodShell(runner)
-
-	if err := pod.CheckAvailable(ctx); err != nil {
-		return nil, err
-	}
-
-	image := cfg.Image
-	if image == "" {
-		return nil, fmt.Errorf(
-			"agent %q has no image configured; set image in agents.yaml "+
-				"or use --local for local execution",
-			agentRunAgent,
-		)
-	}
-
-	mounts := parseMounts(agentRunMounts)
-	envVars := mergeEnvVars(cfg.Env)
-
-	podInfo, err := pod.Create(ctx, core.PodCreateOpts{
-		Image:   image,
-		Mounts:  mounts,
-		EnvVars: envVars,
-		Network: agentRunNetwork,
-		Labels: map[string]string{
-			"tlc.agent":  agentRunAgent,
-			"tlc.run-id": record.ID,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create container: %w", err)
-	}
-	record.ContainerID = podInfo.ID
-
-	if !agentRunKeepPod {
-		defer func() { _ = pod.Destroy(ctx, podInfo.Name) }()
-	}
-
-	// Write context to temp file and upload.
-	tmpContext, err := os.CreateTemp("", "tlc-context-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("create temp context file: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpContext.Name()) }()
-
-	if _, err := tmpContext.Write(contextJSON); err != nil {
-		return nil, fmt.Errorf("write temp context: %w", err)
-	}
-	if err := tmpContext.Close(); err != nil {
-		return nil, fmt.Errorf("close temp context: %w", err)
-	}
-
-	remotePath := "/workspace/.tlc/context.json"
-	if err := pod.CopyTo(ctx, podInfo.Name, tmpContext.Name(), remotePath); err != nil {
-		return nil, fmt.Errorf("upload context: %w", err)
-	}
-	if err := pod.VerifyFile(ctx, podInfo.Name, remotePath); err != nil {
-		return nil, err
-	}
-
-	// Execute agent inside container.
-	stdout, _, exitCode, err := pod.Exec(ctx, podInfo.Name, "agent-run")
-	if err != nil {
-		return nil, fmt.Errorf("agent exec: %w", err)
-	}
-
-	// Download results file if it exists.
-	localResults := filepath.Join(os.TempDir(), fmt.Sprintf("tlc-results-%s.json", record.ID))
-	defer func() { _ = os.Remove(localResults) }()
-	_ = pod.CopyFrom(ctx, podInfo.Name, "/workspace/.tlc/results.json", localResults)
-
-	result, err := collector.CollectFromExec(stdout, localResults)
-	if err != nil {
-		return &core.AgentResult{
-			Version:  core.AgentResultVersion,
-			Status:   core.AgentStatusFailed,
-			ExitCode: exitCode,
-			Summary:  fmt.Sprintf("result collection failed: %v", err),
-		}, nil
-	}
-	result.ExitCode = exitCode
-	result.Agent = agentRunAgent
-	return result, nil
-}
-
 func validateAgentRunFlags() error {
 	targets := 0
 	if len(agentRunTasks) > 0 {
-		targets++
-	}
-	if agentRunFlow != "" {
 		targets++
 	}
 	if agentRunTrack != "" {
@@ -451,12 +284,12 @@ func validateAgentRunFlags() error {
 
 	if targets == 0 {
 		return fmt.Errorf(
-			"at least one target required; use --task, --flow, or --track",
+			"at least one target required; use --task or --track",
 		)
 	}
-	if targets > 1 && (agentRunFlow != "" || agentRunTrack != "") {
+	if targets > 1 && agentRunTrack != "" {
 		return fmt.Errorf(
-			"--flow and --track are mutually exclusive and cannot combine " +
+			"--track is mutually exclusive and cannot combine " +
 				"with --task; use only one target type",
 		)
 	}
@@ -474,9 +307,6 @@ func printDryRun(cmd *cobra.Command, cfg *core.AgentConfig) error {
 
 	if len(agentRunTasks) > 0 {
 		_, _ = fmt.Fprintf(out, "  Tasks:   %v\n", agentRunTasks)
-	}
-	if agentRunFlow != "" {
-		_, _ = fmt.Fprintf(out, "  Flow:    %s\n", agentRunFlow)
 	}
 	if agentRunTrack != "" {
 		_, _ = fmt.Fprintf(out, "  Track:   %s\n", agentRunTrack)

@@ -52,7 +52,7 @@ echo
 
 echo "-- top-level subcommands --"
 check "tlc task"         $TLC task
-check "tlc flow"         $TLC flow
+check "tlc recipe"       $TLC recipe
 check "tlc assignee"     $TLC assignee
 check "tlc log"          $TLC log
 check "tlc auth"         $TLC auth
@@ -85,20 +85,34 @@ check "task unclaim"     $TLC task unclaim
 check "task update"      $TLC task update
 
 echo
-echo "-- flow subcommands --"
-check "flow import"      $TLC flow import
-check "flow invoke"      $TLC flow invoke
-check "flow list"        $TLC flow list
-check "flow run"         $TLC flow run
-check "flow status"      $TLC flow status
-check "flow test"        $TLC flow test
+echo "-- recipe test flags --"
+check "recipe test"      $TLC recipe test
+check_flag "recipe test --record"        $TLC recipe test --record
+check_flag "recipe test --passthrough"   $TLC recipe test --passthrough
+check_flag "recipe test --keep-sandbox"  $TLC recipe test --keep-sandbox
+check_flag "recipe test --task"          $TLC recipe test --task
 
 echo
-echo "-- flow test flags --"
-check_flag "flow test --record"        $TLC flow test --record
-check_flag "flow test --passthrough"   $TLC flow test --passthrough
-check_flag "flow test --keep-sandbox"  $TLC flow test --keep-sandbox
-check_flag "flow test --steps"         $TLC flow test --steps
+echo "-- recipe subcommands --"
+check "recipe list"      $TLC recipe list
+check "recipe show"      $TLC recipe show
+check "recipe validate"  $TLC recipe validate
+check "recipe import"    $TLC recipe import
+check "recipe runs"      $TLC recipe runs
+check "recipe diff"      $TLC recipe diff
+check_flag "recipe list --source"      $TLC recipe list --source
+check_flag "track create --recipe"     $TLC track create --recipe
+check_flag "track create --var"        $TLC track create --var
+check_flag "track create --task"       $TLC track create --task
+check_flag "track create --with-deps"  $TLC track create --with-deps
+check_flag "track create --assign"     $TLC track create --assign
+check_flag "task create --recipe"      $TLC task create --recipe
+check_flag "task create --for"         $TLC task create --for
+check_flag "task execute --recipe"     $TLC task execute --recipe
+check_flag "track execute --recipe"    $TLC track execute --recipe
+check_flag "track execute --recreate"  $TLC track execute --recreate
+check_flag "recipe import --install"   $TLC recipe import --install
+check_flag "recipe runs --all-projects" $TLC recipe runs --all-projects
 
 echo
 echo "-- key flag checks --"
@@ -136,7 +150,7 @@ check "track archive"    $TLC track archive
 check "track abandon"    $TLC track abandon
 check "track delete"     $TLC track delete
 check "track summary"    $TLC track summary
-check "track exec"       $TLC track exec
+check "track execute"    $TLC track execute
 
 echo
 echo "-- agent subcommands --"
@@ -148,8 +162,8 @@ check "agent cancel"     $TLC agent cancel
 check "agent list"       $TLC agent list
 
 echo
-echo "-- task exec --"
-check "task exec"        $TLC task exec
+echo "-- task execute --"
+check "task execute"     $TLC task execute
 
 echo
 echo "-- agent/exec flag checks --"
@@ -157,13 +171,13 @@ check_flag "agent run --agent"          $TLC agent run --agent
 check_flag "agent run --async"          $TLC agent run --async
 check_flag "agent run --local"          $TLC agent run --local
 check_flag "agent run --trust-project"  $TLC agent run --trust-project
-check_flag "task exec --agent"          $TLC task exec --agent
-check_flag "task exec --with-pod"       $TLC task exec --with-pod
-check_flag "task exec --force"          $TLC task exec --force
-check_flag "task exec --ctxt"           $TLC task exec --ctxt
-check_flag "track exec --agent"         $TLC track exec --agent
-check_flag "track exec --local"         $TLC track exec --local
-check_flag "track exec --ctxt"          $TLC track exec --ctxt
+check_flag "task execute --agent"       $TLC task execute --agent
+check_flag "task execute --with-pod"    $TLC task execute --with-pod
+check_flag "task execute --force"       $TLC task execute --force
+check_flag "task execute --ctxt"        $TLC task execute --ctxt
+check_flag "track execute --agent"      $TLC track execute --agent
+check_flag "track execute --with-pod"   $TLC track execute --with-pod
+check_flag "track execute --ctxt"       $TLC track execute --ctxt
 
 echo
 echo "-- schema command --"

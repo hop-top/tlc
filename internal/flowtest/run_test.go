@@ -85,3 +85,25 @@ func TestMergePassthrough(t *testing.T) {
 	got = flowtest.MergePassthrough(nil, nil)
 	assert.Nil(t, got)
 }
+
+func TestRunResolutionManifestVars(t *testing.T) {
+	manifest := []byte(`
+expected_exit: 0
+vars:
+  pr: "42"
+  depth: deep
+`)
+	root := makeFixturesRoot(t, "code-review", "happy-path", manifest)
+	runs, err := flowtest.DiscoverRuns("code-review", root)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, map[string]string{"pr": "42", "depth": "deep"}, runs[0].Vars)
+}
+
+func TestRunResolutionNoManifestHasNoVars(t *testing.T) {
+	root := makeFixturesRoot(t, "code-review", "happy-path", nil)
+	runs, err := flowtest.DiscoverRuns("code-review", root)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Empty(t, runs[0].Vars)
+}

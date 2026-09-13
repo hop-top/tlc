@@ -68,15 +68,15 @@ WARN (backfill is a separate task).
 
 ### v2: `fixture:` prefix
 
-For tests driven by a fixture runner (e.g. `tlc flow test <runner> <dir>`):
+For tests driven by a fixture runner (e.g. `tlc recipe test <recipe> <run>`):
 
 ```markdown
 ## E2E Tests
 
 ### E2E
-- `tests/e2e/flow_single_step_test.go::TestFlow_SingleStep_HappyPath`
-- fixture: `examples/flows/fixtures/single-step/happy-path/`
-- fixture: `examples/flows/fixtures/single-step/error-path/`
+- `tests/e2e/recipe_single_step_test.go::TestRecipe_SingleStep_HappyPath`
+- fixture: `examples/recipes/fixtures/single-step/happy-path/`
+- fixture: `examples/recipes/fixtures/single-step/error-path/`
 ```
 
 The fixture path is a directory containing the test inputs (`test.yaml`,
@@ -110,12 +110,12 @@ counts per section.
 For a doc that is a test plan, not a feature story:
 
 ```markdown
-# E2E Test Plan — Task Flow (TFS) v0.1
+# E2E Test Plan — Recipes (RCP) v0.1
 
 ## Test Plan
 
-- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E01_SequentialOrdering`
-- planned: `tests/e2e/taskflow_v0_1_test.go::TestE2E02_DependencyGate`
+- planned: `tests/e2e/recipe_v0_1_test.go::TestE2E01_SequentialOrdering`
+- planned: `tests/e2e/recipe_v0_1_test.go::TestE2E02_DependencyGate`
 ```
 
 Audit recognizes by title prefix or filename pattern. No `status:`

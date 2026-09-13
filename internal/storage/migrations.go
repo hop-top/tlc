@@ -494,7 +494,7 @@ var migrations = []migration{
 	},
 	{
 		// Audit ledger for runs executed by external tools that use tlc
-		// as their audit home (third audit leg beside task logs and flow
+		// as their audit home (third audit leg beside task logs and agent
 		// runs). Keyed by (project_id, tool, run_id); steps replaced
 		// wholesale on upsert. Timestamps UTC RFC3339 TEXT per repo
 		// convention; metrics stored as a JSON object string.
@@ -582,10 +582,79 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_tracks_seq ON tracks(project_id, seq);
 		`,
 	},
+	{
+		// Recipe-era task fields and the recipe run ledger.
+		//
+		// The task columns are ALTER-only additions with defaults, so no
+		// row is rewritten: kind and attempts get their NOT NULL defaults,
+		// everything else is NULL until a recipe or the executor sets it.
+		// kind/attempts/claimed_at/run_id/step_id/step_ordinal are columns
+		// because the executor's readiness and reclaim queries filter and
+		// order on them; spec and result are JSON blobs read per task.
+		//
+		// recipe_runs records each materialization (which recipe, at what
+		// version and content hash, with which vars, for which subject and
+		// track). recipe_run_tasks maps a run's step ids to the task rows
+		// it created; reconcile keys off this table rather than task
+		// presence, so a deliberately deleted task is not recreated.
+		//
+		// flow_runs stays until v22 drops it.
+		version: 21,
+		query: `
+		ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'agent';
+		ALTER TABLE tasks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE tasks ADD COLUMN claimed_at TEXT;
+		ALTER TABLE tasks ADD COLUMN run_id TEXT;
+		ALTER TABLE tasks ADD COLUMN step_id TEXT;
+		ALTER TABLE tasks ADD COLUMN step_ordinal INTEGER;
+		ALTER TABLE tasks ADD COLUMN spec TEXT;
+		ALTER TABLE tasks ADD COLUMN result TEXT;
+
+		CREATE INDEX IF NOT EXISTS idx_tasks_run_id ON tasks(run_id);
+
+		CREATE TABLE IF NOT EXISTS recipe_runs (
+			id           TEXT PRIMARY KEY,
+			project_id   TEXT NOT NULL DEFAULT '',
+			recipe_id    TEXT NOT NULL,
+			version      TEXT NOT NULL DEFAULT '',
+			hash         TEXT NOT NULL DEFAULT '',
+			vars         TEXT,
+			subject_type TEXT,
+			subject_id   TEXT,
+			track_id     TEXT,
+			selection    TEXT,
+			dropped_deps TEXT,
+			parent_run   TEXT,
+			created_by   TEXT NOT NULL DEFAULT '',
+			created_at   TEXT NOT NULL
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_recipe_runs_recipe_id ON recipe_runs(recipe_id);
+		CREATE INDEX IF NOT EXISTS idx_recipe_runs_track_id ON recipe_runs(track_id);
+		CREATE INDEX IF NOT EXISTS idx_recipe_runs_subject ON recipe_runs(subject_type, subject_id);
+		CREATE INDEX IF NOT EXISTS idx_recipe_runs_project_id ON recipe_runs(project_id);
+
+		CREATE TABLE IF NOT EXISTS recipe_run_tasks (
+			run_id  TEXT NOT NULL,
+			step_id TEXT NOT NULL,
+			task_id TEXT NOT NULL,
+			PRIMARY KEY (run_id, step_id),
+			FOREIGN KEY (run_id) REFERENCES recipe_runs(id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_recipe_run_tasks_task_id ON recipe_run_tasks(task_id);
+		`,
+	},
+	{
+		// v22: drop flow_runs. Recipes replaced the flow subsystem and
+		// nothing reads or writes the table any more.
+		version: 22,
+		query:   `DROP TABLE IF EXISTS flow_runs;`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 20
+const LatestMigrationVersion = 22
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

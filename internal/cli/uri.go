@@ -66,11 +66,6 @@ func setupURICompletion(s *storage.SQLiteStorage) error {
 	trackAbandonCmd.ValidArgsFunction = trackComp
 	trackDeleteCmd.ValidArgsFunction = trackComp
 
-	// Flow commands
-	flowComp := completer.Complete("flow")
-	FlowRunCmd.ValidArgsFunction = flowComp
-	FlowInvokeCmd.ValidArgsFunction = flowComp
-
 	// Project commands
 	projectComp := completer.Complete("project")
 	ProjectExportCmd.ValidArgsFunction = projectComp

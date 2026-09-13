@@ -106,7 +106,7 @@ var commandGroups = map[string]string{
 	"task":    "knowledge",
 	"tasks":   "knowledge",
 	"track":   "knowledge",
-	"flow":    "knowledge",
+	"recipe":  "knowledge",
 	"log":     "knowledge",
 	"audit":   "knowledge",
 	"project": "knowledge",
@@ -178,7 +178,7 @@ func kitRoot() *kitcli.Root {
 	})
 
 	cmd := root.Cmd
-	cmd.Long = "TLC provides commands for task management, flow execution, and collaboration."
+	cmd.Long = "TLC provides commands for task management, recipe execution, and collaboration."
 
 	// --- TLC-specific persistent flags ---
 	// kit provides --quiet, --no-color, --format, --verbose/-V (count

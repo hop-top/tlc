@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,4 +98,22 @@ func TestSandboxKeep(t *testing.T) {
 	_, err = os.Stat(dir)
 	assert.NoError(t, err, "sandbox root must still exist when Keep=true")
 	_ = os.RemoveAll(dir)
+}
+
+func TestSandboxOverridesDoNotStackBinDirOnPath(t *testing.T) {
+	cwd := t.TempDir()
+	initGitRepo(t, cwd)
+
+	sb, err := flowtest.NewSandbox(cwd)
+	require.NoError(t, err)
+	defer sb.Teardown()
+
+	first := sb.Overrides("s", xrr.ModeReplay, nil)
+	t.Setenv("PATH", first["PATH"])
+	second := sb.Overrides("s", xrr.ModeReplay, nil)
+
+	assert.Equal(t, first["PATH"], second["PATH"], "an already-prefixed PATH must not gain a second bin dir")
+	assert.Equal(t, 1, strings.Count(second["PATH"], sb.BinDir))
+	assert.Equal(t, sb.HomeDir, second["HOME"])
+	assert.Equal(t, "", second["TLC_FLOW_TEST_CASSETTE_DIR"], "no run, no cassette dir")
 }

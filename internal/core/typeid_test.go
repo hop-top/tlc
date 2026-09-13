@@ -96,3 +96,34 @@ func TestNewTaskIDIsUnique(t *testing.T) {
 		seen[id] = struct{}{}
 	}
 }
+
+func TestNewRecipeRunID(t *testing.T) {
+	id := NewRecipeRunID()
+	if !strings.HasPrefix(id, "run_") {
+		t.Fatalf("NewRecipeRunID() = %q; want prefix \"run_\"", id)
+	}
+	if !IsRecipeRunID(id) {
+		t.Fatalf("IsRecipeRunID(%q) = false; want true", id)
+	}
+	if IsTaskID(id) || IsTrackID(id) {
+		t.Fatalf("run id %q reads as a task or track id", id)
+	}
+}
+
+func TestIsRecipeRunID(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"run_01h455vb4pex5vsknk084sn02q", true},
+		{"task_01h455vb4pex5vsknk084sn02q", false},
+		{"run-001", false},
+		{"run_short", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := IsRecipeRunID(c.in); got != c.want {
+			t.Errorf("IsRecipeRunID(%q) = %v; want %v", c.in, got, c.want)
+		}
+	}
+}

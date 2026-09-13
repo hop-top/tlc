@@ -52,6 +52,9 @@ tlc task delete <id>                     # delete task
 tlc task create "title" --due tomorrow   # set due date
 tlc task create "title" --due "in 3d" --remind-every 1h  # due + recurring
 tlc task create "title" --due friday --no-auto-remind     # suppress 12h auto-remind
+tlc task create --recipe <recipe> --var key=val           # recipe steps as tasks (trackless)
+tlc task create --recipe <recipe> --for T-0041            # into T-0041's track, T-0041 blocked on the leaves
+tlc task create --recipe <recipe> --var k=v --track <id> --task 1-3 --with-deps
 tlc task update <id> --due "2025-05-01"  # set/change due date
 tlc task update <id> --due -             # clear due date
 tlc task update <id> --remind-at "2025-05-01T14:00:00Z"   # one-shot
@@ -86,6 +89,8 @@ Conventions:
 ```bash
 tlc track create "Title" --type feature         # create track (type required)
 tlc track create "Title" --type bug --id slug    # custom ID
+tlc track create --recipe <recipe> --var key=val # track + tasks from a recipe (title/type/plan from its track block)
+tlc track create "Title" --recipe <recipe> --var k=v --task lint,review --assign
 tlc track list                                   # list with progress/state
 tlc track list --status active --type feature    # filtered
 tlc track show <id>                              # detail + phase breakdown
@@ -136,12 +141,11 @@ track auto-transitions to active.
 
 ### `tlc agent` — Agent Dispatch
 
-Run tasks, tracks, or flows via named agent profiles.
+Run tasks or tracks via named agent profiles.
 
 ```bash
-# run an agent against a task, flow, or track
+# run an agent against a task or a track
 tlc agent run --agent <name> --task <id>
-tlc agent run --agent <name> --flow <flow.yaml>
 tlc agent run --agent <name> --track <id>
 
 # watch the agent queue; poll every 5s
@@ -158,14 +162,45 @@ tlc agent list --source config   # agents declared in agents.yaml
 
 Shorthand exec (delegates to `agent run` internally):
 ```bash
-tlc task exec <id> --agent <name>
-tlc track exec <id> --agent <name>
+tlc task execute <id> --agent <name>
+tlc track execute <id> [--agent <name>]
 ```
 
-The `--agent <name>` flag is also accepted on `tlc flow run`:
+Recipe-driven exec: `task execute` creates the recipe's tasks for the task
+(the subject) and runs them; `track execute` reconciles the track against
+the recipe's run ledger (creates only the missing steps) and then runs it.
 ```bash
-tlc flow run <flow.yaml> --agent <name>
+tlc task execute <id> --recipe <recipe> [--var key=val]
+tlc track execute <id> --recipe <recipe> [--recreate]
 ```
+
+`--agent <name>` supplies the agent for agent-kind tasks that name none;
+`track execute` also takes `--with-pod`, `--concurrency`, `--permissive`,
+`--reclaim`, `--wait --poll`, `--timeout`, `--trust-project` and `--ctxt`.
+
+### `tlc recipe` — Recipe Templates
+
+```bash
+tlc recipe list [--source <dir|builtin>]      # recipes in the search path
+tlc recipe show <recipe>                      # header, vars, expanded steps
+tlc recipe validate <recipe>                  # exit 0 valid, 1 with the problem
+tlc recipe import <track|url> [--var --name --version -o --install --force --external-deps]
+tlc recipe runs [<recipe>[@<version>]] [--all-projects --track <track>]
+tlc recipe diff <track> [--recipe <recipe>]
+```
+
+A recipe is referenced by name, by `name@version`, or by file path. The
+search path is `recipe.dir` (relative to the project root), then
+`.tlc/recipes`, then `~/.config/tlc/recipes`.
+
+Human-kind steps wait for a decision:
+```bash
+tlc task approve <id> [--by <who> --note "..."]
+tlc task reject <id> --reason "<why>" [--by <who>]
+```
+
+See [`docs/recipes.md`](docs/recipes.md) for the guide and
+[`docs/recipe-spec-0.1.md`](docs/recipe-spec-0.1.md) for the grammar.
 
 ### `tlc schema` — Toolspec Schema
 
@@ -181,39 +216,44 @@ tlc schema --format anthropic     # Anthropic tool-use schema
 
 Supported formats: `json` · `mcp` · `openai` · `anthropic`
 
-### `tlc flow test` — Deterministic Flow Testing
+### `tlc recipe test` — Deterministic Recipe Testing
 
-Run a flow definition through a hermetic sandbox with cassette-backed tool shims.
+Materialize a recipe into a throwaway store and execute it inside a hermetic
+sandbox with cassette-backed tool shims.
 
 ```bash
-# replay all named runs for a flow
-tlc flow test examples/flows/pr-review-loop.yaml
+# replay every run the recipe has
+tlc recipe test examples/recipes/exec-cli-smoke.yaml
 
 # replay one named run
-tlc flow test examples/flows/pr-review-loop.yaml happy-path
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path
 
 # record cassettes (proxy real tool calls; write to fixtures/)
-tlc flow test examples/flows/pr-review-loop.yaml happy-path --record
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --record
 
 # force live execution for named tools; replay everything else
-tlc flow test examples/flows/pr-review-loop.yaml happy-path --passthrough wrangler,docker
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --passthrough wrangler,docker
 
-# keep sandbox dir after run for debugging
-tlc flow test examples/flows/pr-review-loop.yaml happy-path --keep-sandbox
+# keep the sandbox dir after the run for debugging
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --keep-sandbox
+
+# materialize only some steps: ordinals, ranges or ids
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --task 1-2
 ```
 
 Exit codes:
 
 | Code | Meaning |
 |------|---------|
-| 0 | All steps executed; all contracts passed |
-| 1 | Step failed or contract violated |
-| 2 | Cassette miss in replay mode |
-| 3 | Sandbox setup failure |
+| 0 | Every task ran and every contract passed |
+| 1 | A task failed or a contract was violated |
+| 2 | Replay found no cassette for a step |
+| 3 | The sandbox, the recipe or the fixtures could not be set up |
 
-Named runs live under `examples/flows/fixtures/<flow-name>/<run-name>/`. Each run
-has a `record/` dir (cassettes) and optional `contracts/` dir (eva contracts).
-Add a `test.yaml` manifest to declare `expected_exit` or `passthrough` overrides.
+Runs live under `<recipe dir>/fixtures/<recipe>/<run>/`. Each run has a
+`record/` dir (cassettes, one subdirectory per step id), an optional
+`contracts/` dir (eva contracts, `<step-id>.yaml`), and a `test.yaml`
+manifest declaring `expected_exit`, `vars` and `passthrough`.
 
 ### `git hop` — Worktree Management
 
@@ -321,8 +361,8 @@ the live `tlc` CLI registry. Stale examples mislead agents and break automation.
 using `--help` mode. Exits non-zero if any check fails.
 
 Covers (46 checks as of 2026-03-28):
-- all top-level subcommands (`task`, `flow`, `auth`, `config`, …)
-- all `task` and `flow` subcommands
+- all top-level subcommands (`task`, `recipe`, `auth`, `config`, …)
+- all `task` and `recipe` subcommands
 - key flags: `--no-verify`, `--yes`, `--mine`, `--counters`, `--force`, etc.
 
 ### Running locally
@@ -366,18 +406,21 @@ make tidy           # go mod tidy && go mod verify (mutating)
 make fmt-check      # formatting check (non-mutating; exits 1 if dirty)
 make tidy-check     # module tidiness check (non-mutating; exits 1 if dirty)
 make coverage       # test with coverage report
-make build-shims    # compile flowtest shim binaries
+make build-shims    # compile the recipe test shim binaries
 ```
 
 ## Configurable Paths
 
-Directory paths for tracks, flows, assignees, inbox, projection, todo
+Directory paths for tracks, recipes, assignees, inbox, projection, todo
 file, and database are all configurable in `.tlc/config.yaml`. Accessor
-methods (`TracksDir()`, `FlowsDir()`, `AssigneesDirectory()`,
+methods (`TracksDir()`, `RecipeDir()`, `AssigneesDirectory()`,
 `InboxDir()`, `ProjectionDirectory()`, `TodoFilePath()`, `DBFilePath()`)
 return the configured value or a default. Never hardcode directory names
-like `"tracks"` or `"examples/flows"` — always use the accessor method
-from the relevant config struct.
+like `"tracks"` or `"examples/assignees"` — always use the accessor method
+from the relevant config struct. The recipe search path is assembled by
+`recipeDirsFromConfig()` in `internal/cli/config_dirs.go` (`recipe.dir`,
+then `.tlc/recipes`, then the user config dir); use `recipeLocator()`
+rather than scanning directories by hand.
 
 ## Required Docs to Keep Updated
 

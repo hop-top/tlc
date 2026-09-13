@@ -14,7 +14,7 @@ func TestConfigDomain(t *testing.T) {
 	}{
 		{"task", "task"},
 		{"track", "tracks"},
-		{"flow", "flow"},
+		{"recipe", "recipe"},
 	}
 
 	for _, tt := range tests {
