@@ -10,7 +10,6 @@ func TestTopicConstants_NonEmpty(t *testing.T) {
 	topics := []string{
 		TaskCreated, TaskClaimed, TaskCompleted, TaskStatusChanged,
 		TrackCreated, TrackActivated, TrackCompleted,
-		FlowStarted, FlowStepCompleted, FlowCompleted, FlowFailed,
 	}
 	for _, topic := range topics {
 		if topic == "" {

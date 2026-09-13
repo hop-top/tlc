@@ -5,44 +5,6 @@ import (
 	"testing"
 )
 
-// TestEvalCondition_Unit covers the legacy inputs-only wrapper: whitespace
-// and edge cases not hit by the executor flow tests. Kept verbatim from the
-// flow executor suite so the wrapper's contract is pinned until flows go.
-func TestEvalCondition_Unit(t *testing.T) {
-	cases := []struct {
-		name    string
-		expr    string
-		inputs  map[string]any
-		want    bool
-		wantErr bool
-	}{
-		{"empty is true", "", nil, true, false},
-		{"whitespace pad", "  inputs.x  ==  'a'  ", map[string]any{"x": "a"}, true, false},
-		{"int coerced via Sprintf", "n == '7'", map[string]any{"n": 7}, true, false},
-		{"bare key bare value", "env == prod", map[string]any{"env": "prod"}, true, false},
-		{"missing operator errors", "inputs.x", map[string]any{"x": "a"}, false, true},
-		{"empty lhs errors", " == 'a'", map[string]any{"x": "a"}, false, true},
-		{"empty rhs errors", "inputs.x == ", map[string]any{"x": "a"}, false, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := EvalCondition(tc.expr, tc.inputs)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil (got=%v)", got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("got %v want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func condEnv() CondEnv {
 	return CondEnv{
 		Inputs: map[string]any{"target": "staging"},

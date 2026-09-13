@@ -21,18 +21,6 @@ func TestAgentContext_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid flow context",
-			ctx: AgentContext{
-				Version:    1,
-				FlowID:     "code-review",
-				FlowStepID: "understand-requirements",
-				StepType:   "task",
-				StepTitle:  "Understand requirements",
-				RepoRoot:   "/workspace",
-				Prompt:     "Review the code",
-			},
-		},
-		{
 			name: "wrong version",
 			ctx: AgentContext{
 				Version:  99,
@@ -149,8 +137,7 @@ func TestAgentContext_OmitsEmptyFields(t *testing.T) {
 
 	for _, key := range []string{
 		"task_id", "task_title", "task_description",
-		"tags", "track_id", "flow_id", "flow_step_id",
-		"step_type", "step_title", "files",
+		"tags", "track_id", "files",
 	} {
 		if _, ok := raw[key]; ok {
 			t.Errorf("expected %q to be omitted from JSON", key)

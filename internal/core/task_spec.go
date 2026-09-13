@@ -75,3 +75,13 @@ type TaskSpec struct {
 	Retry *RetrySpec `json:"retry,omitempty" yaml:"retry,omitempty"`
 	Gate  *StepGate  `json:"gate,omitempty" yaml:"gate,omitempty"`
 }
+
+// HumanTimeoutAction is the auto-action applied when a human task's
+// timeout elapses.
+type HumanTimeoutAction string
+
+const (
+	HumanTimeoutApprove     HumanTimeoutAction = "approve"
+	HumanTimeoutReject      HumanTimeoutAction = "reject"
+	HumanTimeoutKeepWaiting HumanTimeoutAction = "keep_waiting"
+)

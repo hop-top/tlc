@@ -14,7 +14,6 @@ func TestJobPayload_RoundTrip_AllFlags(t *testing.T) {
 	original := &JobPayload{
 		AgentName:        "copilot",
 		Tasks:            []string{"T-0042", "T-0043"},
-		FlowRef:          "flow:build:1.0",
 		TrackID:          "my-track",
 		Image:            "ghcr.io/hop-top/pod-copilot:v2",
 		Local:            false,
@@ -43,7 +42,6 @@ func TestJobPayload_RoundTrip_AllFlags(t *testing.T) {
 	// Verify all fields round-trip.
 	assert.Equal(t, original.AgentName, decoded.AgentName, "AgentName")
 	assert.Equal(t, original.Tasks, decoded.Tasks, "Tasks")
-	assert.Equal(t, original.FlowRef, decoded.FlowRef, "FlowRef")
 	assert.Equal(t, original.TrackID, decoded.TrackID, "TrackID")
 	assert.Equal(t, original.Image, decoded.Image, "Image")
 	assert.Equal(t, original.Local, decoded.Local, "Local")

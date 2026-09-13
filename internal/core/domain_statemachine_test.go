@@ -122,47 +122,6 @@ func TestNewTrackStateMachine_ForceBypass(t *testing.T) {
 	}
 }
 
-func TestNewFlowStateMachine_AllowedTransitions(t *testing.T) {
-	sm := NewFlowStateMachine(nil)
-	ctx := context.Background()
-
-	allowed := []struct{ from, to domain.State }{
-		{"queued", "running"},
-		{"running", "succeeded"},
-		{"running", "failed"},
-		{"running", "canceled"},
-		{"running", "paused"},
-		{"paused", "running"},
-		{"paused", "canceled"},
-	}
-	for _, tt := range allowed {
-		if err := sm.Transition(ctx, tt.from, tt.to, false); err != nil {
-			t.Errorf("Transition(%s -> %s) unexpected error: %v",
-				tt.from, tt.to, err)
-		}
-	}
-}
-
-func TestNewFlowStateMachine_DisallowedTransitions(t *testing.T) {
-	sm := NewFlowStateMachine(nil)
-	ctx := context.Background()
-
-	disallowed := []struct{ from, to domain.State }{
-		{"queued", "succeeded"},
-		{"queued", "failed"},
-		{"succeeded", "running"},
-		{"failed", "running"},
-		{"canceled", "running"},
-		{"paused", "succeeded"},
-	}
-	for _, tt := range disallowed {
-		if err := sm.Transition(ctx, tt.from, tt.to, false); err == nil {
-			t.Errorf("Transition(%s -> %s) expected error, got nil",
-				tt.from, tt.to)
-		}
-	}
-}
-
 func TestNewTaskStateMachine_NilConfig(t *testing.T) {
 	cfg := &config.TaskConfig{} // no statuses, no state machine
 	sm := NewTaskStateMachine(cfg, nil)

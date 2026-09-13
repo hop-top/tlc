@@ -11,19 +11,17 @@ import (
 )
 
 type MockRepository struct {
-	mu       sync.Mutex
-	Tasks    map[string]*Task
-	FlowRuns map[string]*FlowRun
-	logs     []*LogEntry
-	seqs     map[string]int
+	mu    sync.Mutex
+	Tasks map[string]*Task
+	logs  []*LogEntry
+	seqs  map[string]int
 }
 
 func NewMockRepository() *MockRepository {
 	return &MockRepository{
-		Tasks:    make(map[string]*Task),
-		FlowRuns: make(map[string]*FlowRun),
-		logs:     make([]*LogEntry, 0),
-		seqs:     make(map[string]int),
+		Tasks: make(map[string]*Task),
+		logs:  make([]*LogEntry, 0),
+		seqs:  make(map[string]int),
 	}
 }
 
@@ -271,34 +269,6 @@ func (m *MockRepository) ArchiveTasks(ctx context.Context, threshold time.Durati
 	return count, nil
 }
 
-func (m *MockRepository) CreateFlowRun(ctx context.Context, run *FlowRun) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.FlowRuns[run.ID] = run
-	return nil
-}
-
-func (m *MockRepository) GetFlowRun(ctx context.Context, id string) (*FlowRun, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.FlowRuns[id], nil
-}
-
-func (m *MockRepository) UpdateFlowRun(ctx context.Context, run *FlowRun) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.FlowRuns[run.ID] = run
-	return nil
-}
-
-func (m *MockRepository) ListFlowRuns(ctx context.Context, query Query) ([]*FlowRun, error) {
-	runs := make([]*FlowRun, 0, len(m.FlowRuns))
-	for _, r := range m.FlowRuns {
-		runs = append(runs, r)
-	}
-	return runs, nil
-}
-
 type MockLogRepository struct {
 	mu   sync.Mutex
 	Logs []*LogEntry
@@ -354,31 +324,4 @@ func (m *MockLogRepository) UpdateLogNote(_ context.Context, logID int64, note s
 		}
 	}
 	return fmt.Errorf("log entry %d not found", logID)
-}
-
-// MockAgentRunner is a configurable AgentRunner for unit tests.
-// CanHandleFunc defaults to always-true when nil.
-// RunFunc defaults to returning an empty output map when nil.
-type MockAgentRunner struct {
-	CanHandleFunc func(Step) bool
-	RunFunc       func(context.Context, Step, string) (map[string]any, error)
-	Calls         []Step
-	mu            sync.Mutex
-}
-
-func (m *MockAgentRunner) CanHandle(step Step) bool {
-	if m.CanHandleFunc != nil {
-		return m.CanHandleFunc(step)
-	}
-	return true
-}
-
-func (m *MockAgentRunner) Run(ctx context.Context, step Step, prompt string) (map[string]any, error) {
-	m.mu.Lock()
-	m.Calls = append(m.Calls, step)
-	m.mu.Unlock()
-	if m.RunFunc != nil {
-		return m.RunFunc(ctx, step, prompt)
-	}
-	return map[string]any{"mock": fmt.Sprintf("step:%s", step.ID)}, nil
 }

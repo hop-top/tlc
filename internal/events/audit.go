@@ -25,7 +25,7 @@ func NewAuditSubscriber(b bus.Bus, logRepo core.LogRepository) *AuditSubscriber 
 }
 
 func (s *AuditSubscriber) handle(ctx context.Context, e bus.Event) error {
-	// Only persist task events to task_logs. Track/flow events use a
+	// Only persist task events to task_logs. Track events use a
 	// different entity ID space and AddLog queries the tasks table for
 	// project_id — non-task IDs would cause a lookup failure.
 	if !isTaskTopic(string(e.Topic)) {
@@ -103,14 +103,6 @@ func topicToAction(topic string) string {
 		return "TRACK_ACTIVATED"
 	case TrackCompleted:
 		return "TRACK_COMPLETED"
-	case FlowStarted:
-		return core.ActionFlowStart
-	case FlowStepCompleted:
-		return core.ActionStepEnd
-	case FlowCompleted:
-		return core.ActionFlowEnd
-	case FlowFailed:
-		return core.ActionFailure
 	default:
 		return topic
 	}

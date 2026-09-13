@@ -54,3 +54,10 @@ func (a *Assignee) CheckUnblocks(_ *Task) []string {
 
 	return a.Delegation.Unblocks
 }
+
+// TaskRequirements specifies capabilities needed to execute a task.
+type TaskRequirements struct {
+	Capabilities []string `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+	Domains      []string `json:"domains,omitempty" yaml:"domains,omitempty"`
+	Tools        []string `json:"tools,omitempty" yaml:"tools,omitempty"`
+}

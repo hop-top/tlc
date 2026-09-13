@@ -24,8 +24,7 @@ const (
 // shell child's grandchildren cannot keep the pipes open.
 var ErrArgvTimeout = errors.New("argv run timed out")
 
-// ArgvOpts describes one literal command run: an exec-kind task or a
-// flow exec step.
+// ArgvOpts describes one literal command run: an exec-kind task.
 type ArgvOpts struct {
 	Argv []string
 	// Cwd is the working directory; relative values resolve against
@@ -54,7 +53,7 @@ type ArgvResult struct {
 }
 
 // Map renders the result in the exec output schema — the keys `when:`
-// expressions, eva gates and the flow adapter read.
+// expressions and eva gates read.
 func (r *ArgvResult) Map() map[string]any {
 	return map[string]any{
 		ResultKeyExitCode: r.ExitCode,

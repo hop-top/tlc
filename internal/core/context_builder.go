@@ -28,7 +28,7 @@ func (o *BuildOpts) repoRoot() string {
 	return "/workspace"
 }
 
-// ContextBuilder derives AgentContext from task, flow, or track metadata.
+// ContextBuilder derives AgentContext from task or track metadata.
 type ContextBuilder struct {
 	repo Repository
 }
@@ -79,43 +79,6 @@ func (b *ContextBuilder) BuildForTask(
 		Files:           files,
 		CtxtRefs:        opts.CtxtRefs,
 		Prompt:          prompt,
-	}
-	return ac, nil
-}
-
-// BuildForFlowStep creates an AgentContext from a flow step definition.
-func (b *ContextBuilder) BuildForFlowStep(
-	ctx context.Context,
-	flow *Flow,
-	stepID string,
-	opts BuildOpts,
-) (*AgentContext, error) {
-	if flow == nil {
-		return nil, fmt.Errorf("context builder: flow is nil")
-	}
-	step, ok := flow.Steps[stepID]
-	if !ok {
-		return nil, fmt.Errorf(
-			"context builder: step %q not found in flow %s",
-			stepID, flow.ID,
-		)
-	}
-
-	prompt := opts.PromptFile
-	if prompt == "" {
-		prompt = buildFlowStepPrompt(flow, &step)
-	}
-
-	ac := &AgentContext{
-		Version:    AgentContextVersion,
-		FlowID:     flow.ID,
-		FlowStepID: stepID,
-		StepType:   string(step.Type),
-		StepTitle:  step.Title,
-		RepoRoot:   opts.repoRoot(),
-		Files:      opts.ContextFiles,
-		CtxtRefs:   opts.CtxtRefs,
-		Prompt:     prompt,
 	}
 	return ac, nil
 }
@@ -193,25 +156,6 @@ func buildTaskPrompt(task *Task, files []string) string {
 	}
 	sb.WriteString("### Instructions\n\n")
 	sb.WriteString("Complete the task described above. ")
-	sb.WriteString("Write results to /workspace/.tlc/results.json\n")
-	return sb.String()
-}
-
-func buildFlowStepPrompt(flow *Flow, step *Step) string {
-	var sb strings.Builder
-	sb.WriteString("## Flow Step\n\n")
-	sb.WriteString("Flow: ")
-	sb.WriteString(flow.Name)
-	sb.WriteString("\nStep: ")
-	sb.WriteString(step.Title)
-	sb.WriteString("\n\n")
-	if step.TaskTemplate != nil && step.TaskTemplate.Description != "" {
-		sb.WriteString("### Description\n\n")
-		sb.WriteString(step.TaskTemplate.Description)
-		sb.WriteString("\n\n")
-	}
-	sb.WriteString("### Instructions\n\n")
-	sb.WriteString("Complete the step described above. ")
 	sb.WriteString("Write results to /workspace/.tlc/results.json\n")
 	return sb.String()
 }

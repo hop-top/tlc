@@ -160,14 +160,6 @@ func (r *stubTaskRepo) FindTaskByOrigin(_ context.Context, _, _ string) (*Task, 
 func (r *stubTaskRepo) ArchiveTasks(_ context.Context, _ time.Duration) (int64, error) {
 	return 0, nil
 }
-func (r *stubTaskRepo) CreateFlowRun(_ context.Context, _ *FlowRun) error { return nil }
-func (r *stubTaskRepo) GetFlowRun(_ context.Context, _ string) (*FlowRun, error) {
-	return nil, nil
-}
-func (r *stubTaskRepo) UpdateFlowRun(_ context.Context, _ *FlowRun) error { return nil }
-func (r *stubTaskRepo) ListFlowRuns(_ context.Context, _ Query) ([]*FlowRun, error) {
-	return nil, nil
-}
 
 func (r *stubTaskRepo) GetNextSequenceID(_ context.Context, _ string) (int, error) {
 	return 1, nil

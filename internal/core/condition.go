@@ -11,18 +11,12 @@ import (
 //   - Results: upstream task results keyed by step id, read as
 //     results.<step>.<dotted path> — the executor's `when:` input.
 //   - Vars: recipe vars, read as vars.<name>.
-//   - Inputs: the legacy flow inputs, read as inputs.<name>; a bare
-//     identifier resolves in Inputs first, then Vars.
+//   - Inputs: named inputs, read as inputs.<name>; a bare identifier
+//     resolves in Inputs first, then Vars.
 type CondEnv struct {
 	Inputs  map[string]any
 	Vars    map[string]any
 	Results map[string]map[string]any
-}
-
-// EvalCondition evaluates an inputs-only expression. It is the legacy
-// flow entry point and delegates to EvalConditionEnv.
-func EvalCondition(expr string, inputs map[string]any) (bool, error) {
-	return EvalConditionEnv(expr, CondEnv{Inputs: inputs})
 }
 
 // EvalConditionEnv evaluates a condition against env.

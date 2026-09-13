@@ -22,7 +22,7 @@ func TestRunArgv_HappyPath(t *testing.T) {
 
 // TestRunArgv_NonzeroExitIsResultNotError: the runner reports the exit
 // code and leaves the success policy to the caller (the executor marks
-// nonzero as failed; the flow adapter honors allow_nonzero_exit).
+// nonzero as failed).
 func TestRunArgv_NonzeroExitIsResultNotError(t *testing.T) {
 	res, err := RunArgv(context.Background(), ArgvOpts{Argv: []string{"sh", "-c", "exit 7"}})
 	if err != nil {

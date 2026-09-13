@@ -13,7 +13,7 @@ import (
 type AgentRunRecord struct {
 	ID          string
 	Agent       string
-	TargetType  string // "task", "flow", "track"
+	TargetType  string // "task", "track"
 	TargetID    string
 	JobID       string // kit/job ID if async
 	ContainerID string
@@ -88,7 +88,7 @@ func (u *StateUpdater) Update(
 		return nil
 	}
 	if targetType != "task" {
-		// Flow/track state handled by their own executors.
+		// Track state is handled by its own executor.
 		return nil
 	}
 

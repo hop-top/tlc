@@ -97,62 +97,6 @@ func TestContextBuilder_BuildForTask_NotFound(t *testing.T) {
 	}
 }
 
-func TestContextBuilder_BuildForFlowStep(t *testing.T) {
-	flow := &Flow{
-		ID:   "code-review",
-		Name: "Code Review",
-		Steps: map[string]Step{
-			"understand": {
-				ID:    "understand",
-				Type:  StepTypeTask,
-				Title: "Understand requirements",
-				TaskTemplate: &TaskTemplate{
-					Description: "Review the code changes",
-				},
-			},
-		},
-	}
-
-	cb := NewContextBuilder(NewMockRepository())
-	ac, err := cb.BuildForFlowStep(
-		context.Background(), flow, "understand", BuildOpts{},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if ac.FlowID != "code-review" {
-		t.Errorf("flow_id = %q", ac.FlowID)
-	}
-	if ac.FlowStepID != "understand" {
-		t.Errorf("flow_step_id = %q", ac.FlowStepID)
-	}
-	if ac.StepType != "task" {
-		t.Errorf("step_type = %q", ac.StepType)
-	}
-	if ac.StepTitle != "Understand requirements" {
-		t.Errorf("step_title = %q", ac.StepTitle)
-	}
-	if ac.Prompt == "" {
-		t.Error("prompt is empty")
-	}
-}
-
-func TestContextBuilder_BuildForFlowStep_MissingStep(t *testing.T) {
-	flow := &Flow{
-		ID:    "test",
-		Steps: map[string]Step{},
-	}
-
-	cb := NewContextBuilder(NewMockRepository())
-	_, err := cb.BuildForFlowStep(
-		context.Background(), flow, "nonexistent", BuildOpts{},
-	)
-	if err == nil {
-		t.Fatal("expected error for missing step")
-	}
-}
-
 func TestContextBuilder_BuildForTrack(t *testing.T) {
 	repo := NewMockRepository()
 	ctx := context.Background()
