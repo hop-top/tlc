@@ -161,12 +161,15 @@ func TestBindTaskColumnCount(t *testing.T) {
 		ProjectID: &pid,
 	}
 
+	// The bind must cover every persisted task column — the count is the
+	// full SELECT list, so a column added to the store without a bind
+	// (the state this test previously pinned at 21 of 25) fails here.
 	cols, vals := BindTask(task)
-	if len(cols) != 21 {
-		t.Errorf("BindTask returned %d columns, want 21", len(cols))
+	if len(cols) != taskColumnCount {
+		t.Errorf("BindTask returned %d columns, want %d", len(cols), taskColumnCount)
 	}
-	if len(vals) != 21 {
-		t.Errorf("BindTask returned %d values, want 21", len(vals))
+	if len(vals) != taskColumnCount {
+		t.Errorf("BindTask returned %d values, want %d", len(vals), taskColumnCount)
 	}
 	if cols[0] != "id" {
 		t.Errorf("first column = %q, want %q", cols[0], "id")

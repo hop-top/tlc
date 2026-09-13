@@ -286,11 +286,6 @@ type RetryPolicy struct {
 
 // StepGate configures optional EVA contract validation for a step output.
 // When present, the step is only marked succeeded if EVA returns a pass result.
-type StepGate struct {
-	Contract string `json:"contract" yaml:"contract"` // named EVA contract
-	EvaURL   string `json:"eva_url"  yaml:"eva_url"`  // EVA gateway base URL
-}
-
 // FlowRun represents an execution instance of a flow definition.
 type FlowRun struct {
 	ID        string         `json:"run_id" yaml:"run_id" table:"Run ID"`

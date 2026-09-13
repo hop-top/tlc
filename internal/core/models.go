@@ -556,6 +556,20 @@ type Task struct {
 	RemindAt      *time.Time             `json:"remind_at,omitempty" yaml:"remind_at,omitempty"`
 	RRule         string                 `json:"rrule,omitempty" yaml:"rrule,omitempty"`
 	NoAutoRemind  bool                   `json:"no_auto_remind,omitempty" yaml:"no_auto_remind,omitempty"`
+
+	// Recipe-era execution fields. Kind, Attempts, ClaimedAt and the
+	// run/step identity are columns because the executor's readiness and
+	// reclaim queries filter and order on them; Spec and Result are JSON
+	// blobs read only once a task is picked. All omit when unset so tasks
+	// that never touched a recipe serialize exactly as before.
+	Kind        TaskKind               `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Spec        *TaskSpec              `json:"spec,omitempty" yaml:"spec,omitempty"`
+	Result      map[string]interface{} `json:"result,omitempty" yaml:"result,omitempty"`
+	Attempts    int                    `json:"attempts,omitempty" yaml:"attempts,omitempty"`
+	ClaimedAt   *time.Time             `json:"claimed_at,omitempty" yaml:"claimed_at,omitempty"`
+	RunID       string                 `json:"run_id,omitempty" yaml:"run_id,omitempty"`
+	StepID      string                 `json:"step_id,omitempty" yaml:"step_id,omitempty"`
+	StepOrdinal int                    `json:"step_ordinal,omitempty" yaml:"step_ordinal,omitempty"`
 }
 
 type RegisteredProject struct {
