@@ -14,9 +14,10 @@ import (
 // and bus events — but without a state transition, which the executor
 // owns.
 //
-// Dispatches are serialized: the agent runner reads process-level
-// settings (agentRun*), and local mode writes one shared
-// .tlc/context.json, so two agents cannot run at once in this process.
+// Container dispatches run concurrently up to the executor's bound: each
+// carries its own execParams and gets its own pod. Local dispatches share
+// the host working tree, so localMu lets only one run at a time whatever
+// --concurrency says.
 type agentDispatcher struct {
 	s interface {
 		core.Repository
@@ -25,17 +26,20 @@ type agentDispatcher struct {
 	registry      *core.AgentRegistry
 	defaultAgent  string
 	ctxtRefs      []string
-	local         bool
 	imageOverride string
+	params        execParams
 	updater       *core.StateUpdater
+	exec          agentExecFunc // nil selects execTaskWithAgent
 
-	mu sync.Mutex
+	localMu sync.Mutex
 }
 
 // Dispatch implements core.Dispatcher.
 func (d *agentDispatcher) Dispatch(ctx context.Context, task *core.Task) (*core.DispatchResult, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	if d.params.local {
+		d.localMu.Lock()
+		defer d.localMu.Unlock()
+	}
 
 	name := d.defaultAgent
 	if task.Spec != nil && task.Spec.Agent != "" {
@@ -62,15 +66,21 @@ func (d *agentDispatcher) Dispatch(ctx context.Context, task *core.Task) (*core.
 		cfg = &copied
 	}
 
+	p := d.params
+	p.agent = resolved
 	ac, err := core.NewContextBuilder(d.s).BuildForTask(ctx, task.ID, core.BuildOpts{
 		CtxtRefs: d.ctxtRefs,
-		RepoRoot: repoRootForMode(d.local),
+		RepoRoot: p.repoRoot,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build context for %s: %w", formatTaskAlias(task), err)
 	}
 
-	result, err := execTaskWithAgent(ctx, resolved, task.ID, ac, cfg, d.updater, d.local)
+	run := d.exec
+	if run == nil {
+		run = execTaskWithAgent
+	}
+	result, err := run(ctx, p, task.ID, ac, cfg, d.updater)
 	if err != nil {
 		return nil, err
 	}

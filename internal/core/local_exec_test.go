@@ -9,6 +9,48 @@ import (
 	"testing"
 )
 
+// TestLocalExecManager_Exec_ProtocolEnv: every local agent learns its
+// context and results paths from TLC_CONTEXT_PATH / TLC_RESULTS_PATH.
+func TestLocalExecManager_Exec_ProtocolEnv(t *testing.T) {
+	dir := t.TempDir()
+	script := []string{"-c", "printf '%s\\n%s\\n' \"$TLC_CONTEXT_PATH\" \"$TLC_RESULTS_PATH\""}
+
+	t.Run("explicit paths", func(t *testing.T) {
+		results := filepath.Join(dir, "run-1", "results.json")
+		m := NewLocalExecManager(nil, results)
+		stdout, _, code, err := m.Exec(context.Background(), LocalExecOpts{
+			Binary:      "sh",
+			Args:        script,
+			RepoRoot:    dir,
+			ContextPath: filepath.Join(dir, "run-1", "context.json"),
+		})
+		if err != nil || code != 0 {
+			t.Fatalf("exec: code=%d err=%v", code, err)
+		}
+		want := filepath.Join(dir, "run-1", "context.json") + "\n" + results + "\n"
+		if stdout != want {
+			t.Errorf("stdout = %q; want %q", stdout, want)
+		}
+	})
+
+	t.Run("defaults", func(t *testing.T) {
+		m := NewLocalExecManager(nil, "")
+		stdout, _, code, err := m.Exec(context.Background(), LocalExecOpts{
+			Binary:   "sh",
+			Args:     script,
+			EnvVars:  map[string]string{"UNRELATED": "1"},
+			RepoRoot: dir,
+		})
+		if err != nil || code != 0 {
+			t.Fatalf("exec: code=%d err=%v", code, err)
+		}
+		want := "\n" + filepath.Join(dir, ".tlc", "results.json") + "\n"
+		if stdout != want {
+			t.Errorf("stdout = %q; want no context path and the default results path %q", stdout, want)
+		}
+	})
+}
+
 func TestLocalExecManager_Exec(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		m := NewLocalExecManager(nil, "")

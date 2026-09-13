@@ -37,6 +37,11 @@ from blocked_by each round, ready tasks are claimed and dispatched by
 kind (agent tasks to the named agent, exec tasks as their argv), and the
 outcome is applied — done, retried, or blocked with a reason.
 
+--concurrency bounds in-flight dispatches of every kind. Container agents
+(the default --with-pod) run in parallel up to the bound, one pod each;
+local agents (--with-pod false) share the host working tree, so they run
+one at a time whatever the bound.
+
 Only tasks created by a recipe run are dispatched unless --permissive is
 set. Human tasks are never dispatched: when only human tasks remain
 ready the command reports them and exits 0 (or keeps polling with
@@ -79,7 +84,7 @@ func init() {
 	f.StringVar(&trackExecuteWithPod, "with-pod", "true",
 		"Run agents in a container (true), locally (false), or in the given image; "+
 			"when passed, exec tasks run in a container too")
-	f.IntVar(&trackExecuteConcurrency, "concurrency", 1, "In-flight dispatches (exec tasks; agent tasks run one at a time)")
+	f.IntVar(&trackExecuteConcurrency, "concurrency", 1, "In-flight dispatches; local-mode agents (--with-pod false) still run one at a time")
 	f.BoolVar(&trackExecutePermissive, "permissive", false, "Also dispatch tasks not created by a recipe run")
 	f.DurationVar(&trackExecuteReclaim, "reclaim", 0, "Re-dispatch tasks whose claim is older than this")
 	f.BoolVar(&trackExecuteWait, "wait", false, "Keep polling while only human tasks are ready")
@@ -134,6 +139,7 @@ func runTrackExecute(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	projectID := currentProjectID()
+	local, _ := withPodMode(trackExecuteWithPod)
 
 	registry, err := loadAgentRegistry(trackExecuteTrustProject)
 	if err != nil {
@@ -169,7 +175,7 @@ func runTrackExecute(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if trackExecuteDryRun {
-		return printTrackExecuteDryRun(ctx, cmd, s, wm, trackDisplay, trackID, projectID, opts)
+		return printTrackExecuteDryRun(ctx, cmd, s, wm, trackDisplay, trackID, projectID, opts, local)
 	}
 
 	executor, err := newTrackExecutor(cmd, s, wm, opts, registry, executorSetup{
@@ -179,6 +185,7 @@ func runTrackExecute(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(out, "Executing track %s\n", trackDisplay)
+	printLocalConcurrencyNotice(out, local, opts.Concurrency)
 	report, err := executor.RunTrack(ctx, trackID, projectID)
 	if err != nil {
 		return fmt.Errorf("execute track %s: %w", trackDisplay, err)
@@ -207,8 +214,8 @@ func newTrackExecutor(
 		registry:      registry,
 		defaultAgent:  setup.agent,
 		ctxtRefs:      setup.ctxtRefs,
-		local:         local,
 		imageOverride: imageOverride,
+		params:        newExecParams("", local),
 		updater:       core.NewStateUpdater(core.NewTaskService(s, s), GetEventBus()),
 	})
 	execDispatcher, err := execDispatcherForMode(cmd, registry, local, imageOverride)
@@ -217,6 +224,15 @@ func newTrackExecutor(
 	}
 	executor.Register(core.TaskKindExec, execDispatcher)
 	return executor, nil
+}
+
+// printLocalConcurrencyNotice says so when a concurrency bound above 1
+// will not parallelize agents: local agents share the working tree and
+// run one at a time.
+func printLocalConcurrencyNotice(out io.Writer, local bool, concurrency int) {
+	if local && concurrency > 1 {
+		_, _ = fmt.Fprintln(out, "  Agents:      one at a time (local mode shares the working tree; --concurrency applies to exec tasks)")
+	}
 }
 
 // printExecReport summarizes a run under a label ("Track L-0003", "Task
@@ -237,7 +253,7 @@ func printExecReport(ctx context.Context, out io.Writer, s core.Repository, labe
 // would dispatch, without claiming or running anything.
 func printTrackExecuteDryRun(
 	ctx context.Context, cmd *cobra.Command, s core.Repository, wm *core.WorkflowManager,
-	trackDisplay, trackID, projectID string, opts core.ExecutorOpts,
+	trackDisplay, trackID, projectID string, opts core.ExecutorOpts, local bool,
 ) error {
 	out := cmd.OutOrStdout()
 	tasks, err := s.ListTasks(ctx, core.Query{
@@ -265,6 +281,7 @@ func printTrackExecuteDryRun(
 		_, _ = fmt.Fprintf(out, "  Agent:       %s\n", trackExecuteAgent)
 	}
 	_, _ = fmt.Fprintf(out, "  Concurrency: %d\n", opts.Concurrency)
+	printLocalConcurrencyNotice(out, local, opts.Concurrency)
 	if opts.Permissive {
 		_, _ = fmt.Fprintf(out, "  Mode:        permissive (tasks without recipe provenance included)\n")
 	}

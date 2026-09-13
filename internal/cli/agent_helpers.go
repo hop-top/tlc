@@ -2,25 +2,24 @@ package cli
 
 import (
 	"os"
+	"strings"
 
 	"hop.top/tlc/internal/core"
 )
 
-func buildOpts() core.BuildOpts {
+// buildOpts assembles context-builder options from the `agent run`
+// prompt/context flags for the given repo root.
+func buildOpts(repoRoot string) core.BuildOpts {
 	return core.BuildOpts{
 		PromptFile:   agentRunPrompt,
 		ContextFiles: agentRunContext,
-		RepoRoot:     repoRoot(),
+		RepoRoot:     repoRoot,
 	}
 }
 
-// repoRoot returns the working directory for agent execution. In local
-// mode it returns the host CWD; in container mode the repo is mounted
-// at /workspace.
-func repoRoot() string {
-	return repoRootForMode(agentRunLocal)
-}
-
+// repoRootForMode returns the working directory for agent execution: the
+// host CWD in local mode, /workspace (where the repo is mounted) in a
+// container.
 func repoRootForMode(local bool) string {
 	if !local {
 		return "/workspace"
@@ -66,17 +65,17 @@ func splitMount(s string) []string {
 	return parts
 }
 
-func mergeEnvVars(cfgEnv map[string]string) map[string]string {
-	merged := make(map[string]string, len(cfgEnv)+len(agentRunEnv))
+// mergeEnvVars overlays KEY=VALUE pairs on a copy of the agent config
+// env; the overlay wins on duplicate keys and entries without '=' are
+// dropped.
+func mergeEnvVars(cfgEnv map[string]string, overlay []string) map[string]string {
+	merged := make(map[string]string, len(cfgEnv)+len(overlay))
 	for k, v := range cfgEnv {
 		merged[k] = v
 	}
-	for _, kv := range agentRunEnv {
-		for i := 0; i < len(kv); i++ {
-			if kv[i] == '=' {
-				merged[kv[:i]] = kv[i+1:]
-				break
-			}
+	for _, kv := range overlay {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			merged[k] = v
 		}
 	}
 	return merged
