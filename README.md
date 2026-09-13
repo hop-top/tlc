@@ -712,6 +712,38 @@ tlc recipe show code-review -f json   # the expanded document
 tlc recipe validate ./my-recipe.yaml  # exit 1 with the first problem
 ```
 
+#### Capturing and inspecting recipes
+
+A track that already works can be captured as a recipe: one step per task
+in dependency order, ids from recipe provenance or the task titles,
+`depends_on` from the blocked-by edges inside the track. `--var name=value`
+lifts every whole-word occurrence of `value` back into `{{name}}` and
+declares the var; the vars of the track's latest recipe run are lifted the
+same way. A markdown procedure reachable by URL is converted by the model
+behind `LLM_API_KEY` and kept verbatim as `track.plan`.
+
+```bash
+tlc recipe import release-flow                    # writes ./release-flow.yaml
+tlc recipe import release-flow --var pr=1234      # "Review PR 1234" → "Review PR {{pr}}"
+tlc recipe import release-flow --install          # into .tlc/recipes/release-flow.yaml
+tlc recipe import release-flow -o - --name release --version 1.0.0
+tlc recipe import https://github.com/org/repo/blob/main/docs/release.md
+```
+
+Every materialization is recorded in a run ledger. `recipe runs` lists it;
+`recipe diff` walks a recipe's steps against the runs on a track and reports
+each step as `materialized`, `missing` (never created), `deleted` (task since
+removed) or `extra` (created by the run but no longer in the recipe), noting
+version and content drift between the file and the run.
+
+```bash
+tlc recipe runs                                   # newest first, with task counts
+tlc recipe runs code-review --track release-flow  # one recipe, one track
+tlc recipe runs --all-projects
+tlc recipe diff release-flow                      # against the latest run's recipe
+tlc recipe diff release-flow --recipe ./code-review.yaml
+```
+
 ### Flows & Assignees
 
 TLC includes a comprehensive workflow suite with capability-based task assignment:
