@@ -34,10 +34,6 @@ func TestStorage_MigrationIntegration(t *testing.T) {
 	if err := s.CreateTask(ctx, &core.Task{ID: "T-INT", Title: "Integration", Status: core.StatusTodo, Reference: "ref"}); err != nil {
 		t.Errorf("CreateTask failed: %v", err)
 	}
-
-	if err := s.CreateFlowRun(ctx, &core.FlowRun{ID: "run:INT", FlowID: "flow:INT", Status: core.FlowStatusRunning, StartedAt: time.Now()}); err != nil {
-		t.Errorf("CreateFlowRun failed: %v", err)
-	}
 }
 
 // TestStorage_TransactionalIntegrity validates foreign key constraints

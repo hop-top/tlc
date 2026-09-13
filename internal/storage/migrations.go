@@ -494,7 +494,7 @@ var migrations = []migration{
 	},
 	{
 		// Audit ledger for runs executed by external tools that use tlc
-		// as their audit home (third audit leg beside task logs and flow
+		// as their audit home (third audit leg beside task logs and agent
 		// runs). Keyed by (project_id, tool, run_id); steps replaced
 		// wholesale on upsert. Timestamps UTC RFC3339 TEXT per repo
 		// convention; metrics stored as a JSON object string.
@@ -598,8 +598,7 @@ var migrations = []migration{
 		// it created; reconcile keys off this table rather than task
 		// presence, so a deliberately deleted task is not recreated.
 		//
-		// flow_runs stays: its drop is a later migration once the flow
-		// command group is gone.
+		// flow_runs stays until v22 drops it.
 		version: 21,
 		query: `
 		ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'agent';
@@ -646,10 +645,16 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_recipe_run_tasks_task_id ON recipe_run_tasks(task_id);
 		`,
 	},
+	{
+		// v22: drop flow_runs. Recipes replaced the flow subsystem and
+		// nothing reads or writes the table any more.
+		version: 22,
+		query:   `DROP TABLE IF EXISTS flow_runs;`,
+	},
 }
 
 // LatestMigrationVersion is the highest migration version in the schema.
-const LatestMigrationVersion = 21
+const LatestMigrationVersion = 22
 
 // SchemaVersion returns the current schema version from the database.
 func (s *SQLiteStorage) SchemaVersion() (int, error) {

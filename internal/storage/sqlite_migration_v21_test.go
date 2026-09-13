@@ -221,7 +221,7 @@ func TestMigrationV21_UpgradePreservesTasksWithDefaults(t *testing.T) {
 		assertRecipeDefaults(t, s.id, readRecipeCols(t, db, s.id))
 	}
 	// Ledger tables exist and are empty on upgrade; flow_runs is untouched
-	// by v21 (its drop is a later migration).
+	// by v21 — v22 drops it.
 	assertRowCount(t, db, "recipe_runs", 0)
 	assertRowCount(t, db, "recipe_run_tasks", 0)
 	if _, err := db.ExecContext(ctx, `SELECT id FROM flow_runs LIMIT 0`); err != nil {
