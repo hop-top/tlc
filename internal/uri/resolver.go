@@ -18,6 +18,10 @@ type Resolver struct {
 	storage  *storage.SQLiteStorage
 	FlowsDir string // overrides default flows directory; empty = "examples/flows"
 
+	// RecipeDirs is the recipe search path in precedence order. A
+	// project-scoped recipe URI prepends that project's own recipes dir.
+	RecipeDirs []string
+
 	// DBCache caches cross-project DB handles. When nil, ResolveTask
 	// opens a fresh handle on every cross-DB lookup and the caller (or
 	// a deferred close in ResolvedTask) must close it. When non-nil,

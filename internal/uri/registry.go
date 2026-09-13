@@ -19,8 +19,16 @@ const trackTypeName = "track"
 
 // TypesDirConfig holds configurable directory paths for URI type registration.
 type TypesDirConfig struct {
-	FlowsDir     string // empty = "examples/flows"
-	AssigneesDir string // empty = "examples/assignees"
+	FlowsDir     string   // empty = "examples/flows"
+	AssigneesDir string   // empty = "examples/assignees"
+	RecipeDirs   []string // recipe search path in precedence order; nil = no recipes
+}
+
+func (c *TypesDirConfig) recipeDirs() []string {
+	if c == nil {
+		return nil
+	}
+	return c.RecipeDirs
 }
 
 func (c *TypesDirConfig) flowsDir() string {
@@ -51,6 +59,7 @@ func RegisterTypes(reg *scheme.Registry, s *storage.SQLiteStorage, dirs ...*Type
 		assigneeCompletion(dc),
 		tagCompletion(s),
 		flowCompletion(dc),
+		recipeCompletion(dc),
 	}
 	for _, r := range registrations {
 		if err := reg.Register(r); err != nil {

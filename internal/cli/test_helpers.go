@@ -690,3 +690,14 @@ func newTestInitCmd() *cobra.Command {
 
 	return cmd
 }
+
+// resetRecipeFlags zeroes recipe flag state between in-process runs so a
+// --source from one test does not leak into the next.
+func resetRecipeFlags() {
+	recipeListSource = ""
+	for _, cmd := range []*cobra.Command{recipeListCmd, recipeShowCmd, recipeValidateCmd} {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+		})
+	}
+}

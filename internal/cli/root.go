@@ -107,6 +107,7 @@ var commandGroups = map[string]string{
 	"tasks":   "knowledge",
 	"track":   "knowledge",
 	"flow":    "knowledge",
+	"recipe":  "knowledge",
 	"log":     "knowledge",
 	"audit":   "knowledge",
 	"project": "knowledge",

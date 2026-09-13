@@ -53,6 +53,7 @@ echo
 echo "-- top-level subcommands --"
 check "tlc task"         $TLC task
 check "tlc flow"         $TLC flow
+check "tlc recipe"       $TLC recipe
 check "tlc assignee"     $TLC assignee
 check "tlc log"          $TLC log
 check "tlc auth"         $TLC auth
@@ -99,6 +100,13 @@ check_flag "flow test --record"        $TLC flow test --record
 check_flag "flow test --passthrough"   $TLC flow test --passthrough
 check_flag "flow test --keep-sandbox"  $TLC flow test --keep-sandbox
 check_flag "flow test --steps"         $TLC flow test --steps
+
+echo
+echo "-- recipe subcommands --"
+check "recipe list"      $TLC recipe list
+check "recipe show"      $TLC recipe show
+check "recipe validate"  $TLC recipe validate
+check_flag "recipe list --source"      $TLC recipe list --source
 
 echo
 echo "-- key flag checks --"

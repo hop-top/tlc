@@ -29,35 +29,35 @@ func TestTracksDir_AbsolutePathRejectedByValidation(t *testing.T) {
 	}
 }
 
-// --- FlowConfig.FlowsDir ---
+// --- RecipeConfig.RecipeDir ---
 
-func TestFlowsDir_DefaultWhenEmpty(t *testing.T) {
-	fc := &FlowConfig{}
-	want := filepath.Join("examples", "flows")
-	if got := fc.FlowsDir(); got != want {
-		t.Errorf("FlowsDir() = %q; want %q", got, want)
+func TestRecipeDir_DefaultWhenEmpty(t *testing.T) {
+	fc := &RecipeConfig{}
+	want := "" // no repo-relative default: an unset layer is skipped
+	if got := fc.RecipeDir(); got != want {
+		t.Errorf("RecipeDir() = %q; want %q", got, want)
 	}
 }
 
-func TestFlowsDir_CustomValue(t *testing.T) {
-	fc := &FlowConfig{Dir: "workflows"}
-	if got := fc.FlowsDir(); got != "workflows" {
-		t.Errorf("FlowsDir() = %q; want %q", got, "workflows")
+func TestRecipeDir_CustomValue(t *testing.T) {
+	fc := &RecipeConfig{Dir: "workflows"}
+	if got := fc.RecipeDir(); got != "workflows" {
+		t.Errorf("RecipeDir() = %q; want %q", got, "workflows")
 	}
 }
 
-func TestFlowsDir_AbsolutePathRejectedByValidation(t *testing.T) {
+func TestRecipeDir_AbsolutePathRejectedByValidation(t *testing.T) {
 	abs := filepath.Join(string(filepath.Separator), "opt", "flows")
-	fc := &FlowConfig{Dir: abs}
+	fc := &RecipeConfig{Dir: abs}
 	if err := fc.Validate(); err == nil {
 		t.Error("Validate() should reject absolute flows dir")
 	}
 }
 
-// --- FlowConfig.AssigneesDirectory ---
+// --- RecipeConfig.AssigneesDirectory ---
 
 func TestAssigneesDirectory_DefaultWhenEmpty(t *testing.T) {
-	fc := &FlowConfig{}
+	fc := &RecipeConfig{}
 	want := filepath.Join("examples", "assignees")
 	if got := fc.AssigneesDirectory(); got != want {
 		t.Errorf("AssigneesDirectory() = %q; want %q", got, want)
@@ -65,7 +65,7 @@ func TestAssigneesDirectory_DefaultWhenEmpty(t *testing.T) {
 }
 
 func TestAssigneesDirectory_CustomValue(t *testing.T) {
-	fc := &FlowConfig{AssigneesDir: "people"}
+	fc := &RecipeConfig{AssigneesDir: "people"}
 	if got := fc.AssigneesDirectory(); got != "people" {
 		t.Errorf("AssigneesDirectory() = %q; want %q", got, "people")
 	}
@@ -154,8 +154,8 @@ func TestDefaultConfig_PathMethodsReturnDefaults(t *testing.T) {
 		want string
 	}{
 		{"TracksDir", cfg.Tracks.TracksDir(), "tracks"},
-		{"FlowsDir", cfg.Flow.FlowsDir(), filepath.Join("examples", "flows")},
-		{"AssigneesDirectory", cfg.Flow.AssigneesDirectory(), filepath.Join("examples", "assignees")},
+		{"RecipeDir", cfg.Recipe.RecipeDir(), ""},
+		{"AssigneesDirectory", cfg.Recipe.AssigneesDirectory(), filepath.Join("examples", "assignees")},
 		{"InboxDir", cfg.Storage.Inbox.InboxDir(), "inbox"},
 		{"ProjectionDirectory", cfg.Task.ProjectionDirectory(), "tasks"},
 		{"TodoFilePath", cfg.Task.TodoFilePath(), "todo.txt"},
@@ -175,8 +175,8 @@ func TestDefaultConfig_PathMethodsReturnDefaults(t *testing.T) {
 func TestConfigValidate_CustomPathsPreserved(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Tracks.Dir = "custom/tracks"
-	cfg.Flow.Dir = "custom/flows"
-	cfg.Flow.AssigneesDir = "custom/assignees"
+	cfg.Recipe.Dir = "custom/flows"
+	cfg.Recipe.AssigneesDir = "custom/assignees"
 	cfg.Storage.Inbox.Dir = "custom/inbox"
 	cfg.Task.ProjectionDir = "custom/projection"
 	cfg.Task.TodoFile = "custom/todo.md"
@@ -189,10 +189,10 @@ func TestConfigValidate_CustomPathsPreserved(t *testing.T) {
 	if got := cfg.Tracks.TracksDir(); got != "custom/tracks" {
 		t.Errorf("TracksDir() = %q after validate", got)
 	}
-	if got := cfg.Flow.FlowsDir(); got != "custom/flows" {
-		t.Errorf("FlowsDir() = %q after validate", got)
+	if got := cfg.Recipe.RecipeDir(); got != "custom/flows" {
+		t.Errorf("RecipeDir() = %q after validate", got)
 	}
-	if got := cfg.Flow.AssigneesDirectory(); got != "custom/assignees" {
+	if got := cfg.Recipe.AssigneesDirectory(); got != "custom/assignees" {
 		t.Errorf("AssigneesDirectory() = %q after validate", got)
 	}
 	if got := cfg.Storage.Inbox.InboxDir(); got != "custom/inbox" {
@@ -228,8 +228,8 @@ func TestPathMethods_DotRelative(t *testing.T) {
 }
 
 func TestPathMethods_ParentRelative(t *testing.T) {
-	fc := &FlowConfig{Dir: "../shared/flows"}
-	if got := fc.FlowsDir(); got != "../shared/flows" {
-		t.Errorf("FlowsDir() = %q; want %q", got, "../shared/flows")
+	fc := &RecipeConfig{Dir: "../shared/flows"}
+	if got := fc.RecipeDir(); got != "../shared/flows" {
+		t.Errorf("RecipeDir() = %q; want %q", got, "../shared/flows")
 	}
 }

@@ -371,13 +371,16 @@ make build-shims    # compile flowtest shim binaries
 
 ## Configurable Paths
 
-Directory paths for tracks, flows, assignees, inbox, projection, todo
+Directory paths for tracks, recipes, assignees, inbox, projection, todo
 file, and database are all configurable in `.tlc/config.yaml`. Accessor
-methods (`TracksDir()`, `FlowsDir()`, `AssigneesDirectory()`,
+methods (`TracksDir()`, `RecipeDir()`, `AssigneesDirectory()`,
 `InboxDir()`, `ProjectionDirectory()`, `TodoFilePath()`, `DBFilePath()`)
 return the configured value or a default. Never hardcode directory names
-like `"tracks"` or `"examples/flows"` — always use the accessor method
-from the relevant config struct.
+like `"tracks"` or `"examples/assignees"` — always use the accessor method
+from the relevant config struct. The recipe search path is assembled by
+`recipeDirsFromConfig()` in `internal/cli/config_dirs.go` (`recipe.dir`,
+then `.tlc/recipes`, then the user config dir); use `recipeLocator()`
+rather than scanning directories by hand.
 
 ## Required Docs to Keep Updated
 

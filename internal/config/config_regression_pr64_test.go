@@ -6,7 +6,7 @@ import (
 )
 
 // T-0584: Regression — all dir config fields reject absolute paths via Validate().
-// Validates that tracks.dir, flow.dir, flow.assignees_dir, storage.inbox.dir,
+// Validates that tracks.dir, recipe.dir, recipe.assignees_dir, storage.inbox.dir,
 // and task.projection_dir each reject absolute paths when Validate() is called
 // on the top-level Config.
 func TestValidateRelativePath_AllDirFieldsRejectAbsolute(t *testing.T) {
@@ -15,8 +15,8 @@ func TestValidateRelativePath_AllDirFieldsRejectAbsolute(t *testing.T) {
 		setup func(*Config)
 	}{
 		{"tracks.dir", func(c *Config) { c.Tracks.Dir = "/abs/tracks" }},
-		{"flow.dir", func(c *Config) { c.Flow.Dir = "/abs/flows" }},
-		{"flow.assignees_dir", func(c *Config) { c.Flow.AssigneesDir = "/abs/people" }},
+		{"recipe.dir", func(c *Config) { c.Recipe.Dir = "/abs/recipes" }},
+		{"recipe.assignees_dir", func(c *Config) { c.Recipe.AssigneesDir = "/abs/people" }},
 		{"storage.inbox.dir", func(c *Config) { c.Storage.Inbox.Dir = "/abs/inbox" }},
 		{"task.projection_dir", func(c *Config) { c.Task.ProjectionDir = "/abs/tasks" }},
 	}
@@ -59,24 +59,23 @@ func TestTodoFilePath_SubdirectoryPreserved(t *testing.T) {
 	}
 }
 
-// T-0586: Regression — FlowConfig accessor defaults match zero-value struct.
-// When viper has no overrides, flowsDirFromConfig() and
+// T-0586: Regression — RecipeConfig accessor defaults match zero-value struct.
+// When viper has no overrides, recipeDirsFromConfig() and
 // assigneesDirFromConfig() (in the CLI layer) delegate to
-// FlowConfig{}.FlowsDir() and FlowConfig{}.AssigneesDirectory().
-// This test verifies the zero-value accessors return the expected defaults.
-func TestFlowConfig_AccessorDefaults(t *testing.T) {
-	fc := &FlowConfig{}
+// RecipeConfig{}.RecipeDir() and RecipeConfig{}.AssigneesDirectory().
+// The recipe dir has no repo-relative default: an empty value means the
+// layer is skipped.
+func TestRecipeConfig_AccessorDefaults(t *testing.T) {
+	fc := &RecipeConfig{}
 
-	gotFlows := fc.FlowsDir()
-	wantFlows := filepath.Join("examples", "flows")
-	if gotFlows != wantFlows {
-		t.Errorf("FlowConfig{}.FlowsDir() = %q, want %q", gotFlows, wantFlows)
+	if got := fc.RecipeDir(); got != "" {
+		t.Errorf("RecipeConfig{}.RecipeDir() = %q, want empty (no default layer)", got)
 	}
 
 	gotAssignees := fc.AssigneesDirectory()
 	wantAssignees := filepath.Join("examples", "assignees")
 	if gotAssignees != wantAssignees {
-		t.Errorf("FlowConfig{}.AssigneesDirectory() = %q, want %q",
+		t.Errorf("RecipeConfig{}.AssigneesDirectory() = %q, want %q",
 			gotAssignees, wantAssignees)
 	}
 }

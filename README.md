@@ -663,6 +663,55 @@ tracks:
     min_progress_to_start: 50
 ```
 
+### Recipes
+
+Recipes are versioned YAML templates that create tracks and tasks the same
+way every time: an ordered list of steps with dependencies, kinds (`agent`,
+`exec`, `human`), retries, gates and due dates, plus the variables a run binds.
+
+```yaml
+recipe: code-review
+version: 1.2.0
+description: Review a pull request
+vars:
+  pr: {description: PR number, required: true}
+  depth: {default: standard}
+steps:
+  - id: lint
+    kind: exec
+    exec: {argv: [golangci-lint, run], timeout: 5m}
+  - id: review
+    title: "Review {{pr}} ({{depth}})"
+    description: "Lint said: {{results.lint.stdout}}"
+    depends_on: [lint]
+    when: "results.lint.exit_code == 0"
+    retry: {max_attempts: 3, backoff: 30s}
+  - id: sign-off
+    kind: human
+    human: {assignee: "@lead", timeout: 48h, on_timeout: reject}
+    depends_on: [review]
+```
+
+- **Templates**: `{{var}}`, `{{subject.title}}`, `{{run.iteration}}` and
+  `{{steps.<id>.<field>}}` are rendered when tasks are created;
+  `{{results.<id>.<field>}}` and `when:` are evaluated at dispatch from
+  upstream task results. Due dates compose:
+  `due: "{{steps.planning.due}} + 5d"` or `due: {after: planning, offset: 5d}`.
+- **Composition**: `include: security-scan@1.0` with `with: {target: "{{pr}}"}`
+  splices another recipe in as `<id>/<step>`; `repeat: 3` with
+  `until: "results.review.verdict == 'approved'"` unrolls a block into
+  bounded iterations.
+- **Search path**: `recipe.dir` from `.tlc/config.yaml`, then `.tlc/recipes/`,
+  then `~/.config/tlc/recipes/`. Reference a recipe by name, `name@version`
+  or file path.
+
+```bash
+tlc recipe list                       # every recipe in the search path
+tlc recipe show code-review           # header, vars and expanded steps
+tlc recipe show code-review -f json   # the expanded document
+tlc recipe validate ./my-recipe.yaml  # exit 1 with the first problem
+```
+
 ### Flows & Assignees
 
 TLC includes a comprehensive workflow suite with capability-based task assignment:
@@ -975,8 +1024,8 @@ tracks:
   dir: docs/tracks             # default: "tracks" (relative to .tlc/)
   slug_max_len: 24             # default: 24 (new slugs only)
 
-flow:
-  dir: workflows               # default: "examples/flows"
+recipe:
+  dir: recipes                 # default: none; then .tlc/recipes, ~/.config/tlc/recipes
   assignees_dir: team           # default: "examples/assignees"
 
 task:
@@ -997,8 +1046,8 @@ repo root but artifacts live in a shared directory:
 # mono-repo example: .tlc/config.yaml at repo root
 tracks:
   dir: packages/project-a/tracks
-flow:
-  dir: packages/project-a/flows
+recipe:
+  dir: packages/project-a/recipes
 ```
 
 ## 📚 Documentation

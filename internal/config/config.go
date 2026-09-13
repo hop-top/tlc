@@ -178,35 +178,36 @@ func (tc *TrackConfig) Validate() error {
 	return nil
 }
 
-// FlowConfig holds flow-related configuration.
-type FlowConfig struct {
+// RecipeConfig holds recipe-related configuration: the project recipe
+// directory and the assignees directory.
+type RecipeConfig struct {
 	Dir          string `yaml:"dir,omitempty"`
 	AssigneesDir string `yaml:"assignees_dir,omitempty"`
 }
 
-// Validate validates the flow configuration.
-func (fc *FlowConfig) Validate() error {
-	if err := validateRelativePath("flow.dir", fc.Dir); err != nil {
+// Validate validates the recipe configuration.
+func (rc *RecipeConfig) Validate() error {
+	if err := validateRelativePath("recipe.dir", rc.Dir); err != nil {
 		return err
 	}
-	if err := validateRelativePath("flow.assignees_dir", fc.AssigneesDir); err != nil {
+	if err := validateRelativePath("recipe.assignees_dir", rc.AssigneesDir); err != nil {
 		return err
 	}
 	return nil
 }
 
-// FlowsDir returns the configured flows directory or the default.
-func (fc *FlowConfig) FlowsDir() string {
-	if fc.Dir != "" {
-		return fc.Dir
-	}
-	return filepath.Join("examples", "flows")
+// RecipeDir returns the configured project recipe directory, or "" when
+// unset. Recipes have no repo-relative default: an unset layer is skipped
+// and the search continues with the project's .tlc/recipes and the user's
+// config dir.
+func (rc *RecipeConfig) RecipeDir() string {
+	return rc.Dir
 }
 
 // AssigneesDirectory returns the configured assignees directory or the default.
-func (fc *FlowConfig) AssigneesDirectory() string {
-	if fc.AssigneesDir != "" {
-		return fc.AssigneesDir
+func (rc *RecipeConfig) AssigneesDirectory() string {
+	if rc.AssigneesDir != "" {
+		return rc.AssigneesDir
 	}
 	return filepath.Join("examples", "assignees")
 }
@@ -218,7 +219,7 @@ type Config struct {
 	Task       TaskConfig        `yaml:"task"`
 	Tracks     TrackConfig       `yaml:"tracks"`
 	Defaults   *DefaultsConfig   `yaml:"defaults,omitempty"`
-	Flow       FlowConfig        `yaml:"flow,omitempty"`
+	Recipe     RecipeConfig      `yaml:"recipe,omitempty"`
 	Git        GitConfig         `yaml:"git"`
 	Sync       SyncConfig        `yaml:"sync"`
 	Storage    StorageConfig     `yaml:"storage"`
@@ -256,7 +257,7 @@ func (c *Config) Validate() error {
 	if err := c.Tracks.Validate(); err != nil {
 		return err
 	}
-	if err := c.Flow.Validate(); err != nil {
+	if err := c.Recipe.Validate(); err != nil {
 		return err
 	}
 	if err := c.Storage.Inbox.Validate(); err != nil {
@@ -1111,13 +1112,15 @@ func (t *TaskConfig) ValidatePriorityDerivation() error {
 			return fmt.Errorf(
 				"task.priority_derivation.rules[%d]: rule must have a name; "+
 					"the name is what an explain line and a duplicate-rule "+
-					"error cite", i)
+					"error cite", i,
+			)
 		}
 		if prev, dup := seenName[r.Name]; dup {
 			return fmt.Errorf(
 				"task.priority_derivation.rules: duplicate rule name %q "+
 					"(indices %d and %d); rule names must be unique so a "+
-					"rule can be cited unambiguously", r.Name, prev, i)
+					"rule can be cited unambiguously", r.Name, prev, i,
+			)
 		}
 		seenName[r.Name] = i
 
@@ -1125,13 +1128,15 @@ func (t *TaskConfig) ValidatePriorityDerivation() error {
 			return fmt.Errorf(
 				"task.priority_derivation.rules[%q]: `then` must name the "+
 					"priority to assign (one of: %s)",
-				r.Name, strings.Join(names, ", "))
+				r.Name, strings.Join(names, ", "),
+			)
 		}
 		if !valid[r.Then] {
 			return fmt.Errorf(
 				"task.priority_derivation.rules[%q]: `then: %s` is not in "+
 					"the priority vocabulary (%s)",
-				r.Name, r.Then, strings.Join(names, ", "))
+				r.Name, r.Then, strings.Join(names, ", "),
+			)
 		}
 
 		cond := r.conditionKey()
@@ -1140,13 +1145,15 @@ func (t *TaskConfig) ValidatePriorityDerivation() error {
 				"task.priority_derivation.rules[%q]: rule declares no "+
 					"condition; a catch-all must be spelled explicitly as "+
 					"`always: true` so a mistyped condition key cannot "+
-					"silently claim every task", r.Name)
+					"silently claim every task", r.Name,
+			)
 		}
 		if r.Always && cond != "always" {
 			return fmt.Errorf(
 				"task.priority_derivation.rules[%q]: `always: true` cannot "+
 					"be combined with another condition (%s); the other "+
-					"condition would never be read", r.Name, cond)
+					"condition would never be read", r.Name, cond,
+			)
 		}
 		if prev, clash := seenCond[cond]; clash {
 			return fmt.Errorf(
@@ -1154,7 +1161,8 @@ func (t *TaskConfig) ValidatePriorityDerivation() error {
 					"identical conditions; which one applies would depend on "+
 					"the order they were typed rather than on a decision — "+
 					"merge them, or make their conditions differ",
-				prev, r.Name)
+				prev, r.Name,
+			)
 		}
 		seenCond[cond] = r.Name
 	}

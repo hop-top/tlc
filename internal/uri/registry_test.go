@@ -22,7 +22,7 @@ func TestGetRegistry_RegistersExpectedTypes(t *testing.T) {
 
 	types := reg.Types()
 	assert.ElementsMatch(t,
-		[]string{"project", "task", "track", "assignee", "tag", "flow"}, types)
+		[]string{"project", "task", "track", "assignee", "tag", "flow", "recipe"}, types)
 }
 
 func TestGetRegistry_DoubleCallReturnsNewRegistry(t *testing.T) {

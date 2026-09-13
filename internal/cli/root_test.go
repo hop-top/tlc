@@ -724,6 +724,7 @@ func TestApplyCommandGroups(t *testing.T) {
 		"task":      "knowledge",
 		"track":     "knowledge",
 		"flow":      "knowledge",
+		"recipe":    "knowledge",
 		"log":       "knowledge",
 		"project":   "knowledge",
 		"prompt":    "knowledge",
