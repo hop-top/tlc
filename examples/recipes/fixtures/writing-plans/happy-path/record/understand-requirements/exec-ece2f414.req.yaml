@@ -1,0 +1,13 @@
+xrr: "1"
+adapter: exec
+fingerprint: ece2f414
+recorded_at: "2026-04-02T08:35:57Z"
+payload:
+    argv:
+        - "-20"
+    stdin: |
+        testing: warning: no tests to run
+        PASS
+        ok  	hop.top/tlc/internal/flowtest	0.201s [no tests to run]
+        ?   	hop.top/tlc/internal/flowtest/shims/shimlib	[no test files]
+        ?   	hop.top/tlc/internal/flowtest/shims/shims	[no test files]

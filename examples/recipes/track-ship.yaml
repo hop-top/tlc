@@ -1,0 +1,110 @@
+recipe: track-ship
+version: 1.0.0
+description: |
+  Ship a track: build it on its own worktree, open the pull request,
+  wait for a human review, apply the feedback, merge and clean up. The
+  review is a task someone approves or rejects, so nothing has to keep
+  polling while it waits.
+requires:
+  subject: track
+agent: claude
+vars:
+  base:
+    description: "Branch the worktree starts from and the PR targets"
+    default: main
+track:
+  title: "Ship {{subject.title}}"
+  type: delivery
+  plan: |
+    # Shipping a track
+
+    The work happens on a worktree of its own, so the main checkout stays
+    untouched while the track is built.
+
+    ## The review
+
+    Opening the pull request is where the recipe hands over. The review
+    task waits for a person: approve it and the merge runs, reject it and
+    the feedback task picks up the comments. Nothing polls, and nothing
+    is lost if the machine goes away in between.
+
+    ## Skipped tasks
+
+    A task that was skipped rather than done is a decision someone made
+    and nobody recorded. The pull request step reports them and the
+    reviewer decides whether they block the merge.
+steps:
+  - id: create-worktree
+    title: "Create the worktree for {{subject.title}}"
+    description: |
+      Create a worktree off {{base}} named for the track, and switch to
+      it. Everything after this step happens there.
+
+  - id: implement-track
+    title: "Implement the tasks of {{subject.title}}"
+    depends_on: [create-worktree]
+    description: |
+      Work the track's tasks in dependency order. Claim each one, do the
+      work, commit it, and complete the task with the commit sha.
+
+      A task you cannot finish is skipped with a reason, never silently
+      left behind. Report the skipped ones in your summary: the review
+      that follows needs to see them.
+
+  - id: verify-track
+    kind: exec
+    title: "Run the test suite on the branch"
+    depends_on: [implement-track]
+    exec:
+      argv: [make, test]
+      timeout: 30m
+    description: |
+      Run the project's test target on the worktree. A nonzero exit stops
+      the recipe here, before anything is pushed.
+
+  - id: push-and-pr
+    title: "Push the branch and open the pull request"
+    depends_on: [verify-track]
+    when: "results.verify-track.exit_code == 0"
+    description: |
+      Push the branch and open a pull request against {{base}}. The body
+      states what the track delivers, what was tested, and every task
+      that was skipped with its reason.
+
+      Report the pull request number in your summary.
+
+  - id: review
+    kind: human
+    title: "Review the pull request for {{subject.title}}"
+    depends_on: [push-and-pr]
+    human:
+      timeout: 168h
+      on_timeout: reject
+    description: |
+      Read the pull request and decide. Approving it merges the branch;
+      rejecting it sends the work to the feedback task with your
+      comments. Untouched for a week, it is treated as rejected.
+
+  - id: address-feedback
+    title: "Apply the review feedback"
+    depends_on: [review]
+    when: "results.review.decision == 'rejected'"
+    description: |
+      Read the review comments on the pull request and apply them.
+      Commit and push the fixes, then reply on each thread saying what
+      changed. Ask for a re-review when the branch is ready again.
+
+  - id: merge-pr
+    title: "Merge the approved pull request"
+    depends_on: [review]
+    when: "results.review.decision == 'approved'"
+    description: |
+      Merge the pull request with the project's merge style, and delete
+      the branch on the remote if the project deletes merged branches.
+
+  - id: cleanup
+    title: "Remove the worktree and close the track"
+    depends_on: [merge-pr]
+    description: |
+      Remove the worktree, update {{base}} in the main checkout, and
+      complete the track with the merge commit in the note.

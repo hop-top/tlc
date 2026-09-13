@@ -1,0 +1,15 @@
+name: gate_passes
+provider: filesystem
+evaluators:
+  - name: step_status
+    step: produce-output
+    expected: SUCCEEDED
+  - name: step_status
+    step: gated-step
+    expected: SUCCEEDED
+  - name: step_status
+    step: final-step
+    expected: SUCCEEDED
+  - name: contains
+    substring: '"quality": "high"'
+    mode: binary

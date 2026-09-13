@@ -1,0 +1,8 @@
+xrr: "1"
+adapter: exec
+fingerprint: cc93eeb6
+recorded_at: "2026-04-02T18:21:09Z"
+payload:
+    stdout: |
+        {"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"chrome-mcp-server","version":"1.0.0"}},"jsonrpc":"2.0","id":0}
+    exit_code: 0

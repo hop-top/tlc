@@ -1,0 +1,25 @@
+recipe: composition-child
+version: 1.0.0
+description: |
+  Reusable lint-then-test pipeline. Meant to be included by another
+  recipe, but also usable on its own.
+vars:
+  working_dir:
+    description: Directory to lint and test
+    required: true
+steps:
+  - id: lint
+    title: Lint codebase
+    description: |
+      Run the project linter on {{working_dir}}.
+
+  - id: test
+    title: Run test suite
+    depends_on: [lint]
+    gate:
+      contract: lint-and-test
+      eva_url: http://localhost:8080
+    description: |
+      Execute the project test suite in {{working_dir}}.
+      Output: `test_report`, a JSON summary with pass/fail counts.
+      Record it in the task result as `test_report`.

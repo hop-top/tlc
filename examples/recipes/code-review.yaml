@@ -1,0 +1,227 @@
+recipe: code-review
+version: 1.0.0
+description: Systematic code review against plan and quality standards
+agent: claude
+track:
+  title: Code review
+  type: feature
+  plan: |
+    ## Code Review Process
+
+    Review completed work against original plans and coding standards.
+
+    ## When to Review
+
+    - Major project step completed (numbered step from plan)
+    - Feature implementation finished
+    - Before merging to main branch
+    - After fixing critical bugs
+
+    ## Review Framework
+
+    ### Phase 1: Context Loading
+
+    1. **Load the plan**
+       - Find original plan document
+       - Review objectives and requirements
+       - Note planned steps and approach
+
+    2. **Identify changes**
+       - git diff against baseline
+       - List all modified/created files
+       - Understand scope of changes
+
+    ### Phase 2: Plan Alignment
+
+    3. **Verify objectives met**
+       - Does implementation match plan?
+       - All requirements addressed?
+       - Deviations justified?
+
+    4. **Check completeness**
+       - All planned steps completed?
+       - Edge cases handled?
+       - Error scenarios covered?
+
+    ### Phase 3: Code Quality
+
+    5. **Architecture review**
+       - Follows project patterns?
+       - Separation of concerns?
+       - SOLID principles applied?
+
+    6. **Implementation quality**
+       - Code readability
+       - Error handling
+       - Type safety
+       - No obvious bugs
+
+    7. **Test coverage**
+       - Tests for main functionality?
+       - Edge cases tested?
+       - Tests actually pass?
+
+    ### Phase 4: Security & Performance
+
+    8. **Security check**
+       - Input validation?
+       - No injection vulnerabilities?
+       - Secrets properly handled?
+       - Authentication/authorization correct?
+
+    9. **Performance considerations**
+       - No obvious performance issues?
+       - Resource handling correct?
+       - Scalability concerns?
+
+    ### Phase 5: Documentation & Communication
+
+    10. **Documentation**
+        - Code comments where needed?
+        - API docs updated?
+        - README updated if needed?
+
+    11. **Create review report**
+        - Acknowledge what's done well
+        - List issues by priority:
+          - Critical (blocks merge)
+          - Important (should fix)
+          - Suggestions (nice to have)
+        - Provide specific examples
+        - Constructive tone
+steps:
+  - id: load-context
+    title: Gather context for review
+    description: |
+      Load the context needed for review:
+
+      1. Find and read the original plan document
+         - Usually in docs/plans/ or .claude/plans/
+         - Review objectives, requirements, approach
+
+      2. Identify what changed
+         - Run git diff to see all changes
+         - List modified/created files
+         - Understand scope
+
+      3. Load relevant code
+         - Read changed files
+         - Understand how they fit together
+
+  - id: verify-plan-alignment
+    title: Check plan alignment
+    depends_on: [load-context]
+    description: |
+      Compare implementation against original plan:
+
+      - Does implementation match planned approach?
+      - All requirements from plan addressed?
+      - If deviations exist, are they justified?
+      - All planned steps completed?
+      - Edge cases from plan handled?
+      - Error scenarios covered?
+
+      Create list of alignment issues found.
+
+  - id: review-architecture
+    title: Assess architectural quality
+    depends_on: [verify-plan-alignment]
+    description: |
+      Review architectural decisions:
+
+      - Follows existing project patterns?
+      - Proper separation of concerns?
+      - SOLID principles applied?
+      - Appropriate abstractions?
+      - Integration with existing code clean?
+
+      Note any architectural concerns.
+
+  - id: review-implementation
+    title: Check code quality and correctness
+    depends_on: [review-architecture]
+    description: |
+      Review implementation details:
+
+      Code Quality:
+      - Readable and maintainable?
+      - Clear variable/function names?
+      - Appropriate comments?
+
+      Correctness:
+      - Logic sound?
+      - Error handling present?
+      - Type safety maintained?
+      - No obvious bugs?
+
+      List implementation issues by priority.
+
+  - id: review-tests
+    title: Verify test quality and coverage
+    depends_on: [review-implementation]
+    description: |
+      Review testing:
+
+      - Tests for main functionality exist?
+      - Edge cases tested?
+      - Error cases tested?
+      - Tests actually pass?
+      - Test names descriptive?
+      - Tests test behavior, not implementation?
+
+      Run tests to verify they pass.
+      Note any gaps in coverage.
+
+  - id: security-review
+    title: Check for security issues
+    depends_on: [review-tests]
+    description: |
+      Review for security vulnerabilities:
+
+      - Input validation present?
+      - No SQL injection risks?
+      - No XSS vulnerabilities?
+      - No command injection?
+      - Secrets/credentials handled properly?
+      - Authentication/authorization correct?
+      - No sensitive data in logs?
+
+      Flag any security concerns as CRITICAL.
+
+  - id: create-review-report
+    title: Document review findings
+    depends_on: [security-review]
+    description: |
+      Create comprehensive review report:
+
+      Structure:
+      1. Summary
+         - What was reviewed
+         - Overall assessment
+
+      2. What's Done Well
+         - Acknowledge good work
+         - Specific positive examples
+
+      3. Issues Found
+         - CRITICAL (blocks merge):
+           - Security vulnerabilities
+           - Data loss risks
+           - Complete feature breakage
+
+         - IMPORTANT (should fix before merge):
+           - Plan deviations
+           - Missing error handling
+           - Incomplete functionality
+
+         - SUGGESTIONS (nice to have):
+           - Code style improvements
+           - Refactoring opportunities
+           - Performance optimizations
+
+      4. Next Steps
+         - What needs to be done
+         - Priority order
+
+      Tone: Constructive and specific.
+      Provide code examples where helpful.

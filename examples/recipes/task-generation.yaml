@@ -1,0 +1,31 @@
+recipe: task-generation
+version: 1.0.0
+description: Generate sprint tasks with a dependency chain
+agent: claude
+vars:
+  sprint_name:
+    description: Sprint identifier (e.g. S42)
+    required: true
+track:
+  title: "Sprint {{sprint_name}}"
+  type: feature
+steps:
+  - id: define-scope
+    title: "Define scope for {{sprint_name}}"
+    description: |
+      Identify and document the scope for sprint {{sprint_name}}.
+      List deliverables, constraints, and success criteria.
+
+  - id: implement-features
+    title: "Implement {{sprint_name}} features"
+    depends_on: [define-scope]
+    description: |
+      Build the features defined in {{sprint_name}} scope.
+      Follow TDD: write tests first, then implementation.
+
+  - id: validate-delivery
+    title: "Validate {{sprint_name}} delivery"
+    depends_on: [implement-features]
+    description: |
+      Run full test suite and verify all acceptance criteria
+      for sprint {{sprint_name}} are met.

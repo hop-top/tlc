@@ -1,0 +1,231 @@
+recipe: executing-plans
+version: 1.0.0
+description: Execute written implementation plans with review checkpoints
+track:
+  title: Execute implementation plan
+  type: feature
+  plan: |
+    ## Executing Plans
+
+    Transform written implementation plans into working code with disciplined execution.
+
+    ## The Framework
+
+    ### Phase 1: Plan Loading
+
+    1. **Load and understand the plan**
+       - Read complete plan document
+       - Understand objectives
+       - Review all steps
+       - Note verification criteria
+
+    2. **Set up environment**
+       - Create git worktree (isolation)
+       - Install dependencies
+       - Verify starting state
+
+    ### Phase 2: Step-by-Step Execution
+
+    3. **For each step in plan:**
+
+       a. **Before implementing:**
+          - Read step completely
+          - Understand what's required
+          - Identify files to modify/create
+          - Understand dependencies
+
+       b. **During implementation:**
+          - Follow step as written
+          - Make only planned changes
+          - No "while I'm here" additions
+          - Test incrementally
+
+       c. **After implementing:**
+          - Verify step complete
+          - Run relevant tests
+          - Check against step criteria
+          - Commit if step is atomic
+
+    ### Phase 3: Review Checkpoints
+
+    4. **After major milestones:**
+       - Review against original plan
+       - Verify alignment
+       - Run full test suite
+       - Address any deviations
+
+    ### Phase 4: Final Verification
+
+    5. **Before marking complete:**
+       - All steps implemented?
+       - All tests passing?
+       - Plan objectives met?
+       - No regressions introduced?
+
+    ## Key Principles
+
+    - **Discipline**: Follow plan, don't improvise
+    - **Incremental**: One step at a time
+    - **Verification**: Test after each step
+    - **Checkpoints**: Review at milestones
+    - **Evidence**: Verify before claiming complete
+
+    ## When to Deviate
+
+    Only deviate from plan when:
+    - Plan has clear error
+    - Unexpected blocker discovered
+    - Better approach becomes obvious
+
+    When deviating:
+    - Document why
+    - Update plan document
+    - Verify deviation needed
+steps:
+  - id: load-plan
+    title: Read implementation plan completely
+    description: |
+      Load the implementation plan:
+
+      1. Find plan document
+         - Usually in docs/plans/ or .claude/plans/
+         - Load the complete document
+
+      2. Understand plan structure
+         - Objectives/goals
+         - Implementation steps (numbered)
+         - Critical files list
+         - Verification criteria
+         - Known risks
+
+      3. Create execution checklist
+         - List all steps
+         - Note dependencies
+         - Identify review checkpoints
+
+      Do NOT start implementation yet.
+
+  - id: setup-environment
+    title: Prepare implementation environment
+    depends_on: [load-plan]
+    description: |
+      Set up for implementation:
+
+      1. Create git worktree (recommended)
+         - Isolate work from main branch
+         - Allow easy cleanup if needed
+         - Command: git worktree add ../path branch-name
+
+      2. Install/verify dependencies
+         - npm install / go mod download / etc.
+         - Ensure build works before changes
+
+      3. Run tests to establish baseline
+         - All tests should pass initially
+         - Note count: X tests passing
+         - This is your baseline
+
+      Ready to implement when baseline is green.
+
+  - id: execute-step
+    title: Implement single plan step
+    depends_on: [setup-environment]
+    description: |
+      For the CURRENT plan step:
+
+      Before:
+      - Read step completely
+      - Understand requirements
+      - Know which files to modify/create
+      - Understand success criteria
+
+      During:
+      - Follow step as written
+      - Make ONLY changes described in step
+      - No scope creep
+      - No "improvements" outside scope
+
+      After:
+      - Run tests related to this step
+      - Verify step criteria met
+      - If step is atomic, commit it
+
+      Repeat for each step in sequence.
+
+      Use the test-driven-development recipe if a step involves new functionality.
+
+  - id: review-checkpoint
+    title: Review progress against plan
+    depends_on: [execute-step]
+    description: |
+      At major milestones (every 3-5 steps or phase boundaries):
+
+      1. Review implementation against plan
+         - Steps completed match plan?
+         - Any deviations from plan?
+         - Deviations justified?
+
+      2. Run full test suite
+         - All tests passing?
+         - Test count as expected?
+         - No regressions?
+
+      3. Check code quality
+         - Follows project patterns?
+         - No obvious issues?
+
+      4. Update plan if needed
+         - Document any deviations
+         - Update steps if plan was wrong
+         - Keep plan in sync with reality
+
+      Continue to next steps if checkpoint passes.
+
+  - id: final-verification
+    title: Verify plan fully implemented
+    depends_on: [review-checkpoint]
+    description: |
+      Before marking work complete:
+
+      1. Check all steps implemented
+         - Review plan step by step
+         - Verify each step done
+         - No skipped steps?
+
+      2. Run full verification
+         - All tests pass?
+         - Build succeeds?
+         - Linter passes?
+         - Type checker passes?
+
+      3. Verify objectives met
+         - Plan objectives achieved?
+         - Acceptance criteria met?
+         - No regressions introduced?
+
+      4. Manual testing if applicable
+         - Feature works as intended?
+         - Edge cases handled?
+         - Error cases work correctly?
+
+      Only claim complete if ALL verifications pass.
+
+      Use the verification-before-completion recipe.
+
+  - id: request-review
+    title: Submit for code review
+    depends_on: [final-verification]
+    description: |
+      Implementation complete and verified.
+
+      Now request review:
+      - Use the code-review recipe
+      - Or create PR for human review
+
+      Provide reviewers with:
+      - Link to original plan
+      - Summary of what was implemented
+      - Any deviations from plan with justification
+      - Test results showing all green
+
+      Do not merge until review complete.

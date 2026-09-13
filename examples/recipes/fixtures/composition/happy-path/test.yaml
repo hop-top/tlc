@@ -1,0 +1,7 @@
+name: happy-path
+description: >
+  Parent recipe includes the child (lint + test). The child completes
+  successfully, outputs propagate to report step.
+expected_exit: 0
+vars:
+  repo: /tmp/test-repo

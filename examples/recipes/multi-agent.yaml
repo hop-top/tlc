@@ -1,0 +1,21 @@
+recipe: multi-agent
+version: 1.0.0
+description: Three steps, each dispatched to a different agent
+agent: claude
+steps:
+  - id: plan
+    title: Create implementation plan
+    agent: claude
+    description: Analyze requirements and produce a plan
+
+  - id: implement
+    title: Implement the solution
+    depends_on: [plan]
+    agent: codex
+    description: Write code following the plan
+
+  - id: review
+    title: Review implementation
+    depends_on: [implement]
+    agent: gemini
+    description: Check code quality and correctness

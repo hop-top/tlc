@@ -1,0 +1,10 @@
+xrr: "1"
+adapter: exec
+fingerprint: b5dde711
+recorded_at: "2026-04-02T08:34:47Z"
+payload:
+    argv:
+        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo/internal/cli/flow_import.go
+        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo/internal/cli/flow_test_cmd.go
+        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo/internal/cli/flow_test.go
+        - /private/var/folders/x6/lrc3lbzd1gs0wvmn_z_t76780000gn/T/tlc-flow-test-761267373/repo/internal/cli/flow.go

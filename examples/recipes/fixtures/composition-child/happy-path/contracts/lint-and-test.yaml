@@ -1,0 +1,12 @@
+name: lint_and_test_succeed
+provider: filesystem
+evaluators:
+  - name: contains
+    substring: "lint: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "test: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "test_report"
+    mode: binary

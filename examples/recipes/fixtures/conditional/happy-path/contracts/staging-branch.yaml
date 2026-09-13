@@ -1,0 +1,18 @@
+name: staging_branch_taken
+provider: filesystem
+evaluators:
+  - name: contains
+    substring: "validate-config: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "deploy-staging: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "verify-staging: SUCCEEDED"
+    mode: binary
+  - name: contains
+    substring: "deploy-production: SKIPPED"
+    mode: binary
+  - name: contains
+    substring: "verify-production: SKIPPED"
+    mode: binary

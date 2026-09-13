@@ -1,0 +1,62 @@
+recipe: writing-plans
+version: 1.0.0
+description: Create detailed implementation plans before coding
+agent: claude
+track:
+  title: Implementation plan
+  type: feature
+steps:
+  - id: understand-requirements
+    title: Review and clarify requirements
+    description: |
+      - Review design document
+      - List acceptance criteria
+      - Identify constraints (technical, business, timeline)
+      - Clarify unknowns
+
+  - id: break-down-steps
+    title: Create step-by-step implementation plan
+    depends_on: [understand-requirements]
+    description: |
+      Break work into logical chunks:
+      - Each step should be independently testable
+      - Order by dependencies
+      - Estimate complexity (S/M/L, not hours)
+      - Identify risky/uncertain areas
+
+  - id: identify-files
+    title: List files to create/modify/read
+    depends_on: [break-down-steps]
+    description: |
+      For each implementation step, identify:
+      - Files to create (with purpose)
+      - Files to modify (with changes)
+      - Files to read for context
+
+      Include full file paths.
+
+  - id: plan-verification
+    title: Define how to verify each step
+    depends_on: [identify-files]
+    description: |
+      For each step, define:
+      - Unit tests to write
+      - Integration tests needed
+      - Manual verification steps
+      - End-to-end verification
+      - Rollback procedure
+
+  - id: document-plan
+    title: Write plan to docs/plans/
+    depends_on: [plan-verification]
+    description: |
+      Write implementation plan to docs/plans/YYYY-MM-DD-<topic>-plan.md
+
+      Include:
+      - Objective
+      - Implementation steps (numbered)
+      - Critical files
+      - Verification strategy
+      - Risks and mitigation
+
+      Format: Clear, scannable, executable

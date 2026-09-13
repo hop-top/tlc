@@ -1,0 +1,8 @@
+name: timeout
+description: >
+  Deploy succeeds but health-check exceeds its 5s timeout and is killed.
+  The run continues to teardown.
+  Exit 0 because on_failure=continue prevents hard failure.
+expected_exit: 0
+vars:
+  service_url: https://staging.example.com
