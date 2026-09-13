@@ -82,10 +82,10 @@ build-shims: ## Compile flowtest shim binaries into internal/flowtest/shims/bin/
 		go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/$$shim ./internal/flowtest/shims/$$shim/ || exit 1; \
 		echo "  built $$shim"; \
 	done
-	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/tlc-shim-passthrough ./internal/flowtest/shims/passthrough/
-	@echo "  built tlc-shim-passthrough"
-	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/tlc-shim-catchall ./internal/flowtest/shims/catchall/
-	@echo "  built tlc-shim-catchall"
+	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/shim-passthrough ./internal/flowtest/shims/passthrough/
+	@echo "  built shim-passthrough"
+	@go build -tags shimbin -buildvcs=false -o $(SHIMS_BIN_DIR)/shim-catchall ./internal/flowtest/shims/catchall/
+	@echo "  built shim-catchall"
 	@echo "$(COLOR_GREEN)✓ Shims built to $(SHIMS_BIN_DIR)/$(COLOR_RESET)"
 
 test: build-shims test-plugins ## Run all tests (CLI suite runs under TrueColor profile via TestMain)

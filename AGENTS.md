@@ -216,39 +216,44 @@ tlc schema --format anthropic     # Anthropic tool-use schema
 
 Supported formats: `json` · `mcp` · `openai` · `anthropic`
 
-### `tlc flow test` — Deterministic Flow Testing
+### `tlc recipe test` — Deterministic Recipe Testing
 
-Run a flow definition through a hermetic sandbox with cassette-backed tool shims.
+Materialize a recipe into a throwaway store and execute it inside a hermetic
+sandbox with cassette-backed tool shims.
 
 ```bash
-# replay all named runs for a flow
-tlc flow test examples/flows/pr-review-loop.yaml
+# replay every run the recipe has
+tlc recipe test examples/recipes/exec-cli-smoke.yaml
 
 # replay one named run
-tlc flow test examples/flows/pr-review-loop.yaml happy-path
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path
 
 # record cassettes (proxy real tool calls; write to fixtures/)
-tlc flow test examples/flows/pr-review-loop.yaml happy-path --record
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --record
 
 # force live execution for named tools; replay everything else
-tlc flow test examples/flows/pr-review-loop.yaml happy-path --passthrough wrangler,docker
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --passthrough wrangler,docker
 
-# keep sandbox dir after run for debugging
-tlc flow test examples/flows/pr-review-loop.yaml happy-path --keep-sandbox
+# keep the sandbox dir after the run for debugging
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --keep-sandbox
+
+# materialize only some steps: ordinals, ranges or ids
+tlc recipe test examples/recipes/exec-cli-smoke.yaml happy-path --task 1-2
 ```
 
 Exit codes:
 
 | Code | Meaning |
 |------|---------|
-| 0 | All steps executed; all contracts passed |
-| 1 | Step failed or contract violated |
-| 2 | Cassette miss in replay mode |
-| 3 | Sandbox setup failure |
+| 0 | Every task ran and every contract passed |
+| 1 | A task failed or a contract was violated |
+| 2 | Replay found no cassette for a step |
+| 3 | The sandbox, the recipe or the fixtures could not be set up |
 
-Named runs live under `examples/flows/fixtures/<flow-name>/<run-name>/`. Each run
-has a `record/` dir (cassettes) and optional `contracts/` dir (eva contracts).
-Add a `test.yaml` manifest to declare `expected_exit` or `passthrough` overrides.
+Runs live under `<recipe dir>/fixtures/<recipe>/<run>/`. Each run has a
+`record/` dir (cassettes, one subdirectory per step id), an optional
+`contracts/` dir (eva contracts, `<step-id>.yaml`), and a `test.yaml`
+manifest declaring `expected_exit`, `vars` and `passthrough`.
 
 ### `git hop` — Worktree Management
 
@@ -401,7 +406,7 @@ make tidy           # go mod tidy && go mod verify (mutating)
 make fmt-check      # formatting check (non-mutating; exits 1 if dirty)
 make tidy-check     # module tidiness check (non-mutating; exits 1 if dirty)
 make coverage       # test with coverage report
-make build-shims    # compile recipe-test shim binaries
+make build-shims    # compile the recipe test shim binaries
 ```
 
 ## Configurable Paths

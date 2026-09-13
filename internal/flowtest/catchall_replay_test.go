@@ -25,7 +25,7 @@ func TestCatchallReplaysRecordedCassette(t *testing.T) {
 	}
 
 	binDir := t.TempDir()
-	shimPath := filepath.Join(binDir, "tlc-shim-catchall")
+	shimPath := filepath.Join(binDir, "shim-catchall")
 
 	build := exec.CommandContext(t.Context(), "go", "build", "-tags", "shimbin", "-buildvcs=false",
 		"-o", shimPath, "hop.top/tlc/internal/flowtest/shims/catchall")
@@ -41,7 +41,8 @@ func TestCatchallReplaysRecordedCassette(t *testing.T) {
 	}
 
 	cassetteDir := t.TempDir()
-	env := append(os.Environ(),
+	env := append(
+		os.Environ(),
 		"TLC_FLOW_TEST_CASSETTE_DIR="+cassetteDir,
 		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)

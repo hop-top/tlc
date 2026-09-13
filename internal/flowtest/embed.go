@@ -13,15 +13,15 @@ import (
 var shimsFS embed.FS
 
 // Helper shim binary names. Helper shims are symlink targets, not tool
-// names, so they carry the tlc-shim- prefix to stay out of the tool
+// names, so they carry the shim- prefix to stay out of the tool
 // namespace inside the sandbox bin/ dir.
 const (
-	shimPassthroughName = "tlc-shim-passthrough"
-	shimCatchallName    = "tlc-shim-catchall"
+	shimPassthroughName = "shim-passthrough"
+	shimCatchallName    = "shim-catchall"
 )
 
 // passthroughAlways are tools that always exec the real binary without cassettes.
-// Symlinked to tlc-shim-passthrough (if present) or tlc-shim-catchall.
+// Symlinked to shim-passthrough (if present) or shim-catchall.
 var passthroughAlways = []string{
 	"node", "vite", "next",
 	"ls", "cat", "head", "tail", "wc", "grep", "pwd",

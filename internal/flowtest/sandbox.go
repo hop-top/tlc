@@ -10,7 +10,7 @@ import (
 	xrr "hop.top/xrr"
 )
 
-// Sandbox is a hermetic test environment for one flow test run.
+// Sandbox is a hermetic test environment for one recipe test run.
 type Sandbox struct {
 	RootDir string
 	RepoDir string
@@ -19,10 +19,10 @@ type Sandbox struct {
 	Keep    bool
 }
 
-// NewSandbox creates tmp/tlc-flow-test-<uuid>/{repo,bin,home} and
+// NewSandbox creates tmp/tlc-recipe-test-<uuid>/{repo,bin,home} and
 // git clone --local <cwd> into repo/.
 func NewSandbox(cwd string) (*Sandbox, error) {
-	root, err := os.MkdirTemp("", "tlc-flow-test-*")
+	root, err := os.MkdirTemp("", "tlc-recipe-test-*")
 	if err != nil {
 		return nil, fmt.Errorf("flowtest: create sandbox root: %w", err)
 	}
@@ -53,8 +53,10 @@ func NewSandbox(cwd string) (*Sandbox, error) {
 	return sb, nil
 }
 
-// Env returns the os.Environ()-style slice to inject into each step subprocess.
-func (s *Sandbox) Env(stepID string, mode xrr.Mode, run *Run) []string {
+// Overrides returns the env keys the sandbox sets for one step: its home,
+// git and gh redirected into the sandbox, the shim protocol vars, and PATH
+// leading with bin/. A PATH already led by bin/ is left as is.
+func (s *Sandbox) Overrides(stepID string, mode xrr.Mode, run *Run) map[string]string {
 	passthrough := ""
 	if run != nil && len(run.Passthrough) > 0 {
 		passthrough = strings.Join(run.Passthrough, ",")
@@ -65,7 +67,12 @@ func (s *Sandbox) Env(stepID string, mode xrr.Mode, run *Run) []string {
 		cassetteDir = filepath.Join(run.RecordDir, stepID)
 	}
 
-	overrides := map[string]string{
+	path := os.Getenv("PATH")
+	if prefix := s.BinDir + string(os.PathListSeparator); !strings.HasPrefix(path, prefix) {
+		path = prefix + path
+	}
+
+	return map[string]string{
 		"HOME":                       s.HomeDir,
 		"GIT_DIR":                    filepath.Join(s.RepoDir, ".git"),
 		"GIT_WORK_TREE":              s.RepoDir,
@@ -74,11 +81,13 @@ func (s *Sandbox) Env(stepID string, mode xrr.Mode, run *Run) []string {
 		"TLC_FLOW_TEST_STEP":         stepID,
 		"TLC_FLOW_TEST_CASSETTE_DIR": cassetteDir,
 		"TLC_FLOW_TEST_PASSTHROUGH":  passthrough,
+		"PATH":                       path,
 	}
+}
 
-	// prepend BinDir to PATH
-	origPath := os.Getenv("PATH")
-	overrides["PATH"] = s.BinDir + string(os.PathListSeparator) + origPath
+// Env returns the os.Environ()-style slice to inject into each step subprocess.
+func (s *Sandbox) Env(stepID string, mode xrr.Mode, run *Run) []string {
+	overrides := s.Overrides(stepID, mode, run)
 
 	base := os.Environ()
 	result := make([]string, 0, len(base)+len(overrides))
