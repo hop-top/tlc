@@ -123,12 +123,17 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				if task.Meta == nil {
 					task.Meta = map[string]interface{}{}
 				}
-				// Normalise rather than assert: Meta may already carry
+				// Normalise rather than assert. Meta may already carry
 				// blocked_by in any supported shape (notably the
 				// []interface{} produced by JSON decoding), and a bare
-				// []string assertion would silently drop it.
-				existing := core.NormalizeBlockedBy(task.Meta["blocked_by"])
-				task.Meta["blocked_by"] = append(existing, blocker)
+				// []string assertion would silently drop it. Re-running
+				// the coercion over the appended slice also collapses a
+				// repeated DEPENDS-ON edge to a single blocker.
+				merged := append(
+					core.NormalizeBlockedBy(task.Meta["blocked_by"]),
+					blocker,
+				)
+				task.Meta["blocked_by"] = core.NormalizeBlockedBy(merged)
 			}
 		}
 	}
@@ -597,15 +602,6 @@ func uidBody(uid, domain string) string {
 		return uid[:i]
 	}
 	return uid
-}
-
-func paramFirst(params []vstar.Param, key string) string {
-	for _, p := range params {
-		if strings.EqualFold(p.Name, key) {
-			return p.Value
-		}
-	}
-	return ""
 }
 
 // dateOnlyLayout is RFC 5545 §3.3.4 DATE (`YYYYMMDD`), the value form
