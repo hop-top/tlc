@@ -277,7 +277,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 			if remoteTask.ID == "" {
 				remoteTask.ID = core.NewTaskID()
 			}
-			remoteTask.LastSyncAt = &now
+			markSynced(&remoteTask, now)
 			if err := s.CreateTask(ctx, &remoteTask); err != nil {
 				fmt.Printf("Error creating task %s: %v\n", remoteTask.ID, err)
 			} else {
@@ -319,7 +319,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 			if updatedLocally {
 				resolved.ID = existing.ID               // Preserve local ID
 				resolved.ProjectID = existing.ProjectID // Preserve existing project_id
-				resolved.LastSyncAt = &now
+				markSynced(resolved, now)
 				if err := s.UpdateTask(ctx, resolved); err != nil {
 					fmt.Printf("Error updating task %s: %v\n", resolved.ID, err)
 				} else {
@@ -341,7 +341,7 @@ func runSyncPull(cmd *cobra.Command, system string) error {
 			if remoteTask.UpdatedAt.After(existing.UpdatedAt.Add(time.Second)) {
 				remoteTask.ID = existing.ID               // Preserve local ID
 				remoteTask.ProjectID = existing.ProjectID // Preserve existing project_id
-				remoteTask.LastSyncAt = &now
+				markSynced(&remoteTask, now)
 				if err := s.UpdateTask(ctx, &remoteTask); err != nil {
 					fmt.Printf("Error updating task %s: %v\n", existing.ID, err)
 				} else {
@@ -503,7 +503,7 @@ Example:
 			if err != nil {
 				continue
 			}
-			task.LastSyncAt = &now
+			markSynced(task, now)
 			if err := s.UpdateTask(ctx, task); err != nil {
 				fmt.Printf("Error updating task %s: %v\n", id, err)
 				continue
@@ -673,6 +673,15 @@ func getPluginPath(system string) string {
 	return filepath.Join(os.Getenv("HOME"), ".config", "tlc", "plugins", system+"-sync", "bin", system+"-sync")
 }
 
+// markSynced records the sync baseline (LastSyncAt plus the content
+// hash NeedsPush and DetectConflict compare against) on task. A hash
+// failure is reported, not fatal: the timestamp fallback still applies.
+func markSynced(task *core.Task, at time.Time) {
+	if err := sync.MarkSynced(task, at); err != nil {
+		fmt.Printf("Warning: could not record content hash for task %s: %v\n", task.ID, err)
+	}
+}
+
 func resolveConflictInteractive(conflict *sync.Conflict) (*core.Task, bool) {
 	// Without a usable interactive terminal — stdin/stdout both character
 	// devices AND /dev/tty openable — huh would crash or corrupt redirected
@@ -682,14 +691,21 @@ func resolveConflictInteractive(conflict *sync.Conflict) (*core.Task, bool) {
 		return conflict.RemoteTask, true
 	}
 
+	// Property-level detail, local on the left, remote on the right.
+	detail := conflict.Diff.String()
+	if detail != "" {
+		detail = "\n\n" + detail
+	}
+
 	var choice string
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewNote().
 				Title(fmt.Sprintf("Conflict detected for %s", conflict.TaskID)).
-				Description(fmt.Sprintf("Local: %s (updated: %s)\nRemote: %s (updated: %s)",
+				Description(fmt.Sprintf("Local: %s (updated: %s)\nRemote: %s (updated: %s)%s",
 					conflict.LocalTask.Title, conflict.LocalTask.UpdatedAt.Format(time.RFC3339),
-					conflict.RemoteTask.Title, conflict.RemoteTask.UpdatedAt.Format(time.RFC3339))),
+					conflict.RemoteTask.Title, conflict.RemoteTask.UpdatedAt.Format(time.RFC3339),
+					detail)),
 			huh.NewSelect[string]().
 				Title("Choose resolution strategy").
 				Options(

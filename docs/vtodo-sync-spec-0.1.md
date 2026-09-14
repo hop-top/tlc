@@ -582,3 +582,63 @@ emitted: the codec escapes every comma in a TEXT value, so it reaches
 the wire as `CATEGORIES:security\,auth`, which any RFC 5545 reader
 parses as one category. On import both shapes are accepted, and a file
 mixing them decodes to the union in wire order.
+
+---
+
+<!-- added by content-based change detection; fold into "The vtodo-sync Plugin" / a future "Sync semantics" section when the registry rewrite lands -->
+
+## Addendum: change detection
+
+Sync decides "changed since last sync" and "in conflict" by content, not
+by comparing `UpdatedAt` with `LastSyncAt`.
+
+**Content hash.** A task's sync content hash is `sha256:<hex>` over the
+`hop.top/vstar/canonical` bytes of its exported VTODO (built alone,
+through the same encoder `tlc export` uses) after dropping the
+properties that are not content: `UID`, `X-TLC-TASK-SEQ`,
+`X-TLC-PROJECT-ID` (identity), `DTSTAMP`, `LAST-MODIFIED`, `CREATED`,
+`COMPLETED` (instants that move without the task moving; `COMPLETED`
+falls back to `UpdatedAt` when the log is not supplied) and
+`X-VSTAR-HASH`, at every nesting level (a VALARM loses its own `UID`,
+`DTSTAMP` and hash too). It is therefore **not** the `X-VSTAR-HASH` on
+the wire: that one covers `DTSTAMP`/`LAST-MODIFIED` and moves with
+every `UpdatedAt` bump, including saves a remote never sees (a
+stale-timeout firing, an executor claim, run/step bookkeeping).
+
+**Baseline.** A successful push or pull records the content hash under
+`Task.Meta["last_sync_hash"]` next to `LastSyncAt`. The key is
+scrubbed before hashing, so recording it never feeds back into the
+hash. It is not in the encoder's derived-key set yet, so it is emitted
+inside `X-TLC-META` by a real export; treat it as sync bookkeeping, not
+task content.
+
+**Needs push.** With a baseline recorded, a task needs a push iff its
+current content hash differs from the baseline, whatever `UpdatedAt`
+says. Only while no baseline exists (first sync, or a task last synced
+before hashes were kept) does the old rule apply: `UpdatedAt` more than
+1 ms after `LastSyncAt`. `sync push` pre-selects candidates in SQL by
+timestamp (a superset, since every content change bumps `updated_at`)
+and confirms each by hash.
+
+**Conflict.** `DetectConflict(local, remote)` reports a conflict iff:
+the local side moved (content hash differs from the baseline; timestamp
+rule, with the detector's 1 s slack, only when no baseline exists), the
+remote side moved (its `UpdatedAt`, the remote system's own modification
+instant, more than 1 s after `LastSyncAt`; no remote baseline hash is
+recorded, because the remote representation drops fields it cannot
+store), and the two content views are not equal under
+`hop.top/vstar/diff.Component`. Two sides that changed to the same
+content are not a conflict. A conflict carries `diff.OfComponent` of the
+two views (local on the left) so `--strategy manual` shows property-level
+detail; `Description` names the differing properties. The four
+strategies are unchanged; `last-write-wins` still compares `UpdatedAt`,
+that being its definition (recency), not a change heuristic.
+
+**Determinism.** Exporting an unchanged task under two different export
+clocks, or none, yields byte-identical canonical bytes, the same
+`X-VSTAR-HASH` and the same serialized document
+(`TestExport_DeterministicAcrossClocks`). The one boundary: a task with
+neither `UpdatedAt` nor `CreatedAt` takes `DTSTAMP` from the export
+clock, so its `X-VSTAR-HASH` follows the clock
+(`TestExport_TimestamplessTaskIsClockStamped`); the content hash strips
+`DTSTAMP` and is unaffected.
