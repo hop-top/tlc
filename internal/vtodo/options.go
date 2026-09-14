@@ -12,6 +12,8 @@
 package vtodo
 
 import (
+	"time"
+
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
@@ -30,6 +32,7 @@ type options struct {
 	uidDomain   string
 	productID   string
 	includeLogs bool
+	exportTime  time.Time
 	// priorities is the priority vocabulary in rank order, most urgent
 	// first. Never empty after resolve — defaultOptions seeds it from
 	// the project config and WithPriorityVocabulary ignores empty input.
@@ -76,8 +79,24 @@ func WithProductID(id string) Option {
 	}
 }
 
+// WithExportTime pins the instant written to DTSTAMP. RFC 5545 §3.8.7.2
+// defines DTSTAMP as the moment the calendar instance was created, so it
+// defaults to wall-clock time at BuildVCalendar. Override it to make
+// encoder output deterministic (fixtures, golden tests).
+//
+// The zero time is ignored — it would clear DTSTAMP, which RFC 5545
+// §3.6.2 requires on every VTODO.
+func WithExportTime(t time.Time) Option {
+	return func(o *options) {
+		if !t.IsZero() {
+			o.exportTime = t
+		}
+	}
+}
+
 // resolve applies a slice of Options on top of the defaults and returns
-// the resolved configuration.
+// the resolved configuration. The export clock is sampled once here so
+// every component in a single calendar shares one DTSTAMP.
 func resolve(opts []Option) options {
 	o := defaultOptions()
 	for _, fn := range opts {
@@ -87,6 +106,9 @@ func resolve(opts []Option) options {
 	}
 	if len(o.priorities) == 0 {
 		o.priorities = config.GetDefaultPriorities()
+	}
+	if o.exportTime.IsZero() {
+		o.exportTime = time.Now().UTC()
 	}
 	return o
 }

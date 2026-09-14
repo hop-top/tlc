@@ -294,3 +294,106 @@ func TestBuildVCalendar_LongPRODIDFoldsCleanly(t *testing.T) {
 	require.Contains(t, out, "\r\nCALSCALE:GREGORIAN\r\n")
 	require.Contains(t, out, "\r\nMETHOD:PUBLISH\r\n")
 }
+
+// TestBuildVCalendar_DTSTAMPIsExportTime proves DTSTAMP carries the
+// moment the calendar instance was created (RFC 5545 §3.8.7.2), not the
+// entity's creation timestamp. CREATED keeps CreatedAt.
+func TestBuildVCalendar_DTSTAMPIsExportTime(t *testing.T) {
+	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
+	task := sampleTask() // CreatedAt == fixedTime, a different instant
+	require.NotEqual(t, exportAt, task.CreatedAt)
+
+	cal, err := vtodo.BuildVCalendar(
+		[]*core.Task{task}, nil, nil,
+		vtodo.WithExportTime(exportAt),
+	)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	require.Contains(t, out, "DTSTAMP:20260914T080000Z", "DTSTAMP must be export time")
+	require.Contains(t, out, "CREATED:20260502T143000Z", "CREATED must keep CreatedAt")
+	require.NotContains(t, out, "DTSTAMP:20260502T143000Z", "DTSTAMP must not mirror CreatedAt")
+}
+
+// TestBuildVCalendar_DTSTAMPChangesAcrossExports proves two exports of
+// the same unchanged entity carry different DTSTAMPs. The pre-fix code
+// pinned DTSTAMP to CreatedAt, so it never moved.
+func TestBuildVCalendar_DTSTAMPChangesAcrossExports(t *testing.T) {
+	task := sampleTask()
+	first := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
+	second := first.Add(90 * time.Minute)
+
+	cal1, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil, vtodo.WithExportTime(first))
+	require.NoError(t, err)
+	cal2, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil, vtodo.WithExportTime(second))
+	require.NoError(t, err)
+
+	require.Contains(t, mustSerialize(t, cal1), "DTSTAMP:20260914T080000Z")
+	require.Contains(t, mustSerialize(t, cal2), "DTSTAMP:20260914T093000Z")
+}
+
+// TestBuildVCalendar_DTSTAMPDefaultsToNow proves the export clock
+// defaults to wall-clock time when no WithExportTime is supplied.
+func TestBuildVCalendar_DTSTAMPDefaultsToNow(t *testing.T) {
+	before := time.Now().UTC().Add(-time.Second).Truncate(time.Second)
+	cal, err := vtodo.BuildVCalendar([]*core.Task{sampleTask()}, nil, nil)
+	require.NoError(t, err)
+	after := time.Now().UTC().Add(time.Second)
+
+	todos := cal.Filter(vstar.CompTodo)
+	require.Len(t, todos, 1)
+	stamp, ok := todos[0].DTSTAMP()
+	require.True(t, ok, "DTSTAMP must parse as RFC 5545 form #2")
+	require.False(t, stamp.Before(before), "DTSTAMP %v before %v", stamp, before)
+	require.False(t, stamp.After(after), "DTSTAMP %v after %v", stamp, after)
+}
+
+// TestBuildVCalendar_TrackAndLogDTSTAMPIsExportTime covers the two
+// other components that emit DTSTAMP.
+func TestBuildVCalendar_TrackAndLogDTSTAMPIsExportTime(t *testing.T) {
+	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
+	track := &core.Track{
+		ID:        "track_01h455vbqkfsn02nk084ksn02q",
+		Title:     "Auth rewrite",
+		Status:    core.TrackStatusActive,
+		CreatedAt: fixedTime,
+		UpdatedAt: fixedTime,
+	}
+	logs := []*core.LogEntry{{
+		TaskID:    "task_01h455vb4pex5vsknk084sn02q",
+		Timestamp: fixedTime,
+		By:        "alice",
+		Action:    "CLAIMED",
+	}}
+	cal, err := vtodo.BuildVCalendar(
+		nil, []*core.Track{track}, logs,
+		vtodo.WithIncludeLogs(true),
+		vtodo.WithExportTime(exportAt),
+	)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	require.NotContains(t, out, "DTSTAMP:20260502T143000Z")
+	require.Equal(t, 2, strings.Count(out, "DTSTAMP:20260914T080000Z"),
+		"both VTODO and VJOURNAL carry export-time DTSTAMP:\n%s", out)
+	// CREATED keeps the entity timestamps.
+	require.Equal(t, 2, strings.Count(out, "CREATED:20260502T143000Z"), out)
+}
+
+// TestBuildVCalendar_CreatedEmittedWithoutDTSTAMPCoupling proves CREATED
+// is driven solely by CreatedAt: a zero CreatedAt drops CREATED but
+// DTSTAMP is still emitted (RFC 5545 requires DTSTAMP on every VTODO).
+func TestBuildVCalendar_CreatedEmittedWithoutDTSTAMPCoupling(t *testing.T) {
+	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
+	task := sampleTask()
+	task.CreatedAt = time.Time{}
+
+	cal, err := vtodo.BuildVCalendar(
+		[]*core.Task{task}, nil, nil,
+		vtodo.WithExportTime(exportAt),
+	)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+	require.NotContains(t, out, "CREATED:")
+	require.Contains(t, out, "DTSTAMP:20260914T080000Z")
+}

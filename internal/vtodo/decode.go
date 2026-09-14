@@ -181,29 +181,23 @@ func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.T
 		}
 	}
 	t.Tags = decodeCategories(todo)
-	if p, ok := todo.Get("CREATED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			t.CreatedAt = ts
-		}
+	if ts, ok := propTime(todo, "CREATED"); ok {
+		t.CreatedAt = ts
 	}
-	if p, ok := todo.Get("LAST-MODIFIED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			t.UpdatedAt = ts
-		}
+	if ts, ok := propTime(todo, "LAST-MODIFIED"); ok {
+		t.UpdatedAt = ts
 	}
 	if t.UpdatedAt.IsZero() {
 		// Fallback to DTSTAMP when LAST-MODIFIED is absent.
-		if p, ok := todo.Get("DTSTAMP"); ok {
-			if ts, err := parseICSTime(p.Value); err == nil {
-				t.UpdatedAt = ts
-			}
+		if ts, ok := propTime(todo, "DTSTAMP"); ok {
+			t.UpdatedAt = ts
 		}
 	}
-	if p, ok := todo.Get("DUE"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			due := ts
-			t.DueAt = &due
-		}
+	if due, ok := todo.DUE(vstar.Calendar{}); ok {
+		t.DueAt = &due
+	} else if due, ok := propTime(todo, "DUE"); ok {
+		// Date-only DUE; see parseDateOnly.
+		t.DueAt = &due
 	}
 	if p, ok := todo.Get("RRULE"); ok {
 		if err := core.ValidateRRule(p.Value); err == nil {
@@ -251,7 +245,7 @@ func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.T
 		if !ok {
 			continue
 		}
-		if ts, err := parseICSTime(trig.Value); err == nil {
+		if ts, ok := parsePropValue(trig.Value); ok {
 			tt := ts
 			t.RemindAt = &tt
 			break
@@ -293,21 +287,15 @@ func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 	if p, ok := todo.Get("STATUS"); ok {
 		tr.Status = wireStatusToTrack(p.Value)
 	}
-	if p, ok := todo.Get("CREATED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			tr.CreatedAt = ts
-		}
+	if ts, ok := propTime(todo, "CREATED"); ok {
+		tr.CreatedAt = ts
 	}
-	if p, ok := todo.Get("LAST-MODIFIED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			tr.UpdatedAt = ts
-		}
+	if ts, ok := propTime(todo, "LAST-MODIFIED"); ok {
+		tr.UpdatedAt = ts
 	}
 	if tr.UpdatedAt.IsZero() {
-		if p, ok := todo.Get("DTSTAMP"); ok {
-			if ts, err := parseICSTime(p.Value); err == nil {
-				tr.UpdatedAt = ts
-			}
+		if ts, ok := propTime(todo, "DTSTAMP"); ok {
+			tr.UpdatedAt = ts
 		}
 	}
 	if p, ok := todo.Get(XPropTrackSlug); ok {
@@ -347,16 +335,16 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEn
 	} else if p, ok := j.Get("SUMMARY"); ok {
 		le.Note = p.Value
 	}
-	if p, ok := j.Get("DTSTAMP"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			le.Timestamp = ts
-		}
+	// CREATED carries the log entry's own instant; DTSTAMP carries the
+	// export instant (RFC 5545 §3.8.7.2) and is the same for every
+	// component in a calendar, so it is only a fallback for producers
+	// that emit no CREATED.
+	if ts, ok := propTime(j, "CREATED"); ok {
+		le.Timestamp = ts
 	}
 	if le.Timestamp.IsZero() {
-		if p, ok := j.Get("CREATED"); ok {
-			if ts, err := parseICSTime(p.Value); err == nil {
-				le.Timestamp = ts
-			}
+		if ts, ok := propTime(j, "DTSTAMP"); ok {
+			le.Timestamp = ts
 		}
 	}
 
@@ -520,27 +508,41 @@ func paramFirst(params []vstar.Param, key string) string {
 	return ""
 }
 
-// parseICSTime parses iCalendar DATE-TIME forms. Only UTC ("Z") and
-// floating local forms are handled; v1 emits UTC exclusively.
-func parseICSTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, fmt.Errorf("empty time value")
+// dateOnlyLayout is RFC 5545 §3.3.4 DATE (`YYYYMMDD`), the value form
+// carried by a VALUE=DATE property.
+const dateOnlyLayout = "20060102"
+
+// parseDateOnly parses an RFC 5545 §3.3.4 DATE value as midnight UTC.
+//
+// Upstream gap: vstar has no VALUE=DATE support — vstar.ParseTime is
+// strict form #2 only and the typed Component accessors reject a
+// date-only value. This is the single fallback that remains; every
+// other form goes through vstar. Drop it once vstar grows a DATE type.
+func parseDateOnly(s string) (time.Time, bool) {
+	t, err := time.ParseInLocation(dateOnlyLayout, s, time.UTC)
+	if err != nil {
+		return time.Time{}, false
 	}
-	formats := []string{
-		"20060102T150405Z",
-		"20060102T150405",
-		"20060102",
-		"2006-01-02T15:04:05Z",
-		"2006-01-02T15:04:05",
-		time.RFC3339,
+	return t.UTC(), true
+}
+
+// propTime reads a time-bearing property from todo, accepting RFC 5545
+// §3.3.5 form #2 (via vstar) and falling back to a bare DATE value.
+func propTime(c vstar.Component, name string) (time.Time, bool) {
+	p, ok := c.Get(name)
+	if !ok {
+		return time.Time{}, false
 	}
-	for _, f := range formats {
-		if t, err := time.ParseInLocation(f, s, time.UTC); err == nil {
-			return t.UTC(), nil
-		}
+	return parsePropValue(p.Value)
+}
+
+// parsePropValue applies the form #2 → DATE ladder to a raw property
+// value.
+func parsePropValue(v string) (time.Time, bool) {
+	if t, ok := vstar.ParseTime(v); ok {
+		return t, true
 	}
-	return time.Time{}, fmt.Errorf("unrecognised iCalendar time %q", s)
+	return parseDateOnly(v)
 }
 
 // decodeCategories reads a task's tags from the CATEGORIES property

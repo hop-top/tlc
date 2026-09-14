@@ -19,6 +19,11 @@ import (
 
 var fixedTime = time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
 
+// exportTime pins DTSTAMP in generated fixtures. DTSTAMP is export time
+// (RFC 5545 §3.8.7.2), so without a pinned clock every regeneration
+// would rewrite every fixture.
+var exportTime = fixedTime
+
 func ptr[T any](v T) *T { return &v }
 
 func write(path, content string) {
@@ -64,7 +69,7 @@ func main() {
 	}
 
 	// 1. single-task.ics
-	cal, _ := vtodo.BuildVCalendar([]*core.Task{base}, nil, nil)
+	cal, _ := vtodo.BuildVCalendar([]*core.Task{base}, nil, nil, vtodo.WithExportTime(exportTime))
 	write(dir+"/single-task.ics", mustSerialize(cal))
 
 	// 2. track-with-tasks.ics
@@ -90,13 +95,14 @@ func main() {
 	cal2, _ := vtodo.BuildVCalendar(
 		[]*core.Task{&tt1, &tt2, &tt3},
 		[]*core.Track{track}, nil,
+		vtodo.WithExportTime(exportTime),
 	)
 	write(dir+"/track-with-tasks.ics", mustSerialize(cal2))
 
 	// 3. recurring-rrule.ics
 	rec := *base
 	rec.RRule = "FREQ=DAILY;INTERVAL=2"
-	cal3, _ := vtodo.BuildVCalendar([]*core.Task{&rec}, nil, nil)
+	cal3, _ := vtodo.BuildVCalendar([]*core.Task{&rec}, nil, nil, vtodo.WithExportTime(exportTime))
 	write(dir+"/recurring-rrule.ics", mustSerialize(cal3))
 
 	// 4. with-dependencies.ics
@@ -111,7 +117,7 @@ func main() {
 	dep.Meta = map[string]interface{}{
 		"blocked_by": []string{blockerID},
 	}
-	cal4, _ := vtodo.BuildVCalendar([]*core.Task{&blocker, &dep}, nil, nil)
+	cal4, _ := vtodo.BuildVCalendar([]*core.Task{&blocker, &dep}, nil, nil, vtodo.WithExportTime(exportTime))
 	write(dir+"/with-dependencies.ics", mustSerialize(cal4))
 
 	// 5. with-logs.ics
@@ -132,6 +138,7 @@ func main() {
 	cal5, _ := vtodo.BuildVCalendar(
 		[]*core.Task{base}, nil, []*core.LogEntry{log1, log2},
 		vtodo.WithIncludeLogs(true),
+		vtodo.WithExportTime(exportTime),
 	)
 	write(dir+"/with-logs.ics", mustSerialize(cal5))
 }
