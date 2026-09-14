@@ -140,11 +140,7 @@ func TestFixture_RoundTripStability(t *testing.T) {
 			)
 			require.NoError(t, err)
 			got := mustSerialize(t, cal)
-			require.Equal(t, normaliseEOL(string(data)), normaliseEOL(got))
+			require.Equal(t, string(data), got)
 		})
 	}
-}
-
-func normaliseEOL(s string) string {
-	return strings.ReplaceAll(s, "\r\n", "\n")
 }
