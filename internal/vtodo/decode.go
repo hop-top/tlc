@@ -11,6 +11,7 @@ import (
 	"hop.top/vstar/codec/rfc5545"
 	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
+	"hop.top/vstar/supersession"
 
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -26,14 +27,31 @@ type ParseResult struct {
 	// X-VSTAR-HASH is absent or does not match its content. Empty for
 	// a calendar tlc wrote and nobody altered.
 	Warnings []string
+	// Concepts maps a component's wire UID to the agentic concept it
+	// declared through X-TLC-CONCEPT (lowercased), for every component
+	// that carried one, VEVENT and sub-components included. Keyed by
+	// UID rather than entity ID because the declaration is a fact
+	// about the wire component: log entries have no ID of their own,
+	// and a VEVENT maps to no entity at all. Nil when nothing in the
+	// calendar declared a concept. The token is never stored on the
+	// entities themselves; the encoder re-derives it from TrackID and
+	// Action on export.
+	Concepts map[string]string
 }
 
 // ParseVCalendar reads an iCalendar stream and returns the tasks,
 // tracks, and log entries it contained.
 //
-// VTODO classification:
+// VTODO classification, first match wins:
+//   - X-TLC-CONCEPT=assignment → Task (an assignment is a scoped unit
+//     inside a mission, and tlc has no track inside a track)
 //   - X-TLC-IS-TRACK=TRUE marker → Track
+//   - UID body is a track TypeID → Track
 //   - otherwise → Task
+//
+// X-TLC-CONCEPT=mission is not decisive on its own: a track and a
+// standalone task are both missions, so the marker and the UID prefix
+// still pick the Go type.
 //
 // UID handling: a UID of the form `<typeid>@<our-domain>` — the domain
 // being the one WithUIDDomain configured, DefaultUIDDomain otherwise —
@@ -47,6 +65,9 @@ type ParseResult struct {
 // RELATED-TO property whose value (after stripping the @domain) maps to
 // a known Task UID; if the link can't be resolved the LogEntry is still
 // emitted with TaskID set to the raw UID body.
+//
+// VEVENT: an open turn (X-TLC-CONCEPT:turn, no DTEND) sets ClaimedAt on
+// the task its PARENT edge names; nothing else is decoded from events.
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	o := resolve(opts)
 	statusDefs := o.statusDefinitions()
@@ -56,7 +77,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		return nil, fmt.Errorf("parse calendar: %w", err)
 	}
 
-	res := &ParseResult{Warnings: verifyHashes(cal)}
+	res := &ParseResult{Warnings: verifyHashes(cal), Concepts: collectConcepts(cal)}
 
 	// Build a map UID-body → entity ID for cross-component linkage and
 	// VJOURNAL TaskID resolution. Two passes because VJOURNAL parsing
@@ -76,7 +97,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				uidToTrackID[uidBodyVal] = tr.ID
 			}
 		} else {
-			t, uidBodyVal, perr := decodeTask(todo, o.uidDomain, o.priorities, statusDefs)
+			t, uidBodyVal, perr := decodeTask(todo, cal.Components, o.uidDomain, o.priorities, statusDefs)
 			if perr != nil {
 				return nil, perr
 			}
@@ -146,8 +167,41 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 
 	// VJOURNAL → LogEntry.
 	for _, j := range cal.Filter(vstar.CompJournal) {
-		le := decodeJournal(j, uidToTaskID, o.uidDomain)
+		le := decodeJournal(j, uidToTaskID, o.uidDomain, statusDefs)
 		res.Logs = append(res.Logs, le)
+	}
+
+	// An open turn VEVENT is the wire form of Task.ClaimedAt: the task
+	// row itself carries no claim property. Only a VEVENT that declares
+	// itself a turn counts; a foreign event related to a task is not a
+	// claim. VEVENTs are otherwise not decoded: a turn is a log-derived
+	// window and a playthrough has no entity the decoder mints.
+	for _, ev := range cal.Filter(vstar.CompEvent) {
+		if declaredConcept(ev) != ConceptTurn {
+			continue
+		}
+		if _, closed := ev.Get("DTEND"); closed {
+			continue
+		}
+		start, ok := propTime(ev, "DTSTART")
+		if !ok {
+			continue
+		}
+		for _, rel := range helpers.RelatedTo(ev) {
+			if !strings.EqualFold(rel.RelType, RelTypeParent) {
+				continue
+			}
+			id, ok := uidToTaskID[uidBody(rel.UID, o.uidDomain)]
+			if !ok {
+				continue
+			}
+			for _, t := range res.Tasks {
+				if t.ID == id && (t.ClaimedAt == nil || start.After(*t.ClaimedAt)) {
+					at := start
+					t.ClaimedAt = &at
+				}
+			}
+		}
 	}
 
 	return res, nil
@@ -188,7 +242,20 @@ func verifyHashes(cal vstar.Calendar) []string {
 	return out
 }
 
+// isTrackComponent picks the Go type of a VTODO. The concept token is
+// consulted first, the track marker second, the UID prefix last, so a
+// declaration a producer made on purpose beats a marker and a marker
+// beats a naming convention.
+//
+// Only `assignment` decides: it names a unit inside a mission, which in
+// tlc is always a task, whatever marker or UID prefix the component
+// also carries. `mission` covers tracks and standalone tasks alike and
+// so falls through to the marker; any other token (or none, the case
+// for every calendar written before the property existed) does too.
 func isTrackComponent(todo vstar.Component, domain string) bool {
+	if declaredConcept(todo) == ConceptAssignment {
+		return false
+	}
 	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, "TRUE") {
 		return true
 	}
@@ -201,6 +268,7 @@ func isTrackComponent(todo vstar.Component, domain string) bool {
 
 func decodeTask(
 	todo vstar.Component,
+	ledger []vstar.Component,
 	domain string,
 	defs []config.PriorityDefinition,
 	statusDefs []config.StatusDefinition,
@@ -227,7 +295,7 @@ func decodeTask(
 	if p, ok := todo.Get("DESCRIPTION"); ok {
 		t.Description = p.Value
 	}
-	t.Status = decodeTaskStatus(todo, statusDefs)
+	t.Status = decodeTaskStatus(todo, ledger, statusDefs)
 	t.Priority = priorityFromComponent(todo, defs)
 	if p, ok := todo.Get(XPropPrioritySource); ok {
 		if v := strings.TrimSpace(p.Value); v != "" {
@@ -298,6 +366,13 @@ func decodeTask(
 	}
 	if p, ok := todo.Get(XPropArchived); ok {
 		t.Archived = isTrueValue(p.Value)
+	}
+	if p, ok := todo.Get(XPropRun); ok {
+		// Only a run TypeID under our domain is ours to reference; a
+		// foreign playthrough UID names a run this store has no row for.
+		if body := uidBody(strings.TrimSpace(p.Value), domain); core.IsRecipeRunID(body) {
+			t.RunID = body
+		}
 	}
 	for _, alarm := range todo.Sub {
 		if alarm.Type != vstar.CompAlarm {
@@ -391,11 +466,31 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 	return tr, body, nil
 }
 
-func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain string) *core.LogEntry {
+func decodeJournal(
+	j vstar.Component,
+	uidToTaskID map[string]string,
+	domain string,
+	statusDefs []config.StatusDefinition,
+) *core.LogEntry {
 	le := &core.LogEntry{}
 
 	if p, ok := j.Get(XPropLogAction); ok {
 		le.Action = p.Value
+	}
+	// X-VSTAR-* properties are not tlc's to adopt (see applyMeta), with
+	// one exception: the effective status of a supersession journal is
+	// the ledger's fact about the task, and dropping it would re-export
+	// a foreign ledger entry as a plain journal. It is kept only when
+	// the entry's own action cannot reproduce it, so tlc's own output
+	// decodes to the Meta it was exported from.
+	if eff, ok := supersessionStatus(j); ok {
+		if !isStatusTransition(le.Action, statusDefs) ||
+			!strings.EqualFold(eff, derivedEffectiveStatus(le.Action, statusDefs)) {
+			if le.Meta == nil {
+				le.Meta = map[string]interface{}{}
+			}
+			le.Meta[MetaEffectiveStatusKey] = eff
+		}
 	}
 	if p, ok := j.Get(XPropLogBy); ok {
 		le.By = p.Value
@@ -448,9 +543,23 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain stri
 	return le
 }
 
-// decodeTaskStatus recovers a tlc status from a VTODO, preferring the
-// exact name in XPropStatus and falling back to the role the RFC STATUS
-// value implies.
+// decodeTaskStatus recovers a tlc status from a VTODO, walking a
+// three-step ladder:
+//
+//  1. The exact name in XPropStatus, when the CURRENT vocabulary declares
+//     it. tlc writes the property with the task's current status, so a
+//     VTODO carrying it is a mutated-in-place snapshot and the ledger
+//     behind it is history, not a correction.
+//  2. The ledger. A VTODO without a usable XPropStatus is foreign, or
+//     from a vocabulary this config no longer has; for it the spec 02
+//     discipline applies: the original component is never mutated and
+//     the latest supersession journal pointing at it holds the truth.
+//     supersession.Superseded picks that entry (latest DTSTAMP wins);
+//     its value is used when it is one of the four RFC 5545 VTODO
+//     STATUS values, the vocabulary tlc writes and the one the spec
+//     example shows. Any other vocabulary is opaque here and falls
+//     through.
+//  3. The role the VTODO's own STATUS value implies.
 //
 // The X-property is only trusted when the CURRENT vocabulary declares
 // that name. A calendar exported from another project (or from this one
@@ -458,7 +567,7 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain stri
 // and importing it would seed the store with a value every later
 // validation refuses. Falling back to the role default keeps the import
 // inside the configured vocabulary while preserving the coarse meaning.
-func decodeTaskStatus(todo vstar.Component, defs []config.StatusDefinition) core.TaskStatus {
+func decodeTaskStatus(todo vstar.Component, ledger []vstar.Component, defs []config.StatusDefinition) core.TaskStatus {
 	if p, ok := todo.Get(XPropStatus); ok {
 		name := strings.TrimSpace(p.Value)
 		for _, def := range defs {
@@ -468,7 +577,9 @@ func decodeTaskStatus(todo vstar.Component, defs []config.StatusDefinition) core
 		}
 	}
 	wire := ""
-	if p, ok := todo.Get("STATUS"); ok {
+	if eff, ok := supersession.Superseded(todo, ledger); ok && isTodoStatusWire(eff) {
+		wire = strings.TrimSpace(eff)
+	} else if p, ok := todo.Get("STATUS"); ok {
 		wire = strings.TrimSpace(p.Value)
 	}
 	return roleDefaultStatus(wireToRole(wire), defs)

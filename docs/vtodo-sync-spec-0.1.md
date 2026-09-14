@@ -31,19 +31,19 @@ Every exported component is one of the V\* agentic concepts below. The mapping, 
 | `Task` without a track (`TrackID` nil) | Mission | VTODO | `mission` |
 | `Task` with a track | Assignment | VTODO | `assignment` |
 | `LogEntry` | Journal | VJOURNAL | `status` \| `decision` \| `action` \| `observation` \| `journal` |
-| `RecipeRun` | Playthrough | VEVENT | `playthrough` (not exported yet) |
-| claim window (`ClaimedAt` + the `CLAIMED`…`DONE` journal pair) | Turn | VEVENT | `turn` (not exported yet) |
+| `RecipeRun` | Playthrough | VEVENT | `playthrough` — see [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs) |
+| claim window (`ClaimedAt`, or a `CLAIMED`/`RECLAIMED` … `DONE`/`RELEASED`/… journal pair) | Turn | VEVENT | `turn` — see [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs) |
 | `AssignedTo`, `LogEntry.By` | Player | VCARD | — (no VCARD export yet) |
 | `Task.RRule` | Cadence | `RRULE` property | — (a property, not a component) |
 | `Task.RemindAt` | Timeout / escalation | VALARM | — |
 
-A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO, and `X-TLC-IS-TRACK` remains the track/task discriminator on decode. A standalone task is a mission because it carries no `RELATED-TO;RELTYPE=PARENT` edge; an assignment always does.
+A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO. On decode the token is consulted first for track-vs-task: `assignment` always decodes as a task, whatever marker or UID prefix the component also carries; `mission` names a track and a standalone task alike, so it defers to `X-TLC-IS-TRACK`, then to the UID prefix, the same ladder a calendar without the token walks. A standalone task is a mission because it carries no `RELATED-TO;RELTYPE=PARENT` edge; an assignment always does. The decoder reports every declared token by wire UID in `ParseResult.Concepts` and never stores it on the entity; the encoder re-derives it from `TrackID` and `Action`.
 
 ---
 
 ## VCALENDAR Envelope
 
-All VTODO/VJOURNAL output is wrapped in a VCALENDAR container:
+All output is wrapped in a VCALENDAR container, components in this order:
 
 ```
 BEGIN:VCALENDAR
@@ -51,8 +51,9 @@ VERSION:2.0
 PRODID:-//tlc//vtodo//EN
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
-[VTODO components]
+[VTODO components: tracks, then tasks]
 [VJOURNAL components]
+[VEVENT components: turns per task, then playthroughs]
 END:VCALENDAR
 ```
 
@@ -128,13 +129,13 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 
 | LogEntry Field | VJOURNAL Property | Notes |
 |---|---|---|
-| UID (derived) | `UID` | Synthesized: `log-<task-typeid>-<action>-<utc-stamp>@<domain>` — see below |
+| UID (derived) | `UID` | Synthesized: `log-<task-typeid>-<action>-<utc-stamp>@<domain>` — see below. A status transition whose task is in the export uses the spec-vstar supersession scheme instead, `journal:status:<task-uid>:<utc-stamp>` — see [Status transitions as supersession entries](#status-transitions-as-supersession-entries) |
 | `Timestamp` | `CREATED` | The entry's own instant, UTC; omitted when zero. On import `CREATED` is preferred; `DTSTAMP` is only a fallback for producers that emit no `CREATED` |
 | — | `DTSTAMP` | Required on every VJOURNAL (RFC 5545 §3.6.3); the instant it carries is defined in the hashing section |
 | `By` (user) | `X-TLC-LOG-BY` | Actor name verbatim; omitted if empty. No `ORGANIZER` is emitted |
 | `Action` | `X-TLC-LOG-ACTION` | Action string verbatim (e.g., `created`, `status_change`, `comment`); omitted if empty |
 | `Note` | `DESCRIPTION`, `SUMMARY` | `DESCRIPTION` carries the full note and `SUMMARY` its first line; both omitted if the note is empty, in which case `SUMMARY` carries the action instead |
-| `TaskID` | `RELATED-TO;RELTYPE=PARENT`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID with an explicit `RELTYPE=PARENT`; `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
+| `TaskID` | `RELATED-TO;RELTYPE=PARENT`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID with an explicit `RELTYPE=PARENT` (bare on a supersession entry, which is the same edge: RFC 5545 §3.2.15 defaults `RELTYPE` to `PARENT`); `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
 | `Meta` | `X-TLC-META` | JSON-serialized; omitted if empty. See [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 
 **Opt-in**: VJOURNAL export is disabled by default. Enable via:
@@ -162,6 +163,69 @@ the UID be `log_<typeid>@<domain>`, but that is a schema change and is
 out of scope for v0.1.
 
 **Round-trip**: Foreign VJOURNAL imports (non-tlc UIDs) generate fresh tlc log rows with the original UID stored in `LogEntry.Meta["external_uid"]` for round-trip stability.
+
+### Status transitions as supersession entries
+
+A log entry in the `status` class (see [Vocabulary](#vocabulary): the fixed transition constants `CLAIMED`, `RELEASED`, `DONE`, `SKIPPED`, `RETRY`, `REOPENED`, `BLOCKED`, `UNBLOCKED`, or any name in the configured status vocabulary) whose task is in the same export is emitted as a spec-vstar "status supersession" entry, built by `hop.top/vstar/supersession.Supersedes` against the finished task VTODO:
+
+```
+BEGIN:VJOURNAL
+UID:journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z
+DTSTAMP:20260502T143000Z
+RELATED-TO:task_01h455vb4pex5vsknk084sn02q@tlc.local
+CATEGORIES:status-supersession
+X-VSTAR-EFFECTIVE-STATUS:IN-PROCESS
+X-TLC-CONCEPT:status
+SUMMARY:starting work on signer rotation
+CREATED:20260502T143000Z
+X-TLC-LOG-TASK:task_01h455vb4pex5vsknk084sn02q
+X-TLC-LOG-ACTION:CLAIMED
+X-TLC-LOG-BY:alice
+X-VSTAR-HASH:sha256:…
+END:VJOURNAL
+```
+
+- **Both UID schemes coexist.** Every other journal, and a status transition whose task is *not* in the export (an orphan supersession entry is unprojectable, spec-vstar 05 §4), keeps `log-<task-typeid>-<action>-<utc-stamp>@<domain>`. Both shapes carry the same `X-TLC-*` properties, so a reader that ignores the ledger discipline sees one kind of journal.
+- **`X-VSTAR-EFFECTIVE-STATUS`** carries the RFC 5545 VTODO `STATUS` value the transition lands the task in, through the same role mapping `STATUS` uses: a configured name by its role; `CLAIMED` → `IN-PROCESS`; `RELEASED`, `RETRY`, `REOPENED`, `BLOCKED`, `UNBLOCKED` → `NEEDS-ACTION`; `DONE` → `COMPLETED`; `SKIPPED` → `CANCELLED`. The tlc status name is not written here (rationale and the upstream ask: [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md)).
+- **Tasks only.** `LogEntry.TaskID` is the only subject; tracks have no journals and so no ledger.
+- **Import.** A task VTODO whose `X-TLC-STATUS` is absent or names a status the current vocabulary lacks takes its status from the latest supersession entry pointing at it (`supersession.Superseded`, latest `DTSTAMP` wins) when that value is one of the four RFC `STATUS` values; otherwise from its own `STATUS`. A VTODO with a usable `X-TLC-STATUS` is a tlc snapshot and keeps it. An imported supersession journal's effective status is kept in `LogEntry.Meta["effective_status"]` when its action cannot reproduce it (a foreign entry with no `X-TLC-LOG-ACTION`, or a disagreeing value), and is re-emitted verbatim; tlc's own entries decode Meta-clean.
+
+---
+
+## VEVENT: Turns and Playthroughs
+
+Two V\* concepts map to VEVENT (spec-vstar 02): a **turn**, one bounded execution window on an assignment, and a **playthrough**, one run of a recipe through a mission. Every VEVENT carries `UID`, `DTSTAMP`, `DTSTART` (spec-vstar 05 §5, VS041), one `X-TLC-CONCEPT` and `X-VSTAR-HASH` last. No `STATUS`: the pinned vstar has no VEVENT status enum, and an open turn is told from a closed one by the absence of `DTEND`. VEVENTs are not decoded into entities; the one thing read back is an open turn's `DTSTART`, which is the wire form of `Task.ClaimedAt`.
+
+### Turn
+
+| Source | VEVENT Property | Notes |
+|---|---|---|
+| task id + claim instant | `UID` | `turn-<task-typeid>-<DTSTART>@<domain>`; deterministic, the same whether the window came from the log or from `ClaimedAt` |
+| claim instant | `DTSTART` | The `CLAIMED` / `RECLAIMED` entry's timestamp, or `Task.ClaimedAt` |
+| release instant | `DTEND` | The closing entry's timestamp; absent while the turn is open |
+| — | `DTSTAMP` | `DTEND` when closed, `DTSTART` while open (the turn's last modification) |
+| the task | `RELATED-TO;RELTYPE=PARENT`, `SUMMARY` | The assignment's UID; `SUMMARY` is the task title |
+| the player | `ATTENDEE:mailto:` / `X-TLC-ASSIGNEE` | The opening entry's `By`, or `Task.AssignedTo` for a `ClaimedAt` turn; same email rule as a task |
+
+**Where turns come from.** With `--include-logs` the exported log is the source: `CLAIMED` or `RECLAIMED` opens a window, `DONE`, `RELEASED`, `SKIPPED`, `APPROVED`, `REJECTED`, `RETRY` or `BLOCKED` closes it, a `RECLAIMED` while a window is open closes that window at the reclaim instant and opens the next, a closer with no open window is ignored, and the last window is left open when nothing closed it. Without the log, or when the exported log opens no window, `Task.ClaimedAt` yields the one open turn. The two sources are never combined, so a claim is never emitted twice. A task never claimed emits no turn. Configured status names do not bound a turn: the executor logs the constants above whatever the vocabulary.
+
+**Import.** A VEVENT declaring `X-TLC-CONCEPT:turn` with no `DTEND` sets `ClaimedAt` on the task its `RELATED-TO;RELTYPE=PARENT` names (the latest start when several are open). A VEVENT without the token is not a claim, whatever it is related to.
+
+### Playthrough
+
+| `RecipeRun` Field | VEVENT Property | Notes |
+|---|---|---|
+| `ID` | `UID` | `<run-typeid>@<domain>` (`run_…`), like a task or track |
+| `CreatedAt` | `DTSTART`, `DTSTAMP` | The materialisation instant; a run row never changes, so both are the same. No `DTEND`: a run has no end timestamp (RFC 5545 §3.6.1 permits its absence) |
+| `RecipeID` | `SUMMARY`, `X-TLC-RECIPE-ID` | Omitted when empty |
+| `Version` | `X-TLC-RECIPE-VERSION` | Omitted when empty |
+| `Hash` | `X-TLC-RECIPE-HASH` | The recipe content hash the run pinned; omitted when empty |
+| `TrackID` | `RELATED-TO;RELTYPE=PARENT` | The mission the run went through; absent for a trackless run (a path through the world) |
+| `ProjectID` | `X-TLC-PROJECT-ID` | Omitted when empty |
+
+Runs reach the encoder through `vtodo.WithRecipeRuns`; the CLI passes the run behind every exported task that has a `RunID` (`tlc task list/show --format vtodo`). `Vars`, `Selection`, `DroppedDeps`, `ParentRun`, `SubjectType`/`SubjectID` and `CreatedBy` are not exported yet.
+
+**Assignment → playthrough edge.** A task materialised by a run carries `X-TLC-RUN:<playthrough UID>`. It is an X-property rather than a `RELATED-TO` because no `RELTYPE` means "member of a run": `PARENT` is the mission edge, `CHILD`/`SIBLING` are hierarchy, `DEPENDS-ON` is ordering, and RFC 5545 readers degrade an unknown `RELTYPE` to `PARENT`, which would silently re-parent the task under the run. On import the value decodes to `Task.RunID` when it is a run TypeID under our domain; a foreign run UID names a run this store has no row for and is left alone. `Task.StepID` is not exported yet.
 
 ---
 
@@ -228,6 +292,9 @@ Consequence of the JSON round-trip: values return with `encoding/json`'s `interf
 | `blocked_by` | `RELATED-TO;RELTYPE=DEPENDS-ON` rows |
 | `external_uid` | the `UID` property |
 | `x_tlc` | re-emitted as real `X-TLC-*` properties (below) |
+| `priority_source`, `priority_rule` | `X-TLC-PRIORITY-SOURCE`, `X-TLC-PRIORITY-RULE` |
+| `effective_status` (log entries) | `X-VSTAR-EFFECTIVE-STATUS` on a supersession journal |
+| `last_sync_hash` (tasks) | nothing: the sync layer's local change-detection baseline, meaningless off this store and never exported |
 
 An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
 
@@ -235,7 +302,7 @@ An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
 
 **Sub-components are walked explicitly.** `ext.ExtensionsByScope` does not recurse into `Component.Sub`, so `VALARM` (and any future nested component) is scanned separately; its `X-TLC-*` properties merge into the parent entity's `x_tlc` bag.
 
-**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. This is the receiver rule of spec-vstar's extension discipline — receivers MUST ignore unknown `X-*` properties — see <https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
+**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. One exception: `X-VSTAR-EFFECTIVE-STATUS` on a well-formed supersession journal is the ledger's fact about the task and is kept as described under [Status transitions as supersession entries](#status-transitions-as-supersession-entries); `X-VSTAR-HASH` is always recomputed, never adopted. This is the receiver rule of spec-vstar's extension discipline — receivers MUST ignore unknown `X-*` properties — see <https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
 
 ### `X-TLC-*` property registry
 
@@ -244,12 +311,17 @@ Every `X-TLC-*` property tlc emits, derived from the encoder, the decoder and th
 | Property | Carried on | Value form | Source field | Since / notes |
 |---|---|---|---|---|
 | `X-TLC-EFFORT` | VTODO task | Effort name from the configured vocabulary (default `XS` \| `S` \| `M` \| `L` \| `XL`) | `Task.Effort` | 0.1 (2026-05). Omitted when empty. Import: kept only if the name is in the current vocabulary, else dropped |
-| `X-TLC-ASSIGNEE` | VTODO task, VTODO track | Assignee name, verbatim | `Task.AssignedTo`, `Track.AssignedTo` | 0.1 (2026-05). Task: emitted only when the value is not an email address (an email goes to `ATTENDEE:mailto:` instead). Track: always used; tracks never emit `ATTENDEE`. Import: wins over `ATTENDEE` when both are present |
-| `X-TLC-PROJECT-ID` | VTODO task, VTODO track | Project identifier, verbatim | `Task.ProjectID`, `Track.ProjectID` | 0.1 (2026-05). Omitted when unset or empty |
+| `X-TLC-ASSIGNEE` | VTODO task, VTODO track, VEVENT turn | Assignee name, verbatim | `Task.AssignedTo`, `Track.AssignedTo`, the turn's player (`LogEntry.By` of the opening entry, else `Task.AssignedTo`) | 0.1 (2026-05). Task and turn: emitted only when the value is not an email address (an email goes to `ATTENDEE:mailto:` instead). Track: always used; tracks never emit `ATTENDEE`. Import: wins over `ATTENDEE` when both are present; not read from a turn |
+| `X-TLC-PROJECT-ID` | VTODO task, VTODO track, VEVENT playthrough | Project identifier, verbatim | `Task.ProjectID`, `Track.ProjectID`, `RecipeRun.ProjectID` | 0.1 (2026-05). Omitted when unset or empty |
 | `X-TLC-TASK-SEQ` | VTODO task | Positive base-10 integer | `Task.Seq` | 0.1 (2026-05). Omitted when `Seq <= 0`. Import: an unparsable value is ignored |
 | `X-TLC-TRACK-SLUG` | VTODO track | Slug, verbatim | `Track.Slug` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-TRACK-TYPE` | VTODO track | Track type, verbatim (e.g. `feature`) | `Track.Type` | 0.1 (2026-05). Omitted when empty |
-| `X-TLC-IS-TRACK` | VTODO track | `TRUE` | (component-kind marker; no model field) | 0.1 (2026-05). Always emitted on a track, never on a task. Import: `TRUE` (case-insensitive) classifies the VTODO as a track; without it, a UID body that is a track TypeID is the fallback |
+| `X-TLC-IS-TRACK` | VTODO track | `TRUE` | (component-kind marker; no model field) | 0.1 (2026-05). Always emitted on a track, never on a task. Import: `TRUE` (case-insensitive) classifies the VTODO as a track unless `X-TLC-CONCEPT:assignment` is present; without it, a UID body that is a track TypeID is the fallback |
+| `X-TLC-CONCEPT` | VTODO task, VTODO track, VJOURNAL, VEVENT | `mission` \| `assignment` on a VTODO; `status` \| `decision` \| `action` \| `observation` \| `journal` on a VJOURNAL; `turn` \| `playthrough` on a VEVENT. Lowercase, one token | (derived: `Task.TrackID`, `LogEntry.Action` against the configured status vocabulary; a track is always `mission`; a VEVENT's token is fixed by its builder) | 0.1 (2026-09). Always emitted, never on `VALARM`. Import: read case-insensitively; `assignment` is the first track-vs-task discriminator (see [Vocabulary](#vocabulary)); `turn` gates the `ClaimedAt` read-back; every token is reported by UID in `ParseResult.Concepts`; not stored on the entity, re-derived on export |
+| `X-TLC-RUN` | VTODO task | Playthrough UID (`<run-typeid>@<domain>`) | `Task.RunID` | 0.1 (2026-09). Omitted when empty. The assignment → playthrough edge; an X-property, not a `RELATED-TO`, because no `RELTYPE` means run membership (see [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs)). Import: decoded when the UID body is a run TypeID under our domain, else ignored |
+| `X-TLC-RECIPE-ID` | VEVENT playthrough | Recipe identifier, verbatim | `RecipeRun.RecipeID` | 0.1 (2026-09). Omitted when empty; also the VEVENT's `SUMMARY`. Never decoded (a playthrough mints no entity) |
+| `X-TLC-RECIPE-VERSION` | VEVENT playthrough | Recipe version, verbatim | `RecipeRun.Version` | 0.1 (2026-09). Omitted when empty. Never decoded |
+| `X-TLC-RECIPE-HASH` | VEVENT playthrough | Recipe content hash, verbatim (`sha256:…`) | `RecipeRun.Hash` | 0.1 (2026-09). Omitted when empty. Never decoded |
 | `X-TLC-LOG-ACTION` | VJOURNAL | Action string, verbatim | `LogEntry.Action` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-LOG-BY` | VJOURNAL | Actor name, verbatim | `LogEntry.By` | 0.1 (2026-05). Omitted when empty. tlc emits no `ORGANIZER` |
 | `X-TLC-LOG-TASK` | VJOURNAL | Bare task TypeID (no `@domain`) | `LogEntry.TaskID` | 0.1 (2026-05). Emitted next to `RELATED-TO;RELTYPE=PARENT`. Import: preferred over `RELATED-TO`, so the TypeID survives even when the calendar carries no matching VTODO |
@@ -265,7 +337,7 @@ No `X-TLC-*` property is emitted on `VALARM`. On import, `X-TLC-*` properties fo
 
 Names absent from this table are, by definition, unknown. On import they land in `Meta["x_tlc"]` as described above; on export they are re-emitted from that bag, sorted by name, only if the name still classifies as TLC-owned, is not in this table, and holds a string value. The bag is never written into `X-TLC-META`.
 
-**Conformance posture.** Every property in the registry sits in the `X-<SYSTEM>-*` tier of spec-vstar's extension discipline (<https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>), under the system slug `TLC`, and is stable per that tier: removing one is a breaking change for consumers, so a property is promoted or replaced, never renamed in place. tlc defines no `X-VSTAR-*` or `X-EXP-*` property of its own; the one `X-VSTAR-*` property in its output, `X-VSTAR-HASH`, is minted by the vstar helpers rather than by tlc (see the hashing section). Unknown non-TLC `X-*` properties are ignored on import and never re-emitted, per the receiver rule above. Promotion of any `X-TLC-*` property to `X-VSTAR-*` goes through spec-vstar's promotion path — two independent systems implementing compatible semantics — and is recorded there, not here. tlc's self-certification against the spec is written up in [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md) (forthcoming).
+**Conformance posture.** Every property in the registry sits in the `X-<SYSTEM>-*` tier of spec-vstar's extension discipline (<https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>), under the system slug `TLC`, and is stable per that tier: removing one is a breaking change for consumers, so a property is promoted or replaced, never renamed in place. tlc defines no `X-VSTAR-*` or `X-EXP-*` property of its own; the two `X-VSTAR-*` properties in its output, `X-VSTAR-HASH` and `X-VSTAR-EFFECTIVE-STATUS`, are minted by the vstar library (`hashing`, `supersession.Supersedes`) rather than by tlc (see the hashing section and [Status transitions as supersession entries](#status-transitions-as-supersession-entries)). Unknown non-TLC `X-*` properties are ignored on import and never re-emitted, per the receiver rule above. Promotion of any `X-TLC-*` property to `X-VSTAR-*` goes through spec-vstar's promotion path — two independent systems implementing compatible semantics — and is recorded there, not here. tlc's self-certification against the spec is written up in [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md).
 
 ---
 
@@ -376,7 +448,7 @@ By default, archived tasks are omitted.
 
 ## Out of Scope (v1)
 
-- **VEVENT** components (calendar events; separate from tasks)
+- **Free-form VEVENT** components (calendar events that are neither a turn nor a playthrough; the two tlc emits are specified in [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs))
 - **Subtask hierarchy** (`Task.ParentID` field not yet in schema)
 - **`RELTYPE=SIBLING`** (siblings inferred from shared parent)
 - **`RELTYPE=BLOCKS` / `BLOCKED-BY`** (non-standard; cause silent corruption in RFC 5545 readers)

@@ -39,6 +39,9 @@ type options struct {
 	// first. Never empty after resolve — defaultOptions seeds it from
 	// the project config and WithPriorityVocabulary ignores empty input.
 	priorities []config.PriorityDefinition
+	// recipeRuns are the playthroughs to export as VEVENTs. Nil means
+	// none were made available, not that there are none.
+	recipeRuns []*core.RecipeRun
 }
 
 func defaultOptions() options {
@@ -68,6 +71,18 @@ func WithUIDDomain(domain string) Option {
 func WithIncludeLogs(include bool) Option {
 	return func(o *options) {
 		o.includeLogs = include
+	}
+}
+
+// WithRecipeRuns supplies the recipe runs to export, each as a
+// playthrough VEVENT (X-TLC-CONCEPT:playthrough). Runs are data rather
+// than configuration, but BuildVCalendar's positional inputs are the
+// three entity kinds every caller has; an option keeps that signature
+// and lets a caller with no run store pass nothing. Nil entries are
+// skipped.
+func WithRecipeRuns(runs []*core.RecipeRun) Option {
+	return func(o *options) {
+		o.recipeRuns = runs
 	}
 }
 
