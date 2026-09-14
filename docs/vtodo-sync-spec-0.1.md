@@ -20,6 +20,27 @@ TLC exports tasks and tracks as RFC 5545–compliant iCalendar VTODO components 
 
 ---
 
+## Vocabulary
+
+Every exported component is one of the V\* agentic concepts below. The mapping, its rationale, the journal sub-typing rule and the declaration property are recorded in [2026-09-14-agentic-concept-mapping-decision.md](superpowers/specs/2026-09-14-agentic-concept-mapping-decision.md); this table is the normative summary. Concept definitions: hop-top/agr `GLOSSARY.md`. Concept → component table: [hop-top/spec-vstar](https://github.com/hop-top/spec-vstar) `specs/v0.1/02-component-mapping.md`.
+
+| tlc entity | V\* concept | Component | `X-TLC-CONCEPT` |
+|---|---|---|---|
+| project | World | VCALENDAR | — (the envelope) |
+| `Track` | Mission | VTODO | `mission` |
+| `Task` without a track (`TrackID` nil) | Mission | VTODO | `mission` |
+| `Task` with a track | Assignment | VTODO | `assignment` |
+| `LogEntry` | Journal | VJOURNAL | `status` \| `decision` \| `action` \| `observation` \| `journal` |
+| `RecipeRun` | Playthrough | VEVENT | `playthrough` (not exported yet) |
+| claim window (`ClaimedAt` + the `CLAIMED`…`DONE` journal pair) | Turn | VEVENT | `turn` (not exported yet) |
+| `AssignedTo`, `LogEntry.By` | Player | VCARD | — (no VCARD export yet) |
+| `Task.RRule` | Cadence | `RRULE` property | — (a property, not a component) |
+| `Task.RemindAt` | Timeout / escalation | VALARM | — |
+
+A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO, and `X-TLC-IS-TRACK` remains the track/task discriminator on decode. A standalone task is a mission because it carries no `RELATED-TO;RELTYPE=PARENT` edge; an assignment always does.
+
+---
+
 ## VCALENDAR Envelope
 
 All VTODO/VJOURNAL output is wrapped in a VCALENDAR container:
