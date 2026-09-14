@@ -69,6 +69,19 @@ const (
 	// XPropArchived carries Task.Archived, which has no iCalendar
 	// equivalent at all. Emitted only when true.
 	XPropArchived = "X-TLC-ARCHIVED"
+
+	// XPropConcept declares which V* agentic concept a component is
+	// (spec-vstar 02 "Core mapping", conformance criterion 4). One
+	// token per component, from the Concept* constants: a VTODO says
+	// whether it is a mission or an assignment, a VJOURNAL what kind of
+	// journal it is. VALARM never carries it (single-concept). Written
+	// right after the constructor-seeded properties so the declaration
+	// leads the block.
+	//
+	// Not CATEGORIES: that property carries Task.Tags, and the codec
+	// escapes every comma in a TEXT value, so a token appended there
+	// would be glued to the user's labels.
+	XPropConcept = "X-TLC-CONCEPT"
 )
 
 // icsPriorityMin and icsPriorityMax bound the DEFINED half of the
@@ -166,7 +179,7 @@ func BuildVCalendar(
 			if le == nil {
 				continue
 			}
-			c, err := buildLogComponent(le, o.uidDomain, o.exportTime)
+			c, err := buildLogComponent(le, o.uidDomain, statusDefs, o.exportTime)
 			if err != nil {
 				return vstar.Calendar{}, err
 			}
@@ -440,6 +453,7 @@ func buildTaskComponent(
 	}
 	stamp := dtstampFor(exportAt, t.UpdatedAt, t.CreatedAt)
 	setDTSTAMP(&c, stamp)
+	c.Add(vstar.Property{Name: XPropConcept, Value: taskConcept(t)})
 
 	if t.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
@@ -539,6 +553,10 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
 	}
 	setDTSTAMP(&c, dtstampFor(exportAt, tr.UpdatedAt, tr.CreatedAt))
+	// A track is the goal its tasks are scoped units of. The concept
+	// says what it IS; XPropTrackKind below still says which Go type it
+	// decodes to, because a standalone task is a mission too.
+	c.Add(vstar.Property{Name: XPropConcept, Value: ConceptMission})
 
 	if tr.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
@@ -592,7 +610,12 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	return c, nil
 }
 
-func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) (vstar.Component, error) {
+func buildLogComponent(
+	le *core.LogEntry,
+	domain string,
+	statusDefs []config.StatusDefinition,
+	exportAt time.Time,
+) (vstar.Component, error) {
 	// Zero DTSTART: NewJournal omits the property for the zero time. A
 	// tlc journal's own instant travels as CREATED, the property both the
 	// decoder and the sync spec read; carrying it a second time as
@@ -604,6 +627,9 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) (vs
 	// A log entry is immutable, so its own instant is its last
 	// modification.
 	setDTSTAMP(&c, dtstampFor(exportAt, le.Timestamp))
+	// The sub-type is a function of the action and the exporting
+	// project's status vocabulary, the same dependency STATUS has.
+	c.Add(vstar.Property{Name: XPropConcept, Value: journalConcept(le.Action, statusDefs)})
 
 	if le.Note != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})

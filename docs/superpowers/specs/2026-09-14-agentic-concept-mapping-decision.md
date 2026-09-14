@@ -215,11 +215,18 @@ X-TLC-CONCEPT:turn           on a claim VEVENT (follow-on)
   ambiguity about which concept "wins".
 - **Emitted on every VTODO/VEVENT/VJOURNAL tlc produces**, so a
   consumer never has to infer.
-- **Read-side rules.** Ignored for type discrimination (that stays on
-  `X-TLC-IS-TRACK` and the UID prefix); an unknown token is preserved
-  the way every unknown `X-TLC-*` is (`Meta["x_tlc"]`), and a known one
-  must be added to `knownXProps` (`internal/vtodo/meta.go`) or the
-  parked copy will be re-emitted beside the encoder's own.
+- **Read-side rules.** The token is the first track-vs-task
+  discriminator, ahead of `X-TLC-IS-TRACK` and the UID prefix, but only
+  `assignment` decides: it names a unit inside a mission, which in tlc
+  is always a task, so it wins over a conflicting marker or prefix.
+  `mission` covers a track and a standalone task alike and so defers
+  to the marker, then the prefix, the ladder a calendar without the
+  token walks. The decoder reports every declared token by wire UID in
+  `ParseResult.Concepts` and stores none of them on the entity; the
+  encoder re-derives the token from `TrackID` and `Action`. The
+  property is in `knownXProps` (`internal/vtodo/meta.go`), so the wire
+  copy is never parked in `Meta["x_tlc"]` and re-emitted beside the
+  encoder's own.
 - **Not CATEGORIES.** Two independent reasons. (1) The vstar codec in
   use (`hop.top/vstar v0.0.0-20260526030101-766e6e3a0692`,
   `codec/rfc5545/encoder.go`) lists `CATEGORIES` as TEXT and
@@ -244,15 +251,14 @@ X-TLC-CONCEPT:turn           on a claim VEVENT (follow-on)
   consumers are unaffected (spec 04: receivers MUST ignore unknown
   `X-*`).
 - Criterion 4 becomes checkable per component instead of by graph
-  shape; the token is what a `VSTAR-CONFORMANCE.md` for tlc (spec 05,
-  "Self-certification") can point at. No such file exists yet.
+  shape; the token is what `docs/VSTAR-CONFORMANCE.md` (spec 05,
+  "Self-certification") points at.
 - The journal sub-type is computed at encode from `Action` and the
   configured status vocabulary. It therefore depends on the exporting
   project's config, as `STATUS` already does.
 - `docs/vtodo-sync-spec-0.1.md` gains a "Vocabulary" section (entity →
-  concept → component) referencing this ADR. The `X-TLC-*` registry
-  in that file is maintained separately; `X-TLC-CONCEPT` needs an
-  entry there when the encoder emits it.
+  concept → component) referencing this ADR, and `X-TLC-CONCEPT` has
+  its row in that file's `X-TLC-*` registry.
 - VEVENT emission (turn, playthrough) and VCARD emission (player) are
   reserved, not delivered.
 

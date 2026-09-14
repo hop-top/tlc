@@ -75,6 +75,11 @@ var knownXProps = map[string]bool{
 	XPropStatus:      true,
 	XPropTrackStatus: true,
 	XPropArchived:    true,
+
+	// Derived at encode from the entity (TrackID, Action), never
+	// carried on the model; registered so the wire copy is not parked
+	// and re-emitted beside the encoder's own.
+	XPropConcept: true,
 }
 
 // metaProperty renders the non-derived entries of meta as a single

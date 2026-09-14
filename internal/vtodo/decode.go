@@ -26,14 +26,31 @@ type ParseResult struct {
 	// X-VSTAR-HASH is absent or does not match its content. Empty for
 	// a calendar tlc wrote and nobody altered.
 	Warnings []string
+	// Concepts maps a component's wire UID to the agentic concept it
+	// declared through X-TLC-CONCEPT (lowercased), for every component
+	// that carried one, VEVENT and sub-components included. Keyed by
+	// UID rather than entity ID because the declaration is a fact
+	// about the wire component: log entries have no ID of their own,
+	// and a VEVENT maps to no entity at all. Nil when nothing in the
+	// calendar declared a concept. The token is never stored on the
+	// entities themselves; the encoder re-derives it from TrackID and
+	// Action on export.
+	Concepts map[string]string
 }
 
 // ParseVCalendar reads an iCalendar stream and returns the tasks,
 // tracks, and log entries it contained.
 //
-// VTODO classification:
+// VTODO classification, first match wins:
+//   - X-TLC-CONCEPT=assignment → Task (an assignment is a scoped unit
+//     inside a mission, and tlc has no track inside a track)
 //   - X-TLC-IS-TRACK=TRUE marker → Track
+//   - UID body is a track TypeID → Track
 //   - otherwise → Task
+//
+// X-TLC-CONCEPT=mission is not decisive on its own: a track and a
+// standalone task are both missions, so the marker and the UID prefix
+// still pick the Go type.
 //
 // UID handling: a UID of the form `<typeid>@<our-domain>` — the domain
 // being the one WithUIDDomain configured, DefaultUIDDomain otherwise —
@@ -56,7 +73,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		return nil, fmt.Errorf("parse calendar: %w", err)
 	}
 
-	res := &ParseResult{Warnings: verifyHashes(cal)}
+	res := &ParseResult{Warnings: verifyHashes(cal), Concepts: collectConcepts(cal)}
 
 	// Build a map UID-body → entity ID for cross-component linkage and
 	// VJOURNAL TaskID resolution. Two passes because VJOURNAL parsing
@@ -188,7 +205,20 @@ func verifyHashes(cal vstar.Calendar) []string {
 	return out
 }
 
+// isTrackComponent picks the Go type of a VTODO. The concept token is
+// consulted first, the track marker second, the UID prefix last, so a
+// declaration a producer made on purpose beats a marker and a marker
+// beats a naming convention.
+//
+// Only `assignment` decides: it names a unit inside a mission, which in
+// tlc is always a task, whatever marker or UID prefix the component
+// also carries. `mission` covers tracks and standalone tasks alike and
+// so falls through to the marker; any other token (or none, the case
+// for every calendar written before the property existed) does too.
 func isTrackComponent(todo vstar.Component, domain string) bool {
+	if declaredConcept(todo) == ConceptAssignment {
+		return false
+	}
 	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, "TRUE") {
 		return true
 	}

@@ -37,7 +37,7 @@ Every exported component is one of the V\* agentic concepts below. The mapping, 
 | `Task.RRule` | Cadence | `RRULE` property | — (a property, not a component) |
 | `Task.RemindAt` | Timeout / escalation | VALARM | — |
 
-A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO, and `X-TLC-IS-TRACK` remains the track/task discriminator on decode. A standalone task is a mission because it carries no `RELATED-TO;RELTYPE=PARENT` edge; an assignment always does.
+A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO. On decode the token is consulted first for track-vs-task: `assignment` always decodes as a task, whatever marker or UID prefix the component also carries; `mission` names a track and a standalone task alike, so it defers to `X-TLC-IS-TRACK`, then to the UID prefix, the same ladder a calendar without the token walks. A standalone task is a mission because it carries no `RELATED-TO;RELTYPE=PARENT` edge; an assignment always does. The decoder reports every declared token by wire UID in `ParseResult.Concepts` and never stores it on the entity; the encoder re-derives it from `TrackID` and `Action`.
 
 ---
 
@@ -249,7 +249,8 @@ Every `X-TLC-*` property tlc emits, derived from the encoder, the decoder and th
 | `X-TLC-TASK-SEQ` | VTODO task | Positive base-10 integer | `Task.Seq` | 0.1 (2026-05). Omitted when `Seq <= 0`. Import: an unparsable value is ignored |
 | `X-TLC-TRACK-SLUG` | VTODO track | Slug, verbatim | `Track.Slug` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-TRACK-TYPE` | VTODO track | Track type, verbatim (e.g. `feature`) | `Track.Type` | 0.1 (2026-05). Omitted when empty |
-| `X-TLC-IS-TRACK` | VTODO track | `TRUE` | (component-kind marker; no model field) | 0.1 (2026-05). Always emitted on a track, never on a task. Import: `TRUE` (case-insensitive) classifies the VTODO as a track; without it, a UID body that is a track TypeID is the fallback |
+| `X-TLC-IS-TRACK` | VTODO track | `TRUE` | (component-kind marker; no model field) | 0.1 (2026-05). Always emitted on a track, never on a task. Import: `TRUE` (case-insensitive) classifies the VTODO as a track unless `X-TLC-CONCEPT:assignment` is present; without it, a UID body that is a track TypeID is the fallback |
+| `X-TLC-CONCEPT` | VTODO task, VTODO track, VJOURNAL | `mission` \| `assignment` on a VTODO; `status` \| `decision` \| `action` \| `observation` \| `journal` on a VJOURNAL. Lowercase, one token | (derived: `Task.TrackID`, `LogEntry.Action` against the configured status vocabulary; a track is always `mission`) | 0.1 (2026-09). Always emitted, never on `VALARM`. Import: read case-insensitively; `assignment` is the first track-vs-task discriminator (see [Vocabulary](#vocabulary)); every token is reported by UID in `ParseResult.Concepts`; not stored on the entity, re-derived on export |
 | `X-TLC-LOG-ACTION` | VJOURNAL | Action string, verbatim | `LogEntry.Action` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-LOG-BY` | VJOURNAL | Actor name, verbatim | `LogEntry.By` | 0.1 (2026-05). Omitted when empty. tlc emits no `ORGANIZER` |
 | `X-TLC-LOG-TASK` | VJOURNAL | Bare task TypeID (no `@domain`) | `LogEntry.TaskID` | 0.1 (2026-05). Emitted next to `RELATED-TO;RELTYPE=PARENT`. Import: preferred over `RELATED-TO`, so the TypeID survives even when the calendar carries no matching VTODO |
