@@ -282,6 +282,8 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 	if t.Seq > 0 {
 		c.Add(vstar.Property{Name: XPropTaskSeq, Value: fmt.Sprintf("%d", t.Seq)})
 	}
+	addMeta(&c, t.Meta)
+	addUnknownTLCProps(&c, t.Meta)
 	return c
 }
 
@@ -337,6 +339,8 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string) vs
 			Value:  uidFor(member.ID, domain),
 		})
 	}
+	addMeta(&c, tr.Meta)
+	addUnknownTLCProps(&c, tr.Meta)
 	return c
 }
 
@@ -369,6 +373,8 @@ func buildLogComponent(le *core.LogEntry, domain string) vstar.Component {
 	if le.By != "" {
 		c.Add(vstar.Property{Name: XPropLogBy, Value: le.By})
 	}
+	addMeta(&c, le.Meta)
+	addUnknownTLCProps(&c, le.Meta)
 	return c
 }
 

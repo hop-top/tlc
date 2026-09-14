@@ -61,7 +61,7 @@ END:VCALENDAR
 | `Task.RRule` | `RRULE` | RFC 5545 string (e.g., `FREQ=DAILY;INTERVAL=2`); omitted if empty |
 | `Task.TrackID` | `RELATED-TO;RELTYPE=PARENT` | Points to parent track's UID; omitted if no parent |
 | `Task.Effort` | `X-TLC-EFFORT` | Value: `XS` \| `S` \| `M` \| `L` \| `XL`; omitted if not set |
-| `Task.Meta` (map) | `X-TLC-META` | JSON-serialized; omitted if empty |
+| `Task.Meta` (map) | `X-TLC-META` | JSON-serialized; omitted if empty. Derived keys excluded — see [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 | `Task.Archived` | (omitted) | Archived tasks excluded from output by default; include via `--archived` flag |
 
 **Time format**: All datetime fields use UTC ISO 8601 (`20260501T143000Z`) with trailing `Z` to indicate UTC.
@@ -110,7 +110,7 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 | `Action` | `SUMMARY` | Abbreviated action string (e.g., `created`, `status_change`, `comment`) |
 | `Note` | `DESCRIPTION` | Full note text; omitted if empty |
 | `TaskID` | `RELATED-TO` | Points to parent task's UID (no RELTYPE; implicit parent) |
-| `Meta` | `X-TLC-META` | JSON-serialized; omitted if empty |
+| `Meta` | `X-TLC-META` | JSON-serialized; omitted if empty. See [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 
 **Opt-in**: VJOURNAL export is disabled by default. Enable via:
 - CLI: `--include-logs` flag on `tlc task list/show` and `tlc track show`
@@ -167,6 +167,32 @@ FREQ=DAILY;COUNT=5
 **Reminder firing**: Stored RRULE string is parsed by the reminder scheduler, which computes the next fire time via `core.NextFireFromRRule()` and sets `RemindAt`. Supports up to 10,000 iterations to find next occurrence; bails with error if exceeded.
 
 **Time zone**: Rules are stored in UTC and computed in UTC. No floating local time support in v1; use UTC UNTIL dates.
+
+---
+
+## The `X-TLC-*` Extension Namespace
+
+`X-TLC-*` is a System-scoped extension namespace (RFC 5545 §3.8.8.2) owned by tlc. Classification is delegated to `hop.top/vstar/ext`: `ext.ScopeOf` reports `ScopeSystem` and `ext.SystemName` reports owner slug `TLC`. tlc never hand-maintains a name list on the read path.
+
+**`Meta` serialization**: `Task.Meta`, `Track.Meta` and `LogEntry.Meta` each serialize to a **single** `X-TLC-META` property whose value is a JSON object. One property per key (`X-TLC-META-<KEY>`) is explicitly NOT used: Meta values are arbitrary JSON, and a flat property family cannot carry numbers, booleans, arrays or nested maps without inventing a type-tagging convention on top of RFC 5545 TEXT.
+
+Consequence of the JSON round-trip: values return with `encoding/json`'s `interface{}` types. Numbers decode as `float64`, never as the Go integer that was written. Consumers comparing Meta across an export/import boundary must expect that widening.
+
+**Derived keys are excluded** from `X-TLC-META`, because decode reconstructs them from other wire constructs and emitting them twice would break round-trip stability:
+
+| Key | Reconstructed from |
+|---|---|
+| `blocked_by` | `RELATED-TO;RELTYPE=DEPENDS-ON` rows |
+| `external_uid` | the `UID` property |
+| `x_tlc` | re-emitted as real `X-TLC-*` properties (below) |
+
+An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
+
+**Unknown `X-TLC-*` properties are preserved, not dropped.** On import, every `X-TLC-*` property that no typed field consumes is parked in `Meta["x_tlc"]` as a map of full (upper-cased) property name → raw string value, and re-emitted verbatim on the next export. This lets a calendar written by a newer tlc survive a round-trip through an older one without losing state.
+
+**Sub-components are walked explicitly.** `ext.ExtensionsByScope` does not recurse into `Component.Sub`, so `VALARM` (and any future nested component) is scanned separately; its `X-TLC-*` properties merge into the parent entity's `x_tlc` bag.
+
+**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
 
 ---
 

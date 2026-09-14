@@ -257,6 +257,15 @@ func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 		}
 	}
 
+	// X-TLC-META payload plus any unrecognised X-TLC-* property, so a
+	// foreign producer's extensions survive the import. ext's scope
+	// walk covers only the VTODO's own Props; VALARM and every other
+	// sub-component is folded in explicitly below.
+	t.Meta = applyMeta(t.Meta, todo)
+	for _, sub := range todo.Sub {
+		t.Meta = applyMeta(t.Meta, sub)
+	}
+
 	return t, body, nil
 }
 
@@ -315,6 +324,11 @@ func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 		tr.ProjectID = &val
 	}
 
+	tr.Meta = applyMeta(tr.Meta, todo)
+	for _, sub := range todo.Sub {
+		tr.Meta = applyMeta(tr.Meta, sub)
+	}
+
 	return tr, body, nil
 }
 
@@ -362,6 +376,14 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEn
 				break
 			}
 		}
+	}
+
+	// VJOURNAL is a top-level component, so ext's non-recursive walk
+	// needs to be invoked on it directly rather than inherited from the
+	// VTODO pass above.
+	le.Meta = applyMeta(le.Meta, j)
+	for _, sub := range j.Sub {
+		le.Meta = applyMeta(le.Meta, sub)
 	}
 
 	return le
