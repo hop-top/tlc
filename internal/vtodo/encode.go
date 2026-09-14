@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/core"
 )
@@ -225,12 +226,6 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 	if p := priorityToICS(t.Priority); p != 0 {
 		c.Add(vstar.Property{Name: "PRIORITY", Value: fmt.Sprintf("%d", p)})
 	}
-	for _, tag := range t.Tags {
-		if tag == "" {
-			continue
-		}
-		c.Add(vstar.Property{Name: "CATEGORIES", Value: tag})
-	}
 	if !t.CreatedAt.IsZero() {
 		stamp := t.CreatedAt.UTC().Format(utcStampLayout)
 		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
@@ -282,6 +277,18 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 	if t.Seq > 0 {
 		c.Add(vstar.Property{Name: XPropTaskSeq, Value: fmt.Sprintf("%d", t.Seq)})
 	}
+	// CATEGORIES last, and via the helper rather than one Add per tag:
+	// RFC 5545 §3.8.1.2 models categories as ONE property holding a
+	// comma-separated value list, which is what SetCategories emits
+	// (deduped, first-seen order preserved, case-sensitive).
+	//
+	// Position matters. Every helpers mutator refreshes X-VSTAR-HASH as
+	// its last step, and that hash covers the component AS IT STANDS.
+	// Called mid-build it would pin a digest of a half-populated VTODO
+	// -- self-inconsistent the moment CREATED or DUE lands after it.
+	// Called here it covers the finished component, so the emitted hash
+	// verifies.
+	helpers.SetCategories(&c, t.Tags)
 	return c
 }
 

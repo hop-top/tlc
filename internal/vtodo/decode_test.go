@@ -230,3 +230,144 @@ func TestParseVCalendar_RRuleValidation(t *testing.T) {
 	require.Len(t, res.Tasks, 1)
 	require.Empty(t, res.Tasks[0].RRule, "unsupported FREQ must not survive decode")
 }
+
+// categoriesICS wraps body (raw VTODO property lines) in a minimal
+// VCALENDAR so a hand-written CATEGORIES shape can be parsed.
+func categoriesICS(body string) string {
+	return "BEGIN:VCALENDAR\r\n" +
+		"VERSION:2.0\r\n" +
+		"PRODID:-//tlc//vtodo//EN\r\n" +
+		"BEGIN:VTODO\r\n" +
+		"UID:task_01h455vb4pex5vsknk084sn02q@tlc.local\r\n" +
+		"SUMMARY:Tagged\r\n" +
+		body +
+		"END:VTODO\r\n" +
+		"END:VCALENDAR\r\n"
+}
+
+// TestCategories_RoundTrip pins the contract that matters to a caller:
+// tags survive export→import as the same slice, in the same order.
+// Order is load-bearing -- tlc tags are ordered and callers compare the
+// slice directly, so a set-like reordering would be a regression.
+func TestCategories_RoundTrip(t *testing.T) {
+	in := sampleTask()
+	in.Tags = []string{"security", "auth", "backend", "priority:P1"}
+
+	res := roundTrip(t, []*core.Task{in}, nil, nil)
+	require.Len(t, res.Tasks, 1)
+	require.Equal(t, in.Tags, res.Tasks[0].Tags)
+}
+
+// TestCategories_SinglePropertyForm asserts the emitted wire form is ONE
+// CATEGORIES property carrying a comma-separated list (RFC 5545
+// 3.8.1.2), not the one-property-per-tag shape tlc used to write.
+func TestCategories_SinglePropertyForm(t *testing.T) {
+	task := sampleTask()
+	task.Tags = []string{"security", "auth"}
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	require.Equal(t, 1, strings.Count(out, "CATEGORIES"),
+		"expected exactly one CATEGORIES property in:\n%s", out)
+	// The separator comma is escaped because the codec escapes every
+	// comma in a TEXT value; the parser reverses it, which is why the
+	// round-trip test above is the real guarantee.
+	require.Contains(t, out, "CATEGORIES:security\\,auth")
+}
+
+// TestCategories_BackwardCompatRepeatedProperties is the compatibility
+// guarantee. Every .ics tlc wrote before this change -- and the
+// committed fixtures -- carry one CATEGORIES property PER tag.
+// helpers.Categories alone cannot read that shape: it resolves the
+// property through Component.Get, which returns only the first match,
+// so decoding would silently yield just ["security"]. Dropping a user's
+// tags with no error is the failure this test exists to catch.
+func TestCategories_BackwardCompatRepeatedProperties(t *testing.T) {
+	src := categoriesICS("CATEGORIES:security\r\nCATEGORIES:auth\r\nCATEGORIES:backend\r\n")
+
+	res, err := vtodo.ParseVCalendar(strings.NewReader(src))
+	require.NoError(t, err)
+	require.Len(t, res.Tasks, 1)
+	require.Equal(t, []string{"security", "auth", "backend"}, res.Tasks[0].Tags)
+}
+
+// TestCategories_BackwardCompatMixedShapes covers a file that carries
+// both shapes at once -- one property holding a list plus a second
+// standalone property. A merge of the two written by different tool
+// versions is exactly how this arises in the wild.
+func TestCategories_BackwardCompatMixedShapes(t *testing.T) {
+	src := categoriesICS("CATEGORIES:security\\,auth\r\nCATEGORIES:backend\r\n")
+
+	res, err := vtodo.ParseVCalendar(strings.NewReader(src))
+	require.NoError(t, err)
+	require.Len(t, res.Tasks, 1)
+	require.Equal(t, []string{"security", "auth", "backend"}, res.Tasks[0].Tags)
+}
+
+// TestCategories_RepeatedPropertiesDedupe pins the dedupe applied across
+// repeated properties: an old file may name the same tag twice, and a
+// task must not come back with a duplicate tag. First-seen order wins,
+// matching helpers.SetCategories on the write side so the value is
+// stable under a decode→encode round trip.
+func TestCategories_RepeatedPropertiesDedupe(t *testing.T) {
+	src := categoriesICS("CATEGORIES:security\r\nCATEGORIES:auth\r\nCATEGORIES:security\r\n")
+
+	res, err := vtodo.ParseVCalendar(strings.NewReader(src))
+	require.NoError(t, err)
+	require.Equal(t, []string{"security", "auth"}, res.Tasks[0].Tags)
+}
+
+// TestCategories_CaseSensitive pins case-sensitive tag identity.
+// helpers treats CATEGORIES as user-facing labels, so "Security" and
+// "security" are distinct tags and neither dedupes the other away.
+func TestCategories_CaseSensitive(t *testing.T) {
+	in := sampleTask()
+	in.Tags = []string{"Security", "security"}
+
+	res := roundTrip(t, []*core.Task{in}, nil, nil)
+	require.Equal(t, []string{"Security", "security"}, res.Tasks[0].Tags)
+}
+
+// TestCategories_Empty asserts a task with no tags emits no CATEGORIES
+// property at all, rather than an empty one.
+func TestCategories_Empty(t *testing.T) {
+	task := sampleTask()
+	task.Tags = nil
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	require.NotContains(t, out, "CATEGORIES")
+
+	res := roundTrip(t, []*core.Task{task}, nil, nil)
+	require.Empty(t, res.Tasks[0].Tags)
+}
+
+// TestCategories_TagContainingComma documents a REAL limitation rather
+// than asserting desired behavior.
+//
+// core.ValidateTags imposes no character restrictions under the default
+// `open` policy -- it returns nil without inspecting the tags at all --
+// so a tag containing a comma is accepted on the write path. On the
+// wire it cannot survive: RFC 5545 3.3.11 makes the comma the value
+// separator for multi-value TEXT, and the codec escapes every comma in
+// a CATEGORIES value uniformly, giving the separator and an in-tag
+// comma an identical encoding. So "a,b" comes back as two tags.
+//
+// This is not a regression introduced here -- the previous
+// one-property-per-tag encoder split on comma at decode and lost the
+// same tag. The test pins the loss so a future change that makes
+// commas round-trip (or that rejects them at validation) fails here
+// loudly and gets a deliberate decision instead of passing unnoticed.
+func TestCategories_TagContainingComma(t *testing.T) {
+	require.NoError(t, core.ValidateTags([]string{"a,b"}),
+		"open tag policy is expected to admit a comma; revisit this test if that changes")
+
+	in := sampleTask()
+	in.Tags = []string{"a,b", "c"}
+
+	res := roundTrip(t, []*core.Task{in}, nil, nil)
+	require.Equal(t, []string{"a", "b", "c"}, res.Tasks[0].Tags,
+		"a comma inside a tag is indistinguishable from the list separator")
+}
