@@ -10,6 +10,7 @@ import (
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
 
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -37,7 +38,7 @@ type ParseResult struct {
 // a known Task UID; if the link can't be resolved the LogEntry is still
 // emitted with TaskID set to the raw UID body.
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
-	_ = resolve(opts) // currently no decode-time options consume from o
+	o := resolve(opts)
 
 	cal, err := rfc5545.Parse(r)
 	if err != nil {
@@ -64,7 +65,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				uidToTrackID[uidBodyVal] = tr.ID
 			}
 		} else {
-			t, uidBodyVal, perr := decodeTask(todo)
+			t, uidBodyVal, perr := decodeTask(todo, o.priorities)
 			if perr != nil {
 				return nil, perr
 			}
@@ -141,7 +142,7 @@ func isTrackComponent(todo vstar.Component) bool {
 	return false
 }
 
-func decodeTask(todo vstar.Component) (*core.Task, string, error) {
+func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.Task, string, error) {
 	t := &core.Task{}
 
 	uid := getUID(todo)
@@ -167,9 +168,15 @@ func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 	if p, ok := todo.Get("STATUS"); ok {
 		t.Status = wireToStatus(p.Value)
 	}
-	if p, ok := todo.Get("PRIORITY"); ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(p.Value)); err == nil {
-			t.Priority = icsToPriority(n)
+	t.Priority = priorityFromComponent(todo, defs)
+	if p, ok := todo.Get(XPropPrioritySource); ok {
+		if v := strings.TrimSpace(p.Value); v != "" {
+			setMeta(t, core.MetaPrioritySource, v)
+		}
+	}
+	if p, ok := todo.Get(XPropPriorityRule); ok {
+		if v := strings.TrimSpace(p.Value); v != "" {
+			setMeta(t, core.MetaPriorityRule, v)
 		}
 	}
 	for _, p := range todo.GetAll("CATEGORIES") {
@@ -397,19 +404,79 @@ func wireStatusToTrack(s string) core.TrackStatus {
 	return core.TrackStatusPending
 }
 
-func icsToPriority(n int) core.Priority {
-	switch {
-	case n <= 0:
+// icsToPriority maps an RFC 5545 PRIORITY integer back onto the
+// CONFIGURED priority vocabulary by nearest rank.
+//
+// This is the FALLBACK path, used when a component carries no
+// X-TLC-PRIORITY - a calendar written by some other tool, or by a tlc
+// old enough to predate the X-property. It is inherently lossy: nine
+// numeric slots cannot name a vocabulary entry that was never in the
+// file, so the best available answer is the rank whose encoded slot sits
+// closest to n.
+//
+// Inverts priorityToICS: for each rank the encoder would have written
+// 1 + floor(rank*9/N), and the rank minimising |encoded - n| wins. Ties
+// go to the MORE urgent rank (the lower index), because over-reporting
+// urgency on an ambiguous import is the recoverable direction.
+//
+// n <= 0 is RFC 5545's "undefined" and decodes to the empty priority -
+// NOT to the least urgent one. "Nobody set a priority" is a different
+// fact from "somebody set the lowest", and conflating them would invent
+// a triage decision the author never made.
+func icsToPriority(n int, defs []config.PriorityDefinition) core.Priority {
+	if n <= 0 || len(defs) == 0 {
 		return ""
-	case n <= 2:
-		return core.PriorityP0
-	case n <= 4:
-		return core.PriorityP1
-	case n <= 6:
-		return core.PriorityP2
-	default:
-		return core.PriorityP3
 	}
+	best, bestDist := 0, -1
+	for rank := range defs {
+		d := icsPriorityMin + rank*(icsPriorityMax+1-icsPriorityMin)/len(defs)
+		if d > icsPriorityMax {
+			d = icsPriorityMax
+		}
+		dist := d - n
+		if dist < 0 {
+			dist = -dist
+		}
+		if bestDist < 0 || dist < bestDist {
+			best, bestDist = rank, dist
+		}
+	}
+	return core.Priority(defs[best].Name)
+}
+
+// priorityFromComponent resolves a task's priority, preferring the
+// verbatim X-TLC-PRIORITY name over the lossy numeric PRIORITY.
+//
+// The name only wins when it NAMES a currently-configured priority. A
+// calendar exported under one vocabulary and imported under another
+// would otherwise smuggle in a value that fails core.ValidPriority, and
+// every downstream consumer (filters, sorts, the enum flags) would then
+// be looking at a priority the project does not have. When the name is
+// unrecognised the numeric value still gives a defensible nearest-rank
+// answer in the CURRENT vocabulary, so that is what we fall back to.
+func priorityFromComponent(todo vstar.Component, defs []config.PriorityDefinition) core.Priority {
+	if p, ok := todo.Get(XPropPriority); ok {
+		name := strings.TrimSpace(p.Value)
+		for _, d := range defs {
+			if d.Name == name {
+				return core.Priority(name)
+			}
+		}
+	}
+	if p, ok := todo.Get("PRIORITY"); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(p.Value)); err == nil {
+			return icsToPriority(n, defs)
+		}
+	}
+	return ""
+}
+
+// setMeta writes a Task.Meta entry, allocating the map on first use.
+func setMeta(t *core.Task, key string, value interface{}) {
+	if t.Meta == nil {
+		t.Meta = map[string]interface{}{}
+	}
+	t.Meta[key] = value
 }
 
 func getUID(todo vstar.Component) string {
