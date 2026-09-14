@@ -81,10 +81,12 @@ func WithProductID(id string) Option {
 	}
 }
 
-// WithExportTime pins the instant written to DTSTAMP. RFC 5545 §3.8.7.2
-// defines DTSTAMP as the moment the calendar instance was created, so it
-// defaults to wall-clock time at BuildVCalendar. Override it to make
-// encoder output deterministic (fixtures, golden tests).
+// WithExportTime pins the export clock. DTSTAMP is normally the
+// entity's own last-modified instant (see BuildVCalendar); the export
+// clock is written only for an entity that carries no timestamp at
+// all, and defaults to wall-clock time at BuildVCalendar. Override it
+// to keep encoder output deterministic for such entities (fixtures,
+// golden tests).
 //
 // The zero time is ignored — it would clear DTSTAMP, which RFC 5545
 // §3.6.2 requires on every VTODO.
@@ -98,7 +100,7 @@ func WithExportTime(t time.Time) Option {
 
 // resolve applies a slice of Options on top of the defaults and returns
 // the resolved configuration. The export clock is sampled once here so
-// every component in a single calendar shares one DTSTAMP.
+// every timestamp-less entity in a single calendar shares one DTSTAMP.
 func resolve(opts []Option) options {
 	o := defaultOptions()
 	for _, fn := range opts {

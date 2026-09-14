@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/config"
@@ -20,6 +21,11 @@ type ParseResult struct {
 	Tasks  []*core.Task
 	Tracks []*core.Track
 	Logs   []*core.LogEntry
+	// Warnings lists integrity findings that did not stop the import:
+	// one entry per component (nested VALARMs included) whose
+	// X-VSTAR-HASH is absent or does not match its content. Empty for
+	// a calendar tlc wrote and nobody altered.
+	Warnings []string
 }
 
 // ParseVCalendar reads an iCalendar stream and returns the tasks,
@@ -50,7 +56,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		return nil, fmt.Errorf("parse calendar: %w", err)
 	}
 
-	res := &ParseResult{}
+	res := &ParseResult{Warnings: verifyHashes(cal)}
 
 	// Build a map UID-body → entity ID for cross-component linkage and
 	// VJOURNAL TaskID resolution. Two passes because VJOURNAL parsing
@@ -145,6 +151,41 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	}
 
 	return res, nil
+}
+
+// verifyHashes checks X-VSTAR-HASH on every component of cal, nested
+// sub-components included, and returns one warning per component that
+// fails: a missing hash (the producer is not V*-conformant) or a
+// mismatch (the component changed after it was hashed, or its bytes
+// were altered in transit). Warnings rather than errors: the entities
+// are still importable, and the caller decides how loudly to say so.
+func verifyHashes(cal vstar.Calendar) []string {
+	var out []string
+	var walk func(c vstar.Component, parent string)
+	walk = func(c vstar.Component, parent string) {
+		label := string(c.Type)
+		if uid := c.UID(); uid != "" {
+			label += " " + uid
+		}
+		if parent != "" {
+			label = parent + " > " + label
+		}
+		ok, want, got := hashing.VerifyXVSTAR(c)
+		switch {
+		case ok:
+		case got == "":
+			out = append(out, label+": no X-VSTAR-HASH")
+		default:
+			out = append(out, fmt.Sprintf("%s: X-VSTAR-HASH mismatch: stored %s, computed %s", label, got, want))
+		}
+		for _, sub := range c.Sub {
+			walk(sub, label)
+		}
+	}
+	for _, c := range cal.Components {
+		walk(c, "")
+	}
+	return out
 }
 
 func isTrackComponent(todo vstar.Component, domain string) bool {
@@ -323,6 +364,16 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 	if p, ok := todo.Get(XPropTrackType); ok {
 		tr.Type = p.Value
 	}
+	if p, ok := todo.Get(XPropTrackSeq); ok {
+		if n, err := strconv.ParseInt(strings.TrimSpace(p.Value), 10, 64); err == nil {
+			tr.Seq = n
+		}
+	}
+	if due, ok := todo.DUE(vstar.Calendar{}); ok {
+		tr.DueAt = &due
+	} else if due, ok := propTime(todo, "DUE"); ok {
+		tr.DueAt = &due
+	}
 	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
 		tr.AssignedTo = &val
@@ -354,10 +405,10 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain stri
 	} else if p, ok := j.Get("SUMMARY"); ok {
 		le.Note = p.Value
 	}
-	// CREATED carries the log entry's own instant; DTSTAMP carries the
-	// export instant (RFC 5545 §3.8.7.2) and is the same for every
-	// component in a calendar, so it is only a fallback for producers
-	// that emit no CREATED.
+	// CREATED carries the log entry's own instant. tlc writes DTSTAMP
+	// with the same value, but a foreign producer's DTSTAMP is whatever
+	// its clock said, so it is only a fallback for calendars that emit
+	// no CREATED.
 	if ts, ok := propTime(j, "CREATED"); ok {
 		le.Timestamp = ts
 	}
@@ -644,25 +695,26 @@ func parsePropValue(v string) (time.Time, bool) {
 // decodeCategories reads a task's tags from the CATEGORIES property
 // (RFC 5545 §3.8.1.2), tolerating BOTH wire shapes.
 //
-// The idiomatic shape -- and the only one tlc writes now -- is a single
-// property carrying a comma-separated list, which helpers.Categories
-// reads: it splits on comma, trims, and drops empty tokens.
+// The shape tlc writes is one property PER tag (see addCategories). The
+// other legal shape is a single property carrying a comma-separated
+// list, which foreign producers and one interim tlc release write;
+// helpers.Categories reads that one: it splits on comma, trims, and
+// drops empty tokens.
 //
-// The other shape is one property PER tag. tlc emitted that for its
-// whole history, so it is what every .ics already on disk looks like.
-// helpers.Categories cannot read it: it resolves the property with
-// Component.Get, which returns only the FIRST match, so a file with
+// helpers.Categories cannot read the repeated shape: it resolves the
+// property with Component.Get, which returns only the FIRST match, so
 // `CATEGORIES:security` + `CATEGORIES:auth` would silently decode to
 // just ["security"] -- tags dropped with no error, the kind of loss a
 // user only notices later as a filter returning nothing. So when GetAll
 // finds more than one property, each is parsed and the results are
-// concatenated.
+// concatenated. Each property's value is still split on comma, which
+// is what keeps a mixed-shape file readable.
 //
 // Order is preserved in both shapes: tlc tags are ordered and callers
 // compare the slice. Duplicates are dropped across the whole set --
 // repeated properties may legitimately repeat a tag -- keeping
-// first-seen order, matching helpers.SetCategories on the write side so
-// a decode/encode round trip is stable.
+// first-seen order, matching addCategories on the write side so a
+// decode/encode round trip is stable.
 func decodeCategories(todo vstar.Component) []string {
 	props := todo.GetAll("CATEGORIES")
 	if len(props) == 0 {
@@ -680,7 +732,7 @@ func decodeCategories(todo vstar.Component) []string {
 }
 
 // dedupeTags drops repeats while preserving first-seen order. Compare
-// is case-sensitive, matching helpers.SetCategories -- CATEGORIES are
+// is case-sensitive, matching addCategories -- CATEGORIES are
 // user-facing labels, so "Work" and "work" are distinct tags.
 func dedupeTags(tags []string) []string {
 	if len(tags) == 0 {

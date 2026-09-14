@@ -42,17 +42,19 @@ func TestMeta_TaskRoundTrip(t *testing.T) {
 }
 
 // TestMeta_TaskMetaOnWire pins the chosen shape: one X-TLC-META property
-// carrying JSON, not a flat X-TLC-META-<KEY> family.
+// carrying JSON, not a flat X-TLC-META-<KEY> family. The key is a
+// free-form one on purpose: priority_source has a typed property of its
+// own and is kept out of the JSON (TestMeta_PriorityProvenanceNotInJSON).
 func TestMeta_TaskMetaOnWire(t *testing.T) {
 	task := sampleTask()
-	task.Meta = map[string]interface{}{"priority_source": "rule"}
+	task.Meta = map[string]interface{}{"owner": "alice"}
 
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
 
-	require.Contains(t, out, `X-TLC-META:{"priority_source":"rule"}`)
-	require.NotContains(t, out, "X-TLC-META-PRIORITY-SOURCE")
+	require.Contains(t, out, `X-TLC-META:{"owner":"alice"}`)
+	require.NotContains(t, out, "X-TLC-META-OWNER")
 }
 
 // TestMeta_DerivedKeysNotDuplicated guards round-trip stability: keys

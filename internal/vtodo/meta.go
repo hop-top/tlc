@@ -7,6 +7,8 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/ext"
+
+	"hop.top/tlc/internal/core"
 )
 
 // XPropMeta carries the JSON serialisation of an entity's Meta map.
@@ -33,14 +35,20 @@ const tlcSystemSlug = "TLC"
 // constructs on decode, so re-emitting them inside X-TLC-META would
 // duplicate state and corrupt round-trip stability.
 //
-//   - blocked_by   → RELATED-TO;RELTYPE=DEPENDS-ON rows
-//   - external_uid → the UID property itself
-//   - x_tlc        → re-emitted as real X-TLC-* properties; carrying it
-//     inside the JSON too would double it on every cycle.
+//   - blocked_by      → RELATED-TO;RELTYPE=DEPENDS-ON rows
+//   - external_uid    → the UID property itself
+//   - x_tlc           → re-emitted as real X-TLC-* properties; carrying
+//     it inside the JSON too would double it on every cycle.
+//   - priority_source, priority_rule → XPropPrioritySource and
+//     XPropPriorityRule, the typed properties decode reads them back
+//     from; inside the JSON as well they were written twice and the
+//     JSON copy silently won on import.
 var derivedMetaKeys = map[string]bool{
-	"blocked_by":   true,
-	"external_uid": true,
-	MetaXTLCKey:    true,
+	"blocked_by":            true,
+	"external_uid":          true,
+	MetaXTLCKey:             true,
+	core.MetaPrioritySource: true,
+	core.MetaPriorityRule:   true,
 }
 
 // knownXProps is the set of X-TLC-* names that already populate a typed
@@ -54,6 +62,7 @@ var knownXProps = map[string]bool{
 	XPropTrackSlug: true,
 	XPropTrackType: true,
 	XPropTrackKind: true,
+	XPropTrackSeq:  true,
 	XPropLogAction: true,
 	XPropLogBy:     true,
 	XPropLogTaskID: true,

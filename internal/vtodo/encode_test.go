@@ -19,7 +19,7 @@ func ptr[T any](v T) *T { return &v }
 
 // mustSerialize encodes cal via vtodo.Serialize and fails the test on
 // error. Replaces *ics.Calendar.Serialize() from the pre-vstar codec
-// era (T-1230).
+// era.
 func mustSerialize(t *testing.T, cal vstar.Calendar) string {
 	t.Helper()
 	s, err := vtodo.Serialize(cal)
@@ -78,13 +78,13 @@ func TestBuildVCalendar_TaskFields(t *testing.T) {
 	require.Contains(t, out, "X-TLC-EFFORT:M")
 	require.Contains(t, out, "DUE:20260503T143000Z")
 	require.Contains(t, out, "RRULE:FREQ=DAILY;INTERVAL=2")
-	// One CATEGORIES property holding a comma-separated list, per RFC
-	// 5545 3.8.1.2 -- not one property per tag. The separator comma is
-	// backslash-escaped on the wire because the codec escapes every
-	// comma in a TEXT value; the parser unescapes it symmetrically, so
-	// the round-trip in TestCategories_RoundTrip is what pins meaning.
-	require.Contains(t, out, "CATEGORIES:security\\,auth")
-	require.NotContains(t, out, "CATEGORIES:security\r\n")
+	// One CATEGORIES property per tag (RFC 5545 3.8.1.2 allows either
+	// shape). The comma-joined form is not usable: the codec escapes
+	// every comma in a TEXT value, so it reaches the wire as
+	// `security\,auth`, one category to any RFC 5545 reader.
+	require.Contains(t, out, "CATEGORIES:security\r\n")
+	require.Contains(t, out, "CATEGORIES:auth\r\n")
+	require.NotContains(t, out, "\\,")
 	// Assignee without an email goes into X-TLC-ASSIGNEE.
 	require.Contains(t, out, "X-TLC-ASSIGNEE:alice")
 	// Email-shaped assignee → ATTENDEE.
@@ -295,13 +295,15 @@ func TestBuildVCalendar_LongPRODIDFoldsCleanly(t *testing.T) {
 	require.Contains(t, out, "\r\nMETHOD:PUBLISH\r\n")
 }
 
-// TestBuildVCalendar_DTSTAMPIsExportTime proves DTSTAMP carries the
-// moment the calendar instance was created (RFC 5545 §3.8.7.2), not the
-// entity's creation timestamp. CREATED keeps CreatedAt.
-func TestBuildVCalendar_DTSTAMPIsExportTime(t *testing.T) {
+// TestBuildVCalendar_DTSTAMPIsLastModified pins the deviation from RFC
+// 5545 §3.8.7.2 recorded in docs/VSTAR-CONFORMANCE.md: DTSTAMP is the
+// entity's last-modified instant, not the export clock, so unchanged
+// content keeps its X-VSTAR-HASH from one export to the next. CREATED
+// keeps CreatedAt.
+func TestBuildVCalendar_DTSTAMPIsLastModified(t *testing.T) {
 	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
-	task := sampleTask() // CreatedAt == fixedTime, a different instant
-	require.NotEqual(t, exportAt, task.CreatedAt)
+	task := sampleTask() // UpdatedAt == fixedTime + 1h, CreatedAt == fixedTime
+	require.NotEqual(t, exportAt, task.UpdatedAt)
 
 	cal, err := vtodo.BuildVCalendar(
 		[]*core.Task{task}, nil, nil,
@@ -310,15 +312,25 @@ func TestBuildVCalendar_DTSTAMPIsExportTime(t *testing.T) {
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
 
-	require.Contains(t, out, "DTSTAMP:20260914T080000Z", "DTSTAMP must be export time")
+	require.Contains(t, out, "DTSTAMP:20260502T153000Z", "DTSTAMP must be UpdatedAt")
 	require.Contains(t, out, "CREATED:20260502T143000Z", "CREATED must keep CreatedAt")
+	require.NotContains(t, out, "DTSTAMP:20260914T080000Z", "DTSTAMP must not be the export clock")
 	require.NotContains(t, out, "DTSTAMP:20260502T143000Z", "DTSTAMP must not mirror CreatedAt")
+
+	// The wire check above is satisfied by ANY DTSTAMP in the document,
+	// the VALARM's included; pin the VTODO's own through the model.
+	todos := cal.Filter(vstar.CompTodo)
+	require.Len(t, todos, 1)
+	stamp, ok := todos[0].DTSTAMP()
+	require.True(t, ok)
+	require.Equal(t, task.UpdatedAt, stamp, "the VTODO itself must carry UpdatedAt")
 }
 
-// TestBuildVCalendar_DTSTAMPChangesAcrossExports proves two exports of
-// the same unchanged entity carry different DTSTAMPs. The pre-fix code
-// pinned DTSTAMP to CreatedAt, so it never moved.
-func TestBuildVCalendar_DTSTAMPChangesAcrossExports(t *testing.T) {
+// TestBuildVCalendar_DTSTAMPStableAcrossExports proves two exports of
+// the same unchanged entity under different export clocks are
+// byte-identical, X-VSTAR-HASH included. This is the property the
+// DTSTAMP decision buys: the hash detects content changes, not exports.
+func TestBuildVCalendar_DTSTAMPStableAcrossExports(t *testing.T) {
 	task := sampleTask()
 	first := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
 	second := first.Add(90 * time.Minute)
@@ -328,15 +340,21 @@ func TestBuildVCalendar_DTSTAMPChangesAcrossExports(t *testing.T) {
 	cal2, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil, vtodo.WithExportTime(second))
 	require.NoError(t, err)
 
-	require.Contains(t, mustSerialize(t, cal1), "DTSTAMP:20260914T080000Z")
-	require.Contains(t, mustSerialize(t, cal2), "DTSTAMP:20260914T093000Z")
+	out1, out2 := mustSerialize(t, cal1), mustSerialize(t, cal2)
+	require.Equal(t, out1, out2)
+	require.Contains(t, out1, "DTSTAMP:20260502T153000Z")
+	require.NotContains(t, out1, "20260914")
 }
 
-// TestBuildVCalendar_DTSTAMPDefaultsToNow proves the export clock
-// defaults to wall-clock time when no WithExportTime is supplied.
+// TestBuildVCalendar_DTSTAMPDefaultsToNow proves a timestamp-less entity
+// falls back to the export clock, which defaults to wall-clock time
+// when no WithExportTime is supplied.
 func TestBuildVCalendar_DTSTAMPDefaultsToNow(t *testing.T) {
+	task := sampleTask()
+	task.CreatedAt = time.Time{}
+	task.UpdatedAt = time.Time{}
 	before := time.Now().UTC().Add(-time.Second).Truncate(time.Second)
-	cal, err := vtodo.BuildVCalendar([]*core.Task{sampleTask()}, nil, nil)
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
 	after := time.Now().UTC().Add(time.Second)
 
@@ -348,16 +366,17 @@ func TestBuildVCalendar_DTSTAMPDefaultsToNow(t *testing.T) {
 	require.False(t, stamp.After(after), "DTSTAMP %v after %v", stamp, after)
 }
 
-// TestBuildVCalendar_TrackAndLogDTSTAMPIsExportTime covers the two
-// other components that emit DTSTAMP.
-func TestBuildVCalendar_TrackAndLogDTSTAMPIsExportTime(t *testing.T) {
+// TestBuildVCalendar_TrackAndLogDTSTAMPFollowEntity covers the two
+// other top-level components: a track stamps its UpdatedAt, a journal
+// its own Timestamp (a log entry never changes after it is written).
+func TestBuildVCalendar_TrackAndLogDTSTAMPFollowEntity(t *testing.T) {
 	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
 	track := &core.Track{
 		ID:        "track_01h455vbqkfsn02nk084ksn02q",
 		Title:     "Auth rewrite",
 		Status:    core.TrackStatusActive,
 		CreatedAt: fixedTime,
-		UpdatedAt: fixedTime,
+		UpdatedAt: fixedTime.Add(3 * time.Hour),
 	}
 	logs := []*core.LogEntry{{
 		TaskID:    "task_01h455vb4pex5vsknk084sn02q",
@@ -373,27 +392,179 @@ func TestBuildVCalendar_TrackAndLogDTSTAMPIsExportTime(t *testing.T) {
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
 
-	require.NotContains(t, out, "DTSTAMP:20260502T143000Z")
-	require.Equal(t, 2, strings.Count(out, "DTSTAMP:20260914T080000Z"),
-		"both VTODO and VJOURNAL carry export-time DTSTAMP:\n%s", out)
+	require.NotContains(t, out, "DTSTAMP:20260914T080000Z", "no export-clock DTSTAMP")
+	require.Contains(t, out, "DTSTAMP:20260502T173000Z", "track DTSTAMP is its UpdatedAt")
+	require.Contains(t, out, "DTSTAMP:20260502T143000Z", "journal DTSTAMP is its Timestamp")
+	require.Equal(t, 2, strings.Count(out, "DTSTAMP:"), out)
 	// CREATED keeps the entity timestamps.
 	require.Equal(t, 2, strings.Count(out, "CREATED:20260502T143000Z"), out)
 }
 
 // TestBuildVCalendar_CreatedEmittedWithoutDTSTAMPCoupling proves CREATED
-// is driven solely by CreatedAt: a zero CreatedAt drops CREATED but
-// DTSTAMP is still emitted (RFC 5545 requires DTSTAMP on every VTODO).
+// is driven solely by CreatedAt: a zero CreatedAt drops CREATED while
+// DTSTAMP still lands (RFC 5545 requires it on every VTODO), walking
+// the ladder UpdatedAt, then CreatedAt, then the export clock.
 func TestBuildVCalendar_CreatedEmittedWithoutDTSTAMPCoupling(t *testing.T) {
 	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
-	task := sampleTask()
-	task.CreatedAt = time.Time{}
+	build := func(created, updated time.Time) string {
+		task := sampleTask()
+		task.CreatedAt, task.UpdatedAt = created, updated
+		cal, err := vtodo.BuildVCalendar(
+			[]*core.Task{task}, nil, nil,
+			vtodo.WithExportTime(exportAt),
+		)
+		require.NoError(t, err)
+		return mustSerialize(t, cal)
+	}
 
+	out := build(time.Time{}, fixedTime.Add(time.Hour))
+	require.NotContains(t, out, "CREATED:")
+	require.Contains(t, out, "DTSTAMP:20260502T153000Z", "UpdatedAt wins")
+
+	out = build(fixedTime, time.Time{})
+	require.Contains(t, out, "CREATED:20260502T143000Z")
+	require.Contains(t, out, "DTSTAMP:20260502T143000Z", "CreatedAt backs a zero UpdatedAt")
+
+	out = build(time.Time{}, time.Time{})
+	require.NotContains(t, out, "CREATED:")
+	require.Contains(t, out, "DTSTAMP:20260914T080000Z", "the export clock is the last resort")
+}
+
+// TestBuildVCalendar_CompletedRoleEmitsDoneTriple proves a task whose
+// status ROLE is completed goes through helpers.Complete: STATUS,
+// COMPLETED and PERCENT-COMPLETE=100 land together, and STATUS is
+// written exactly once. Without a completing log entry COMPLETED is
+// the last modification.
+func TestBuildVCalendar_CompletedRoleEmitsDoneTriple(t *testing.T) {
+	task := sampleTask()
+	task.Status = core.StatusDone
+	task.UpdatedAt = time.Date(2026, 5, 3, 9, 0, 0, 0, time.UTC)
+
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	require.Equal(t, 1, strings.Count(out, "\r\nSTATUS:"), out)
+	require.Contains(t, out, "\r\nSTATUS:COMPLETED\r\n")
+	require.Contains(t, out, "\r\nCOMPLETED:20260503T090000Z\r\n")
+	require.Contains(t, out, "\r\nPERCENT-COMPLETE:100\r\n")
+	require.Contains(t, out, "X-TLC-STATUS:DONE")
+}
+
+// TestBuildVCalendar_CompletedAtFromLog proves COMPLETED is the LATEST
+// completing transition in the log, not UpdatedAt, whenever the log has
+// one, that a reopening transition in between does not count, that
+// another task's log is not confused with this one's, and that the log
+// is consulted even though VJOURNAL export is off.
+func TestBuildVCalendar_CompletedAtFromLog(t *testing.T) {
+	task := sampleTask()
+	task.Status = core.StatusDone
+	task.UpdatedAt = time.Date(2026, 5, 3, 9, 0, 0, 0, time.UTC)
+	at := func(h int) time.Time { return time.Date(2026, 5, 2, h, 0, 0, 0, time.UTC) }
+	logs := []*core.LogEntry{
+		{TaskID: task.ID, Action: string(core.StatusDone), Timestamp: at(18)},
+		{TaskID: task.ID, Action: string(core.StatusInProgress), Timestamp: at(19)},
+		{TaskID: task.ID, Action: string(core.StatusDone), Timestamp: at(20)},
+		{TaskID: "task_01h455vb4pex5vsknk084sn0az", Action: string(core.StatusDone), Timestamp: at(23)},
+	}
+
+	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, logs)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+
+	require.Contains(t, out, "\r\nCOMPLETED:20260502T200000Z\r\n")
+	require.NotContains(t, out, "COMPLETED:20260503T090000Z")
+	require.NotContains(t, out, "COMPLETED:20260502T230000Z")
+	require.NotContains(t, out, "BEGIN:VJOURNAL")
+}
+
+// TestBuildVCalendar_OpenRoleHasNoDoneTriple is the inverse: a task that
+// is not in a completed-role status carries neither COMPLETED nor
+// PERCENT-COMPLETE.
+func TestBuildVCalendar_OpenRoleHasNoDoneTriple(t *testing.T) {
+	cal, err := vtodo.BuildVCalendar([]*core.Task{sampleTask()}, nil, nil)
+	require.NoError(t, err)
+	out := mustSerialize(t, cal)
+	require.NotContains(t, out, "\r\nCOMPLETED:")
+	require.NotContains(t, out, "PERCENT-COMPLETE")
+}
+
+// TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP proves the VALARM is built
+// through helpers.NewAlarm: a UID derived from its parent's, a DTSTAMP
+// pinned to its parent's rather than the constructor's wall clock or
+// the export clock, an absolute TRIGGER, and an X-VSTAR-HASH.
+func TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP(t *testing.T) {
+	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
+	task := sampleTask()
 	cal, err := vtodo.BuildVCalendar(
 		[]*core.Task{task}, nil, nil,
 		vtodo.WithExportTime(exportAt),
 	)
 	require.NoError(t, err)
+	todos := cal.Filter(vstar.CompTodo)
+	require.Len(t, todos, 1)
+	require.Len(t, todos[0].Sub, 1)
+	alarm := todos[0].Sub[0]
+
+	require.Equal(t, vstar.CompAlarm, alarm.Type)
+	require.Equal(t, "task_01h455vb4pex5vsknk084sn02q-alarm@tlc.local", alarm.UID())
+	stamp, ok := alarm.DTSTAMP()
+	require.True(t, ok)
+	require.Equal(t, task.UpdatedAt, stamp, "VALARM takes its parent's DTSTAMP")
+	trig, ok := alarm.Get("TRIGGER")
+	require.True(t, ok)
+	require.Equal(t, []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}}, trig.Params)
+	require.Equal(t, "20260503T023000Z", trig.Value)
+	_, ok = alarm.Get("X-VSTAR-HASH")
+	require.True(t, ok, "VALARM must carry X-VSTAR-HASH")
+}
+
+// TestBuildVCalendar_AlarmUIDFollowsDomain proves the alarm UID is
+// derived from the parent UID as emitted, domain override included.
+func TestBuildVCalendar_AlarmUIDFollowsDomain(t *testing.T) {
+	cal, err := vtodo.BuildVCalendar(
+		[]*core.Task{sampleTask()}, nil, nil,
+		vtodo.WithUIDDomain("calendar.example.com"),
+	)
+	require.NoError(t, err)
+	todos := cal.Filter(vstar.CompTodo)
+	require.Len(t, todos, 1)
+	require.Len(t, todos[0].Sub, 1)
+	require.Equal(t,
+		"task_01h455vb4pex5vsknk084sn02q-alarm@calendar.example.com",
+		todos[0].Sub[0].UID(),
+	)
+}
+
+// TestBuildVCalendar_JournalOmitsDTSTART pins the decision taken when
+// moving to helpers.NewJournal: the constructor also writes DTSTART, but
+// a tlc journal's instant travels as CREATED and is not duplicated.
+func TestBuildVCalendar_JournalOmitsDTSTART(t *testing.T) {
+	logs := []*core.LogEntry{{
+		TaskID:    "task_01h455vb4pex5vsknk084sn02q",
+		Timestamp: fixedTime,
+		By:        "alice",
+		Action:    "CLAIMED",
+		Note:      "starting work",
+	}}
+	cal, err := vtodo.BuildVCalendar(nil, nil, logs, vtodo.WithIncludeLogs(true))
+	require.NoError(t, err)
 	out := mustSerialize(t, cal)
-	require.NotContains(t, out, "CREATED:")
-	require.Contains(t, out, "DTSTAMP:20260914T080000Z")
+	require.Contains(t, out, "BEGIN:VJOURNAL")
+	require.NotContains(t, out, "DTSTART")
+	require.Contains(t, out, "CREATED:20260502T143000Z")
+}
+
+// TestBuildVCalendar_EmptyIDRejected proves an entity without an ID is
+// refused rather than exported with an empty UID: every V* component
+// must carry one, and the helpers constructors enforce it.
+func TestBuildVCalendar_EmptyIDRejected(t *testing.T) {
+	task := sampleTask()
+	task.ID = ""
+	_, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
+	require.ErrorIs(t, err, vstar.ErrMissingUID)
+
+	track := &core.Track{Title: "no id", Status: core.TrackStatusActive}
+	_, err = vtodo.BuildVCalendar(nil, []*core.Track{track}, nil)
+	require.ErrorIs(t, err, vstar.ErrMissingUID)
 }

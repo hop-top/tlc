@@ -527,3 +527,58 @@ END:VJOURNAL
 
 **Version**: 0.1  
 **Last Updated**: 2026-05-02
+
+---
+
+<!-- added by hash-every-component / self-certification; fold into the sections above when the X-prop registry rewrite merges -->
+
+## Addendum: integrity and timestamps
+
+- **Every component is hashed.** Each VTODO, VJOURNAL and VALARM
+  carries `UID`, `DTSTAMP` and `X-VSTAR-HASH` (spec-vstar 02). The hash
+  is the last property of the component and covers the finished
+  component, sub-components included. On import every component is
+  re-verified; a missing or mismatching hash is reported in
+  `ParseResult.Warnings` (the `vtodo-sync` plugin prints them to stderr)
+  and never blocks the import.
+- **`DTSTAMP` is the last-modified instant, not export time.** Task and
+  track: `UpdatedAt` (then `CreatedAt`, then the export clock for an
+  entity with no timestamp). Log entry: its `Timestamp`. VALARM: its
+  parent's stamp. The rows above that say `DTSTAMP` is creation or
+  export time are superseded by this. Rationale and the RFC 5545
+  deviation: `VSTAR-CONFORMANCE.md`.
+- **VALARM UID** is derived from the parent UID with `-alarm` before the
+  domain separator: `task_<id>-alarm@<domain>`.
+
+---
+
+<!-- added by track fidelity; merge these rows into the X-prop registry table and the Track mapping when the registry rewrite lands -->
+
+## Addendum: track fidelity
+
+| Property | Entity | Value | Direction | Notes |
+|---|---|---|---|---|
+| `X-TLC-TRACK-SEQ` | Track | `Track.Seq` as a decimal integer | export + import | Per-project sequence behind the `L-NNNN` alias; omitted when zero. Registered as a typed property, so it never lands in `Meta["x_tlc"]`. |
+| `PERCENT-COMPLETE` | Track | terminal members / all members × 100, rounded | export only | The `tlc track` Progress column. Omitted for a track with no member tasks in the export; `0` when none are done. Derived, never decoded. |
+| `DUE` | Track | `Track.DueAt`, UTC form #2 | export + import | Same mapping tasks already had. |
+
+`priority_source` and `priority_rule` are excluded from `X-TLC-META`
+(they join `blocked_by`, `external_uid` and `x_tlc` in the derived-key
+set): each has a typed property, `X-TLC-PRIORITY-SOURCE` and
+`X-TLC-PRIORITY-RULE`, and carrying them in the JSON as well wrote them
+twice and let the JSON copy win on import.
+
+---
+
+<!-- added by categories wire form; supersedes the `Task.Tags | CATEGORIES | Comma-separated list` row in the Task mapping -->
+
+## Addendum: CATEGORIES wire form
+
+`Task.Tags` is written as **one `CATEGORIES` property per tag**
+(`CATEGORIES:security` / `CATEGORIES:auth`), trimmed, empties dropped,
+repeats removed keeping first-seen order, case-sensitive. The
+comma-joined single property RFC 5545 §3.8.1.2 also allows is not
+emitted: the codec escapes every comma in a TEXT value, so it reaches
+the wire as `CATEGORIES:security\,auth`, which any RFC 5545 reader
+parses as one category. On import both shapes are accepted, and a file
+mixing them decodes to the union in wire order.

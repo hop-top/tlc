@@ -9,9 +9,10 @@ import (
 )
 
 // supportedFreq returns true if the given FREQ is in tlc's allow-list
-// for v1 reminder recurrence. vstar/rrule accepts YEARLY too (per
-// vstar ADR-0009 v0.2 scope) but tlc rejects it: long-period yearly
-// reminders are out of scope for the v1 reminder UI.
+// for v1 reminder recurrence. vstar/rrule accepts YEARLY too (spec-vstar
+// specs/v0.1/03-canonicalization.md, "RRULE parsing scope") but tlc
+// rejects it: long-period yearly reminders are out of scope for the v1
+// reminder UI.
 func supportedFreq(f rrule.Freq) bool {
 	switch f {
 	case rrule.FreqHourly, rrule.FreqDaily, rrule.FreqWeekly, rrule.FreqMonthly:

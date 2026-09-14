@@ -3,12 +3,14 @@ package vtodo
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/config"
@@ -34,6 +36,9 @@ const (
 	XPropTrackSlug = "X-TLC-TRACK-SLUG"
 	XPropTrackType = "X-TLC-TRACK-TYPE"
 	XPropTrackKind = "X-TLC-IS-TRACK"
+	// XPropTrackSeq carries Track.Seq, the per-project sequence behind
+	// the "L-NNNN" display alias, as XPropTaskSeq does for tasks.
+	XPropTrackSeq  = "X-TLC-TRACK-SEQ"
 	XPropLogAction = "X-TLC-LOG-ACTION"
 	XPropLogBy     = "X-TLC-LOG-BY"
 	XPropLogTaskID = "X-TLC-LOG-TASK"
@@ -88,6 +93,19 @@ const (
 //
 // Logs: gated by WithIncludeLogs(true). Each LogEntry becomes a
 // VJOURNAL with a RELATED-TO pointing at its task's UID.
+//
+// DTSTAMP: every component's DTSTAMP is the instant its entity was last
+// modified (UpdatedAt, a log entry's own Timestamp; a VALARM takes its
+// parent's), NOT the export clock RFC 5545 §3.8.7.2 describes. The
+// canonical form spec-vstar hashes includes DTSTAMP, so an export-time
+// stamp would give unchanged content a new X-VSTAR-HASH on every
+// export and defeat the hash as a change detector. Documented as a
+// deviation in docs/VSTAR-CONFORMANCE.md. The export clock
+// (WithExportTime) only backs entities that carry no timestamp at all.
+//
+// Hashing: every builder's last step is finalize, so each VTODO,
+// VJOURNAL and VALARM leaves here with an X-VSTAR-HASH that verifies
+// over the finished component.
 func BuildVCalendar(
 	tasks []*core.Task,
 	tracks []*core.Track,
@@ -97,7 +115,9 @@ func BuildVCalendar(
 	o := resolve(opts)
 	statusDefs := o.statusDefinitions()
 
-	cal := vstar.Calendar{ProdID: o.productID}
+	// NewCalendar is PRODID-only at this vstar version; CALSCALE and
+	// METHOD are injected by Serialize.
+	cal := helpers.NewCalendar(o.productID)
 
 	// Index tasks per track for CHILD-link emission.
 	tasksByTrack := make(map[string][]*core.Task)
@@ -113,12 +133,19 @@ func BuildVCalendar(
 		})
 	}
 
+	// The log is consulted for COMPLETED whether or not it is exported.
+	doneAt := completedAtIndex(logs, statusDefs)
+
 	// Tracks → VTODO with CHILD links.
 	for _, tr := range tracks {
 		if tr == nil {
 			continue
 		}
-		cal.Append(buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain, o.exportTime))
+		c, err := buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain, o.exportTime)
+		if err != nil {
+			return vstar.Calendar{}, err
+		}
+		cal.Append(c)
 	}
 
 	// Tasks → VTODO.
@@ -126,7 +153,11 @@ func BuildVCalendar(
 		if t == nil {
 			continue
 		}
-		cal.Append(buildTaskComponent(t, o.uidDomain, o.priorities, statusDefs, o.exportTime))
+		c, err := buildTaskComponent(t, o.uidDomain, o.priorities, statusDefs, o.exportTime, doneAt[t.ID])
+		if err != nil {
+			return vstar.Calendar{}, err
+		}
+		cal.Append(c)
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -135,7 +166,11 @@ func BuildVCalendar(
 			if le == nil {
 				continue
 			}
-			cal.Append(buildLogComponent(le, o.uidDomain, o.exportTime))
+			c, err := buildLogComponent(le, o.uidDomain, o.exportTime)
+			if err != nil {
+				return vstar.Calendar{}, err
+			}
+			cal.Append(c)
 		}
 	}
 
@@ -147,8 +182,8 @@ func BuildVCalendar(
 //
 // Post-processes the codec output to inject CALSCALE:GREGORIAN +
 // METHOD:PUBLISH after PRODID. vstar.Calendar has no Props field for
-// arbitrary calendar-level properties (vstar T-0135); inject manually
-// until upstream lands. Both lines are RFC 5545 §3.6 standard
+// arbitrary calendar-level properties; inject manually until upstream
+// grows one. Both lines are RFC 5545 §3.6 standard
 // calendar-level properties; CALSCALE defaults to GREGORIAN, METHOD
 // defaults to PUBLISH for tlc's export use case.
 func Serialize(cal vstar.Calendar) (string, error) {
@@ -165,7 +200,8 @@ func Serialize(cal vstar.Calendar) (string, error) {
 // multiple physical CRLF-terminated lines; CALSCALE/METHOD must land
 // AFTER the last continuation, never between them.
 //
-// Workaround for vstar T-0135 — drop when vstar.Calendar gains Props.
+// Workaround for the missing calendar-level property bag — drop when
+// vstar.Calendar gains Props.
 func injectCalendarProps(s string) string {
 	const prodIDPrefix = "PRODID:"
 	const inject = "CALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n"
@@ -328,15 +364,82 @@ func priorityToICS(p core.Priority, defs []config.PriorityDefinition) int {
 	return ics
 }
 
+// setDTSTAMP pins DTSTAMP to at. Every helpers constructor stamps
+// DTSTAMP with the wall clock, which would make two exports of one
+// unchanged calendar differ; the builder decides the instant instead.
+func setDTSTAMP(c *vstar.Component, at time.Time) {
+	c.Set(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(at)})
+}
+
+// dtstampFor picks a component's DTSTAMP: the first non-zero candidate
+// (callers pass the entity's last modification first, then its
+// creation), falling back to the export clock for an entity that
+// carries no timestamp at all. See the DTSTAMP note on BuildVCalendar.
+func dtstampFor(exportAt time.Time, candidates ...time.Time) time.Time {
+	for _, t := range candidates {
+		if !t.IsZero() {
+			return t
+		}
+	}
+	return exportAt
+}
+
+// finalize is the single hashing step of every builder and its last
+// statement. The helpers mutators used mid-build (AddRelatedTo,
+// Complete, SetCategories) each refresh X-VSTAR-HASH over the component
+// AS IT STANDS, so whatever they wrote is stale by the time the builder
+// returns; only a digest taken over the finished component, Sub
+// included, verifies. The property is removed first so the fresh value
+// lands last on the wire rather than at the slot the first mutator
+// claimed.
+func finalize(c *vstar.Component) {
+	c.Remove(hashing.XVSTARHashProperty)
+	hashing.SetXVSTAR(c)
+}
+
+// completedAtIndex maps each task ID to the instant of its most recent
+// transition into a completed-role status, read from the log. A
+// transition entry's Action is the target status NAME (Task.Transition
+// writes it that way), so the configured vocabulary's roles decide what
+// counts as completion rather than a hard-coded "DONE". Tasks with no
+// such entry are absent from the map and fall back to UpdatedAt.
+func completedAtIndex(logs []*core.LogEntry, defs []config.StatusDefinition) map[string]time.Time {
+	idx := make(map[string]time.Time)
+	for _, le := range logs {
+		if le == nil || le.TaskID == "" || le.Timestamp.IsZero() {
+			continue
+		}
+		if statusRole(core.TaskStatus(le.Action), defs) != config.RoleCompleted {
+			continue
+		}
+		if prev, ok := idx[le.TaskID]; !ok || le.Timestamp.After(prev) {
+			idx[le.TaskID] = le.Timestamp
+		}
+	}
+	return idx
+}
+
 func buildTaskComponent(
 	t *core.Task,
 	domain string,
 	defs []config.PriorityDefinition,
 	statusDefs []config.StatusDefinition,
 	exportAt time.Time,
-) vstar.Component {
-	c := vstar.Component{Type: vstar.CompTodo}
-	c.Add(vstar.Property{Name: "UID", Value: uidFor(t.ID, domain)})
+	doneAt time.Time,
+) (vstar.Component, error) {
+	var due time.Time
+	if t.DueAt != nil {
+		due = *t.DueAt
+	}
+	// NewTodo seeds UID, DTSTAMP and DUE (omitted for the zero time) and
+	// refuses an empty UID, which spec-vstar 02 requires on every
+	// component.
+	c, err := helpers.NewTodo(uidFor(t.ID, domain), due)
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: task %q: %w", t.ID, err)
+	}
+	stamp := dtstampFor(exportAt, t.UpdatedAt, t.CreatedAt)
+	setDTSTAMP(&c, stamp)
 
 	if t.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
@@ -344,7 +447,19 @@ func buildTaskComponent(
 	if t.Description != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: t.Description})
 	}
-	c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status, statusDefs)})
+	if statusRole(t.Status, statusDefs) == config.RoleCompleted {
+		// Complete writes STATUS, COMPLETED and PERCENT-COMPLETE=100 as
+		// one unit, so a foreign reader sees a consistent "done" triple
+		// rather than a bare STATUS. COMPLETED is the instant of the last
+		// completing transition when the log has one, else the last
+		// modification, the closest fact the model holds.
+		if doneAt.IsZero() {
+			doneAt = t.UpdatedAt
+		}
+		helpers.Complete(&c, doneAt)
+	} else {
+		c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status, statusDefs)})
+	}
 	if t.Status != "" {
 		c.Add(vstar.Property{Name: XPropStatus, Value: string(t.Status)})
 	}
@@ -365,14 +480,8 @@ func buildTaskComponent(
 	if !t.CreatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(t.CreatedAt)})
 	}
-	// DTSTAMP is when this calendar instance was created (RFC 5545
-	// §3.8.7.2) — i.e. export time, not entity creation time.
-	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !t.UpdatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(t.UpdatedAt)})
-	}
-	if t.DueAt != nil && !t.DueAt.IsZero() {
-		c.SetDUE(*t.DueAt)
 	}
 	if t.RRule != "" {
 		c.Add(vstar.Property{Name: "RRULE", Value: t.RRule})
@@ -381,7 +490,11 @@ func buildTaskComponent(
 		c.Add(vstar.Property{Name: "URL", Value: t.Reference})
 	}
 	if t.RemindAt != nil && !t.RemindAt.IsZero() {
-		c.Sub = append(c.Sub, buildAlarmComponent(*t.RemindAt, t.Title))
+		alarm, err := buildAlarmComponent(c.UID(), *t.RemindAt, t.Title, stamp)
+		if err != nil {
+			return vstar.Component{}, err
+		}
+		c.Sub = append(c.Sub, alarm)
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
 		helpers.AddRelatedTo(&c, uidFor(*t.TrackID, domain), RelTypeParent)
@@ -409,26 +522,23 @@ func buildTaskComponent(
 	if t.Archived {
 		c.Add(vstar.Property{Name: XPropArchived, Value: "TRUE"})
 	}
+	addCategories(&c, t.Tags)
 	addMeta(&c, t.Meta)
 	addUnknownTLCProps(&c, t.Meta)
-	// CATEGORIES last, and via the helper rather than one Add per tag:
-	// RFC 5545 §3.8.1.2 models categories as ONE property holding a
-	// comma-separated value list, which is what SetCategories emits
-	// (deduped, first-seen order preserved, case-sensitive).
-	//
-	// Position matters. Every helpers mutator refreshes X-VSTAR-HASH as
-	// its last step, and that hash covers the component AS IT STANDS.
-	// Called mid-build it would pin a digest of a half-populated VTODO
-	// -- self-inconsistent the moment CREATED or DUE lands after it.
-	// Called here it covers the finished component, so the emitted hash
-	// verifies.
-	helpers.SetCategories(&c, t.Tags)
-	return c
+	finalize(&c)
+	return c, nil
 }
 
-func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) vstar.Component {
-	c := vstar.Component{Type: vstar.CompTodo}
-	c.Add(vstar.Property{Name: "UID", Value: uidFor(tr.ID, domain)})
+func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) (vstar.Component, error) {
+	var due time.Time
+	if tr.DueAt != nil {
+		due = *tr.DueAt
+	}
+	c, err := helpers.NewTodo(uidFor(tr.ID, domain), due)
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
+	}
+	setDTSTAMP(&c, dtstampFor(exportAt, tr.UpdatedAt, tr.CreatedAt))
 
 	if tr.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
@@ -440,11 +550,18 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if tr.Status != "" {
 		c.Add(vstar.Property{Name: XPropTrackStatus, Value: string(tr.Status)})
 	}
+	// PERCENT-COMPLETE is the Progress column: terminal members over
+	// all members, the same computation `tlc track` shows. Derived, so
+	// it is never decoded; omitted for a track with no members, where
+	// progress is undefined rather than zero.
+	if progress := core.ComputeTrackProgress(members); progress.TotalTasks > 0 {
+		pct := math.Round(float64(progress.CompletedTasks) / float64(progress.TotalTasks) * 100)
+		c.Add(vstar.Property{Name: "PERCENT-COMPLETE", Value: fmt.Sprintf("%d", int(pct))})
+	}
 
 	if !tr.CreatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(tr.CreatedAt)})
 	}
-	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !tr.UpdatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(tr.UpdatedAt)})
 	}
@@ -453,6 +570,9 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 	if tr.Type != "" {
 		c.Add(vstar.Property{Name: XPropTrackType, Value: tr.Type})
+	}
+	if tr.Seq > 0 {
+		c.Add(vstar.Property{Name: XPropTrackSeq, Value: fmt.Sprintf("%d", tr.Seq)})
 	}
 	// Marker so decode can distinguish a track-VTODO from a task-VTODO
 	// when the UID is foreign (rare but real for cross-system sync).
@@ -468,12 +588,22 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 	addMeta(&c, tr.Meta)
 	addUnknownTLCProps(&c, tr.Meta)
-	return c
+	finalize(&c)
+	return c, nil
 }
 
-func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vstar.Component {
-	c := vstar.Component{Type: vstar.CompJournal}
-	c.Add(vstar.Property{Name: "UID", Value: logUID(le, domain)})
+func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) (vstar.Component, error) {
+	// Zero DTSTART: NewJournal omits the property for the zero time. A
+	// tlc journal's own instant travels as CREATED, the property both the
+	// decoder and the sync spec read; carrying it a second time as
+	// DTSTART would only widen the wire.
+	c, err := helpers.NewJournal(logUID(le, domain), time.Time{})
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: log entry for task %q: %w", le.TaskID, err)
+	}
+	// A log entry is immutable, so its own instant is its last
+	// modification.
+	setDTSTAMP(&c, dtstampFor(exportAt, le.Timestamp))
 
 	if le.Note != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})
@@ -481,7 +611,6 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vst
 	} else if le.Action != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: le.Action})
 	}
-	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !le.Timestamp.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(le.Timestamp)})
 	}
@@ -501,24 +630,76 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vst
 	}
 	addMeta(&c, le.Meta)
 	addUnknownTLCProps(&c, le.Meta)
-	return c
+	finalize(&c)
+	return c, nil
 }
 
 // buildAlarmComponent emits a VALARM block carrying an absolute
 // DATE-TIME trigger. Used for tlc reminders that fire at a specific
-// instant rather than relative to DTSTART.
-func buildAlarmComponent(remindAt time.Time, summary string) vstar.Component {
-	c := vstar.Component{Type: vstar.CompAlarm}
-	c.Add(vstar.Property{Name: "ACTION", Value: "DISPLAY"})
-	c.Add(vstar.Property{
+// instant rather than relative to DTSTART. stamp is the parent's
+// DTSTAMP: a reminder has no life of its own, it changes when its task
+// does.
+func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, stamp time.Time) (vstar.Component, error) {
+	trigger := vstar.FormatTime(remindAt)
+	c, err := helpers.NewAlarm(alarmUID(parentUID), "DISPLAY", trigger)
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: alarm for %q: %w", parentUID, err)
+	}
+	setDTSTAMP(&c, stamp)
+	// NewAlarm writes TRIGGER as a bare value, which RFC 5545 §3.8.6.3
+	// reads as a DURATION relative to DTSTART. An absolute instant must
+	// declare VALUE=DATE-TIME.
+	c.Set(vstar.Property{
 		Name:   "TRIGGER",
 		Params: []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}},
-		Value:  vstar.FormatTime(remindAt),
+		Value:  trigger,
 	})
 	if summary != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
 	}
-	return c
+	finalize(&c)
+	return c, nil
+}
+
+// addCategories writes one CATEGORIES property per tag.
+//
+// RFC 5545 §3.8.1.2 also allows a single property carrying a
+// comma-separated list, and helpers.SetCategories emits that shape --
+// but the codec escapes EVERY comma in a TEXT value, so the joined
+// form reaches the wire as `CATEGORIES:security\,auth`, which any RFC
+// 5545 reader parses as ONE category named "security,auth". One
+// property per tag is equally legal and needs no separator, so foreign
+// readers see the tags tlc meant. The decoder accepts both shapes.
+//
+// Tags are trimmed, empties dropped and repeats removed keeping
+// first-seen order; comparison is case-sensitive (labels, not tokens),
+// the same rules the decoder applies, so a round trip is stable.
+func addCategories(c *vstar.Component, tags []string) {
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if _, dup := seen[tag]; dup {
+			continue
+		}
+		seen[tag] = struct{}{}
+		c.Add(vstar.Property{Name: "CATEGORIES", Value: tag})
+	}
+}
+
+// alarmUID derives a VALARM's UID from its parent's: the parent UID
+// with "-alarm" inserted before the domain separator, so
+// task_<id>@tlc.local reminds through task_<id>-alarm@tlc.local. A
+// task carries at most one reminder, which makes the derivation unique
+// per task, deterministic across exports and free of stored state. A
+// foreign parent UID without '@' takes the suffix at its end.
+func alarmUID(parentUID string) string {
+	if i := strings.LastIndexByte(parentUID, '@'); i >= 0 {
+		return parentUID[:i] + "-alarm" + parentUID[i:]
+	}
+	return parentUID + "-alarm"
 }
 
 // logUID derives a stable UID for a LogEntry. Combines task ID, action,
