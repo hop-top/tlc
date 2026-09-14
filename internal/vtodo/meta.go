@@ -43,12 +43,20 @@ const tlcSystemSlug = "TLC"
 //     XPropPriorityRule, the typed properties decode reads them back
 //     from; inside the JSON as well they were written twice and the
 //     JSON copy silently won on import.
+//   - effective_status → X-VSTAR-EFFECTIVE-STATUS on a supersession
+//     journal, the property decode preserved it from.
+//   - last_sync_hash → nothing on the wire. It is the sync layer's
+//     change-detection baseline for this store, meaningful only
+//     against the local row; exported, it would make a task's hash
+//     move on every sync and tell a foreign reader nothing.
 var derivedMetaKeys = map[string]bool{
 	"blocked_by":            true,
 	"external_uid":          true,
 	MetaXTLCKey:             true,
 	core.MetaPrioritySource: true,
 	core.MetaPriorityRule:   true,
+	MetaEffectiveStatusKey:  true,
+	core.MetaLastSyncHash:   true,
 }
 
 // knownXProps is the set of X-TLC-* names that already populate a typed

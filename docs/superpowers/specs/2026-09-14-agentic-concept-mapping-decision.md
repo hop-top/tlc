@@ -32,7 +32,7 @@ what changes is that a VTODO says whether it is a `mission` or an
 | `Track` | Mission — "a goal or obligation" | VTODO | `X-TLC-CONCEPT:mission` | yes, with `X-TLC-IS-TRACK:TRUE` |
 | `Task`, `TrackID` nil | Mission | VTODO | `X-TLC-CONCEPT:mission` | yes; carries no PARENT edge |
 | `Task`, `TrackID` set | Assignment — "a scoped unit of work inside a mission" | VTODO | `X-TLC-CONCEPT:assignment` | yes, with `RELATED-TO;RELTYPE=PARENT` → its mission |
-| `LogEntry` | Journal, sub-typed (below) | VJOURNAL | `X-TLC-CONCEPT:status` \| `decision` \| `action` \| `observation` \| `journal` | yes, opt-in (`--include-logs`) |
+| `LogEntry` | Journal, sub-typed (below) | VJOURNAL | `X-TLC-CONCEPT:status` \| `decision` \| `action` \| `observation` \| `journal` | yes, opt-in (`--include-logs`); a `status` entry whose task is exported is a spec 02 supersession entry |
 | `RecipeRun` | Playthrough — "a branch/run/path through a mission or world" | VEVENT | `X-TLC-CONCEPT:playthrough` | no — follow-on |
 | claim window | Turn — "a bounded execution window" | VEVENT | `X-TLC-CONCEPT:turn` | no — follow-on |
 | `Task.AssignedTo`, `Track.AssignedTo`, `LogEntry.By` | Player | VCARD | — (VCARD is unambiguous) | no VCARD; `ATTENDEE` / `X-TLC-ASSIGNEE` / `X-TLC-LOG-BY` carry the name |
@@ -137,13 +137,18 @@ Notes on the rule:
 - The umbrella is required, not a nicety: the vocabulary is open on
   two sides (configured status names, raw topic fallback), and the
   decoder mints `LogEntry` rows from foreign VJOURNALs.
-- Follow-on: a `status` or `decision` journal should also carry the
-  resulting status as `X-TLC-STATUS:<name>`, the way VTODOs do today.
-  For a raw status-name action the value is the action itself; for the
-  fixed constants it is derivable by role (`CLAIMED` → active,
-  `RELEASED`/`RETRY` → initial, `DONE`/`APPROVED` → completed,
-  `SKIPPED` → skipped). Parsing the `Note` text is not an acceptable
-  source.
+- A `status` journal whose task is in the export is emitted as spec
+  02's supersession entry (`supersession.Supersedes`), with
+  `X-VSTAR-EFFECTIVE-STATUS` holding the RFC 5545 VTODO STATUS value
+  the transition lands the task in, by role: `CLAIMED` → active
+  (`IN-PROCESS`), `RELEASED` / `RETRY` / `REOPENED` / `BLOCKED` /
+  `UNBLOCKED` → initial (`NEEDS-ACTION`), `DONE` → completed
+  (`COMPLETED`), `SKIPPED` → skipped (`CANCELLED`), a status-name
+  action by its configured role. Parsing the `Note` text is not an
+  acceptable source. Follow-on: a `status` or `decision` journal
+  should also carry the resulting tlc status name as
+  `X-TLC-STATUS:<name>`, the way VTODOs do today; a `decision` journal
+  (`APPROVED` completes the task) carries no effective status yet.
 
 ## RecipeRun → Playthrough
 
@@ -279,7 +284,10 @@ X-TLC-CONCEPT:turn           on a claim VEVENT (follow-on)
    example in 02 shows `COMPLETED`, which reads as the RFC 5545 STATUS
    set, but nothing says so. tlc's status names are user-configurable
    and role-mapped onto the four RFC values on export; it needs to
-   know whether to emit the role's RFC value or the system name.
+   know whether to emit the role's RFC value or the system name. Until
+   the spec says, tlc emits the role's RFC value (the reading the
+   example supports and the one that keeps ledger and VTODO in one
+   vocabulary) and projects only those four values on import.
 
 ## Open points
 

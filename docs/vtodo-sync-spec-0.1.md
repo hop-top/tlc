@@ -128,13 +128,13 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 
 | LogEntry Field | VJOURNAL Property | Notes |
 |---|---|---|
-| UID (derived) | `UID` | Synthesized: `log-<task-typeid>-<action>-<utc-stamp>@<domain>` — see below |
+| UID (derived) | `UID` | Synthesized: `log-<task-typeid>-<action>-<utc-stamp>@<domain>` — see below. A status transition whose task is in the export uses the spec-vstar supersession scheme instead, `journal:status:<task-uid>:<utc-stamp>` — see [Status transitions as supersession entries](#status-transitions-as-supersession-entries) |
 | `Timestamp` | `CREATED` | The entry's own instant, UTC; omitted when zero. On import `CREATED` is preferred; `DTSTAMP` is only a fallback for producers that emit no `CREATED` |
 | — | `DTSTAMP` | Required on every VJOURNAL (RFC 5545 §3.6.3); the instant it carries is defined in the hashing section |
 | `By` (user) | `X-TLC-LOG-BY` | Actor name verbatim; omitted if empty. No `ORGANIZER` is emitted |
 | `Action` | `X-TLC-LOG-ACTION` | Action string verbatim (e.g., `created`, `status_change`, `comment`); omitted if empty |
 | `Note` | `DESCRIPTION`, `SUMMARY` | `DESCRIPTION` carries the full note and `SUMMARY` its first line; both omitted if the note is empty, in which case `SUMMARY` carries the action instead |
-| `TaskID` | `RELATED-TO;RELTYPE=PARENT`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID with an explicit `RELTYPE=PARENT`; `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
+| `TaskID` | `RELATED-TO;RELTYPE=PARENT`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID with an explicit `RELTYPE=PARENT` (bare on a supersession entry, which is the same edge: RFC 5545 §3.2.15 defaults `RELTYPE` to `PARENT`); `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
 | `Meta` | `X-TLC-META` | JSON-serialized; omitted if empty. See [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 
 **Opt-in**: VJOURNAL export is disabled by default. Enable via:
@@ -162,6 +162,32 @@ the UID be `log_<typeid>@<domain>`, but that is a schema change and is
 out of scope for v0.1.
 
 **Round-trip**: Foreign VJOURNAL imports (non-tlc UIDs) generate fresh tlc log rows with the original UID stored in `LogEntry.Meta["external_uid"]` for round-trip stability.
+
+### Status transitions as supersession entries
+
+A log entry in the `status` class (see [Vocabulary](#vocabulary): the fixed transition constants `CLAIMED`, `RELEASED`, `DONE`, `SKIPPED`, `RETRY`, `REOPENED`, `BLOCKED`, `UNBLOCKED`, or any name in the configured status vocabulary) whose task is in the same export is emitted as a spec-vstar "status supersession" entry, built by `hop.top/vstar/supersession.Supersedes` against the finished task VTODO:
+
+```
+BEGIN:VJOURNAL
+UID:journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z
+DTSTAMP:20260502T143000Z
+RELATED-TO:task_01h455vb4pex5vsknk084sn02q@tlc.local
+CATEGORIES:status-supersession
+X-VSTAR-EFFECTIVE-STATUS:IN-PROCESS
+X-TLC-CONCEPT:status
+SUMMARY:starting work on signer rotation
+CREATED:20260502T143000Z
+X-TLC-LOG-TASK:task_01h455vb4pex5vsknk084sn02q
+X-TLC-LOG-ACTION:CLAIMED
+X-TLC-LOG-BY:alice
+X-VSTAR-HASH:sha256:…
+END:VJOURNAL
+```
+
+- **Both UID schemes coexist.** Every other journal, and a status transition whose task is *not* in the export (an orphan supersession entry is unprojectable, spec-vstar 05 §4), keeps `log-<task-typeid>-<action>-<utc-stamp>@<domain>`. Both shapes carry the same `X-TLC-*` properties, so a reader that ignores the ledger discipline sees one kind of journal.
+- **`X-VSTAR-EFFECTIVE-STATUS`** carries the RFC 5545 VTODO `STATUS` value the transition lands the task in, through the same role mapping `STATUS` uses: a configured name by its role; `CLAIMED` → `IN-PROCESS`; `RELEASED`, `RETRY`, `REOPENED`, `BLOCKED`, `UNBLOCKED` → `NEEDS-ACTION`; `DONE` → `COMPLETED`; `SKIPPED` → `CANCELLED`. The tlc status name is not written here (rationale and the upstream ask: [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md)).
+- **Tasks only.** `LogEntry.TaskID` is the only subject; tracks have no journals and so no ledger.
+- **Import.** A task VTODO whose `X-TLC-STATUS` is absent or names a status the current vocabulary lacks takes its status from the latest supersession entry pointing at it (`supersession.Superseded`, latest `DTSTAMP` wins) when that value is one of the four RFC `STATUS` values; otherwise from its own `STATUS`. A VTODO with a usable `X-TLC-STATUS` is a tlc snapshot and keeps it. An imported supersession journal's effective status is kept in `LogEntry.Meta["effective_status"]` when its action cannot reproduce it (a foreign entry with no `X-TLC-LOG-ACTION`, or a disagreeing value), and is re-emitted verbatim; tlc's own entries decode Meta-clean.
 
 ---
 
@@ -228,6 +254,9 @@ Consequence of the JSON round-trip: values return with `encoding/json`'s `interf
 | `blocked_by` | `RELATED-TO;RELTYPE=DEPENDS-ON` rows |
 | `external_uid` | the `UID` property |
 | `x_tlc` | re-emitted as real `X-TLC-*` properties (below) |
+| `priority_source`, `priority_rule` | `X-TLC-PRIORITY-SOURCE`, `X-TLC-PRIORITY-RULE` |
+| `effective_status` (log entries) | `X-VSTAR-EFFECTIVE-STATUS` on a supersession journal |
+| `last_sync_hash` (tasks) | nothing: the sync layer's local change-detection baseline, meaningless off this store and never exported |
 
 An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
 
@@ -235,7 +264,7 @@ An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
 
 **Sub-components are walked explicitly.** `ext.ExtensionsByScope` does not recurse into `Component.Sub`, so `VALARM` (and any future nested component) is scanned separately; its `X-TLC-*` properties merge into the parent entity's `x_tlc` bag.
 
-**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. This is the receiver rule of spec-vstar's extension discipline — receivers MUST ignore unknown `X-*` properties — see <https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
+**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. One exception: `X-VSTAR-EFFECTIVE-STATUS` on a well-formed supersession journal is the ledger's fact about the task and is kept as described under [Status transitions as supersession entries](#status-transitions-as-supersession-entries); `X-VSTAR-HASH` is always recomputed, never adopted. This is the receiver rule of spec-vstar's extension discipline — receivers MUST ignore unknown `X-*` properties — see <https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
 
 ### `X-TLC-*` property registry
 
@@ -266,7 +295,7 @@ No `X-TLC-*` property is emitted on `VALARM`. On import, `X-TLC-*` properties fo
 
 Names absent from this table are, by definition, unknown. On import they land in `Meta["x_tlc"]` as described above; on export they are re-emitted from that bag, sorted by name, only if the name still classifies as TLC-owned, is not in this table, and holds a string value. The bag is never written into `X-TLC-META`.
 
-**Conformance posture.** Every property in the registry sits in the `X-<SYSTEM>-*` tier of spec-vstar's extension discipline (<https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>), under the system slug `TLC`, and is stable per that tier: removing one is a breaking change for consumers, so a property is promoted or replaced, never renamed in place. tlc defines no `X-VSTAR-*` or `X-EXP-*` property of its own; the one `X-VSTAR-*` property in its output, `X-VSTAR-HASH`, is minted by the vstar helpers rather than by tlc (see the hashing section). Unknown non-TLC `X-*` properties are ignored on import and never re-emitted, per the receiver rule above. Promotion of any `X-TLC-*` property to `X-VSTAR-*` goes through spec-vstar's promotion path — two independent systems implementing compatible semantics — and is recorded there, not here. tlc's self-certification against the spec is written up in [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md) (forthcoming).
+**Conformance posture.** Every property in the registry sits in the `X-<SYSTEM>-*` tier of spec-vstar's extension discipline (<https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>), under the system slug `TLC`, and is stable per that tier: removing one is a breaking change for consumers, so a property is promoted or replaced, never renamed in place. tlc defines no `X-VSTAR-*` or `X-EXP-*` property of its own; the two `X-VSTAR-*` properties in its output, `X-VSTAR-HASH` and `X-VSTAR-EFFECTIVE-STATUS`, are minted by the vstar library (`hashing`, `supersession.Supersedes`) rather than by tlc (see the hashing section and [Status transitions as supersession entries](#status-transitions-as-supersession-entries)). Unknown non-TLC `X-*` properties are ignored on import and never re-emitted, per the receiver rule above. Promotion of any `X-TLC-*` property to `X-VSTAR-*` goes through spec-vstar's promotion path — two independent systems implementing compatible semantics — and is recorded there, not here. tlc's self-certification against the spec is written up in [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md).
 
 ---
 

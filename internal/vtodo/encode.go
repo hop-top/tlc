@@ -12,6 +12,7 @@ import (
 	"hop.top/vstar/codec/rfc5545"
 	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
+	"hop.top/vstar/supersession"
 
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -105,7 +106,12 @@ const (
 // RELTYPE=DEPENDS-ON.
 //
 // Logs: gated by WithIncludeLogs(true). Each LogEntry becomes a
-// VJOURNAL with a RELATED-TO pointing at its task's UID.
+// VJOURNAL with a RELATED-TO pointing at its task's UID. A status
+// transition whose task is in the export is emitted as a spec 02
+// supersession entry (UID journal:status:<task uid>:<t>,
+// CATEGORIES:status-supersession, X-VSTAR-EFFECTIVE-STATUS), the
+// append-only ledger shape; every other entry keeps the plain shape
+// (UID log-<task>-<action>-<t>@<domain>). See buildLogComponent.
 //
 // DTSTAMP: every component's DTSTAMP is the instant its entity was last
 // modified (UpdatedAt, a log entry's own Timestamp; a VALARM takes its
@@ -161,7 +167,11 @@ func BuildVCalendar(
 		cal.Append(c)
 	}
 
-	// Tasks → VTODO.
+	// Tasks → VTODO. The finished components are kept by task ID: a
+	// supersession journal is built against the component it
+	// supersedes, and supersession.Supersedes verifies that target's
+	// hash, so it has to be the one that went into the calendar.
+	targets := make(map[string]vstar.Component, len(tasks))
 	for _, t := range tasks {
 		if t == nil {
 			continue
@@ -171,6 +181,7 @@ func BuildVCalendar(
 			return vstar.Calendar{}, err
 		}
 		cal.Append(c)
+		targets[t.ID] = c
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -179,7 +190,7 @@ func BuildVCalendar(
 			if le == nil {
 				continue
 			}
-			c, err := buildLogComponent(le, o.uidDomain, statusDefs, o.exportTime)
+			c, err := buildLogComponent(le, o.uidDomain, statusDefs, o.exportTime, targets)
 			if err != nil {
 				return vstar.Calendar{}, err
 			}
@@ -552,7 +563,8 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
 	}
-	setDTSTAMP(&c, dtstampFor(exportAt, tr.UpdatedAt, tr.CreatedAt))
+	stamp := dtstampFor(exportAt, tr.UpdatedAt, tr.CreatedAt)
+	setDTSTAMP(&c, stamp)
 	// A track is the goal its tasks are scoped units of. The concept
 	// says what it IS; XPropTrackKind below still says which Go type it
 	// decodes to, because a standalone task is a mission too.
@@ -567,6 +579,15 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	c.Add(vstar.Property{Name: "STATUS", Value: trackStatusToWire(tr.Status)})
 	if tr.Status != "" {
 		c.Add(vstar.Property{Name: XPropTrackStatus, Value: string(tr.Status)})
+	}
+	if trackStatusToWire(tr.Status) == string(vstar.TodoCompleted) {
+		// Spec 05 §5 pairs STATUS=COMPLETED with COMPLETED (an undated
+		// VTODO is otherwise VS040), as helpers.Complete does for a task.
+		// A track has no completing log entry, so the instant is its
+		// last modification. PERCENT-COMPLETE stays the Progress column
+		// rather than being forced to 100: an archived track can carry
+		// open members.
+		c.SetCOMPLETED(stamp)
 	}
 	// PERCENT-COMPLETE is the Progress column: terminal members over
 	// all members, the same computation `tlc track` shows. Derived, so
@@ -610,26 +631,69 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	return c, nil
 }
 
+// buildLogComponent emits one VJOURNAL per log entry, in one of two
+// shapes:
+//
+//   - A status transition (isSupersessionEntry) whose task is among
+//     targets is a spec 02 supersession entry, built by
+//     supersession.Supersedes against the finished task component:
+//     UID journal:status:<task uid>:<t>, DTSTAMP=t, a bare RELATED-TO
+//     (RFC 5545 §3.2.15 defaults RELTYPE to PARENT, the shape the spec
+//     example uses), CATEGORIES:status-supersession and
+//     X-VSTAR-EFFECTIVE-STATUS. Supersedes verifies the target's
+//     X-VSTAR-HASH and refuses a mutated one.
+//   - Everything else keeps the plain shape: UID
+//     log-<task>-<action>-<t>@<domain>, RELATED-TO;RELTYPE=PARENT.
+//     That includes a status transition whose task is NOT in the
+//     export: a supersession entry with no target in the same
+//     calendar is an orphan (spec 05 §4, VS031), unprojectable by
+//     definition, so it travels as history instead.
+//
+// Both shapes carry the same tlc properties (X-TLC-CONCEPT, SUMMARY,
+// DESCRIPTION, CREATED, X-TLC-LOG-*, X-TLC-META) so a reader that
+// ignores the ledger discipline sees one kind of journal. Supersedes
+// hashes last, but the properties added after it leave that digest
+// stale and mid-block, so finalize still closes the builder.
 func buildLogComponent(
 	le *core.LogEntry,
 	domain string,
 	statusDefs []config.StatusDefinition,
 	exportAt time.Time,
+	targets map[string]vstar.Component,
 ) (vstar.Component, error) {
-	// Zero DTSTART: NewJournal omits the property for the zero time. A
-	// tlc journal's own instant travels as CREATED, the property both the
-	// decoder and the sync spec read; carrying it a second time as
-	// DTSTART would only widen the wire.
-	c, err := helpers.NewJournal(logUID(le, domain), time.Time{})
-	if err != nil {
-		return vstar.Component{}, fmt.Errorf("vtodo: log entry for task %q: %w", le.TaskID, err)
-	}
 	// A log entry is immutable, so its own instant is its last
 	// modification.
-	setDTSTAMP(&c, dtstampFor(exportAt, le.Timestamp))
+	at := dtstampFor(exportAt, le.Timestamp)
+
+	var c vstar.Component
+	target, hasTarget := targets[le.TaskID]
+	if hasTarget && isSupersessionEntry(le, statusDefs) {
+		j, err := supersession.Supersedes(target, effectiveStatus(le, statusDefs), at)
+		if err != nil {
+			return vstar.Component{}, fmt.Errorf("vtodo: supersession journal for task %q: %w", le.TaskID, err)
+		}
+		c = j
+	} else {
+		// Zero DTSTART: NewJournal omits the property for the zero time.
+		// A tlc journal's own instant travels as CREATED, the property
+		// both the decoder and the sync spec read; carrying it a second
+		// time as DTSTART would only widen the wire.
+		j, err := helpers.NewJournal(logUID(le, domain), time.Time{})
+		if err != nil {
+			return vstar.Component{}, fmt.Errorf("vtodo: log entry for task %q: %w", le.TaskID, err)
+		}
+		setDTSTAMP(&j, at)
+		c = j
+	}
 	// The sub-type is a function of the action and the exporting
-	// project's status vocabulary, the same dependency STATUS has.
-	c.Add(vstar.Property{Name: XPropConcept, Value: journalConcept(le.Action, statusDefs)})
+	// project's status vocabulary, the same dependency STATUS has. A
+	// preserved foreign supersession entry may carry no action at all;
+	// it is a status journal by construction.
+	concept := journalConcept(le.Action, statusDefs)
+	if strings.TrimSpace(le.Action) == "" && isSupersessionEntry(le, statusDefs) {
+		concept = ConceptStatus
+	}
+	c.Add(vstar.Property{Name: XPropConcept, Value: concept})
 
 	if le.Note != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})
@@ -641,11 +705,15 @@ func buildLogComponent(
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(le.Timestamp)})
 	}
 	if le.TaskID != "" {
-		c.Add(vstar.Property{
-			Name:   "RELATED-TO",
-			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeParent}},
-			Value:  uidFor(le.TaskID, domain),
-		})
+		// Supersedes already wrote the edge; the plain shape spells the
+		// RFC default out.
+		if _, ok := c.Get("RELATED-TO"); !ok {
+			c.Add(vstar.Property{
+				Name:   "RELATED-TO",
+				Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeParent}},
+				Value:  uidFor(le.TaskID, domain),
+			})
+		}
 		c.Add(vstar.Property{Name: XPropLogTaskID, Value: le.TaskID})
 	}
 	if le.Action != "" {

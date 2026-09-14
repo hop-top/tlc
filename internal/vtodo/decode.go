@@ -11,6 +11,7 @@ import (
 	"hop.top/vstar/codec/rfc5545"
 	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
+	"hop.top/vstar/supersession"
 
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -93,7 +94,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				uidToTrackID[uidBodyVal] = tr.ID
 			}
 		} else {
-			t, uidBodyVal, perr := decodeTask(todo, o.uidDomain, o.priorities, statusDefs)
+			t, uidBodyVal, perr := decodeTask(todo, cal.Components, o.uidDomain, o.priorities, statusDefs)
 			if perr != nil {
 				return nil, perr
 			}
@@ -163,7 +164,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 
 	// VJOURNAL → LogEntry.
 	for _, j := range cal.Filter(vstar.CompJournal) {
-		le := decodeJournal(j, uidToTaskID, o.uidDomain)
+		le := decodeJournal(j, uidToTaskID, o.uidDomain, statusDefs)
 		res.Logs = append(res.Logs, le)
 	}
 
@@ -231,6 +232,7 @@ func isTrackComponent(todo vstar.Component, domain string) bool {
 
 func decodeTask(
 	todo vstar.Component,
+	ledger []vstar.Component,
 	domain string,
 	defs []config.PriorityDefinition,
 	statusDefs []config.StatusDefinition,
@@ -257,7 +259,7 @@ func decodeTask(
 	if p, ok := todo.Get("DESCRIPTION"); ok {
 		t.Description = p.Value
 	}
-	t.Status = decodeTaskStatus(todo, statusDefs)
+	t.Status = decodeTaskStatus(todo, ledger, statusDefs)
 	t.Priority = priorityFromComponent(todo, defs)
 	if p, ok := todo.Get(XPropPrioritySource); ok {
 		if v := strings.TrimSpace(p.Value); v != "" {
@@ -421,11 +423,31 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 	return tr, body, nil
 }
 
-func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain string) *core.LogEntry {
+func decodeJournal(
+	j vstar.Component,
+	uidToTaskID map[string]string,
+	domain string,
+	statusDefs []config.StatusDefinition,
+) *core.LogEntry {
 	le := &core.LogEntry{}
 
 	if p, ok := j.Get(XPropLogAction); ok {
 		le.Action = p.Value
+	}
+	// X-VSTAR-* properties are not tlc's to adopt (see applyMeta), with
+	// one exception: the effective status of a supersession journal is
+	// the ledger's fact about the task, and dropping it would re-export
+	// a foreign ledger entry as a plain journal. It is kept only when
+	// the entry's own action cannot reproduce it, so tlc's own output
+	// decodes to the Meta it was exported from.
+	if eff, ok := supersessionStatus(j); ok {
+		if !isStatusTransition(le.Action, statusDefs) ||
+			!strings.EqualFold(eff, derivedEffectiveStatus(le.Action, statusDefs)) {
+			if le.Meta == nil {
+				le.Meta = map[string]interface{}{}
+			}
+			le.Meta[MetaEffectiveStatusKey] = eff
+		}
 	}
 	if p, ok := j.Get(XPropLogBy); ok {
 		le.By = p.Value
@@ -478,9 +500,23 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain stri
 	return le
 }
 
-// decodeTaskStatus recovers a tlc status from a VTODO, preferring the
-// exact name in XPropStatus and falling back to the role the RFC STATUS
-// value implies.
+// decodeTaskStatus recovers a tlc status from a VTODO, walking a
+// three-step ladder:
+//
+//  1. The exact name in XPropStatus, when the CURRENT vocabulary declares
+//     it. tlc writes the property with the task's current status, so a
+//     VTODO carrying it is a mutated-in-place snapshot and the ledger
+//     behind it is history, not a correction.
+//  2. The ledger. A VTODO without a usable XPropStatus is foreign, or
+//     from a vocabulary this config no longer has; for it the spec 02
+//     discipline applies: the original component is never mutated and
+//     the latest supersession journal pointing at it holds the truth.
+//     supersession.Superseded picks that entry (latest DTSTAMP wins);
+//     its value is used when it is one of the four RFC 5545 VTODO
+//     STATUS values, the vocabulary tlc writes and the one the spec
+//     example shows. Any other vocabulary is opaque here and falls
+//     through.
+//  3. The role the VTODO's own STATUS value implies.
 //
 // The X-property is only trusted when the CURRENT vocabulary declares
 // that name. A calendar exported from another project (or from this one
@@ -488,7 +524,7 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain stri
 // and importing it would seed the store with a value every later
 // validation refuses. Falling back to the role default keeps the import
 // inside the configured vocabulary while preserving the coarse meaning.
-func decodeTaskStatus(todo vstar.Component, defs []config.StatusDefinition) core.TaskStatus {
+func decodeTaskStatus(todo vstar.Component, ledger []vstar.Component, defs []config.StatusDefinition) core.TaskStatus {
 	if p, ok := todo.Get(XPropStatus); ok {
 		name := strings.TrimSpace(p.Value)
 		for _, def := range defs {
@@ -498,7 +534,9 @@ func decodeTaskStatus(todo vstar.Component, defs []config.StatusDefinition) core
 		}
 	}
 	wire := ""
-	if p, ok := todo.Get("STATUS"); ok {
+	if eff, ok := supersession.Superseded(todo, ledger); ok && isTodoStatusWire(eff) {
+		wire = strings.TrimSpace(eff)
+	} else if p, ok := todo.Get("STATUS"); ok {
 		wire = strings.TrimSpace(p.Value)
 	}
 	return roleDefaultStatus(wireToRole(wire), defs)

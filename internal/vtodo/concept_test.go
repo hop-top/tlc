@@ -264,10 +264,12 @@ func TestConcept_DecodeExposesTokens(t *testing.T) {
 	out := mustSerialize(t, fullCalendar(t))
 	res, err := vtodo.ParseVCalendar(strings.NewReader(out))
 	require.NoError(t, err)
+	// The CLAIMED entry is a status transition, so it travels as a
+	// supersession journal under the spec 02 UID scheme.
 	require.Equal(t, map[string]string{
-		"track_01h455vbqkfsn02nk084ksn02q@tlc.local":                             vtodo.ConceptMission,
-		"task_01h455vb4pex5vsknk084sn02q@tlc.local":                              vtodo.ConceptAssignment,
-		"log-task_01h455vb4pex5vsknk084sn02q-CLAIMED-20260502T143000Z@tlc.local": vtodo.ConceptStatus,
+		"track_01h455vbqkfsn02nk084ksn02q@tlc.local":                                vtodo.ConceptMission,
+		"task_01h455vb4pex5vsknk084sn02q@tlc.local":                                 vtodo.ConceptAssignment,
+		"journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z": vtodo.ConceptStatus,
 	}, res.Concepts)
 }
 

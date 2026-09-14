@@ -157,9 +157,10 @@ func TestValidateGate_EveryBuilderPath(t *testing.T) {
 			wantAllowed: vs040,
 		},
 		{
-			name:        "track: completed, no DUE",
-			tracks:      []*core.Track{track(func(tr *core.Track) { tr.Status = core.TrackStatusCompleted })},
-			wantAllowed: vs040,
+			// STATUS=COMPLETED now pairs with COMPLETED, the other half
+			// of what spec 05 §5 accepts, so no VS040 even without DUE.
+			name:   "track: completed, no DUE",
+			tracks: []*core.Track{track(func(tr *core.Track) { tr.Status = core.TrackStatusCompleted })},
 		},
 		{
 			name: "journal",

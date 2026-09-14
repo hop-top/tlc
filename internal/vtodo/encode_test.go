@@ -245,10 +245,11 @@ func TestBuildVCalendar_LogsGated(t *testing.T) {
 		require.Contains(t, out, "BEGIN:VJOURNAL")
 		require.Contains(t, out, "X-TLC-LOG-ACTION:CLAIMED")
 		require.Contains(t, out, "X-TLC-LOG-BY:alice")
-		require.Contains(
-			t, out,
-			"RELATED-TO;RELTYPE=PARENT:task_01h455vb4pex5vsknk084sn02q@tlc.local",
-		)
+		// CLAIMED is a status transition and its task is in the export,
+		// so the journal is a supersession entry: RELATED-TO is the bare
+		// form supersession.Supersedes writes (RFC 5545 §3.2.15 defaults
+		// RELTYPE to PARENT; the spec 02 example uses the same shape).
+		require.Contains(t, out, "\r\nRELATED-TO:task_01h455vb4pex5vsknk084sn02q@tlc.local\r\n")
 	})
 }
 
