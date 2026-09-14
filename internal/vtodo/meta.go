@@ -88,6 +88,14 @@ var knownXProps = map[string]bool{
 	// carried on the model; registered so the wire copy is not parked
 	// and re-emitted beside the encoder's own.
 	XPropConcept: true,
+
+	// The assignment → playthrough edge (decoded into Task.RunID) and
+	// the playthrough VEVENT's recipe identity. The latter never sit on
+	// a VTODO or VJOURNAL, but every X-TLC-* tlc emits is registered.
+	XPropRun:           true,
+	XPropRecipeID:      true,
+	XPropRecipeVersion: true,
+	XPropRecipeHash:    true,
 }
 
 // metaProperty renders the non-derived entries of meta as a single

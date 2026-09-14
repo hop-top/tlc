@@ -327,6 +327,7 @@ func TestFixture_ValidatesUnderGate(t *testing.T) {
 		{name: "recurring-rrule.ics"},
 		{name: "with-dependencies.ics"},
 		{name: "with-logs.ics"},
+		{name: "recipe-run.ics"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

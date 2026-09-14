@@ -33,8 +33,8 @@ what changes is that a VTODO says whether it is a `mission` or an
 | `Task`, `TrackID` nil | Mission | VTODO | `X-TLC-CONCEPT:mission` | yes; carries no PARENT edge |
 | `Task`, `TrackID` set | Assignment — "a scoped unit of work inside a mission" | VTODO | `X-TLC-CONCEPT:assignment` | yes, with `RELATED-TO;RELTYPE=PARENT` → its mission |
 | `LogEntry` | Journal, sub-typed (below) | VJOURNAL | `X-TLC-CONCEPT:status` \| `decision` \| `action` \| `observation` \| `journal` | yes, opt-in (`--include-logs`); a `status` entry whose task is exported is a spec 02 supersession entry |
-| `RecipeRun` | Playthrough — "a branch/run/path through a mission or world" | VEVENT | `X-TLC-CONCEPT:playthrough` | no — follow-on |
-| claim window | Turn — "a bounded execution window" | VEVENT | `X-TLC-CONCEPT:turn` | no — follow-on |
+| `RecipeRun` | Playthrough — "a branch/run/path through a mission or world" | VEVENT | `X-TLC-CONCEPT:playthrough` | yes, when runs are passed (`WithRecipeRuns`; the CLI passes the run behind every exported task with a `RunID`) |
+| claim window | Turn — "a bounded execution window" | VEVENT | `X-TLC-CONCEPT:turn` | yes: from the exported log's claim pairs, else the open claim in `ClaimedAt` |
 | `Task.AssignedTo`, `Track.AssignedTo`, `LogEntry.By` | Player | VCARD | — (VCARD is unambiguous) | no VCARD; `ATTENDEE` / `X-TLC-ASSIGNEE` / `X-TLC-LOG-BY` carry the name |
 | `Task.RRule` | Cadence — "a recurring temporal rhythm, usually RRULE" | `RRULE` property | — (a property, not a component) | yes |
 | `Task.RemindAt` | Timeout / escalation | VALARM | — (VALARM is unambiguous) | yes |
@@ -156,25 +156,34 @@ Notes on the rule:
 of a recipe: which recipe at which version and content hash, with
 which vars, for which subject, into which track". That is a run
 through a mission — the glossary's Playthrough — and spec 02 maps
-Playthrough to VEVENT, not to a branch. Not exported today; VEVENT is
-"out of scope" in the sync spec. This ADR reserves the token and the
-mapping. Shape notes for the follow-on, from the fields that exist:
+Playthrough to VEVENT, not to a branch. Exported as a VEVENT with
+`X-TLC-CONCEPT:playthrough` when runs reach the encoder
+(`vtodo.WithRecipeRuns`; the CLI collects the run behind every
+exported task with a `RunID`). The shape, from the fields that exist:
 
-- `CreatedAt` → `DTSTART`. No end field; `DTEND` omitted (RFC 5545
-  §3.6.1 permits it) or derived from the run's leaves' terminal
-  journals — the same leaves subject completion already computes
-  (recipe spec §11).
-- `TrackID != ""` → `RELATED-TO` the track VTODO (the mission).
-  `TrackID == ""` is a trackless run (`internal/core/recipe_materialize.go`):
-  a path through the World whose tasks are standalone missions. The
-  glossary allows "through a mission or world"; the mission edge is
-  simply absent.
-- `ParentRun` → `RELATED-TO` the prior run (reconcile lineage).
-  `SubjectType`/`SubjectID` → `RELATED-TO` the subject VTODO.
+- `CreatedAt` → `DTSTART` and `DTSTAMP` (a run row never changes). No
+  end field, so no `DTEND` (RFC 5545 §3.6.1 permits it); deriving one
+  from the run's leaves' terminal journals — the same leaves subject
+  completion already computes (recipe spec §11) — is a follow-on.
+- `RecipeID` → `SUMMARY` and `X-TLC-RECIPE-ID`; `Version` →
+  `X-TLC-RECIPE-VERSION`; `Hash` → `X-TLC-RECIPE-HASH`; `ProjectID` →
+  `X-TLC-PROJECT-ID`.
+- `TrackID != ""` → `RELATED-TO;RELTYPE=PARENT` the track VTODO (the
+  mission). `TrackID == ""` is a trackless run
+  (`internal/core/recipe_materialize.go`): a path through the World
+  whose tasks are standalone missions. The glossary allows "through a
+  mission or world"; the mission edge is simply absent.
 - Membership: `RecipeRunTask{RunID, StepID, TaskID}` and the mirror
-  `Task.RunID`/`StepID`. Which side carries the edge and under which
-  RELTYPE is a follow-on design point; `PARENT` on the task side is
-  taken by the mission edge.
+  `Task.RunID`/`StepID`. The edge is carried on the task side as
+  `X-TLC-RUN:<playthrough UID>`, an X-property rather than a
+  `RELATED-TO`: `PARENT` is taken by the mission edge, `CHILD` and
+  `SIBLING` are hierarchy, `DEPENDS-ON` (RFC 9253) is ordering, and an
+  RFC 5545 reader degrades an unknown RELTYPE to `PARENT`, which would
+  silently re-parent the task under the run. A RELTYPE for membership
+  in a run is an upstream ask (below). `StepID` is not exported yet.
+- Not exported yet: `ParentRun` → `RELATED-TO` the prior run
+  (reconcile lineage), `SubjectType`/`SubjectID` → `RELATED-TO` the
+  subject VTODO, `Vars`, `Selection`, `DroppedDeps`, `CreatedBy`.
 
 ## Claim window → Turn
 
@@ -188,8 +197,17 @@ or `RECLAIMED`; closed wherever `ClaimedAt` is cleared
 `BLOCKED`. `EXEC_START`/`EXEC_END` pairs, when present, bound the
 dispatch inside the claim. Spec 02 maps Turn to VEVENT: `DTSTART` from
 the opening journal, `DTEND` from the closing one, `RELATED-TO` the
-assignment. Not exported today; follow-on. See "Open points" for what
-in the decision as stated did not survive contact with the code.
+assignment. Exported as a VEVENT with `X-TLC-CONCEPT:turn`, UID
+`turn-<task id>-<DTSTART>@<domain>`, `SUMMARY` the task title, the
+player as `ATTENDEE`/`X-TLC-ASSIGNEE` (the opening entry's actor). The
+source is the exported log when it opens at least one window (closed
+turns included; a `RECLAIMED` while a window is open closes it at the
+reclaim instant and opens the next), else `ClaimedAt` for the one open
+turn; never both, so a claim is never emitted twice. No VEVENT `STATUS`
+(the pinned vstar has none); open versus closed is the presence of
+`DTEND`. An open turn decodes back into `ClaimedAt`. See "Open points"
+for what in the decision as stated did not survive contact with the
+code.
 
 ## Assignee → Player, RRule → Cadence
 
@@ -212,8 +230,8 @@ single system's extensions in `X-<SYSTEM>-*`, and tlc's slug is `TLC`
 X-TLC-CONCEPT:mission        on a track VTODO or a standalone-task VTODO
 X-TLC-CONCEPT:assignment     on a task VTODO with a PARENT edge
 X-TLC-CONCEPT:status         on a VJOURNAL (or decision | action | observation | journal)
-X-TLC-CONCEPT:playthrough    on a run VEVENT (follow-on)
-X-TLC-CONCEPT:turn           on a claim VEVENT (follow-on)
+X-TLC-CONCEPT:playthrough    on a run VEVENT
+X-TLC-CONCEPT:turn           on a claim VEVENT
 ```
 
 - **One property, one token.** Not a list, so no comma handling and no
@@ -264,8 +282,8 @@ X-TLC-CONCEPT:turn           on a claim VEVENT (follow-on)
 - `docs/vtodo-sync-spec-0.1.md` gains a "Vocabulary" section (entity →
   concept → component) referencing this ADR, and `X-TLC-CONCEPT` has
   its row in that file's `X-TLC-*` registry.
-- VEVENT emission (turn, playthrough) and VCARD emission (player) are
-  reserved, not delivered.
+- VEVENT emission (turn, playthrough) is delivered; VCARD emission
+  (player) is reserved, not delivered.
 
 ## Upstream asks (spec-vstar)
 
@@ -288,6 +306,13 @@ X-TLC-CONCEPT:turn           on a claim VEVENT (follow-on)
    the spec says, tlc emits the role's RFC value (the reading the
    example supports and the one that keeps ledger and VTODO in one
    vocabulary) and projects only those four values on import.
+4. **A relation for membership in a playthrough.** An assignment
+   belongs to the run that materialised it, and no RELTYPE says so:
+   `PARENT` is the mission edge, `CHILD`/`SIBLING` are hierarchy,
+   `DEPENDS-ON` is ordering, and an unknown RELTYPE degrades to
+   `PARENT` in RFC 5545 readers. tlc carries the edge as `X-TLC-RUN`;
+   a RELTYPE, or an `X-VSTAR-*` relation, would let it be a
+   `RELATED-TO` like every other edge.
 
 ## Open points
 
@@ -299,10 +324,30 @@ where the code needs attention before the follow-ons land:
   claim time, and identify which playthrough step an assignment *is*.
   They belong to the Assignment → Playthrough edge, not to Turn. The
   turn is bounded by `ClaimedAt` and the log; `Attempts` counts failed
-  turns, it is not one.
+  turns, it is not one. Resolved: `RunID` is the `X-TLC-RUN` edge on
+  the task VTODO (decoded back under our domain); `StepID` is not
+  exported yet.
 - **`Task.ClaimedAt` holds only the open turn.** Closed turns are
-  recoverable only from journal pairs. Turn export therefore needs
-  `--include-logs` semantics or a store query, not a task-row read.
+  recoverable only from journal pairs. Resolved: with `--include-logs`
+  the exported log is the source of every turn; without it, or when
+  the log opens no window, `ClaimedAt` yields the open one; the two
+  are never combined. The bounds are the log entries' timestamps, so a
+  turn is only as exact as the log.
+- **The turn closer set is the fixed constants only.** `DONE`,
+  `RELEASED`, `SKIPPED`, `APPROVED`, `REJECTED`, `RETRY`, `BLOCKED`
+  close a window; `UNBLOCKED` does not (the task was parked, not
+  released). A configured status name does not bound a turn: the
+  executor logs the constants whatever the vocabulary, and a manual
+  `--status` transition is not a claim. Widening to "any transition
+  out of the active role" is a follow-on if manual transitions turn
+  out to matter.
+- **A playthrough has no `DTEND`** (see "RecipeRun → Playthrough");
+  deriving one from the run's terminal journals is a follow-on. Its
+  `ParentRun`, subject and `Vars` are not exported.
+- **VEVENTs mint no entities on import.** Only an open turn's
+  `DTSTART` is read back, into `ClaimedAt`. A closed turn is history
+  the log already holds; a playthrough is the run store's row, never
+  created from a calendar.
 - **Track missions have no journals.** `LogEntry.TaskID` is the only
   subject, and the audit subscriber drops track topics
   (`internal/events/audit.go`, `isTaskTopic`), so `TRACK_*` action
@@ -349,7 +394,7 @@ where the code needs attention before the follow-ons land:
 
 ## Out of scope (this decision)
 
-- Emitting VEVENT (turn, playthrough) or VCARD (player).
+- Emitting VCARD (player).
 - The `X-TLC-*` property registry in the sync spec.
 - Environment, Group, Score, Memory, Artifact, Resource delta,
   Learning, Availability, Timezone — tlc has no entity for them.

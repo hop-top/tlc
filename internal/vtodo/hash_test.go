@@ -58,7 +58,8 @@ func fullCalendar(t *testing.T) vstar.Calendar {
 		vtodo.WithIncludeLogs(true),
 	)
 	require.NoError(t, err)
-	require.Len(t, cal.Components, 3)
+	// track, task, the CLAIMED journal and the open turn it opens.
+	require.Len(t, cal.Components, 4)
 	requireValidExport(t, cal)
 	return cal
 }
@@ -215,6 +216,7 @@ func TestFixture_HashesVerify(t *testing.T) {
 		"recurring-rrule.ics",
 		"with-dependencies.ics",
 		"with-logs.ics",
+		"recipe-run.ics",
 	} {
 		t.Run(name, func(t *testing.T) {
 			data := loadFixture(t, name)

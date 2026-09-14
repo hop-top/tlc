@@ -14,10 +14,12 @@ the last section.
 ## Implementation class
 
 **Emitter + Round-trip.** tlc emits VTODO (tasks, tracks), VJOURNAL (log
-entries) and VALARM (reminders) and re-imports what it wrote
-byte-identically (`TestFixture_RoundTripStability`). It also consumes
-foreign iCalendar (`Consumer` behaviour), where the V* extras are
-optional: a missing `X-VSTAR-HASH` is reported, never fatal.
+entries, status transitions as supersession entries), VEVENT (turns,
+playthroughs) and VALARM (reminders) and re-imports what it wrote
+byte-identically (`TestFixture_RoundTripStability`,
+`TestTurn_ClaimedAtRoundTrips`). It also consumes foreign iCalendar
+(`Consumer` behaviour), where the V* extras are optional: a missing
+`X-VSTAR-HASH` is reported, never fatal.
 
 ## What conforms
 
@@ -65,6 +67,14 @@ optional: a missing `X-VSTAR-HASH` is reported, never fatal.
   `supersession.Superseded` and drives the imported status of a foreign
   VTODO. Scope and the remaining deviations are under "Known
   deviations".
+- Turns and playthroughs are VEVENTs (spec 02 "Core mapping"),
+  `X-TLC-CONCEPT:turn` / `playthrough`, every one with `DTSTART`
+  (spec 05 §5, VS041 never fires: `TestEvent_NoVS041`), `DTEND` only on
+  a closed turn, `RELATED-TO;RELTYPE=PARENT` to the assignment
+  (turn) or the mission (playthrough), hash last
+  (`TestTurn_OpenClaimFromTaskRow`, `TestTurn_WindowsFromLog`,
+  `TestPlaythrough_Shape`). The mapping and its sources are in
+  `docs/vtodo-sync-spec-0.1.md`, "VEVENT: Turns and Playthroughs".
 
 ## Validation gate
 
@@ -83,7 +93,7 @@ semantic validator behind spec 05, through `vtodo.ValidateExport`
 - Where it runs: every decode round trip (`roundTrip`), the
   one-of-everything calendar the hash tests share (`fullCalendar`), one
   build per builder path (`TestValidateGate_EveryBuilderPath`), the
-  five golden fixtures (`TestFixture_ValidatesUnderGate`) and
+  six golden fixtures (`TestFixture_ValidatesUnderGate`) and
   `cmd/genfixtures-vtodo`, which refuses to write a fixture that fails
   it.
 - Errors: any `SeverityError` fails the export, except the codes in
@@ -169,6 +179,39 @@ What still deviates:
   (`TestSupersession_DecisionIsNotALedgerEntry`). Carrying the
   resulting status on them is a follow-on.
 
+### Turns are reconstructed; the run edge is an X-property
+
+Spec 02 maps Turn and Playthrough to VEVENT and leaves the rest to the
+system. What tlc does, and where it stops short:
+
+- **A turn's bounds come from the log, not from a turn record.** tlc
+  stores only the open claim (`Task.ClaimedAt`); closed turns exist as
+  `CLAIMED`/`RECLAIMED` … `DONE`/`RELEASED`/`SKIPPED`/`APPROVED`/
+  `REJECTED`/`RETRY`/`BLOCKED` pairs in the task log. With
+  `--include-logs` the log is the source and yields every turn; without
+  it `ClaimedAt` yields the open one. The two are never combined
+  (`TestTurn_LogWinsOverClaimedAt`, `TestTurn_ClaimedAtIsTheFallback`).
+  So a document without its log shows at most one turn per task, and a
+  turn's `DTEND` is only as exact as the closing entry's timestamp.
+- **No VEVENT `STATUS`.** The pinned vstar has no VEVENT status enum;
+  open versus closed is carried by the presence of `DTEND`.
+- **A playthrough has no `DTEND`.** `RecipeRun` records no end; RFC
+  5545 §3.6.1 permits its absence. Deriving one from the run's leaves'
+  terminal journals is a follow-on.
+- **The assignment → playthrough edge is `X-TLC-RUN`, not
+  `RELATED-TO`.** No RELTYPE means "member of a run": `PARENT` is the
+  mission edge, `CHILD`/`SIBLING` are hierarchy, `DEPENDS-ON` is
+  ordering, and an RFC 5545 reader degrades an unknown RELTYPE to
+  `PARENT`, which would re-parent the task under the run
+  (`TestPlaythrough_TaskEdge`). Upstream ask: a RELTYPE (or an
+  `X-VSTAR-*` relation) for membership in a playthrough. `StepID`,
+  `ParentRun` (reconcile lineage) and the subject edge are not exported
+  yet.
+- **Turns and playthroughs are not decoded into entities.** The only
+  read-back is an open turn's `DTSTART` into `ClaimedAt`
+  (`TestTurn_ClaimedAtRoundTrips`); a closed turn is history the log
+  already holds, and a run row is never minted from a foreign calendar.
+
 ### `X-VSTAR-EFFECTIVE-STATUS` vocabulary
 
 The spec defines no vocabulary for the property; its example shows
@@ -243,6 +286,15 @@ proves byte-identical re-emission.
 | `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:020b85e5ff1b89955052df9617d8b912b5dce0a1c7010f22a8f43f47fe28ab1d` |
 | `with-logs.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z` | `sha256:63232af5c32129151c811defad4b7d3dfa30cd65921697646b29eefc76b05a5d` |
 | `with-logs.ics` | `log-task_01h455vb4pex5vsknk084sn02q-PROGRESS-20260502T163000Z@tlc.local` | `sha256:140c79a5a4a06d152d3421e3ff3eb95d4103156fdea7817353e1fe3cd8c65fe7` |
+| `with-logs.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:7bd1d3f34f76da79d78529ebea1d8e335257219aed6985593cf7a80b7105a084` |
+| `recipe-run.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:e9c19cf8e596c158db6719835bcf34bfd6f76dd1d02cad42cc02451900cd3f41` |
+| `recipe-run.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:e6bc99da99a21b886116112964464381c34b6f1be597f3f5be63f1653ad42202` |
+| `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z` | `sha256:7d79dface6fd31001c197a08726bcf88043d20ca7c8149f9e55f2d756ec59c03` |
+| `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T153000Z` | `sha256:8c351916c5dd1cd07a81c0523cf3658688dae5a9a77310876f662c8aa8d6fc33` |
+| `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T183000Z` | `sha256:daa122db8b623a43379876afb4124b13948b6b3108354cd063fa5482f7e2e963` |
+| `recipe-run.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:5ecaa93f00500c2b431f0072e7f5450ba22be8c48f822613cc9b9c29292e45d8` |
+| `recipe-run.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T183000Z@tlc.local` | `sha256:e9596b9c1104c74b605ac4f681706d95795d8c713632074cd5ed594585a07871` |
+| `recipe-run.ics` | `run_01h455vb4pex5vsknk084sn0r1@tlc.local` | `sha256:89383c79e71854f7a463626fb24d570b5a5c5796b8f10a02148dbcdd3ab055f9` |
 
 ### Regenerating the golden hashes
 

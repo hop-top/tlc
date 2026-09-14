@@ -122,9 +122,20 @@ const (
 // deviation in docs/VSTAR-CONFORMANCE.md. The export clock
 // (WithExportTime) only backs entities that carry no timestamp at all.
 //
+// Turns: each exported task's claim windows become VEVENTs
+// (X-TLC-CONCEPT:turn) after the journals. When logs are exported the
+// windows come from CLAIMED/RECLAIMED … DONE/RELEASED/… pairs in the
+// task's log, closed and open alike; otherwise, or when the log opens
+// no window, Task.ClaimedAt yields the one open turn. See turnsFor.
+//
+// Playthroughs: each run passed through WithRecipeRuns becomes a VEVENT
+// (X-TLC-CONCEPT:playthrough) after the turns, with RELATED-TO the
+// track VTODO when the run has one. A task materialised by a run
+// points at it with X-TLC-RUN.
+//
 // Hashing: every builder's last step is finalize, so each VTODO,
-// VJOURNAL and VALARM leaves here with an X-VSTAR-HASH that verifies
-// over the finished component.
+// VJOURNAL, VEVENT and VALARM leaves here with an X-VSTAR-HASH that
+// verifies over the finished component.
 func BuildVCalendar(
 	tasks []*core.Task,
 	tracks []*core.Track,
@@ -184,7 +195,10 @@ func BuildVCalendar(
 		targets[t.ID] = c
 	}
 
-	// LogEntries → VJOURNAL (gated).
+	// LogEntries → VJOURNAL (gated). The exported log is also indexed
+	// per task for the turns below; an unexported log bounds nothing a
+	// reader could see.
+	logsByTask := make(map[string][]*core.LogEntry)
 	if o.includeLogs {
 		for _, le := range logs {
 			if le == nil {
@@ -195,7 +209,34 @@ func BuildVCalendar(
 				return vstar.Calendar{}, err
 			}
 			cal.Append(c)
+			logsByTask[le.TaskID] = append(logsByTask[le.TaskID], le)
 		}
+	}
+
+	// Turns → VEVENT, per exported task.
+	for _, t := range tasks {
+		if t == nil {
+			continue
+		}
+		for _, w := range turnsFor(t, logsByTask[t.ID]) {
+			c, err := buildTurnComponent(t, w, o.uidDomain, o.exportTime)
+			if err != nil {
+				return vstar.Calendar{}, err
+			}
+			cal.Append(c)
+		}
+	}
+
+	// Playthroughs → VEVENT.
+	for _, run := range o.recipeRuns {
+		if run == nil {
+			continue
+		}
+		c, err := buildPlaythroughComponent(run, o.uidDomain, o.exportTime)
+		if err != nil {
+			return vstar.Calendar{}, err
+		}
+		cal.Append(c)
 	}
 
 	return cal, nil
@@ -530,13 +571,8 @@ func buildTaskComponent(
 	if t.Effort != "" {
 		c.Add(vstar.Property{Name: XPropEffort, Value: string(t.Effort)})
 	}
-	if t.AssignedTo != nil && *t.AssignedTo != "" {
-		assignee := *t.AssignedTo
-		if isEmail(assignee) {
-			c.Add(vstar.Property{Name: "ATTENDEE", Value: "mailto:" + assignee})
-		} else {
-			c.Add(vstar.Property{Name: XPropAssignee, Value: assignee})
-		}
+	if t.AssignedTo != nil {
+		addAssignee(&c, *t.AssignedTo)
 	}
 	if t.ProjectID != nil && *t.ProjectID != "" {
 		c.Add(vstar.Property{Name: XPropProjectID, Value: *t.ProjectID})
@@ -546,6 +582,11 @@ func buildTaskComponent(
 	}
 	if t.Archived {
 		c.Add(vstar.Property{Name: XPropArchived, Value: "TRUE"})
+	}
+	if t.RunID != "" {
+		// The assignment → playthrough edge; see XPropRun for why it is
+		// not a RELATED-TO.
+		c.Add(vstar.Property{Name: XPropRun, Value: uidFor(t.RunID, domain)})
 	}
 	addCategories(&c, t.Tags)
 	addMeta(&c, t.Meta)
@@ -753,6 +794,21 @@ func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, s
 	}
 	finalize(&c)
 	return c, nil
+}
+
+// addAssignee writes a player: ATTENDEE:mailto: when the name is an
+// email address, X-TLC-ASSIGNEE otherwise, nothing for an empty name.
+// Shared by the task and turn builders; a track always uses
+// X-TLC-ASSIGNEE and does not go through here.
+func addAssignee(c *vstar.Component, name string) {
+	if name == "" {
+		return
+	}
+	if isEmail(name) {
+		c.Add(vstar.Property{Name: "ATTENDEE", Value: "mailto:" + name})
+		return
+	}
+	c.Add(vstar.Property{Name: XPropAssignee, Value: name})
 }
 
 // addCategories writes one CATEGORIES property per tag.

@@ -31,8 +31,8 @@ Every exported component is one of the V\* agentic concepts below. The mapping, 
 | `Task` without a track (`TrackID` nil) | Mission | VTODO | `mission` |
 | `Task` with a track | Assignment | VTODO | `assignment` |
 | `LogEntry` | Journal | VJOURNAL | `status` \| `decision` \| `action` \| `observation` \| `journal` |
-| `RecipeRun` | Playthrough | VEVENT | `playthrough` (not exported yet) |
-| claim window (`ClaimedAt` + the `CLAIMED`…`DONE` journal pair) | Turn | VEVENT | `turn` (not exported yet) |
+| `RecipeRun` | Playthrough | VEVENT | `playthrough` — see [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs) |
+| claim window (`ClaimedAt`, or a `CLAIMED`/`RECLAIMED` … `DONE`/`RELEASED`/… journal pair) | Turn | VEVENT | `turn` — see [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs) |
 | `AssignedTo`, `LogEntry.By` | Player | VCARD | — (no VCARD export yet) |
 | `Task.RRule` | Cadence | `RRULE` property | — (a property, not a component) |
 | `Task.RemindAt` | Timeout / escalation | VALARM | — |
@@ -43,7 +43,7 @@ A component declares which concept it is with one `X-TLC-CONCEPT` property holdi
 
 ## VCALENDAR Envelope
 
-All VTODO/VJOURNAL output is wrapped in a VCALENDAR container:
+All output is wrapped in a VCALENDAR container, components in this order:
 
 ```
 BEGIN:VCALENDAR
@@ -51,8 +51,9 @@ VERSION:2.0
 PRODID:-//tlc//vtodo//EN
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
-[VTODO components]
+[VTODO components: tracks, then tasks]
 [VJOURNAL components]
+[VEVENT components: turns per task, then playthroughs]
 END:VCALENDAR
 ```
 
@@ -191,6 +192,43 @@ END:VJOURNAL
 
 ---
 
+## VEVENT: Turns and Playthroughs
+
+Two V\* concepts map to VEVENT (spec-vstar 02): a **turn**, one bounded execution window on an assignment, and a **playthrough**, one run of a recipe through a mission. Every VEVENT carries `UID`, `DTSTAMP`, `DTSTART` (spec-vstar 05 §5, VS041), one `X-TLC-CONCEPT` and `X-VSTAR-HASH` last. No `STATUS`: the pinned vstar has no VEVENT status enum, and an open turn is told from a closed one by the absence of `DTEND`. VEVENTs are not decoded into entities; the one thing read back is an open turn's `DTSTART`, which is the wire form of `Task.ClaimedAt`.
+
+### Turn
+
+| Source | VEVENT Property | Notes |
+|---|---|---|
+| task id + claim instant | `UID` | `turn-<task-typeid>-<DTSTART>@<domain>`; deterministic, the same whether the window came from the log or from `ClaimedAt` |
+| claim instant | `DTSTART` | The `CLAIMED` / `RECLAIMED` entry's timestamp, or `Task.ClaimedAt` |
+| release instant | `DTEND` | The closing entry's timestamp; absent while the turn is open |
+| — | `DTSTAMP` | `DTEND` when closed, `DTSTART` while open (the turn's last modification) |
+| the task | `RELATED-TO;RELTYPE=PARENT`, `SUMMARY` | The assignment's UID; `SUMMARY` is the task title |
+| the player | `ATTENDEE:mailto:` / `X-TLC-ASSIGNEE` | The opening entry's `By`, or `Task.AssignedTo` for a `ClaimedAt` turn; same email rule as a task |
+
+**Where turns come from.** With `--include-logs` the exported log is the source: `CLAIMED` or `RECLAIMED` opens a window, `DONE`, `RELEASED`, `SKIPPED`, `APPROVED`, `REJECTED`, `RETRY` or `BLOCKED` closes it, a `RECLAIMED` while a window is open closes that window at the reclaim instant and opens the next, a closer with no open window is ignored, and the last window is left open when nothing closed it. Without the log, or when the exported log opens no window, `Task.ClaimedAt` yields the one open turn. The two sources are never combined, so a claim is never emitted twice. A task never claimed emits no turn. Configured status names do not bound a turn: the executor logs the constants above whatever the vocabulary.
+
+**Import.** A VEVENT declaring `X-TLC-CONCEPT:turn` with no `DTEND` sets `ClaimedAt` on the task its `RELATED-TO;RELTYPE=PARENT` names (the latest start when several are open). A VEVENT without the token is not a claim, whatever it is related to.
+
+### Playthrough
+
+| `RecipeRun` Field | VEVENT Property | Notes |
+|---|---|---|
+| `ID` | `UID` | `<run-typeid>@<domain>` (`run_…`), like a task or track |
+| `CreatedAt` | `DTSTART`, `DTSTAMP` | The materialisation instant; a run row never changes, so both are the same. No `DTEND`: a run has no end timestamp (RFC 5545 §3.6.1 permits its absence) |
+| `RecipeID` | `SUMMARY`, `X-TLC-RECIPE-ID` | Omitted when empty |
+| `Version` | `X-TLC-RECIPE-VERSION` | Omitted when empty |
+| `Hash` | `X-TLC-RECIPE-HASH` | The recipe content hash the run pinned; omitted when empty |
+| `TrackID` | `RELATED-TO;RELTYPE=PARENT` | The mission the run went through; absent for a trackless run (a path through the world) |
+| `ProjectID` | `X-TLC-PROJECT-ID` | Omitted when empty |
+
+Runs reach the encoder through `vtodo.WithRecipeRuns`; the CLI passes the run behind every exported task that has a `RunID` (`tlc task list/show --format vtodo`). `Vars`, `Selection`, `DroppedDeps`, `ParentRun`, `SubjectType`/`SubjectID` and `CreatedBy` are not exported yet.
+
+**Assignment → playthrough edge.** A task materialised by a run carries `X-TLC-RUN:<playthrough UID>`. It is an X-property rather than a `RELATED-TO` because no `RELTYPE` means "member of a run": `PARENT` is the mission edge, `CHILD`/`SIBLING` are hierarchy, `DEPENDS-ON` is ordering, and RFC 5545 readers degrade an unknown `RELTYPE` to `PARENT`, which would silently re-parent the task under the run. On import the value decodes to `Task.RunID` when it is a run TypeID under our domain; a foreign run UID names a run this store has no row for and is left alone. `Task.StepID` is not exported yet.
+
+---
+
 ## RRULE: RFC 5545 Recurrence Rules
 
 `Task.RRule` replaces legacy `RemindEvery` duration field. Stored as an RFC 5545 RRULE string; empty string means no recurrence.
@@ -273,13 +311,17 @@ Every `X-TLC-*` property tlc emits, derived from the encoder, the decoder and th
 | Property | Carried on | Value form | Source field | Since / notes |
 |---|---|---|---|---|
 | `X-TLC-EFFORT` | VTODO task | Effort name from the configured vocabulary (default `XS` \| `S` \| `M` \| `L` \| `XL`) | `Task.Effort` | 0.1 (2026-05). Omitted when empty. Import: kept only if the name is in the current vocabulary, else dropped |
-| `X-TLC-ASSIGNEE` | VTODO task, VTODO track | Assignee name, verbatim | `Task.AssignedTo`, `Track.AssignedTo` | 0.1 (2026-05). Task: emitted only when the value is not an email address (an email goes to `ATTENDEE:mailto:` instead). Track: always used; tracks never emit `ATTENDEE`. Import: wins over `ATTENDEE` when both are present |
-| `X-TLC-PROJECT-ID` | VTODO task, VTODO track | Project identifier, verbatim | `Task.ProjectID`, `Track.ProjectID` | 0.1 (2026-05). Omitted when unset or empty |
+| `X-TLC-ASSIGNEE` | VTODO task, VTODO track, VEVENT turn | Assignee name, verbatim | `Task.AssignedTo`, `Track.AssignedTo`, the turn's player (`LogEntry.By` of the opening entry, else `Task.AssignedTo`) | 0.1 (2026-05). Task and turn: emitted only when the value is not an email address (an email goes to `ATTENDEE:mailto:` instead). Track: always used; tracks never emit `ATTENDEE`. Import: wins over `ATTENDEE` when both are present; not read from a turn |
+| `X-TLC-PROJECT-ID` | VTODO task, VTODO track, VEVENT playthrough | Project identifier, verbatim | `Task.ProjectID`, `Track.ProjectID`, `RecipeRun.ProjectID` | 0.1 (2026-05). Omitted when unset or empty |
 | `X-TLC-TASK-SEQ` | VTODO task | Positive base-10 integer | `Task.Seq` | 0.1 (2026-05). Omitted when `Seq <= 0`. Import: an unparsable value is ignored |
 | `X-TLC-TRACK-SLUG` | VTODO track | Slug, verbatim | `Track.Slug` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-TRACK-TYPE` | VTODO track | Track type, verbatim (e.g. `feature`) | `Track.Type` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-IS-TRACK` | VTODO track | `TRUE` | (component-kind marker; no model field) | 0.1 (2026-05). Always emitted on a track, never on a task. Import: `TRUE` (case-insensitive) classifies the VTODO as a track unless `X-TLC-CONCEPT:assignment` is present; without it, a UID body that is a track TypeID is the fallback |
-| `X-TLC-CONCEPT` | VTODO task, VTODO track, VJOURNAL | `mission` \| `assignment` on a VTODO; `status` \| `decision` \| `action` \| `observation` \| `journal` on a VJOURNAL. Lowercase, one token | (derived: `Task.TrackID`, `LogEntry.Action` against the configured status vocabulary; a track is always `mission`) | 0.1 (2026-09). Always emitted, never on `VALARM`. Import: read case-insensitively; `assignment` is the first track-vs-task discriminator (see [Vocabulary](#vocabulary)); every token is reported by UID in `ParseResult.Concepts`; not stored on the entity, re-derived on export |
+| `X-TLC-CONCEPT` | VTODO task, VTODO track, VJOURNAL, VEVENT | `mission` \| `assignment` on a VTODO; `status` \| `decision` \| `action` \| `observation` \| `journal` on a VJOURNAL; `turn` \| `playthrough` on a VEVENT. Lowercase, one token | (derived: `Task.TrackID`, `LogEntry.Action` against the configured status vocabulary; a track is always `mission`; a VEVENT's token is fixed by its builder) | 0.1 (2026-09). Always emitted, never on `VALARM`. Import: read case-insensitively; `assignment` is the first track-vs-task discriminator (see [Vocabulary](#vocabulary)); `turn` gates the `ClaimedAt` read-back; every token is reported by UID in `ParseResult.Concepts`; not stored on the entity, re-derived on export |
+| `X-TLC-RUN` | VTODO task | Playthrough UID (`<run-typeid>@<domain>`) | `Task.RunID` | 0.1 (2026-09). Omitted when empty. The assignment → playthrough edge; an X-property, not a `RELATED-TO`, because no `RELTYPE` means run membership (see [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs)). Import: decoded when the UID body is a run TypeID under our domain, else ignored |
+| `X-TLC-RECIPE-ID` | VEVENT playthrough | Recipe identifier, verbatim | `RecipeRun.RecipeID` | 0.1 (2026-09). Omitted when empty; also the VEVENT's `SUMMARY`. Never decoded (a playthrough mints no entity) |
+| `X-TLC-RECIPE-VERSION` | VEVENT playthrough | Recipe version, verbatim | `RecipeRun.Version` | 0.1 (2026-09). Omitted when empty. Never decoded |
+| `X-TLC-RECIPE-HASH` | VEVENT playthrough | Recipe content hash, verbatim (`sha256:…`) | `RecipeRun.Hash` | 0.1 (2026-09). Omitted when empty. Never decoded |
 | `X-TLC-LOG-ACTION` | VJOURNAL | Action string, verbatim | `LogEntry.Action` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-LOG-BY` | VJOURNAL | Actor name, verbatim | `LogEntry.By` | 0.1 (2026-05). Omitted when empty. tlc emits no `ORGANIZER` |
 | `X-TLC-LOG-TASK` | VJOURNAL | Bare task TypeID (no `@domain`) | `LogEntry.TaskID` | 0.1 (2026-05). Emitted next to `RELATED-TO;RELTYPE=PARENT`. Import: preferred over `RELATED-TO`, so the TypeID survives even when the calendar carries no matching VTODO |
@@ -406,7 +448,7 @@ By default, archived tasks are omitted.
 
 ## Out of Scope (v1)
 
-- **VEVENT** components (calendar events; separate from tasks)
+- **Free-form VEVENT** components (calendar events that are neither a turn nor a playthrough; the two tlc emits are specified in [VEVENT: Turns and Playthroughs](#vevent-turns-and-playthroughs))
 - **Subtask hierarchy** (`Task.ParentID` field not yet in schema)
 - **`RELTYPE=SIBLING`** (siblings inferred from shared parent)
 - **`RELTYPE=BLOCKS` / `BLOCKED-BY`** (non-standard; cause silent corruption in RFC 5545 readers)

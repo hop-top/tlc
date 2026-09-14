@@ -476,6 +476,9 @@ func writeVtodo(
 	if includeLogs {
 		opts = append(opts, vtodo.WithIncludeLogs(true))
 	}
+	if runs := collectVtodoRuns(tasks); len(runs) > 0 {
+		opts = append(opts, vtodo.WithRecipeRuns(runs))
+	}
 	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
 	if err != nil {
 		return fmt.Errorf("vtodo encode failed: %w", err)
@@ -517,6 +520,41 @@ func collectVtodoLogs(tasks []*core.Task) []*core.LogEntry {
 			continue
 		}
 		out = append(out, entries...)
+	}
+	return out
+}
+
+// collectVtodoRuns fetches the recipe run behind every exported task
+// that was materialised by one (Task.RunID), each once, so the export
+// carries the playthrough VEVENT the task's X-TLC-RUN edge points at.
+// Best-effort like collectVtodoLogs: no storage or a missing run row
+// drops the run, never the export.
+func collectVtodoRuns(tasks []*core.Task) []*core.RecipeRun {
+	seen := make(map[string]bool)
+	var ids []string
+	for _, t := range tasks {
+		if t == nil || t.RunID == "" || seen[t.RunID] {
+			continue
+		}
+		seen[t.RunID] = true
+		ids = append(ids, t.RunID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	s, err := getStorageRaw()
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = s.Close() }()
+	ctx := context.Background()
+	var out []*core.RecipeRun
+	for _, id := range ids {
+		run, gErr := s.GetRecipeRun(ctx, id)
+		if gErr != nil || run == nil {
+			continue
+		}
+		out = append(out, run)
 	}
 	return out
 }

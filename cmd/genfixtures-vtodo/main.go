@@ -158,4 +158,35 @@ func main() {
 		vtodo.WithExportTime(exportTime),
 	)
 	write(dir+"/with-logs.ics", cal5)
+
+	// 6. recipe-run.ics: a playthrough (recipe run) through a track, one
+	// assignment it materialised, that assignment's turns from the log
+	// (one closed, one open) and its X-TLC-RUN edge back to the run.
+	// The track is dated so the fixture carries no VS040.
+	runTrack := *track
+	runTrack.DueAt = ptr(fixedTime.Add(7 * 24 * time.Hour))
+	run := &core.RecipeRun{
+		ID:        "run_01h455vb4pex5vsknk084sn0r1",
+		RecipeID:  "auth-rotation",
+		Version:   "1.0.0",
+		Hash:      "sha256:0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+		TrackID:   runTrack.ID,
+		CreatedBy: "alice",
+		CreatedAt: fixedTime.Add(-time.Hour),
+	}
+	step := *base
+	step.TrackID = ptr(runTrack.ID)
+	step.RunID = run.ID
+	step.StepID = "rotate-signer"
+	step.ClaimedAt = ptr(fixedTime.Add(4 * time.Hour))
+	claim1 := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime, By: "alice", Action: "CLAIMED", Note: "first attempt"}
+	release := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime.Add(time.Hour), By: "alice", Action: "RELEASED", Note: "handing back"}
+	claim2 := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime.Add(4 * time.Hour), By: "alice", Action: "CLAIMED", Note: "second attempt"}
+	cal6, _ := vtodo.BuildVCalendar(
+		[]*core.Task{&step}, []*core.Track{&runTrack}, []*core.LogEntry{claim1, release, claim2},
+		vtodo.WithIncludeLogs(true),
+		vtodo.WithRecipeRuns([]*core.RecipeRun{run}),
+		vtodo.WithExportTime(exportTime),
+	)
+	write(dir+"/recipe-run.ics", cal6)
 }

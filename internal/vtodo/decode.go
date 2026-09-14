@@ -65,6 +65,9 @@ type ParseResult struct {
 // RELATED-TO property whose value (after stripping the @domain) maps to
 // a known Task UID; if the link can't be resolved the LogEntry is still
 // emitted with TaskID set to the raw UID body.
+//
+// VEVENT: an open turn (X-TLC-CONCEPT:turn, no DTEND) sets ClaimedAt on
+// the task its PARENT edge names; nothing else is decoded from events.
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	o := resolve(opts)
 	statusDefs := o.statusDefinitions()
@@ -166,6 +169,39 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	for _, j := range cal.Filter(vstar.CompJournal) {
 		le := decodeJournal(j, uidToTaskID, o.uidDomain, statusDefs)
 		res.Logs = append(res.Logs, le)
+	}
+
+	// An open turn VEVENT is the wire form of Task.ClaimedAt: the task
+	// row itself carries no claim property. Only a VEVENT that declares
+	// itself a turn counts; a foreign event related to a task is not a
+	// claim. VEVENTs are otherwise not decoded: a turn is a log-derived
+	// window and a playthrough has no entity the decoder mints.
+	for _, ev := range cal.Filter(vstar.CompEvent) {
+		if declaredConcept(ev) != ConceptTurn {
+			continue
+		}
+		if _, closed := ev.Get("DTEND"); closed {
+			continue
+		}
+		start, ok := propTime(ev, "DTSTART")
+		if !ok {
+			continue
+		}
+		for _, rel := range helpers.RelatedTo(ev) {
+			if !strings.EqualFold(rel.RelType, RelTypeParent) {
+				continue
+			}
+			id, ok := uidToTaskID[uidBody(rel.UID, o.uidDomain)]
+			if !ok {
+				continue
+			}
+			for _, t := range res.Tasks {
+				if t.ID == id && (t.ClaimedAt == nil || start.After(*t.ClaimedAt)) {
+					at := start
+					t.ClaimedAt = &at
+				}
+			}
+		}
 	}
 
 	return res, nil
@@ -330,6 +366,13 @@ func decodeTask(
 	}
 	if p, ok := todo.Get(XPropArchived); ok {
 		t.Archived = isTrueValue(p.Value)
+	}
+	if p, ok := todo.Get(XPropRun); ok {
+		// Only a run TypeID under our domain is ours to reference; a
+		// foreign playthrough UID names a run this store has no row for.
+		if body := uidBody(strings.TrimSpace(p.Value), domain); core.IsRecipeRunID(body) {
+			t.RunID = body
+		}
 	}
 	for _, alarm := range todo.Sub {
 		if alarm.Type != vstar.CompAlarm {

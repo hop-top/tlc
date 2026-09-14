@@ -265,11 +265,13 @@ func TestConcept_DecodeExposesTokens(t *testing.T) {
 	res, err := vtodo.ParseVCalendar(strings.NewReader(out))
 	require.NoError(t, err)
 	// The CLAIMED entry is a status transition, so it travels as a
-	// supersession journal under the spec 02 UID scheme.
+	// supersession journal under the spec 02 UID scheme, and opens a
+	// turn that nothing closes.
 	require.Equal(t, map[string]string{
 		"track_01h455vbqkfsn02nk084ksn02q@tlc.local":                                vtodo.ConceptMission,
 		"task_01h455vb4pex5vsknk084sn02q@tlc.local":                                 vtodo.ConceptAssignment,
 		"journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z": vtodo.ConceptStatus,
+		"turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local":           vtodo.ConceptTurn,
 	}, res.Concepts)
 }
 
@@ -307,5 +309,6 @@ func TestConcept_RoundTripStable(t *testing.T) {
 	require.NoError(t, err)
 	second := mustSerialize(t, cal)
 	require.Equal(t, first, second)
-	require.Equal(t, 3, strings.Count(second, "\r\n"+vtodo.XPropConcept+":"), second)
+	// track, task, journal and the turn the CLAIMED entry opens.
+	require.Equal(t, 4, strings.Count(second, "\r\n"+vtodo.XPropConcept+":"), second)
 }
