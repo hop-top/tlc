@@ -2,7 +2,7 @@
 // from RFC 5545 (iCalendar) + RFC 9253 (RELATED-TO RELTYPE) wire format.
 //
 // The encoder produces a VCALENDAR containing one VTODO per Task and per
-// Track, with PARENT/CHILD/DEPENDS-ON relationships expressed via
+// Track, with PARENT and DEPENDS-ON relationships expressed via
 // RELATED-TO. Optional VJOURNAL components carry log entries.
 //
 // The decoder reverses the mapping: VTODO/VJOURNAL → Task/LogEntry. UIDs

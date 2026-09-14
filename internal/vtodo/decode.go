@@ -129,12 +129,14 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 			continue
 		}
 		// helpers.RelatedTo applies the RFC 5545 §3.2.15 default of
-		// PARENT when the RELTYPE param is absent, and matches the
-		// param name case-insensitively. Unknown RELTYPEs are ignored.
+		// PARENT when the RELTYPE param is absent, matches the param
+		// name case-insensitively and folds a registered value to its
+		// canonical spelling, so the typed constants compare directly.
+		// Unknown RELTYPEs are ignored.
 		for _, rel := range helpers.RelatedTo(todo) {
 			body := uidBody(rel.UID, o.uidDomain)
-			switch strings.ToUpper(rel.RelType) {
-			case RelTypeParent:
+			switch rel.RelType {
+			case vstar.RelParent:
 				if id, ok := uidToTrackID[body]; ok {
 					tid := id
 					task.TrackID = &tid
@@ -142,7 +144,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 					tid := body
 					task.TrackID = &tid
 				}
-			case RelTypeDependsOn:
+			case vstar.RelDependsOn:
 				blocker := body
 				if id, ok := uidToTaskID[body]; ok {
 					blocker = id
@@ -188,7 +190,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 			continue
 		}
 		for _, rel := range helpers.RelatedTo(ev) {
-			if !strings.EqualFold(rel.RelType, RelTypeParent) {
+			if rel.RelType != vstar.RelParent {
 				continue
 			}
 			id, ok := uidToTaskID[uidBody(rel.UID, o.uidDomain)]

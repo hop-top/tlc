@@ -83,7 +83,7 @@ func TestTurn_OpenClaimFromTaskRow(t *testing.T) {
 	require.Equal(t, at(10), stamp, "an open turn's last modification is its start")
 	out := mustSerialize(t, cal)
 	require.Contains(t, out, "\r\nSUMMARY:Replace JWT signer\r\n")
-	require.Contains(t, out, "RELATED-TO;RELTYPE=PARENT:"+eventTaskUID)
+	require.Contains(t, out, "\r\nRELATED-TO:"+eventTaskUID+"\r\n")
 	require.Contains(t, out, "X-TLC-ASSIGNEE:alice")
 }
 
@@ -319,7 +319,7 @@ func TestPlaythrough_Shape(t *testing.T) {
 		require.Equal(t, want, p.Value, name)
 	}
 	require.Contains(t, mustSerialize(t, cal),
-		"RELATED-TO;RELTYPE=PARENT:track_01h455vbqkfsn02nk084ksn02q@tlc.local\r\nX-TLC-PROJECT-ID")
+		"\r\nRELATED-TO:track_01h455vbqkfsn02nk084ksn02q@tlc.local\r\nX-TLC-PROJECT-ID")
 }
 
 // TestPlaythrough_TracklessRunHasNoEdge: a run through the world

@@ -99,7 +99,7 @@ func actionSet(names ...string) map[string]bool {
 }
 
 // taskConcept declares what a task VTODO is: an assignment when it
-// belongs to a track (it will carry RELATED-TO;RELTYPE=PARENT to that
+// belongs to a track (it will carry a PARENT RELATED-TO to that
 // mission), a mission when it stands alone. The token makes explicit
 // what the edge structure already implies.
 func taskConcept(t *core.Task) string {

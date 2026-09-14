@@ -89,7 +89,7 @@ func TestSupersession_StatusTransitionShape(t *testing.T) {
 }
 
 // TestSupersession_NonStatusKeepsPlainShape: an observation is history,
-// not a ledger entry; it keeps the log-… UID and the explicit RELTYPE.
+// not a ledger entry; it keeps the log-… UID, with the same bare edge.
 func TestSupersession_NonStatusKeepsPlainShape(t *testing.T) {
 	cal, j := buildLedger(t, []*core.LogEntry{logAt(core.ActionComment, fixedTime)})
 	requireValidExport(t, cal)
@@ -101,7 +101,8 @@ func TestSupersession_NonStatusKeepsPlainShape(t *testing.T) {
 	require.False(t, ok)
 	rel, ok := j.Get("RELATED-TO")
 	require.True(t, ok)
-	require.Equal(t, []vstar.Param{{Name: "RELTYPE", Value: vtodo.RelTypeParent}}, rel.Params)
+	require.Equal(t, ledgerTaskUID, rel.Value)
+	require.Empty(t, rel.Params, "the plain shape is the same bare edge; spec 02 omits RELTYPE=PARENT")
 	require.Equal(t, vtodo.ConceptObservation, conceptOf(t, j))
 	task, ok := cal.Find(ledgerTaskUID)
 	require.True(t, ok)

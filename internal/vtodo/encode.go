@@ -18,15 +18,6 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// RFC 5545 / RFC 9253 RELTYPE parameter values. RFC 9253 introduces
-// DEPENDS-ON; vstar treats RELTYPE values as opaque strings, so we
-// hold our own constants.
-const (
-	RelTypeParent    = "PARENT"
-	RelTypeChild     = "CHILD"
-	RelTypeDependsOn = "DEPENDS-ON"
-)
-
 // X-property names used to round-trip tlc-specific fields that have no
 // native iCalendar equivalent.
 const (
@@ -97,9 +88,11 @@ const (
 // into a vstar.Calendar with VTODO and VJOURNAL components. Pair with
 // Serialize to produce an .ics string.
 //
-// Hierarchy: each Task with a non-nil TrackID emits a RELATED-TO
-// RELTYPE=PARENT pointing at the track's UID. Each Track emits a
-// matching RELATED-TO RELTYPE=CHILD per member task.
+// Hierarchy: each Task with a non-nil TrackID emits a bare RELATED-TO
+// pointing at the track's UID (RFC 5545 §3.2.15 defaults RELTYPE to
+// PARENT; spec 02 requires the parameter be omitted for that value).
+// The edge is encoded once, in that direction: a Track carries no
+// CHILD back-reference, and membership is read from the tasks.
 //
 // Dependencies: if Task.Meta["blocked_by"] holds a []string of task IDs
 // (or anything coerceable to one), each blocker emits a RELATED-TO
@@ -149,7 +142,7 @@ func BuildVCalendar(
 	// METHOD are injected by Serialize.
 	cal := helpers.NewCalendar(o.productID)
 
-	// Index tasks per track for CHILD-link emission.
+	// Index tasks per track for PERCENT-COMPLETE.
 	tasksByTrack := make(map[string][]*core.Task)
 	for _, t := range tasks {
 		if t == nil || t.TrackID == nil {
@@ -166,7 +159,7 @@ func BuildVCalendar(
 	// The log is consulted for COMPLETED whether or not it is exported.
 	doneAt := completedAtIndex(logs, statusDefs)
 
-	// Tracks → VTODO with CHILD links.
+	// Tracks → VTODO.
 	for _, tr := range tracks {
 		if tr == nil {
 			continue
@@ -462,6 +455,17 @@ func finalize(c *vstar.Component) {
 	hashing.SetXVSTAR(c)
 }
 
+// addParentRelation appends the containment edge from c to the
+// component uid names, as a bare RELATED-TO. RFC 5545 §3.2.15 defaults
+// RELTYPE to PARENT, and spec 02 ("Relationship types") requires the
+// parameter be omitted for that value: RELATED-TO:x and
+// RELATED-TO;RELTYPE=PARENT:x name the same edge but hash differently.
+// helpers.AddRelatedTo spells out whatever RelType it is given,
+// vstar.RelParent included, so the omission is the empty value.
+func addParentRelation(c *vstar.Component, uid string) {
+	helpers.AddRelatedTo(c, uid, "")
+}
+
 // completedAtIndex maps each task ID to the instant of its most recent
 // transition into a completed-role status, read from the log. A
 // transition entry's Action is the target status NAME (Task.Transition
@@ -563,10 +567,10 @@ func buildTaskComponent(
 		c.Sub = append(c.Sub, alarm)
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
-		helpers.AddRelatedTo(&c, uidFor(*t.TrackID, domain), RelTypeParent)
+		addParentRelation(&c, uidFor(*t.TrackID, domain))
 	}
 	for _, blocker := range blockedByList(t.Meta) {
-		helpers.AddRelatedTo(&c, uidFor(blocker, domain), RelTypeDependsOn)
+		helpers.AddRelatedTo(&c, uidFor(blocker, domain), vstar.RelDependsOn)
 	}
 	if t.Effort != "" {
 		c.Add(vstar.Property{Name: XPropEffort, Value: string(t.Effort)})
@@ -663,9 +667,6 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if tr.ProjectID != nil && *tr.ProjectID != "" {
 		c.Add(vstar.Property{Name: XPropProjectID, Value: *tr.ProjectID})
 	}
-	for _, member := range members {
-		helpers.AddRelatedTo(&c, uidFor(member.ID, domain), RelTypeChild)
-	}
 	addMeta(&c, tr.Meta)
 	addUnknownTLCProps(&c, tr.Meta)
 	finalize(&c)
@@ -684,7 +685,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 //     X-VSTAR-EFFECTIVE-STATUS. Supersedes verifies the target's
 //     X-VSTAR-HASH and refuses a mutated one.
 //   - Everything else keeps the plain shape: UID
-//     log-<task>-<action>-<t>@<domain>, RELATED-TO;RELTYPE=PARENT.
+//     log-<task>-<action>-<t>@<domain>, the same bare RELATED-TO.
 //     That includes a status transition whose task is NOT in the
 //     export: a supersession entry with no target in the same
 //     calendar is an orphan (spec 05 §4, VS031), unprojectable by
@@ -746,14 +747,10 @@ func buildLogComponent(
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(le.Timestamp)})
 	}
 	if le.TaskID != "" {
-		// Supersedes already wrote the edge; the plain shape spells the
-		// RFC default out.
+		// Supersedes already wrote the edge for a ledger entry; the
+		// plain shape writes the same one.
 		if _, ok := c.Get("RELATED-TO"); !ok {
-			c.Add(vstar.Property{
-				Name:   "RELATED-TO",
-				Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeParent}},
-				Value:  uidFor(le.TaskID, domain),
-			})
+			addParentRelation(&c, uidFor(le.TaskID, domain))
 		}
 		c.Add(vstar.Property{Name: XPropLogTaskID, Value: le.TaskID})
 	}

@@ -28,8 +28,10 @@ func relTask(id, title string) *core.Task {
 	}
 }
 
-// TestRelations_ParentRoundTrip covers RELTYPE=PARENT: a task carrying a
-// TrackID must emit a PARENT RELATED-TO and recover the same TrackID.
+// TestRelations_ParentRoundTrip covers the PARENT edge: a task carrying
+// a TrackID must emit a bare RELATED-TO (RFC 5545 §3.2.15 defaults
+// RELTYPE to PARENT, and spec 02 requires the parameter be omitted for
+// that value) and recover the same TrackID.
 func TestRelations_ParentRoundTrip(t *testing.T) {
 	trackID := relTrackA
 	task := relTask(relTaskA, "child task")
@@ -47,7 +49,8 @@ func TestRelations_ParentRoundTrip(t *testing.T) {
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, []*core.Track{track}, nil)
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
-	require.Contains(t, out, "RELATED-TO;RELTYPE=PARENT:"+trackID+"@tlc.local")
+	require.Contains(t, out, "\r\nRELATED-TO:"+trackID+"@tlc.local\r\n")
+	require.NotContains(t, out, "RELTYPE=PARENT", "spec 02: RELTYPE is omitted when its value is PARENT")
 
 	res, err := vtodo.ParseVCalendar(strings.NewReader(out))
 	require.NoError(t, err)
@@ -56,13 +59,19 @@ func TestRelations_ParentRoundTrip(t *testing.T) {
 	require.Equal(t, trackID, *res.Tasks[0].TrackID)
 }
 
-// TestRelations_ChildEmitted covers RELTYPE=CHILD on the track component.
-// Decode deliberately ignores CHILD (the PARENT edge on the task is the
-// authoritative link), so this asserts emission only.
-func TestRelations_ChildEmitted(t *testing.T) {
+// TestRelations_NoChildBackReference pins spec 02's direction rule: an
+// edge is encoded once, on the contained component, and the track
+// carries no RELTYPE=CHILD back-reference. Membership still round-trips,
+// derived from the members' PARENT edges alone.
+func TestRelations_NoChildBackReference(t *testing.T) {
 	trackID := relTrackA
-	member := relTask(relTaskA, "member task")
-	member.TrackID = &trackID
+	members := []*core.Task{
+		relTask(relTaskA, "member one"),
+		relTask(relTaskB, "member two"),
+	}
+	for _, m := range members {
+		m.TrackID = &trackID
+	}
 	track := &core.Track{
 		ID:        trackID,
 		Slug:      "auth-rewrite",
@@ -73,10 +82,22 @@ func TestRelations_ChildEmitted(t *testing.T) {
 		UpdatedAt: fixedTime,
 	}
 
-	cal, err := vtodo.BuildVCalendar([]*core.Task{member}, []*core.Track{track}, nil)
+	cal, err := vtodo.BuildVCalendar(members, []*core.Track{track}, nil)
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
-	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:"+relTaskA+"@tlc.local")
+	require.NotContains(t, out, "RELTYPE=CHILD")
+	tr, ok := cal.Find(trackID + "@tlc.local")
+	require.True(t, ok)
+	require.Empty(t, tr.GetAll("RELATED-TO"), "a track carries no edge of its own")
+
+	res, err := vtodo.ParseVCalendar(strings.NewReader(out))
+	require.NoError(t, err)
+	require.Len(t, res.Tracks, 1)
+	require.Len(t, res.Tasks, 2)
+	for _, task := range res.Tasks {
+		require.NotNil(t, task.TrackID, "task %s lost its track", task.ID)
+		require.Equal(t, trackID, *task.TrackID)
+	}
 }
 
 // TestRelations_DependsOnRoundTrip covers RELTYPE=DEPENDS-ON for multiple

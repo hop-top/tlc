@@ -82,7 +82,8 @@ func TestHash_EveryBuilderVerifies(t *testing.T) {
 }
 
 // TestHash_TrackWithoutMembersVerifies covers the track that used to
-// carry no hash at all: with no CHILD link, no helpers mutator ever ran.
+// carry no hash at all: before finalize only a helpers mutator wrote
+// one, and a memberless track ran none.
 func TestHash_TrackWithoutMembersVerifies(t *testing.T) {
 	cal, err := vtodo.BuildVCalendar(nil, []*core.Track{hashTrack()}, nil)
 	require.NoError(t, err)
@@ -94,8 +95,8 @@ func TestHash_TrackWithoutMembersVerifies(t *testing.T) {
 }
 
 // TestHash_TrackWithMetaVerifies covers the track that used to carry a
-// STALE hash: X-TLC-META lands after the last CHILD link, so a hash
-// refreshed by AddRelatedTo never saw it.
+// STALE hash: X-TLC-META landed after the last helpers mutator (then a
+// CHILD back-reference, since dropped), so the digest never saw it.
 func TestHash_TrackWithMetaVerifies(t *testing.T) {
 	track := hashTrack()
 	track.Meta = map[string]any{"owner": "alice"}
