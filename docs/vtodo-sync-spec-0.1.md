@@ -471,3 +471,25 @@ END:VJOURNAL
 
 **Version**: 0.1  
 **Last Updated**: 2026-05-02
+
+---
+
+<!-- added by hash-every-component / self-certification; fold into the sections above when the X-prop registry rewrite merges -->
+
+## Addendum: integrity and timestamps
+
+- **Every component is hashed.** Each VTODO, VJOURNAL and VALARM
+  carries `UID`, `DTSTAMP` and `X-VSTAR-HASH` (spec-vstar 02). The hash
+  is the last property of the component and covers the finished
+  component, sub-components included. On import every component is
+  re-verified; a missing or mismatching hash is reported in
+  `ParseResult.Warnings` (the `vtodo-sync` plugin prints them to stderr)
+  and never blocks the import.
+- **`DTSTAMP` is the last-modified instant, not export time.** Task and
+  track: `UpdatedAt` (then `CreatedAt`, then the export clock for an
+  entity with no timestamp). Log entry: its `Timestamp`. VALARM: its
+  parent's stamp. The rows above that say `DTSTAMP` is creation or
+  export time are superseded by this. Rationale and the RFC 5545
+  deviation: `VSTAR-CONFORMANCE.md`.
+- **VALARM UID** is derived from the parent UID with `-alarm` before the
+  domain separator: `task_<id>-alarm@<domain>`.

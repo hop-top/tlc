@@ -352,6 +352,11 @@ func readTasksFromFile(path string) ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Integrity findings are not fatal; stdout is the JSON-RPC channel,
+	// so they go to stderr.
+	for _, w := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "vtodo-sync: %s: %s\n", path, w)
+	}
 	out := make([]Task, 0, len(res.Tasks))
 	for _, t := range res.Tasks {
 		out = append(out, *taskFromCore(t))

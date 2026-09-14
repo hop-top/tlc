@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/config"
@@ -20,6 +21,11 @@ type ParseResult struct {
 	Tasks  []*core.Task
 	Tracks []*core.Track
 	Logs   []*core.LogEntry
+	// Warnings lists integrity findings that did not stop the import:
+	// one entry per component (nested VALARMs included) whose
+	// X-VSTAR-HASH is absent or does not match its content. Empty for
+	// a calendar tlc wrote and nobody altered.
+	Warnings []string
 }
 
 // ParseVCalendar reads an iCalendar stream and returns the tasks,
@@ -50,7 +56,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		return nil, fmt.Errorf("parse calendar: %w", err)
 	}
 
-	res := &ParseResult{}
+	res := &ParseResult{Warnings: verifyHashes(cal)}
 
 	// Build a map UID-body → entity ID for cross-component linkage and
 	// VJOURNAL TaskID resolution. Two passes because VJOURNAL parsing
@@ -145,6 +151,41 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	}
 
 	return res, nil
+}
+
+// verifyHashes checks X-VSTAR-HASH on every component of cal, nested
+// sub-components included, and returns one warning per component that
+// fails: a missing hash (the producer is not V*-conformant) or a
+// mismatch (the component changed after it was hashed, or its bytes
+// were altered in transit). Warnings rather than errors: the entities
+// are still importable, and the caller decides how loudly to say so.
+func verifyHashes(cal vstar.Calendar) []string {
+	var out []string
+	var walk func(c vstar.Component, parent string)
+	walk = func(c vstar.Component, parent string) {
+		label := string(c.Type)
+		if uid := c.UID(); uid != "" {
+			label += " " + uid
+		}
+		if parent != "" {
+			label = parent + " > " + label
+		}
+		ok, want, got := hashing.VerifyXVSTAR(c)
+		switch {
+		case ok:
+		case got == "":
+			out = append(out, label+": no X-VSTAR-HASH")
+		default:
+			out = append(out, fmt.Sprintf("%s: X-VSTAR-HASH mismatch: stored %s, computed %s", label, got, want))
+		}
+		for _, sub := range c.Sub {
+			walk(sub, label)
+		}
+	}
+	for _, c := range cal.Components {
+		walk(c, "")
+	}
+	return out
 }
 
 func isTrackComponent(todo vstar.Component, domain string) bool {
@@ -354,10 +395,10 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain stri
 	} else if p, ok := j.Get("SUMMARY"); ok {
 		le.Note = p.Value
 	}
-	// CREATED carries the log entry's own instant; DTSTAMP carries the
-	// export instant (RFC 5545 §3.8.7.2) and is the same for every
-	// component in a calendar, so it is only a fallback for producers
-	// that emit no CREATED.
+	// CREATED carries the log entry's own instant. tlc writes DTSTAMP
+	// with the same value, but a foreign producer's DTSTAMP is whatever
+	// its clock said, so it is only a fallback for calendars that emit
+	// no CREATED.
 	if ts, ok := propTime(j, "CREATED"); ok {
 		le.Timestamp = ts
 	}

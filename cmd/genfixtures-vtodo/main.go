@@ -19,9 +19,10 @@ import (
 
 var fixedTime = time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
 
-// exportTime pins DTSTAMP in generated fixtures. DTSTAMP is export time
-// (RFC 5545 §3.8.7.2), so without a pinned clock every regeneration
-// would rewrite every fixture.
+// exportTime pins the export clock. DTSTAMP is each entity's own
+// last-modified instant, so every fixture entity below carries
+// UpdatedAt and the clock is only a backstop against a timestamp-less
+// entity making a regeneration non-deterministic.
 var exportTime = fixedTime
 
 func ptr[T any](v T) *T { return &v }

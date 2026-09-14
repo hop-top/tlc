@@ -119,10 +119,10 @@ func TestFixture_WithLogs(t *testing.T) {
 // byte-for-byte the original fixture content. This is the primary
 // guarantee of the package.
 //
-// DTSTAMP is export time (RFC 5545 §3.8.7.2), so it is deliberately not
-// a function of the entity — the export clock is pinned to the fixture
-// stamp to keep the comparison byte-exact. Every other property must
-// round-trip from the decoded entity alone.
+// DTSTAMP is the entity's own last-modified instant, so it round-trips
+// from the decoded entity like every other property; the export clock
+// is pinned only so a timestamp-less entity could never make the
+// comparison non-deterministic.
 func TestFixture_RoundTripStability(t *testing.T) {
 	fixtureStamp := time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
 	for _, name := range []string{

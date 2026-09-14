@@ -89,6 +89,19 @@ const (
 //
 // Logs: gated by WithIncludeLogs(true). Each LogEntry becomes a
 // VJOURNAL with a RELATED-TO pointing at its task's UID.
+//
+// DTSTAMP: every component's DTSTAMP is the instant its entity was last
+// modified (UpdatedAt, a log entry's own Timestamp; a VALARM takes its
+// parent's), NOT the export clock RFC 5545 §3.8.7.2 describes. The
+// canonical form spec-vstar hashes includes DTSTAMP, so an export-time
+// stamp would give unchanged content a new X-VSTAR-HASH on every
+// export and defeat the hash as a change detector. Documented as a
+// deviation in docs/VSTAR-CONFORMANCE.md. The export clock
+// (WithExportTime) only backs entities that carry no timestamp at all.
+//
+// Hashing: every builder's last step is finalize, so each VTODO,
+// VJOURNAL and VALARM leaves here with an X-VSTAR-HASH that verifies
+// over the finished component.
 func BuildVCalendar(
 	tasks []*core.Task,
 	tracks []*core.Track,
@@ -349,9 +362,35 @@ func priorityToICS(p core.Priority, defs []config.PriorityDefinition) int {
 
 // setDTSTAMP pins DTSTAMP to at. Every helpers constructor stamps
 // DTSTAMP with the wall clock, which would make two exports of one
-// unchanged calendar differ; the export decides the instant instead.
+// unchanged calendar differ; the builder decides the instant instead.
 func setDTSTAMP(c *vstar.Component, at time.Time) {
 	c.Set(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(at)})
+}
+
+// dtstampFor picks a component's DTSTAMP: the first non-zero candidate
+// (callers pass the entity's last modification first, then its
+// creation), falling back to the export clock for an entity that
+// carries no timestamp at all. See the DTSTAMP note on BuildVCalendar.
+func dtstampFor(exportAt time.Time, candidates ...time.Time) time.Time {
+	for _, t := range candidates {
+		if !t.IsZero() {
+			return t
+		}
+	}
+	return exportAt
+}
+
+// finalize is the single hashing step of every builder and its last
+// statement. The helpers mutators used mid-build (AddRelatedTo,
+// Complete, SetCategories) each refresh X-VSTAR-HASH over the component
+// AS IT STANDS, so whatever they wrote is stale by the time the builder
+// returns; only a digest taken over the finished component, Sub
+// included, verifies. The property is removed first so the fresh value
+// lands last on the wire rather than at the slot the first mutator
+// claimed.
+func finalize(c *vstar.Component) {
+	c.Remove(hashing.XVSTARHashProperty)
+	hashing.SetXVSTAR(c)
 }
 
 // completedAtIndex maps each task ID to the instant of its most recent
@@ -395,7 +434,8 @@ func buildTaskComponent(
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: task %q: %w", t.ID, err)
 	}
-	setDTSTAMP(&c, exportAt)
+	stamp := dtstampFor(exportAt, t.UpdatedAt, t.CreatedAt)
+	setDTSTAMP(&c, stamp)
 
 	if t.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
@@ -446,7 +486,7 @@ func buildTaskComponent(
 		c.Add(vstar.Property{Name: "URL", Value: t.Reference})
 	}
 	if t.RemindAt != nil && !t.RemindAt.IsZero() {
-		alarm, err := buildAlarmComponent(c.UID(), *t.RemindAt, t.Title, exportAt)
+		alarm, err := buildAlarmComponent(c.UID(), *t.RemindAt, t.Title, stamp)
 		if err != nil {
 			return vstar.Component{}, err
 		}
@@ -478,20 +518,13 @@ func buildTaskComponent(
 	if t.Archived {
 		c.Add(vstar.Property{Name: XPropArchived, Value: "TRUE"})
 	}
+	// One CATEGORIES property holding a comma-separated list (RFC 5545
+	// §3.8.1.2); SetCategories dedupes, keeps first-seen order and is
+	// case-sensitive.
+	helpers.SetCategories(&c, t.Tags)
 	addMeta(&c, t.Meta)
 	addUnknownTLCProps(&c, t.Meta)
-	// CATEGORIES last, and via the helper rather than one Add per tag:
-	// RFC 5545 §3.8.1.2 models categories as ONE property holding a
-	// comma-separated value list, which is what SetCategories emits
-	// (deduped, first-seen order preserved, case-sensitive).
-	//
-	// Position matters. Every helpers mutator refreshes X-VSTAR-HASH as
-	// its last step, and that hash covers the component AS IT STANDS.
-	// Called mid-build it would pin a digest of a half-populated VTODO
-	// -- self-inconsistent the moment CREATED or DUE lands after it.
-	// Called here it covers the finished component, so the emitted hash
-	// verifies.
-	helpers.SetCategories(&c, t.Tags)
+	finalize(&c)
 	return c, nil
 }
 
@@ -501,7 +534,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
 	}
-	setDTSTAMP(&c, exportAt)
+	setDTSTAMP(&c, dtstampFor(exportAt, tr.UpdatedAt, tr.CreatedAt))
 
 	if tr.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
@@ -540,6 +573,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 	addMeta(&c, tr.Meta)
 	addUnknownTLCProps(&c, tr.Meta)
+	finalize(&c)
 	return c, nil
 }
 
@@ -552,7 +586,9 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) (vs
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: log entry for task %q: %w", le.TaskID, err)
 	}
-	setDTSTAMP(&c, exportAt)
+	// A log entry is immutable, so its own instant is its last
+	// modification.
+	setDTSTAMP(&c, dtstampFor(exportAt, le.Timestamp))
 
 	if le.Note != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})
@@ -579,22 +615,22 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) (vs
 	}
 	addMeta(&c, le.Meta)
 	addUnknownTLCProps(&c, le.Meta)
-	// The constructor's hash predates every property above; refresh it
-	// over the finished component.
-	hashing.SetXVSTAR(&c)
+	finalize(&c)
 	return c, nil
 }
 
 // buildAlarmComponent emits a VALARM block carrying an absolute
 // DATE-TIME trigger. Used for tlc reminders that fire at a specific
-// instant rather than relative to DTSTART.
-func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, exportAt time.Time) (vstar.Component, error) {
+// instant rather than relative to DTSTART. stamp is the parent's
+// DTSTAMP: a reminder has no life of its own, it changes when its task
+// does.
+func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, stamp time.Time) (vstar.Component, error) {
 	trigger := vstar.FormatTime(remindAt)
 	c, err := helpers.NewAlarm(alarmUID(parentUID), "DISPLAY", trigger)
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: alarm for %q: %w", parentUID, err)
 	}
-	setDTSTAMP(&c, exportAt)
+	setDTSTAMP(&c, stamp)
 	// NewAlarm writes TRIGGER as a bare value, which RFC 5545 §3.8.6.3
 	// reads as a DURATION relative to DTSTART. An absolute instant must
 	// declare VALUE=DATE-TIME.
@@ -606,7 +642,7 @@ func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, e
 	if summary != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
 	}
-	hashing.SetXVSTAR(&c)
+	finalize(&c)
 	return c, nil
 }
 
