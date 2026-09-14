@@ -493,3 +493,21 @@ END:VJOURNAL
   deviation: `VSTAR-CONFORMANCE.md`.
 - **VALARM UID** is derived from the parent UID with `-alarm` before the
   domain separator: `task_<id>-alarm@<domain>`.
+
+---
+
+<!-- added by track fidelity; merge these rows into the X-prop registry table and the Track mapping when the registry rewrite lands -->
+
+## Addendum: track fidelity
+
+| Property | Entity | Value | Direction | Notes |
+|---|---|---|---|---|
+| `X-TLC-TRACK-SEQ` | Track | `Track.Seq` as a decimal integer | export + import | Per-project sequence behind the `L-NNNN` alias; omitted when zero. Registered as a typed property, so it never lands in `Meta["x_tlc"]`. |
+| `PERCENT-COMPLETE` | Track | terminal members / all members × 100, rounded | export only | The `tlc track` Progress column. Omitted for a track with no member tasks in the export; `0` when none are done. Derived, never decoded. |
+| `DUE` | Track | `Track.DueAt`, UTC form #2 | export + import | Same mapping tasks already had. |
+
+`priority_source` and `priority_rule` are excluded from `X-TLC-META`
+(they join `blocked_by`, `external_uid` and `x_tlc` in the derived-key
+set): each has a typed property, `X-TLC-PRIORITY-SOURCE` and
+`X-TLC-PRIORITY-RULE`, and carrying them in the JSON as well wrote them
+twice and let the JSON copy win on import.

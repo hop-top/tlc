@@ -95,7 +95,7 @@ proves byte-identical re-emission.
 |---|---|---|
 | `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:9998f7ca8bdf3b38085b0db400921a678f26773c82b2a6f01b48a7354897ba01` |
 | `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:f58e81296facddd51e131fbb43c36a4bd47fc39c50aed8562cfaebc34d1a812a` |
-| `track-with-tasks.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:f235a15ee893d1cbf83507630025a3133717a1f39beb7f70899128bcd9a5b301` |
+| `track-with-tasks.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:28b04785cefafd1cb14de98b89741ed6817621fcee941ea5999d07e645362f5c` |
 | `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:f7c6b44790118afbcae365ab559899cd60d1afa6057b140f5c7b880d96cae52c` |
 | `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:76d03ab3d85134d0ab690cb1bcf372fba4119cf3a07525eaaa576e9b66187a8d` |
 | `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:6e2adfe2b7bdaf58ff64b3eda98d25ed8750f01ad3c5209b0c302585d4f7bb75` |

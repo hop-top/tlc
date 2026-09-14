@@ -364,6 +364,16 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 	if p, ok := todo.Get(XPropTrackType); ok {
 		tr.Type = p.Value
 	}
+	if p, ok := todo.Get(XPropTrackSeq); ok {
+		if n, err := strconv.ParseInt(strings.TrimSpace(p.Value), 10, 64); err == nil {
+			tr.Seq = n
+		}
+	}
+	if due, ok := todo.DUE(vstar.Calendar{}); ok {
+		tr.DueAt = &due
+	} else if due, ok := propTime(todo, "DUE"); ok {
+		tr.DueAt = &due
+	}
 	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
 		tr.AssignedTo = &val

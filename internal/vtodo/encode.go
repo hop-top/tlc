@@ -3,6 +3,7 @@ package vtodo
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -35,6 +36,9 @@ const (
 	XPropTrackSlug = "X-TLC-TRACK-SLUG"
 	XPropTrackType = "X-TLC-TRACK-TYPE"
 	XPropTrackKind = "X-TLC-IS-TRACK"
+	// XPropTrackSeq carries Track.Seq, the per-project sequence behind
+	// the "L-NNNN" display alias, as XPropTaskSeq does for tasks.
+	XPropTrackSeq  = "X-TLC-TRACK-SEQ"
 	XPropLogAction = "X-TLC-LOG-ACTION"
 	XPropLogBy     = "X-TLC-LOG-BY"
 	XPropLogTaskID = "X-TLC-LOG-TASK"
@@ -529,8 +533,11 @@ func buildTaskComponent(
 }
 
 func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) (vstar.Component, error) {
-	// Zero due: NewTodo omits DUE for the zero time.
-	c, err := helpers.NewTodo(uidFor(tr.ID, domain), time.Time{})
+	var due time.Time
+	if tr.DueAt != nil {
+		due = *tr.DueAt
+	}
+	c, err := helpers.NewTodo(uidFor(tr.ID, domain), due)
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
 	}
@@ -546,6 +553,14 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if tr.Status != "" {
 		c.Add(vstar.Property{Name: XPropTrackStatus, Value: string(tr.Status)})
 	}
+	// PERCENT-COMPLETE is the Progress column: terminal members over
+	// all members, the same computation `tlc track` shows. Derived, so
+	// it is never decoded; omitted for a track with no members, where
+	// progress is undefined rather than zero.
+	if progress := core.ComputeTrackProgress(members); progress.TotalTasks > 0 {
+		pct := math.Round(float64(progress.CompletedTasks) / float64(progress.TotalTasks) * 100)
+		c.Add(vstar.Property{Name: "PERCENT-COMPLETE", Value: fmt.Sprintf("%d", int(pct))})
+	}
 
 	if !tr.CreatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(tr.CreatedAt)})
@@ -558,6 +573,9 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 	if tr.Type != "" {
 		c.Add(vstar.Property{Name: XPropTrackType, Value: tr.Type})
+	}
+	if tr.Seq > 0 {
+		c.Add(vstar.Property{Name: XPropTrackSeq, Value: fmt.Sprintf("%d", tr.Seq)})
 	}
 	// Marker so decode can distinguish a track-VTODO from a task-VTODO
 	// when the UID is foreign (rare but real for cross-system sync).
