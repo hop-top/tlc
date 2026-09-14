@@ -27,17 +27,20 @@ type ParseResult struct {
 //   - X-TLC-IS-TRACK=TRUE marker → Track
 //   - otherwise → Task
 //
-// UID handling: a UID of the form `<typeid>@<anything>` where typeid
-// matches core.IsTaskID/IsTrackID is reused as the entity ID. Otherwise
-// the decoder mints a fresh ID and stashes the original UID in
-// Meta["external_uid"].
+// UID handling: a UID of the form `<typeid>@<our-domain>` — the domain
+// being the one WithUIDDomain configured, DefaultUIDDomain otherwise —
+// where typeid matches core.IsTaskID/IsTrackID is reused as the entity
+// ID. So is a bare `<typeid>` carrying no domain at all. Everything
+// else is foreign, a well-formed typeid under someone else's domain
+// included: the decoder mints a fresh ID and stashes the original UID
+// in Meta["external_uid"].
 //
 // VJOURNAL: each becomes a LogEntry. The TaskID is taken from the first
 // RELATED-TO property whose value (after stripping the @domain) maps to
 // a known Task UID; if the link can't be resolved the LogEntry is still
 // emitted with TaskID set to the raw UID body.
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
-	_ = resolve(opts) // currently no decode-time options consume from o
+	o := resolve(opts)
 
 	cal, err := rfc5545.Parse(r)
 	if err != nil {
@@ -54,8 +57,8 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 
 	todos := cal.Filter(vstar.CompTodo)
 	for _, todo := range todos {
-		if isTrackComponent(todo) {
-			tr, uidBodyVal, perr := decodeTrack(todo)
+		if isTrackComponent(todo, o.uidDomain) {
+			tr, uidBodyVal, perr := decodeTrack(todo, o.uidDomain)
 			if perr != nil {
 				return nil, perr
 			}
@@ -64,7 +67,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				uidToTrackID[uidBodyVal] = tr.ID
 			}
 		} else {
-			t, uidBodyVal, perr := decodeTask(todo)
+			t, uidBodyVal, perr := decodeTask(todo, o.uidDomain)
 			if perr != nil {
 				return nil, perr
 			}
@@ -77,11 +80,11 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 
 	// Resolve PARENT links to track IDs and DEPENDS-ON to task IDs.
 	for _, todo := range todos {
-		if isTrackComponent(todo) {
+		if isTrackComponent(todo, o.uidDomain) {
 			continue
 		}
 		uid := getUID(todo)
-		taskID := uidToTaskID[uidBody(uid)]
+		taskID := uidToTaskID[uidBody(uid, o.uidDomain)]
 		if taskID == "" {
 			continue
 		}
@@ -97,7 +100,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		}
 		for _, rel := range todo.GetAll("RELATED-TO") {
 			reltype := paramFirst(rel.Params, "RELTYPE")
-			body := uidBody(rel.Value)
+			body := uidBody(rel.Value, o.uidDomain)
 			switch reltype {
 			case RelTypeParent:
 				if id, ok := uidToTrackID[body]; ok {
@@ -123,29 +126,29 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 
 	// VJOURNAL → LogEntry.
 	for _, j := range cal.Filter(vstar.CompJournal) {
-		le := decodeJournal(j, uidToTaskID)
+		le := decodeJournal(j, uidToTaskID, o.uidDomain)
 		res.Logs = append(res.Logs, le)
 	}
 
 	return res, nil
 }
 
-func isTrackComponent(todo vstar.Component) bool {
+func isTrackComponent(todo vstar.Component, domain string) bool {
 	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, "TRUE") {
 		return true
 	}
 	// Fall-back: if UID body looks like a track typeid, treat as track.
-	if core.IsTrackID(uidBody(getUID(todo))) {
+	if core.IsTrackID(uidBody(getUID(todo), domain)) {
 		return true
 	}
 	return false
 }
 
-func decodeTask(todo vstar.Component) (*core.Task, string, error) {
+func decodeTask(todo vstar.Component, domain string) (*core.Task, string, error) {
 	t := &core.Task{}
 
 	uid := getUID(todo)
-	body := uidBody(uid)
+	body := uidBody(uid, domain)
 	if core.IsTaskID(body) {
 		t.ID = body
 	} else {
@@ -260,11 +263,11 @@ func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 	return t, body, nil
 }
 
-func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
+func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, error) {
 	tr := &core.Track{}
 
 	uid := getUID(todo)
-	body := uidBody(uid)
+	body := uidBody(uid, domain)
 	if core.IsTrackID(body) {
 		tr.ID = body
 	} else {
@@ -318,7 +321,7 @@ func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 	return tr, body, nil
 }
 
-func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEntry {
+func decodeJournal(j vstar.Component, uidToTaskID map[string]string, domain string) *core.LogEntry {
 	le := &core.LogEntry{}
 
 	if p, ok := j.Get(XPropLogAction); ok {
@@ -352,7 +355,7 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEn
 	}
 	if le.TaskID == "" {
 		for _, rel := range j.GetAll("RELATED-TO") {
-			body := uidBody(rel.Value)
+			body := uidBody(rel.Value, domain)
 			if id, ok := uidToTaskID[body]; ok {
 				le.TaskID = id
 				break
@@ -416,13 +419,26 @@ func getUID(todo vstar.Component) string {
 	return todo.UID()
 }
 
-// uidBody strips the "@domain" suffix (if any) from a UID, leaving the
-// typeid (or foreign body) for matching.
-func uidBody(uid string) string {
+// uidBody strips our own "@domain" suffix from a UID, leaving the
+// typeid for matching. A UID carrying any other domain is returned
+// whole: the domain is what distinguishes a UID tlc minted from one a
+// foreign calendar minted, and discarding it would let
+// `task_<26 chars>@someone-else.example` be mistaken for our own
+// identity and silently overwrite that row. Left intact, the body
+// fails core.IsTaskID and the caller takes the foreign-UID path —
+// fresh TypeID, original UID preserved in Meta["external_uid"].
+//
+// A bare UID with no "@" at all keeps its historical treatment: it is
+// its own body, so a domainless typeid still round-trips.
+func uidBody(uid, domain string) string {
 	if uid == "" {
 		return ""
 	}
-	if i := strings.IndexByte(uid, '@'); i >= 0 {
+	i := strings.IndexByte(uid, '@')
+	if i < 0 {
+		return uid
+	}
+	if strings.EqualFold(uid[i+1:], domain) {
 		return uid[:i]
 	}
 	return uid

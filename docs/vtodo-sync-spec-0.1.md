@@ -104,7 +104,7 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 
 | LogEntry Field | VJOURNAL Property | Notes |
 |---|---|---|
-| UID (derived) | `UID` | Synthesized: `log_<typeid>@<domain>` |
+| UID (derived) | `UID` | Synthesized: `log-<task-typeid>-<action>-<utc-stamp>@<domain>` — see below |
 | `Timestamp` | `DTSTAMP` | UTC format |
 | `By` (user) | `ORGANIZER` | If email resolvable: `ORGANIZER:mailto:<addr>`; else `X-TLC-LOG-BY:<name>` |
 | `Action` | `SUMMARY` | Abbreviated action string (e.g., `created`, `status_change`, `comment`) |
@@ -117,6 +117,24 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 - Plugin: `include_logs: true` in `vtodo-sync` config
 
 **Rationale**: Log volume can dwarf task volume; most calendar clients don't render VJOURNAL. Opt-in keeps exports lean by default.
+
+**UID scheme**: `log-<task-typeid>-<action>-<utc-stamp>@<domain>`, e.g.
+`log-task_01h455vb4pex5vsknk084sn02q-status_change-20260502T143000Z@tlc.local`.
+
+A log entry has no identity of its own to put in the UID: `LogEntry.ID` is
+a per-database autoincrement integer, not a TypeID, so it is neither
+stable across databases nor meaningful to a calendar client. The UID is
+therefore *derived* from the fields that do identify the entry — its
+task, its action, and its timestamp — which makes it deterministic:
+re-exporting the same log entry yields the same UID, which is what a
+calendar client needs to recognize a component it has already seen.
+
+The composite is unique in practice rather than by construction. Two log
+entries on the same task, with the same action, in the same second would
+collide; nothing in the schema forbids that, and no collision has been
+observed. Giving `LogEntry` a real TypeID would remove the caveat and let
+the UID be `log_<typeid>@<domain>`, but that is a schema change and is
+out of scope for v0.1.
 
 **Round-trip**: Foreign VJOURNAL imports (non-tlc UIDs) generate fresh tlc log rows with the original UID stored in `LogEntry.Meta["external_uid"]` for round-trip stability.
 
@@ -290,13 +308,28 @@ By default, archived tasks are omitted.
 
 ## Configuration
 
-Plugin config lives in `<project>/.tlc/config.yaml`:
+Config lives in `<project>/.tlc/config.yaml`:
 
 ```yaml
 output:
   vtodo:
     product_id: "-//MyOrg//Calendar//EN"  # Optional; default: -//tlc//vtodo//EN
     uid_domain: "example.com"              # Optional; default: tlc.local
+```
+
+Both keys apply to every `--format vtodo` export. `uid_domain` is also
+the domain the decoder treats as its own: a UID under any other domain
+is foreign, and importing it mints a fresh tlc ID rather than claiming
+the existing one. Change `uid_domain` after exporting and the previous
+exports read back as foreign.
+
+The `vtodo-sync` plugin runs as a separate process and does not read
+this file. It takes the same two settings from the environment it
+inherits from tlc:
+
+```
+TLC_VTODO_PRODUCT_ID
+TLC_VTODO_UID_DOMAIN
 ```
 
 CLI flags override config:
@@ -388,7 +421,7 @@ Input: LogEntry for task with timestamp 2026-05-02 14:30:00, by jad, action "sta
 Output (VJOURNAL):
 ```
 BEGIN:VJOURNAL
-UID:log_01h455vb4pex5vsknk084sn02q@tlc.local
+UID:log-task_01h455vb4pex5vsknk084sn02q-status_change-20260502T143000Z@tlc.local
 DTSTAMP:20260502T143000Z
 ORGANIZER:mailto:jad@example.com
 SUMMARY:status_change

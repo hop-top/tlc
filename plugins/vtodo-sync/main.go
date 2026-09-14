@@ -317,6 +317,24 @@ func resolveFileSource(source string) (string, *rpcErr) {
 	}
 }
 
+// vtodoOptions resolves the iCalendar identity knobs for this process.
+//
+// The plugin is a separate process speaking JSON-RPC over stdio, so it
+// cannot read the host's `output.vtodo.*` config directly and the sync
+// protocol has no field carrying it. Environment is the channel every
+// other plugin here already uses for its configuration, and the plugin
+// inherits the host's environment. Unset vars leave the vtodo package
+// defaults in force — the Option constructors ignore empty strings.
+//
+// Encode and decode share this one resolver: a calendar written under a
+// configured domain has to read back as ours, not as a foreign UID.
+func vtodoOptions() []vtodo.Option {
+	return []vtodo.Option{
+		vtodo.WithProductID(os.Getenv("TLC_VTODO_PRODUCT_ID")),
+		vtodo.WithUIDDomain(os.Getenv("TLC_VTODO_UID_DOMAIN")),
+	}
+}
+
 // readTasksFromFile reads an .ics file and returns the decoded plugin
 // Tasks. A non-existent file yields an empty slice (so a first-time pull
 // degrades gracefully rather than erroring).
@@ -330,7 +348,7 @@ func readTasksFromFile(path string) ([]Task, error) {
 	}
 	defer f.Close()
 
-	res, err := vtodo.ParseVCalendar(f)
+	res, err := vtodo.ParseVCalendar(f, vtodoOptions()...)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +383,7 @@ func replaceTasksFile(path string, tasks []Task) error {
 	for i := range tasks {
 		coreTasks = append(coreTasks, taskToCore(&tasks[i]))
 	}
-	cal, err := vtodo.BuildVCalendar(coreTasks, nil, nil)
+	cal, err := vtodo.BuildVCalendar(coreTasks, nil, nil, vtodoOptions()...)
 	if err != nil {
 		return err
 	}
