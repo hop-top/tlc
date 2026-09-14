@@ -24,6 +24,7 @@ func roundTrip(
 	t.Helper()
 	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
 	require.NoError(t, err)
+	requireValidExport(t, cal)
 	res, err := vtodo.ParseVCalendar(strings.NewReader(mustSerialize(t, cal)), opts...)
 	require.NoError(t, err)
 	return res

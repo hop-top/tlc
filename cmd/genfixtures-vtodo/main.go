@@ -27,21 +27,37 @@ var exportTime = fixedTime
 
 func ptr[T any](v T) *T { return &v }
 
-func write(path, content string) {
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		panic(err)
-	}
-	fmt.Printf("wrote %s (%d bytes)\n", path, len(content))
-}
-
-// mustSerialize encodes cal via vtodo.Serialize and panics on error.
-// Replaces *ics.Calendar.Serialize() from the pre-vstar codec era.
-func mustSerialize(cal vstar.Calendar) string {
+// write gates cal, encodes it and writes the fixture. A calendar
+// that fails the validation gate is never written: the golden documents
+// are the conformance claim, so they must pass what the tests enforce.
+func write(path string, cal vstar.Calendar) {
+	gate(path, cal)
 	s, err := vtodo.Serialize(cal)
 	if err != nil {
 		panic(err)
 	}
-	return s
+	if err := os.WriteFile(path, []byte(s), 0o644); err != nil { //nolint:gosec // G306: committed golden fixture, world-readable like the rest of the repo
+		panic(err)
+	}
+	fmt.Printf("wrote %s (%d bytes)\n", path, len(s))
+}
+
+// gate runs the V* validation gate (docs/VSTAR-CONFORMANCE.md,
+// "Validation gate") and exits non-zero on a blocking diagnostic.
+// Allowed errors and warnings go to stderr so a regeneration shows
+// exactly what the fixtures carry.
+func gate(path string, cal vstar.Calendar) {
+	r := vtodo.ValidateExport(cal)
+	for _, d := range r.Warnings {
+		fmt.Fprintf(os.Stderr, "%s: warning %s %s: %s\n", path, d.Code, d.Path, d.Message)
+	}
+	for _, d := range r.Allowed {
+		fmt.Fprintf(os.Stderr, "%s: allowed %s %s: %s\n", path, d.Code, d.Path, d.Message)
+	}
+	if err := r.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", path, err)
+		os.Exit(1)
+	}
 }
 
 func main() {
@@ -71,7 +87,7 @@ func main() {
 
 	// 1. single-task.ics
 	cal, _ := vtodo.BuildVCalendar([]*core.Task{base}, nil, nil, vtodo.WithExportTime(exportTime))
-	write(dir+"/single-task.ics", mustSerialize(cal))
+	write(dir+"/single-task.ics", cal)
 
 	// 2. track-with-tasks.ics
 	track := &core.Track{
@@ -98,13 +114,13 @@ func main() {
 		[]*core.Track{track}, nil,
 		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/track-with-tasks.ics", mustSerialize(cal2))
+	write(dir+"/track-with-tasks.ics", cal2)
 
 	// 3. recurring-rrule.ics
 	rec := *base
 	rec.RRule = "FREQ=DAILY;INTERVAL=2"
 	cal3, _ := vtodo.BuildVCalendar([]*core.Task{&rec}, nil, nil, vtodo.WithExportTime(exportTime))
-	write(dir+"/recurring-rrule.ics", mustSerialize(cal3))
+	write(dir+"/recurring-rrule.ics", cal3)
 
 	// 4. with-dependencies.ics
 	blockerID := "task_01h455vb4pex5vsknk084sn0az"
@@ -119,7 +135,7 @@ func main() {
 		"blocked_by": []string{blockerID},
 	}
 	cal4, _ := vtodo.BuildVCalendar([]*core.Task{&blocker, &dep}, nil, nil, vtodo.WithExportTime(exportTime))
-	write(dir+"/with-dependencies.ics", mustSerialize(cal4))
+	write(dir+"/with-dependencies.ics", cal4)
 
 	// 5. with-logs.ics
 	log1 := &core.LogEntry{
@@ -141,5 +157,5 @@ func main() {
 		vtodo.WithIncludeLogs(true),
 		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/with-logs.ics", mustSerialize(cal5))
+	write(dir+"/with-logs.ics", cal5)
 }

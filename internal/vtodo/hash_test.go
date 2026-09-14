@@ -59,6 +59,7 @@ func fullCalendar(t *testing.T) vstar.Calendar {
 	)
 	require.NoError(t, err)
 	require.Len(t, cal.Components, 3)
+	requireValidExport(t, cal)
 	return cal
 }
 
