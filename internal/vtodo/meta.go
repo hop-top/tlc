@@ -58,6 +58,10 @@ var knownXProps = map[string]bool{
 	XPropLogBy:     true,
 	XPropLogTaskID: true,
 	XPropMeta:      true,
+
+	XPropPriority:       true,
+	XPropPrioritySource: true,
+	XPropPriorityRule:   true,
 }
 
 // metaProperty renders the non-derived entries of meta as a single
@@ -150,7 +154,7 @@ func unknownTLCExtensions(c vstar.Component) []vstar.Property {
 func applyMeta(dst map[string]interface{}, c vstar.Component) map[string]interface{} {
 	if p, ok := c.Get(XPropMeta); ok {
 		var decoded map[string]interface{}
-		if err := json.Unmarshal([]byte(unescapeText(p.Value)), &decoded); err == nil {
+		if err := json.Unmarshal([]byte(p.Value), &decoded); err == nil {
 			for k, v := range decoded {
 				if derivedMetaKeys[k] {
 					// Never let wire Meta clobber state that decode
@@ -177,7 +181,7 @@ func applyMeta(dst map[string]interface{}, c vstar.Component) map[string]interfa
 		bag = map[string]interface{}{}
 	}
 	for _, p := range unknown {
-		bag[strings.ToUpper(p.Name)] = unescapeText(p.Value)
+		bag[strings.ToUpper(p.Name)] = p.Value
 	}
 	dst[MetaXTLCKey] = bag
 	return dst
