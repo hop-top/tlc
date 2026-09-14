@@ -10,6 +10,7 @@ import (
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
 
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -35,6 +36,25 @@ const (
 	XPropLogAction = "X-TLC-LOG-ACTION"
 	XPropLogBy     = "X-TLC-LOG-BY"
 	XPropLogTaskID = "X-TLC-LOG-TASK"
+	// XPropPriority carries the tlc priority NAME verbatim. The numeric
+	// PRIORITY property is lossy for any vocabulary that is not exactly
+	// nine entries long, and meaningless for a custom vocabulary whose
+	// names a foreign reader has never heard of; this is what makes the
+	// round-trip exact.
+	XPropPriority = "X-TLC-PRIORITY"
+	// XPropPrioritySource and XPropPriorityRule export the priority
+	// provenance recorded in Task.Meta, so a re-imported task still
+	// knows whether a human or a derivation rule set its priority.
+	XPropPrioritySource = "X-TLC-PRIORITY-SOURCE"
+	XPropPriorityRule   = "X-TLC-PRIORITY-RULE"
+)
+
+// icsPriorityMin and icsPriorityMax bound the DEFINED half of the
+// RFC 5545 §3.8.1.9 PRIORITY range. 0 is reserved for "undefined" and is
+// never produced by the spread.
+const (
+	icsPriorityMin = 1
+	icsPriorityMax = 9
 )
 
 // utcStampLayout is the RFC 5545 §3.3.5 form #2 (UTC) DATE-TIME
@@ -93,7 +113,7 @@ func BuildVCalendar(
 		if t == nil {
 			continue
 		}
-		cal.Append(buildTaskComponent(t, o.uidDomain))
+		cal.Append(buildTaskComponent(t, o.uidDomain, o.priorities))
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -193,25 +213,63 @@ func statusToWire(s core.TaskStatus) string {
 	}
 }
 
-// priorityToICS maps a tlc Priority to the iCalendar PRIORITY integer
-// (0-9, lower = higher urgency per RFC 5545 §3.8.1.9). Mapping follows
-// the spec table: P0→1, P1→3, P2→5, P3→7. Empty priority → 0
-// (undefined), which the encoder skips.
-func priorityToICS(p core.Priority) int {
-	switch p {
-	case core.PriorityP0:
-		return 1
-	case core.PriorityP1:
-		return 3
-	case core.PriorityP2:
-		return 5
-	case core.PriorityP3:
-		return 7
+// priorityToICS maps a tlc Priority onto the iCalendar PRIORITY integer
+// (RFC 5545 §3.8.1.9: 0 = undefined, 1 = highest urgency, 9 = lowest).
+//
+// The mapping is driven by the priority's RANK within the CONFIGURED
+// vocabulary, not by its name. tlc's priority vocabulary is
+// user-declared (`task.priorities`) and declaration order is rank order;
+// a hardcoded P0/P1/P2/P3 table silently dropped the PRIORITY property
+// for every project that renamed its priorities.
+//
+// FORMULA - the vocabulary of N names is spread linearly across the nine
+// defined slots by giving each rank a band of width 9/N and taking that
+// band's LOWER edge:
+//
+//	ics = 1 + floor(rank * 9 / N)
+//
+// so rank 0 always lands on 1 (most urgent) and rank N-1 lands as near 9
+// as an integer band allows. This particular spread is chosen over an
+// endpoint-anchored one (1 + rank*8/(N-1), which would give 1/4/6/9)
+// because for the built-in four-name vocabulary it reproduces exactly
+// the 1/3/5/7 tlc has always emitted, so existing .ics consumers see no
+// change, and because it is the exact inverse of the decoder's
+// nearest-rank fallback.
+//
+// For N > 9 two adjacent ranks can share a slot - unavoidable, the
+// numeric range only has nine values - which is precisely why the name
+// is also written to X-TLC-PRIORITY and preferred on decode.
+//
+// Empty priority returns 0 ("undefined"), which the caller skips: no
+// priority set is a different fact from the least urgent priority.
+func priorityToICS(p core.Priority, defs []config.PriorityDefinition) int {
+	if p == "" {
+		return 0
 	}
-	return 0
+	n := len(defs)
+	if n == 0 {
+		return 0
+	}
+	rank := -1
+	for i, d := range defs {
+		if d.Name == string(p) {
+			rank = i
+			break
+		}
+	}
+	if rank < 0 {
+		// Not in this vocabulary: no defensible rank, so no numeric
+		// claim. The name still survives via X-TLC-PRIORITY.
+		return 0
+	}
+	ics := icsPriorityMin + rank*(icsPriorityMax+1-icsPriorityMin)/n
+	if ics > icsPriorityMax {
+		ics = icsPriorityMax
+	}
+	return ics
 }
 
-func buildTaskComponent(t *core.Task, domain string) vstar.Component {
+func buildTaskComponent(t *core.Task, domain string, defs []config.PriorityDefinition) vstar.Component {
 	c := vstar.Component{Type: vstar.CompTodo}
 	c.Add(vstar.Property{Name: "UID", Value: uidFor(t.ID, domain)})
 
@@ -222,8 +280,19 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: t.Description})
 	}
 	c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status)})
-	if p := priorityToICS(t.Priority); p != 0 {
+	if p := priorityToICS(t.Priority, defs); p != 0 {
 		c.Add(vstar.Property{Name: "PRIORITY", Value: fmt.Sprintf("%d", p)})
+	}
+	if t.Priority != "" {
+		// Name alongside the number: the number is a lossy projection
+		// onto nine slots, the name is the fact.
+		c.Add(vstar.Property{Name: XPropPriority, Value: string(t.Priority)})
+	}
+	if v := metaString(t.Meta, core.MetaPrioritySource); v != "" {
+		c.Add(vstar.Property{Name: XPropPrioritySource, Value: v})
+	}
+	if v := metaString(t.Meta, core.MetaPriorityRule); v != "" {
+		c.Add(vstar.Property{Name: XPropPriorityRule, Value: v})
 	}
 	for _, tag := range t.Tags {
 		if tag == "" {
@@ -418,6 +487,16 @@ func isEmail(s string) bool {
 	}
 	// require dot in domain
 	return strings.IndexByte(s[at+1:], '.') > 0
+}
+
+// metaString reads a string-valued Task.Meta entry, returning "" when
+// the key is absent or holds a non-string.
+func metaString(meta map[string]interface{}, key string) string {
+	if meta == nil {
+		return ""
+	}
+	s, _ := meta[key].(string)
+	return s
 }
 
 // blockedByList extracts a []string of task IDs from a Task.Meta entry
