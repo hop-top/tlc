@@ -130,6 +130,23 @@ instant. Consequence: two exports of unchanged data are byte-identical
 (`TestBuildVCalendar_DTSTAMPStableAcrossExports`); a consumer wanting
 export time must look at the file, not the components.
 
+### Refinement: what the hash is an ETag for
+
+The DTSTAMP deviation above makes `X-VSTAR-HASH` stable across exports
+of unchanged data, so it is a valid ETag for "same bytes". It is not
+invariant to a modification-only touch: `DTSTAMP` and `LAST-MODIFIED`
+are `UpdatedAt`, and tlc bumps `UpdatedAt` on saves that change nothing
+a remote sees (a stale-timeout firing, an executor claim). Sync change
+and conflict detection therefore hash a content view of the component
+with `UID`, `DTSTAMP`, `LAST-MODIFIED`, `CREATED`, `COMPLETED`,
+`X-TLC-TASK-SEQ`, `X-TLC-PROJECT-ID` and `X-VSTAR-HASH` removed at every
+level; that hash is recorded at each sync as `Meta["last_sync_hash"]`.
+See `docs/vtodo-sync-spec-0.1.md`, "Addendum: change detection". Both
+hashes are `sha256:<hex>` over `hop.top/vstar/canonical` bytes; only
+their inputs differ. Boundary: a component whose entity carries no
+timestamp at all still stamps the export clock, so its `X-VSTAR-HASH`
+follows the clock (`TestExport_TimestamplessTaskIsClockStamped`).
+
 ### Status transitions are supersession entries; the VTODO still carries its current STATUS
 
 Spec 02 "Status supersession" and conformance point 6 want an
@@ -319,20 +336,3 @@ physical lines; the awk above reads only the first, so join the
 continuation by hand or compare on the parsed component.
 
 <!-- added by content-based change detection; belongs under "DTSTAMP is the entity's last-modified instant" -->
-
-### Refinement: what the hash is an ETag for
-
-The DTSTAMP deviation above makes `X-VSTAR-HASH` stable across exports
-of unchanged data, so it is a valid ETag for "same bytes". It is not
-invariant to a modification-only touch: `DTSTAMP` and `LAST-MODIFIED`
-are `UpdatedAt`, and tlc bumps `UpdatedAt` on saves that change nothing
-a remote sees (a stale-timeout firing, an executor claim). Sync change
-and conflict detection therefore hash a content view of the component
-with `UID`, `DTSTAMP`, `LAST-MODIFIED`, `CREATED`, `COMPLETED`,
-`X-TLC-TASK-SEQ`, `X-TLC-PROJECT-ID` and `X-VSTAR-HASH` removed at every
-level; that hash is recorded at each sync as `Meta["last_sync_hash"]`.
-See `docs/vtodo-sync-spec-0.1.md`, "Addendum: change detection". Both
-hashes are `sha256:<hex>` over `hop.top/vstar/canonical` bytes; only
-their inputs differ. Boundary: a component whose entity carries no
-timestamp at all still stamps the export clock, so its `X-VSTAR-HASH`
-follows the clock (`TestExport_TimestamplessTaskIsClockStamped`).

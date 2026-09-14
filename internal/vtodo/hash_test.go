@@ -161,7 +161,8 @@ func TestParse_WarnsOnMissingHash(t *testing.T) {
 	res, err := vtodo.ParseVCalendar(strings.NewReader(calWith()))
 	require.NoError(t, err)
 	require.Len(t, res.Tasks, 1, "the task is still imported")
-	require.Equal(t,
+	require.Equal(
+		t,
 		[]string{"VTODO task_01h455vb4pex5vsknk084sn02q@tlc.local: no X-VSTAR-HASH"},
 		res.Warnings,
 	)
