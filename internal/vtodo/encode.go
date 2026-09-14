@@ -37,11 +37,6 @@ const (
 	XPropLogTaskID = "X-TLC-LOG-TASK"
 )
 
-// utcStampLayout is the RFC 5545 §3.3.5 form #2 (UTC) DATE-TIME
-// representation used for absolute timestamps (CREATED, DTSTAMP,
-// LAST-MODIFIED, DUE, TRIGGER VALUE=DATE-TIME, …).
-const utcStampLayout = "20060102T150405Z"
-
 // BuildVCalendar serialises tasks, tracks and (optionally) log entries
 // into a vstar.Calendar with VTODO and VJOURNAL components. Pair with
 // Serialize to produce an .ics string.
@@ -85,7 +80,7 @@ func BuildVCalendar(
 		if tr == nil {
 			continue
 		}
-		cal.Append(buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain))
+		cal.Append(buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain, o.exportTime))
 	}
 
 	// Tasks → VTODO.
@@ -93,7 +88,7 @@ func BuildVCalendar(
 		if t == nil {
 			continue
 		}
-		cal.Append(buildTaskComponent(t, o.uidDomain))
+		cal.Append(buildTaskComponent(t, o.uidDomain, o.exportTime))
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -102,7 +97,7 @@ func BuildVCalendar(
 			if le == nil {
 				continue
 			}
-			cal.Append(buildLogComponent(le, o.uidDomain))
+			cal.Append(buildLogComponent(le, o.uidDomain, o.exportTime))
 		}
 	}
 
@@ -211,7 +206,7 @@ func priorityToICS(p core.Priority) int {
 	return 0
 }
 
-func buildTaskComponent(t *core.Task, domain string) vstar.Component {
+func buildTaskComponent(t *core.Task, domain string, exportAt time.Time) vstar.Component {
 	c := vstar.Component{Type: vstar.CompTodo}
 	c.Add(vstar.Property{Name: "UID", Value: uidFor(t.ID, domain)})
 
@@ -232,15 +227,16 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 		c.Add(vstar.Property{Name: "CATEGORIES", Value: tag})
 	}
 	if !t.CreatedAt.IsZero() {
-		stamp := t.CreatedAt.UTC().Format(utcStampLayout)
-		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
-		c.Add(vstar.Property{Name: "DTSTAMP", Value: stamp})
+		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(t.CreatedAt)})
 	}
+	// DTSTAMP is when this calendar instance was created (RFC 5545
+	// §3.8.7.2) — i.e. export time, not entity creation time.
+	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !t.UpdatedAt.IsZero() {
-		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: t.UpdatedAt.UTC().Format(utcStampLayout)})
+		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(t.UpdatedAt)})
 	}
 	if t.DueAt != nil && !t.DueAt.IsZero() {
-		c.Add(vstar.Property{Name: "DUE", Value: t.DueAt.UTC().Format(utcStampLayout)})
+		c.SetDUE(*t.DueAt)
 	}
 	if t.RRule != "" {
 		c.Add(vstar.Property{Name: "RRULE", Value: t.RRule})
@@ -285,7 +281,7 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 	return c
 }
 
-func buildTrackComponent(tr *core.Track, members []*core.Task, domain string) vstar.Component {
+func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) vstar.Component {
 	c := vstar.Component{Type: vstar.CompTodo}
 	c.Add(vstar.Property{Name: "UID", Value: uidFor(tr.ID, domain)})
 
@@ -308,12 +304,11 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string) vs
 	c.Add(vstar.Property{Name: "STATUS", Value: status})
 
 	if !tr.CreatedAt.IsZero() {
-		stamp := tr.CreatedAt.UTC().Format(utcStampLayout)
-		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
-		c.Add(vstar.Property{Name: "DTSTAMP", Value: stamp})
+		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(tr.CreatedAt)})
 	}
+	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !tr.UpdatedAt.IsZero() {
-		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: tr.UpdatedAt.UTC().Format(utcStampLayout)})
+		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(tr.UpdatedAt)})
 	}
 	if tr.Slug != "" {
 		c.Add(vstar.Property{Name: XPropTrackSlug, Value: tr.Slug})
@@ -340,7 +335,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string) vs
 	return c
 }
 
-func buildLogComponent(le *core.LogEntry, domain string) vstar.Component {
+func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vstar.Component {
 	c := vstar.Component{Type: vstar.CompJournal}
 	c.Add(vstar.Property{Name: "UID", Value: logUID(le, domain)})
 
@@ -350,10 +345,9 @@ func buildLogComponent(le *core.LogEntry, domain string) vstar.Component {
 	} else if le.Action != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: le.Action})
 	}
+	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !le.Timestamp.IsZero() {
-		stamp := le.Timestamp.UTC().Format(utcStampLayout)
-		c.Add(vstar.Property{Name: "DTSTAMP", Value: stamp})
-		c.Add(vstar.Property{Name: "CREATED", Value: stamp})
+		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(le.Timestamp)})
 	}
 	if le.TaskID != "" {
 		c.Add(vstar.Property{
@@ -381,7 +375,7 @@ func buildAlarmComponent(remindAt time.Time, summary string) vstar.Component {
 	c.Add(vstar.Property{
 		Name:   "TRIGGER",
 		Params: []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}},
-		Value:  remindAt.UTC().Format(utcStampLayout),
+		Value:  vstar.FormatTime(remindAt),
 	})
 	if summary != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
@@ -395,7 +389,7 @@ func buildAlarmComponent(remindAt time.Time, summary string) vstar.Component {
 func logUID(le *core.LogEntry, domain string) string {
 	stamp := ""
 	if !le.Timestamp.IsZero() {
-		stamp = le.Timestamp.UTC().Format(utcStampLayout)
+		stamp = vstar.FormatTime(le.Timestamp)
 	}
 	base := fmt.Sprintf("log-%s-%s-%s", le.TaskID, le.Action, stamp)
 	return base + "@" + domain

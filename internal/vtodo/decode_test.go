@@ -3,6 +3,7 @@ package vtodo_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -229,4 +230,196 @@ func TestParseVCalendar_RRuleValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Tasks, 1)
 	require.Empty(t, res.Tasks[0].RRule, "unsupported FREQ must not survive decode")
+}
+
+// calWith wraps the supplied VTODO body lines in a minimal VCALENDAR.
+func calWith(lines ...string) string {
+	out := []string{
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"PRODID:-//tlc//vtodo//EN",
+		"CALSCALE:GREGORIAN",
+		"METHOD:PUBLISH",
+		"BEGIN:VTODO",
+		"UID:task_01h455vb4pex5vsknk084sn02q@tlc.local",
+		"SUMMARY:x",
+		"STATUS:NEEDS-ACTION",
+	}
+	out = append(out, lines...)
+	out = append(out, "END:VTODO", "END:VCALENDAR", "")
+	return strings.Join(out, "\r\n")
+}
+
+func parseOneTask(t *testing.T, ics string) *core.Task {
+	t.Helper()
+	res, err := vtodo.ParseVCalendar(strings.NewReader(ics))
+	require.NoError(t, err)
+	require.Len(t, res.Tasks, 1)
+	return res.Tasks[0]
+}
+
+// TestDecode_DateOnlyDueFallback covers the one non-form-#2 layout we
+// still accept. vstar has no VALUE=DATE support at the pinned version,
+// so a bare YYYYMMDD DUE would otherwise be silently dropped.
+func TestDecode_DateOnlyDueFallback(t *testing.T) {
+	got := parseOneTask(t, calWith(
+		"DTSTAMP:20260502T143000Z",
+		"DUE;VALUE=DATE:20260515",
+	))
+	require.NotNil(t, got.DueAt, "date-only DUE must still decode")
+	require.Equal(
+		t,
+		time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
+		got.DueAt.UTC(),
+	)
+}
+
+// TestDecode_DateOnlyCreatedFallback proves the fallback is shared by
+// the other time-bearing properties, not special-cased to DUE.
+func TestDecode_DateOnlyCreatedFallback(t *testing.T) {
+	got := parseOneTask(t, calWith(
+		"DTSTAMP:20260502T143000Z",
+		"CREATED;VALUE=DATE:20260501",
+	))
+	require.Equal(
+		t,
+		time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
+		got.CreatedAt.UTC(),
+	)
+}
+
+// TestDecode_NonICalLayoutsRejected pins the strictness we inherit from
+// vstar.ParseTime: RFC 3339 and bare local-time forms are NOT iCalendar
+// DATE-TIME and must not be silently coerced.
+func TestDecode_NonICalLayoutsRejected(t *testing.T) {
+	for _, due := range []string{
+		"2026-05-15T14:30:00Z", // RFC 3339
+		"2026-05-15T14:30:00",  // ISO local
+		"2026-05-15T14:30:00+02:00",
+		"20260515T143000", // form #1, floating local — no zone
+	} {
+		t.Run(due, func(t *testing.T) {
+			got := parseOneTask(t, calWith(
+				"DTSTAMP:20260502T143000Z",
+				"DUE:"+due,
+			))
+			require.Nil(t, got.DueAt, "non-iCalendar DUE %q must not decode", due)
+		})
+	}
+}
+
+// TestDecode_UTCFormRoundTrips is the happy path: RFC 5545 §3.3.5
+// form #2 for every time-bearing property the decoder reads.
+func TestDecode_UTCFormRoundTrips(t *testing.T) {
+	got := parseOneTask(t, calWith(
+		"CREATED:20260502T143000Z",
+		"DTSTAMP:20260914T080000Z",
+		"LAST-MODIFIED:20260502T153000Z",
+		"DUE:20260503T143000Z",
+		"BEGIN:VALARM",
+		"ACTION:DISPLAY",
+		"TRIGGER;VALUE=DATE-TIME:20260503T023000Z",
+		"END:VALARM",
+	))
+	require.Equal(t, time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC), got.CreatedAt.UTC())
+	require.Equal(t, time.Date(2026, 5, 2, 15, 30, 0, 0, time.UTC), got.UpdatedAt.UTC())
+	require.NotNil(t, got.DueAt)
+	require.Equal(t, time.Date(2026, 5, 3, 14, 30, 0, 0, time.UTC), got.DueAt.UTC())
+	require.NotNil(t, got.RemindAt)
+	require.Equal(t, time.Date(2026, 5, 3, 2, 30, 0, 0, time.UTC), got.RemindAt.UTC())
+}
+
+// TestDecode_UpdatedAtPrefersLastModified pins the documented
+// precedence: LAST-MODIFIED wins, DTSTAMP is only a fallback. With
+// DTSTAMP now carrying export time, leaking it into UpdatedAt whenever
+// LAST-MODIFIED exists would corrupt the entity.
+func TestDecode_UpdatedAtPrefersLastModified(t *testing.T) {
+	t.Run("last-modified present", func(t *testing.T) {
+		got := parseOneTask(t, calWith(
+			"CREATED:20260502T143000Z",
+			"DTSTAMP:20260914T080000Z",
+			"LAST-MODIFIED:20260502T153000Z",
+		))
+		require.Equal(t, time.Date(2026, 5, 2, 15, 30, 0, 0, time.UTC), got.UpdatedAt.UTC())
+	})
+	t.Run("falls back to dtstamp", func(t *testing.T) {
+		got := parseOneTask(t, calWith(
+			"CREATED:20260502T143000Z",
+			"DTSTAMP:20260914T080000Z",
+		))
+		require.Equal(t, time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC), got.UpdatedAt.UTC())
+	})
+}
+
+// TestDecode_TrackUpdatedAtPrefersLastModified mirrors the task-side
+// precedence check for the track decode path.
+func TestDecode_TrackUpdatedAtPrefersLastModified(t *testing.T) {
+	base := []string{
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"PRODID:-//tlc//vtodo//EN",
+		"BEGIN:VTODO",
+		"UID:track_01h455vbqkfsn02nk084ksn02q@tlc.local",
+		"SUMMARY:Auth rewrite",
+		"STATUS:IN-PROCESS",
+		"X-TLC-IS-TRACK:TRUE",
+		"CREATED:20260502T143000Z",
+		"DTSTAMP:20260914T080000Z",
+	}
+	withLM := append(append([]string{}, base...),
+		"LAST-MODIFIED:20260502T153000Z", "END:VTODO", "END:VCALENDAR", "")
+	res, err := vtodo.ParseVCalendar(strings.NewReader(strings.Join(withLM, "\r\n")))
+	require.NoError(t, err)
+	require.Len(t, res.Tracks, 1)
+	require.Equal(t, time.Date(2026, 5, 2, 15, 30, 0, 0, time.UTC), res.Tracks[0].UpdatedAt.UTC())
+
+	noLM := append(append([]string{}, base...), "END:VTODO", "END:VCALENDAR", "")
+	res2, err := vtodo.ParseVCalendar(strings.NewReader(strings.Join(noLM, "\r\n")))
+	require.NoError(t, err)
+	require.Len(t, res2.Tracks, 1)
+	require.Equal(t, time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC), res2.Tracks[0].UpdatedAt.UTC())
+}
+
+// TestDecode_JournalTimestampPrefersCreated pins the VJOURNAL
+// precedence: CREATED carries the entry's own instant, DTSTAMP carries
+// export time and is only a fallback. Preferring DTSTAMP would stamp
+// every decoded log entry with the moment the file was written.
+func TestDecode_JournalTimestampPrefersCreated(t *testing.T) {
+	ics := strings.Join([]string{
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"PRODID:-//tlc//vtodo//EN",
+		"BEGIN:VJOURNAL",
+		"UID:log-1@tlc.local",
+		"SUMMARY:claimed",
+		"DTSTAMP:20260914T080000Z",
+		"CREATED:20260502T143000Z",
+		"X-TLC-LOG-TASK:task_01h455vb4pex5vsknk084sn02q",
+		"END:VJOURNAL",
+		"END:VCALENDAR",
+		"",
+	}, "\r\n")
+	res, err := vtodo.ParseVCalendar(strings.NewReader(ics))
+	require.NoError(t, err)
+	require.Len(t, res.Logs, 1)
+	require.Equal(t, time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC), res.Logs[0].Timestamp.UTC())
+
+	// No CREATED → fall back to DTSTAMP.
+	noCreated := strings.Join([]string{
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"PRODID:-//tlc//vtodo//EN",
+		"BEGIN:VJOURNAL",
+		"UID:log-1@tlc.local",
+		"SUMMARY:claimed",
+		"DTSTAMP:20260914T080000Z",
+		"X-TLC-LOG-TASK:task_01h455vb4pex5vsknk084sn02q",
+		"END:VJOURNAL",
+		"END:VCALENDAR",
+		"",
+	}, "\r\n")
+	res2, err := vtodo.ParseVCalendar(strings.NewReader(noCreated))
+	require.NoError(t, err)
+	require.Len(t, res2.Logs, 1)
+	require.Equal(t, time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC), res2.Logs[0].Timestamp.UTC())
 }

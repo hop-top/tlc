@@ -11,6 +11,8 @@
 // Task.Meta["external_uid"].
 package vtodo
 
+import "time"
+
 // DefaultUIDDomain is the domain appended to Task TypeIDs in the iCalendar
 // UID property when no override is supplied via WithUIDDomain.
 const DefaultUIDDomain = "tlc.local"
@@ -25,6 +27,7 @@ type options struct {
 	uidDomain   string
 	productID   string
 	includeLogs bool
+	exportTime  time.Time
 }
 
 func defaultOptions() options {
@@ -66,14 +69,33 @@ func WithProductID(id string) Option {
 	}
 }
 
+// WithExportTime pins the instant written to DTSTAMP. RFC 5545 §3.8.7.2
+// defines DTSTAMP as the moment the calendar instance was created, so it
+// defaults to wall-clock time at BuildVCalendar. Override it to make
+// encoder output deterministic (fixtures, golden tests).
+//
+// The zero time is ignored — it would clear DTSTAMP, which RFC 5545
+// §3.6.2 requires on every VTODO.
+func WithExportTime(t time.Time) Option {
+	return func(o *options) {
+		if !t.IsZero() {
+			o.exportTime = t
+		}
+	}
+}
+
 // resolve applies a slice of Options on top of the defaults and returns
-// the resolved configuration.
+// the resolved configuration. The export clock is sampled once here so
+// every component in a single calendar shares one DTSTAMP.
 func resolve(opts []Option) options {
 	o := defaultOptions()
 	for _, fn := range opts {
 		if fn != nil {
 			fn(&o)
 		}
+	}
+	if o.exportTime.IsZero() {
+		o.exportTime = time.Now().UTC()
 	}
 	return o
 }
