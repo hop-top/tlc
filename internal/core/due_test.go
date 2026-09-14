@@ -1,11 +1,14 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hop.top/tlc/internal/core"
+	"hop.top/vstar/rrule"
 )
 
 func TestIsOverdue(t *testing.T) {
@@ -71,12 +74,15 @@ func TestNextReminder(t *testing.T) {
 
 	t.Run("no reminders", func(t *testing.T) {
 		task := &core.Task{}
-		assert.Nil(t, task.NextReminder())
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		assert.Nil(t, r)
 	})
 	t.Run("remind_at only", func(t *testing.T) {
 		task := &core.Task{RemindAt: &future}
-		r := task.NextReminder()
-		assert.NotNil(t, r)
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		require.NotNil(t, r)
 		assert.Equal(t, future.Unix(), r.Unix())
 	})
 	t.Run("auto-remind wins over later remind_at", func(t *testing.T) {
@@ -85,8 +91,9 @@ func TestNextReminder(t *testing.T) {
 			DueAt:    &due,
 			RemindAt: &farFuture,
 		}
-		r := task.NextReminder()
-		assert.NotNil(t, r)
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		require.NotNil(t, r)
 		// auto-remind = due - 12h, but that's in the past
 		// so remind_at (farFuture) should win
 		assert.Equal(t, farFuture.Unix(), r.Unix())
@@ -100,9 +107,34 @@ func TestNextReminder(t *testing.T) {
 			CreatedAt: now.Add(-150 * time.Minute),
 			RRule:     "FREQ=HOURLY",
 		}
-		r := task.NextReminder()
-		assert.NotNil(t, r)
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		require.NotNil(t, r)
 		assert.InDelta(t, now.Add(30*time.Minute).Unix(), r.Unix(), 2)
+	})
+	t.Run("rrule weekly", func(t *testing.T) {
+		// Anchor two days ago, FREQ=WEEKLY → next fire five days out.
+		task := &core.Task{
+			CreatedAt: now.Add(-2 * 24 * time.Hour),
+			RRule:     "FREQ=WEEKLY",
+		}
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		require.NotNil(t, r)
+		assert.InDelta(t, now.Add(5*24*time.Hour).Unix(), r.Unix(), 2)
+	})
+	t.Run("rrule yearly", func(t *testing.T) {
+		// Anchor six months back, FREQ=YEARLY → next fire six
+		// months out, inside the horizon.
+		anchor := now.AddDate(0, -6, 0)
+		task := &core.Task{
+			CreatedAt: anchor,
+			RRule:     "FREQ=YEARLY",
+		}
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		require.NotNil(t, r)
+		assert.Equal(t, anchor.AddDate(1, 0, 0).Unix(), r.Unix())
 	})
 	t.Run("rrule stops at due", func(t *testing.T) {
 		// Next fire = now + 2h, but due is now + 10min, so
@@ -114,7 +146,55 @@ func TestNextReminder(t *testing.T) {
 			DueAt:     &dueAt,
 			RRule:     "FREQ=HOURLY;INTERVAL=2",
 		}
-		r := task.NextReminder()
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		assert.Nil(t, r)
+	})
+	t.Run("rrule beyond horizon is no reminder", func(t *testing.T) {
+		// Anchor one day back, FREQ=YEARLY → next fire in a year
+		// less a day... unless the rule's INTERVAL pushes it past
+		// the horizon: INTERVAL=2 fires two years after the anchor.
+		task := &core.Task{
+			CreatedAt: now.Add(-24 * time.Hour),
+			RRule:     "FREQ=YEARLY;INTERVAL=2",
+		}
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		assert.Nil(t, r)
+	})
+	t.Run("rrule exhausted is no reminder", func(t *testing.T) {
+		// UNTIL already passed: the series ended, nothing to
+		// report, and that is not an error.
+		task := &core.Task{
+			CreatedAt: now.AddDate(0, 0, -10),
+			RRule:     "FREQ=DAILY;UNTIL=20200101T000000Z",
+		}
+		r, err := task.NextReminder()
+		require.NoError(t, err)
+		assert.Nil(t, r)
+	})
+	t.Run("unsatisfiable rrule is an error, not silence", func(t *testing.T) {
+		// February 30th never comes. The evaluator walks its
+		// iteration budget and gives up; that MUST reach the caller
+		// as ErrIterationCap rather than collapse into "no
+		// reminder", which used to burn ten thousand steps and then
+		// return nil as if the series had simply ended.
+		task := &core.Task{
+			CreatedAt: now.Add(-time.Hour),
+			RRule:     "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30",
+		}
+		r, err := task.NextReminder()
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, rrule.ErrIterationCap), "got %v", err)
+		assert.Nil(t, r)
+	})
+	t.Run("invalid rrule is an error", func(t *testing.T) {
+		task := &core.Task{
+			CreatedAt: now.Add(-time.Hour),
+			RRule:     "not-an-rrule",
+		}
+		r, err := task.NextReminder()
+		require.Error(t, err)
 		assert.Nil(t, r)
 	})
 }
