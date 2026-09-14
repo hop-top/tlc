@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/hashing"
 	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/config"
@@ -97,7 +98,9 @@ func BuildVCalendar(
 	o := resolve(opts)
 	statusDefs := o.statusDefinitions()
 
-	cal := vstar.Calendar{ProdID: o.productID}
+	// NewCalendar is PRODID-only at this vstar version; CALSCALE and
+	// METHOD are injected by Serialize.
+	cal := helpers.NewCalendar(o.productID)
 
 	// Index tasks per track for CHILD-link emission.
 	tasksByTrack := make(map[string][]*core.Task)
@@ -113,12 +116,19 @@ func BuildVCalendar(
 		})
 	}
 
+	// The log is consulted for COMPLETED whether or not it is exported.
+	doneAt := completedAtIndex(logs, statusDefs)
+
 	// Tracks → VTODO with CHILD links.
 	for _, tr := range tracks {
 		if tr == nil {
 			continue
 		}
-		cal.Append(buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain, o.exportTime))
+		c, err := buildTrackComponent(tr, tasksByTrack[tr.ID], o.uidDomain, o.exportTime)
+		if err != nil {
+			return vstar.Calendar{}, err
+		}
+		cal.Append(c)
 	}
 
 	// Tasks → VTODO.
@@ -126,7 +136,11 @@ func BuildVCalendar(
 		if t == nil {
 			continue
 		}
-		cal.Append(buildTaskComponent(t, o.uidDomain, o.priorities, statusDefs, o.exportTime))
+		c, err := buildTaskComponent(t, o.uidDomain, o.priorities, statusDefs, o.exportTime, doneAt[t.ID])
+		if err != nil {
+			return vstar.Calendar{}, err
+		}
+		cal.Append(c)
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -135,7 +149,11 @@ func BuildVCalendar(
 			if le == nil {
 				continue
 			}
-			cal.Append(buildLogComponent(le, o.uidDomain, o.exportTime))
+			c, err := buildLogComponent(le, o.uidDomain, o.exportTime)
+			if err != nil {
+				return vstar.Calendar{}, err
+			}
+			cal.Append(c)
 		}
 	}
 
@@ -329,15 +347,55 @@ func priorityToICS(p core.Priority, defs []config.PriorityDefinition) int {
 	return ics
 }
 
+// setDTSTAMP pins DTSTAMP to at. Every helpers constructor stamps
+// DTSTAMP with the wall clock, which would make two exports of one
+// unchanged calendar differ; the export decides the instant instead.
+func setDTSTAMP(c *vstar.Component, at time.Time) {
+	c.Set(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(at)})
+}
+
+// completedAtIndex maps each task ID to the instant of its most recent
+// transition into a completed-role status, read from the log. A
+// transition entry's Action is the target status NAME (Task.Transition
+// writes it that way), so the configured vocabulary's roles decide what
+// counts as completion rather than a hard-coded "DONE". Tasks with no
+// such entry are absent from the map and fall back to UpdatedAt.
+func completedAtIndex(logs []*core.LogEntry, defs []config.StatusDefinition) map[string]time.Time {
+	idx := make(map[string]time.Time)
+	for _, le := range logs {
+		if le == nil || le.TaskID == "" || le.Timestamp.IsZero() {
+			continue
+		}
+		if statusRole(core.TaskStatus(le.Action), defs) != config.RoleCompleted {
+			continue
+		}
+		if prev, ok := idx[le.TaskID]; !ok || le.Timestamp.After(prev) {
+			idx[le.TaskID] = le.Timestamp
+		}
+	}
+	return idx
+}
+
 func buildTaskComponent(
 	t *core.Task,
 	domain string,
 	defs []config.PriorityDefinition,
 	statusDefs []config.StatusDefinition,
 	exportAt time.Time,
-) vstar.Component {
-	c := vstar.Component{Type: vstar.CompTodo}
-	c.Add(vstar.Property{Name: "UID", Value: uidFor(t.ID, domain)})
+	doneAt time.Time,
+) (vstar.Component, error) {
+	var due time.Time
+	if t.DueAt != nil {
+		due = *t.DueAt
+	}
+	// NewTodo seeds UID, DTSTAMP and DUE (omitted for the zero time) and
+	// refuses an empty UID, which spec-vstar 02 requires on every
+	// component.
+	c, err := helpers.NewTodo(uidFor(t.ID, domain), due)
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: task %q: %w", t.ID, err)
+	}
+	setDTSTAMP(&c, exportAt)
 
 	if t.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
@@ -345,7 +403,19 @@ func buildTaskComponent(
 	if t.Description != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: t.Description})
 	}
-	c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status, statusDefs)})
+	if statusRole(t.Status, statusDefs) == config.RoleCompleted {
+		// Complete writes STATUS, COMPLETED and PERCENT-COMPLETE=100 as
+		// one unit, so a foreign reader sees a consistent "done" triple
+		// rather than a bare STATUS. COMPLETED is the instant of the last
+		// completing transition when the log has one, else the last
+		// modification, the closest fact the model holds.
+		if doneAt.IsZero() {
+			doneAt = t.UpdatedAt
+		}
+		helpers.Complete(&c, doneAt)
+	} else {
+		c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status, statusDefs)})
+	}
 	if t.Status != "" {
 		c.Add(vstar.Property{Name: XPropStatus, Value: string(t.Status)})
 	}
@@ -366,14 +436,8 @@ func buildTaskComponent(
 	if !t.CreatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(t.CreatedAt)})
 	}
-	// DTSTAMP is when this calendar instance was created (RFC 5545
-	// §3.8.7.2) — i.e. export time, not entity creation time.
-	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !t.UpdatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(t.UpdatedAt)})
-	}
-	if t.DueAt != nil && !t.DueAt.IsZero() {
-		c.SetDUE(*t.DueAt)
 	}
 	if t.RRule != "" {
 		c.Add(vstar.Property{Name: "RRULE", Value: t.RRule})
@@ -382,7 +446,11 @@ func buildTaskComponent(
 		c.Add(vstar.Property{Name: "URL", Value: t.Reference})
 	}
 	if t.RemindAt != nil && !t.RemindAt.IsZero() {
-		c.Sub = append(c.Sub, buildAlarmComponent(*t.RemindAt, t.Title))
+		alarm, err := buildAlarmComponent(c.UID(), *t.RemindAt, t.Title, exportAt)
+		if err != nil {
+			return vstar.Component{}, err
+		}
+		c.Sub = append(c.Sub, alarm)
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
 		helpers.AddRelatedTo(&c, uidFor(*t.TrackID, domain), RelTypeParent)
@@ -424,12 +492,16 @@ func buildTaskComponent(
 	// Called here it covers the finished component, so the emitted hash
 	// verifies.
 	helpers.SetCategories(&c, t.Tags)
-	return c
+	return c, nil
 }
 
-func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) vstar.Component {
-	c := vstar.Component{Type: vstar.CompTodo}
-	c.Add(vstar.Property{Name: "UID", Value: uidFor(tr.ID, domain)})
+func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) (vstar.Component, error) {
+	// Zero due: NewTodo omits DUE for the zero time.
+	c, err := helpers.NewTodo(uidFor(tr.ID, domain), time.Time{})
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
+	}
+	setDTSTAMP(&c, exportAt)
 
 	if tr.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
@@ -445,7 +517,6 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if !tr.CreatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(tr.CreatedAt)})
 	}
-	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !tr.UpdatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(tr.UpdatedAt)})
 	}
@@ -469,12 +540,19 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 	addMeta(&c, tr.Meta)
 	addUnknownTLCProps(&c, tr.Meta)
-	return c
+	return c, nil
 }
 
-func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vstar.Component {
-	c := vstar.Component{Type: vstar.CompJournal}
-	c.Add(vstar.Property{Name: "UID", Value: logUID(le, domain)})
+func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) (vstar.Component, error) {
+	// Zero DTSTART: NewJournal omits the property for the zero time. A
+	// tlc journal's own instant travels as CREATED, the property both the
+	// decoder and the sync spec read; carrying it a second time as
+	// DTSTART would only widen the wire.
+	c, err := helpers.NewJournal(logUID(le, domain), time.Time{})
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: log entry for task %q: %w", le.TaskID, err)
+	}
+	setDTSTAMP(&c, exportAt)
 
 	if le.Note != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})
@@ -482,7 +560,6 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vst
 	} else if le.Action != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: le.Action})
 	}
-	c.Add(vstar.Property{Name: "DTSTAMP", Value: vstar.FormatTime(exportAt)})
 	if !le.Timestamp.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(le.Timestamp)})
 	}
@@ -502,24 +579,48 @@ func buildLogComponent(le *core.LogEntry, domain string, exportAt time.Time) vst
 	}
 	addMeta(&c, le.Meta)
 	addUnknownTLCProps(&c, le.Meta)
-	return c
+	// The constructor's hash predates every property above; refresh it
+	// over the finished component.
+	hashing.SetXVSTAR(&c)
+	return c, nil
 }
 
 // buildAlarmComponent emits a VALARM block carrying an absolute
 // DATE-TIME trigger. Used for tlc reminders that fire at a specific
 // instant rather than relative to DTSTART.
-func buildAlarmComponent(remindAt time.Time, summary string) vstar.Component {
-	c := vstar.Component{Type: vstar.CompAlarm}
-	c.Add(vstar.Property{Name: "ACTION", Value: "DISPLAY"})
-	c.Add(vstar.Property{
+func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, exportAt time.Time) (vstar.Component, error) {
+	trigger := vstar.FormatTime(remindAt)
+	c, err := helpers.NewAlarm(alarmUID(parentUID), "DISPLAY", trigger)
+	if err != nil {
+		return vstar.Component{}, fmt.Errorf("vtodo: alarm for %q: %w", parentUID, err)
+	}
+	setDTSTAMP(&c, exportAt)
+	// NewAlarm writes TRIGGER as a bare value, which RFC 5545 §3.8.6.3
+	// reads as a DURATION relative to DTSTART. An absolute instant must
+	// declare VALUE=DATE-TIME.
+	c.Set(vstar.Property{
 		Name:   "TRIGGER",
 		Params: []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}},
-		Value:  vstar.FormatTime(remindAt),
+		Value:  trigger,
 	})
 	if summary != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
 	}
-	return c
+	hashing.SetXVSTAR(&c)
+	return c, nil
+}
+
+// alarmUID derives a VALARM's UID from its parent's: the parent UID
+// with "-alarm" inserted before the domain separator, so
+// task_<id>@tlc.local reminds through task_<id>-alarm@tlc.local. A
+// task carries at most one reminder, which makes the derivation unique
+// per task, deterministic across exports and free of stored state. A
+// foreign parent UID without '@' takes the suffix at its end.
+func alarmUID(parentUID string) string {
+	if i := strings.LastIndexByte(parentUID, '@'); i >= 0 {
+		return parentUID[:i] + "-alarm" + parentUID[i:]
+	}
+	return parentUID + "-alarm"
 }
 
 // logUID derives a stable UID for a LogEntry. Combines task ID, action,
