@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/core"
 )
@@ -252,18 +253,10 @@ func buildTaskComponent(t *core.Task, domain string) vstar.Component {
 		c.Sub = append(c.Sub, buildAlarmComponent(*t.RemindAt, t.Title))
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
-		c.Add(vstar.Property{
-			Name:   "RELATED-TO",
-			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeParent}},
-			Value:  uidFor(*t.TrackID, domain),
-		})
+		helpers.AddRelatedTo(&c, uidFor(*t.TrackID, domain), RelTypeParent)
 	}
 	for _, blocker := range blockedByList(t.Meta) {
-		c.Add(vstar.Property{
-			Name:   "RELATED-TO",
-			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeDependsOn}},
-			Value:  uidFor(blocker, domain),
-		})
+		helpers.AddRelatedTo(&c, uidFor(blocker, domain), RelTypeDependsOn)
 	}
 	if t.Effort != "" {
 		c.Add(vstar.Property{Name: XPropEffort, Value: string(t.Effort)})
@@ -331,11 +324,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string) vs
 		c.Add(vstar.Property{Name: XPropProjectID, Value: *tr.ProjectID})
 	}
 	for _, member := range members {
-		c.Add(vstar.Property{
-			Name:   "RELATED-TO",
-			Params: []vstar.Param{{Name: "RELTYPE", Value: RelTypeChild}},
-			Value:  uidFor(member.ID, domain),
-		})
+		helpers.AddRelatedTo(&c, uidFor(member.ID, domain), RelTypeChild)
 	}
 	return c
 }
@@ -420,38 +409,13 @@ func isEmail(s string) bool {
 	return strings.IndexByte(s[at+1:], '.') > 0
 }
 
-// blockedByList extracts a []string of task IDs from a Task.Meta entry
-// keyed "blocked_by". Accepts either []string or []interface{} (the
-// usual JSON-decoded shape), and silently skips other shapes.
+// blockedByList extracts the task IDs stored under Task.Meta
+// ["blocked_by"], normalised through the single shared coercion in
+// core so encode, decode, and the core API agree on the accepted
+// shapes (string, []string, []interface{}).
 func blockedByList(meta map[string]interface{}) []string {
 	if meta == nil {
 		return nil
 	}
-	raw, ok := meta["blocked_by"]
-	if !ok {
-		return nil
-	}
-	switch v := raw.(type) {
-	case []string:
-		out := make([]string, 0, len(v))
-		for _, s := range v {
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case []interface{}:
-		out := make([]string, 0, len(v))
-		for _, x := range v {
-			if s, ok := x.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if v != "" {
-			return []string{v}
-		}
-	}
-	return nil
+	return core.NormalizeBlockedBy(meta["blocked_by"])
 }

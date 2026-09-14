@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/core"
 )
@@ -95,10 +96,12 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		if task == nil {
 			continue
 		}
-		for _, rel := range todo.GetAll("RELATED-TO") {
-			reltype := paramFirst(rel.Params, "RELTYPE")
-			body := uidBody(rel.Value)
-			switch reltype {
+		// helpers.RelatedTo applies the RFC 5545 §3.2.15 default of
+		// PARENT when the RELTYPE param is absent, and matches the
+		// param name case-insensitively. Unknown RELTYPEs are ignored.
+		for _, rel := range helpers.RelatedTo(todo) {
+			body := uidBody(rel.UID)
+			switch strings.ToUpper(rel.RelType) {
 			case RelTypeParent:
 				if id, ok := uidToTrackID[body]; ok {
 					tid := id
@@ -115,8 +118,17 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				if task.Meta == nil {
 					task.Meta = map[string]interface{}{}
 				}
-				existing, _ := task.Meta["blocked_by"].([]string)
-				task.Meta["blocked_by"] = append(existing, blocker)
+				// Normalise rather than assert. Meta may already carry
+				// blocked_by in any supported shape (notably the
+				// []interface{} produced by JSON decoding), and a bare
+				// []string assertion would silently drop it. Re-running
+				// the coercion over the appended slice also collapses a
+				// repeated DEPENDS-ON edge to a single blocker.
+				merged := append(
+					core.NormalizeBlockedBy(task.Meta["blocked_by"]),
+					blocker,
+				)
+				task.Meta["blocked_by"] = core.NormalizeBlockedBy(merged)
 			}
 		}
 	}
@@ -426,15 +438,6 @@ func uidBody(uid string) string {
 		return uid[:i]
 	}
 	return uid
-}
-
-func paramFirst(params []vstar.Param, key string) string {
-	for _, p := range params {
-		if strings.EqualFold(p.Name, key) {
-			return p.Value
-		}
-	}
-	return ""
 }
 
 // parseICSTime parses iCalendar DATE-TIME forms. Only UTC ("Z") and
