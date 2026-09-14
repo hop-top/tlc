@@ -210,27 +210,28 @@ func TestParseVCalendar_ForeignUIDStashedInMeta(t *testing.T) {
 	require.Equal(t, "foo@example.com", got.Meta["external_uid"])
 }
 
+// TestParseVCalendar_RRuleValidation: an RRULE survives decode exactly
+// when core.ValidateRRule accepts it. FREQ=YEARLY is valid RFC 5545
+// and inside the library's scope, so it is kept; FREQ=SECONDLY is
+// outside the library's v0.2 scope (rrule.ErrUnsupportedRRule) and is
+// dropped rather than propagated raw.
 func TestParseVCalendar_RRuleValidation(t *testing.T) {
-	// An unsupported FREQ should be dropped, not propagated raw.
-	icsBytes := strings.Join([]string{
-		"BEGIN:VCALENDAR",
-		"VERSION:2.0",
-		"PRODID:-//tlc//vtodo//EN",
-		"CALSCALE:GREGORIAN",
-		"METHOD:PUBLISH",
-		"BEGIN:VTODO",
-		"UID:task_01h455vb4pex5vsknk084sn02q@tlc.local",
-		"SUMMARY:Bad rule",
-		"DTSTAMP:20260502T143000Z",
-		"RRULE:FREQ=YEARLY;INTERVAL=1",
-		"END:VTODO",
-		"END:VCALENDAR",
-		"",
-	}, "\r\n")
-	res, err := vtodo.ParseVCalendar(strings.NewReader(icsBytes))
-	require.NoError(t, err)
-	require.Len(t, res.Tasks, 1)
-	require.Empty(t, res.Tasks[0].RRule, "unsupported FREQ must not survive decode")
+	cases := []struct {
+		rule string
+		want string
+	}{
+		{rule: "FREQ=YEARLY;INTERVAL=1", want: "FREQ=YEARLY;INTERVAL=1"},
+		{rule: "FREQ=SECONDLY;INTERVAL=5", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.rule, func(t *testing.T) {
+			got := parseOneTask(t, calWith(
+				"DTSTAMP:20260502T143000Z",
+				"RRULE:"+tc.rule,
+			))
+			require.Equal(t, tc.want, got.RRule)
+		})
+	}
 }
 
 // TestRoundTrip_LiteralBackslashSequences pins the boundary between the
@@ -467,34 +468,36 @@ func parseOneTask(t *testing.T, ics string) *core.Task {
 	return res.Tasks[0]
 }
 
-// TestDecode_DateOnlyDueFallback covers the one non-form-#2 layout we
-// still accept. vstar has no VALUE=DATE support at the pinned version,
-// so a bare YYYYMMDD DUE would otherwise be silently dropped.
-func TestDecode_DateOnlyDueFallback(t *testing.T) {
+// TestDecode_DateOnlyDue: a VALUE=DATE DUE decodes through the
+// library's date accessor to midnight UTC of that day, flagged as
+// date-only so the export writes it back as a DATE. The wider
+// date-only contract (round trip, foreign spelling, DATE versus a
+// midnight DATE-TIME) is in reminders_test.go.
+func TestDecode_DateOnlyDue(t *testing.T) {
 	got := parseOneTask(t, calWith(
 		"DTSTAMP:20260502T143000Z",
 		"DUE;VALUE=DATE:20260515",
 	))
-	require.NotNil(t, got.DueAt, "date-only DUE must still decode")
+	require.NotNil(t, got.DueAt, "date-only DUE must decode")
 	require.Equal(
 		t,
 		time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
 		got.DueAt.UTC(),
 	)
+	require.Equal(t, true, got.Meta[vtodo.MetaDueDateOnly])
 }
 
-// TestDecode_DateOnlyCreatedFallback proves the fallback is shared by
-// the other time-bearing properties, not special-cased to DUE.
-func TestDecode_DateOnlyCreatedFallback(t *testing.T) {
+// TestDecode_DateOnlyCreatedIsNotPromoted: CREATED is DATE-TIME only
+// (RFC 5545 §3.8.7.1), and spec-vstar 03 rule 11 forbids promoting a
+// DATE to a midnight instant. The hand-rolled fallback that used to
+// read a VALUE=DATE CREATED as midnight UTC is gone with it; the
+// value decodes to nothing rather than to a moment nobody wrote.
+func TestDecode_DateOnlyCreatedIsNotPromoted(t *testing.T) {
 	got := parseOneTask(t, calWith(
 		"DTSTAMP:20260502T143000Z",
 		"CREATED;VALUE=DATE:20260501",
 	))
-	require.Equal(
-		t,
-		time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
-		got.CreatedAt.UTC(),
-	)
+	require.True(t, got.CreatedAt.IsZero(), "a DATE must not be read as a DATE-TIME, got %v", got.CreatedAt)
 }
 
 // TestDecode_NonICalLayoutsRejected pins the strictness we inherit from

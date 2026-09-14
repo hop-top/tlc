@@ -496,14 +496,11 @@ func buildTaskComponent(
 	exportAt time.Time,
 	doneAt time.Time,
 ) (vstar.Component, error) {
-	var due time.Time
-	if t.DueAt != nil {
-		due = *t.DueAt
-	}
-	// NewTodo seeds UID, DTSTAMP and DUE (omitted for the zero time) and
+	// NewTodo seeds UID, DTSTAMP and DUE (omitted for a nil due; a
+	// date-only due is written as VALUE=DATE, see newTodoWithDue) and
 	// refuses an empty UID, which spec-vstar 02 requires on every
 	// component.
-	c, err := helpers.NewTodo(uidFor(t.ID, domain), due)
+	c, err := newTodoWithDue(uidFor(t.ID, domain), t.DueAt, dueDateOnly(t.Meta))
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: task %q: %w", t.ID, err)
 	}
@@ -559,12 +556,10 @@ func buildTaskComponent(
 	if t.Reference != "" {
 		c.Add(vstar.Property{Name: "URL", Value: t.Reference})
 	}
-	if t.RemindAt != nil && !t.RemindAt.IsZero() {
-		alarm, err := buildAlarmComponent(c.UID(), *t.RemindAt, t.Title, stamp)
-		if err != nil {
-			return vstar.Component{}, err
-		}
-		c.Sub = append(c.Sub, alarm)
+	// Reminders: RemindAt and Meta["reminders"] as absolute VALARMs,
+	// the derived auto reminder as a relative one; see reminders.go.
+	if err := addReminderAlarms(&c, t, stamp); err != nil {
+		return vstar.Component{}, err
 	}
 	if t.TrackID != nil && *t.TrackID != "" {
 		addParentRelation(&c, uidFor(*t.TrackID, domain))
@@ -600,11 +595,7 @@ func buildTaskComponent(
 }
 
 func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, exportAt time.Time) (vstar.Component, error) {
-	var due time.Time
-	if tr.DueAt != nil {
-		due = *tr.DueAt
-	}
-	c, err := helpers.NewTodo(uidFor(tr.ID, domain), due)
+	c, err := newTodoWithDue(uidFor(tr.ID, domain), tr.DueAt, dueDateOnly(tr.Meta))
 	if err != nil {
 		return vstar.Component{}, fmt.Errorf("vtodo: track %q: %w", tr.ID, err)
 	}
@@ -766,33 +757,6 @@ func buildLogComponent(
 	return c, nil
 }
 
-// buildAlarmComponent emits a VALARM block carrying an absolute
-// DATE-TIME trigger. Used for tlc reminders that fire at a specific
-// instant rather than relative to DTSTART. stamp is the parent's
-// DTSTAMP: a reminder has no life of its own, it changes when its task
-// does.
-func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, stamp time.Time) (vstar.Component, error) {
-	trigger := vstar.FormatTime(remindAt)
-	c, err := helpers.NewAlarm(alarmUID(parentUID), "DISPLAY", trigger)
-	if err != nil {
-		return vstar.Component{}, fmt.Errorf("vtodo: alarm for %q: %w", parentUID, err)
-	}
-	setDTSTAMP(&c, stamp)
-	// NewAlarm writes TRIGGER as a bare value, which RFC 5545 §3.8.6.3
-	// reads as a DURATION relative to DTSTART. An absolute instant must
-	// declare VALUE=DATE-TIME.
-	c.Set(vstar.Property{
-		Name:   "TRIGGER",
-		Params: []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}},
-		Value:  trigger,
-	})
-	if summary != "" {
-		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
-	}
-	finalize(&c)
-	return c, nil
-}
-
 // addAssignee writes a player: ATTENDEE:mailto: when the name is an
 // email address, X-TLC-ASSIGNEE otherwise, nothing for an empty name.
 // Shared by the task and turn builders; a track always uses
@@ -834,19 +798,6 @@ func addCategories(c *vstar.Component, tags []string) {
 		seen[tag] = struct{}{}
 		c.Add(vstar.Property{Name: "CATEGORIES", Value: tag})
 	}
-}
-
-// alarmUID derives a VALARM's UID from its parent's: the parent UID
-// with "-alarm" inserted before the domain separator, so
-// task_<id>@tlc.local reminds through task_<id>-alarm@tlc.local. A
-// task carries at most one reminder, which makes the derivation unique
-// per task, deterministic across exports and free of stored state. A
-// foreign parent UID without '@' takes the suffix at its end.
-func alarmUID(parentUID string) string {
-	if i := strings.LastIndexByte(parentUID, '@'); i >= 0 {
-		return parentUID[:i] + "-alarm" + parentUID[i:]
-	}
-	return parentUID + "-alarm"
 }
 
 // logUID derives a stable UID for a LogEntry. Combines task ID, action,

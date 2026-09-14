@@ -105,6 +105,24 @@ func TestValidateGate_EveryBuilderPath(t *testing.T) {
 			tasks: []*core.Task{sampleTask()},
 		},
 		{
+			name: "task: date-only DUE",
+			tasks: []*core.Task{task(func(tk *core.Task) {
+				tk.Meta = map[string]interface{}{vtodo.MetaDueDateOnly: true}
+			})},
+		},
+		{
+			name: "task: several reminders",
+			tasks: []*core.Task{task(func(tk *core.Task) {
+				tk.Meta = map[string]interface{}{vtodo.MetaReminders: []string{
+					"2026-05-03T04:00:00Z", "2026-05-03T06:00:00Z",
+				}}
+			})},
+		},
+		{
+			name:  "task: auto reminder suppressed",
+			tasks: []*core.Task{task(func(tk *core.Task) { tk.NoAutoRemind = true })},
+		},
+		{
 			name:        "task: undated, open",
 			tasks:       []*core.Task{task(func(tk *core.Task) { tk.DueAt = nil })},
 			wantAllowed: vs040,
@@ -229,7 +247,9 @@ func TestValidateGate_WalksSubComponents(t *testing.T) {
 		cal, err := vtodo.BuildVCalendar([]*core.Task{sampleTask()}, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, cal.Components, 1)
-		require.Len(t, cal.Components[0].Sub, 1)
+		// Sub[0] is the RemindAt alarm the cases below mutate; Sub[1]
+		// is the auto reminder.
+		require.Len(t, cal.Components[0].Sub, 2)
 		return cal
 	}
 

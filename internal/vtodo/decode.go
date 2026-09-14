@@ -322,11 +322,11 @@ func decodeTask(
 			t.UpdatedAt = ts
 		}
 	}
-	if due, ok := todo.DUE(vstar.Calendar{}); ok {
-		t.DueAt = &due
-	} else if due, ok := propTime(todo, "DUE"); ok {
-		// Date-only DUE; see parseDateOnly.
-		t.DueAt = &due
+	if due, dateOnly := decodeDue(todo); due != nil {
+		t.DueAt = due
+		if dateOnly {
+			setMeta(t, MetaDueDateOnly, true)
+		}
 	}
 	if p, ok := todo.Get("RRULE"); ok {
 		if err := core.ValidateRRule(p.Value); err == nil {
@@ -376,20 +376,9 @@ func decodeTask(
 			t.RunID = body
 		}
 	}
-	for _, alarm := range todo.Sub {
-		if alarm.Type != vstar.CompAlarm {
-			continue
-		}
-		trig, ok := alarm.Get("TRIGGER")
-		if !ok {
-			continue
-		}
-		if ts, ok := parsePropValue(trig.Value); ok {
-			tt := ts
-			t.RemindAt = &tt
-			break
-		}
-	}
+	// After DUE: a relative trigger anchored to END resolves against
+	// it, and the derived auto reminder is told apart by its shape.
+	decodeReminders(t, todo, time.Now())
 
 	// X-TLC-META payload plus any unrecognised X-TLC-* property, so a
 	// foreign producer's extensions survive the import. ext's scope
@@ -446,10 +435,14 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 			tr.Seq = n
 		}
 	}
-	if due, ok := todo.DUE(vstar.Calendar{}); ok {
-		tr.DueAt = &due
-	} else if due, ok := propTime(todo, "DUE"); ok {
-		tr.DueAt = &due
+	if due, dateOnly := decodeDue(todo); due != nil {
+		tr.DueAt = due
+		if dateOnly {
+			if tr.Meta == nil {
+				tr.Meta = map[string]any{}
+			}
+			tr.Meta[MetaDueDateOnly] = true
+		}
 	}
 	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
@@ -768,41 +761,19 @@ func uidBody(uid, domain string) string {
 	return uid
 }
 
-// dateOnlyLayout is RFC 5545 §3.3.4 DATE (`YYYYMMDD`), the value form
-// carried by a VALUE=DATE property.
-const dateOnlyLayout = "20060102"
-
-// parseDateOnly parses an RFC 5545 §3.3.4 DATE value as midnight UTC.
-//
-// Upstream gap: vstar has no VALUE=DATE support — vstar.ParseTime is
-// strict form #2 only and the typed Component accessors reject a
-// date-only value. This is the single fallback that remains; every
-// other form goes through vstar. Drop it once vstar grows a DATE type.
-func parseDateOnly(s string) (time.Time, bool) {
-	t, err := time.ParseInLocation(dateOnlyLayout, s, time.UTC)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t.UTC(), true
-}
-
-// propTime reads a time-bearing property from todo, accepting RFC 5545
-// §3.3.5 form #2 (via vstar) and falling back to a bare DATE value.
+// propTime reads a DATE-TIME property from c through vstar.ParseTime:
+// RFC 5545 §3.3.5 form #2 only. The properties read this way
+// (CREATED, LAST-MODIFIED, DTSTAMP, DTSTART of a turn) are DATE-TIME
+// by definition; a VALUE=DATE among them is non-conforming input and
+// decodes to nothing rather than to a midnight the producer never
+// wrote. DUE, the one property tlc reads in both forms, goes through
+// decodeDue.
 func propTime(c vstar.Component, name string) (time.Time, bool) {
 	p, ok := c.Get(name)
 	if !ok {
 		return time.Time{}, false
 	}
-	return parsePropValue(p.Value)
-}
-
-// parsePropValue applies the form #2 → DATE ladder to a raw property
-// value.
-func parsePropValue(v string) (time.Time, bool) {
-	if t, ok := vstar.ParseTime(v); ok {
-		return t, true
-	}
-	return parseDateOnly(v)
+	return vstar.ParseTime(p.Value)
 }
 
 // decodeCategories reads a task's tags from the CATEGORIES property

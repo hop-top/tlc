@@ -78,7 +78,7 @@ func TestHash_EveryBuilderVerifies(t *testing.T) {
 			alarms++
 		}
 	}
-	require.Equal(t, 1, alarms, "the task's reminder must be present as a VALARM")
+	require.Equal(t, 2, alarms, "the task's reminder and its auto reminder must both be VALARMs")
 }
 
 // TestHash_TrackWithoutMembersVerifies covers the track that used to
