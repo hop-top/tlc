@@ -204,7 +204,8 @@ func foreignLedger(extraTodoLines ...string) string {
 		"STATUS:NEEDS-ACTION",
 	}
 	lines = append(lines, extraTodoLines...)
-	lines = append(lines,
+	lines = append(
+		lines,
 		"END:VTODO",
 		"BEGIN:VJOURNAL",
 		"UID:journal:status:"+ledgerTaskUID+":20260502T180000Z",

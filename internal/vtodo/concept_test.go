@@ -279,7 +279,8 @@ func TestConcept_DecodeExposesTokens(t *testing.T) {
 // normalised on read and never parked in the unknown bag.
 func TestConcept_ForeignTokenLowercased(t *testing.T) {
 	res, err := vtodo.ParseVCalendar(strings.NewReader(
-		conflictingTodo("task_01h455vb4pex5vsknk084sn02q@tlc.local", "Mission", false)))
+		conflictingTodo("task_01h455vb4pex5vsknk084sn02q@tlc.local", "Mission", false),
+	))
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
 		"task_01h455vb4pex5vsknk084sn02q@tlc.local": vtodo.ConceptMission,

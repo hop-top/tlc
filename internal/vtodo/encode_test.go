@@ -531,7 +531,8 @@ func TestBuildVCalendar_AlarmUIDFollowsDomain(t *testing.T) {
 	todos := cal.Filter(vstar.CompTodo)
 	require.Len(t, todos, 1)
 	require.Len(t, todos[0].Sub, 1)
-	require.Equal(t,
+	require.Equal(
+		t,
 		"task_01h455vb4pex5vsknk084sn02q-alarm@calendar.example.com",
 		todos[0].Sub[0].UID(),
 	)
