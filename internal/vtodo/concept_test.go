@@ -61,7 +61,7 @@ func TestConcept_TrackedTaskIsAssignment(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, vtodo.ConceptAssignment, conceptOf(t, c))
 	out := mustSerialize(t, cal)
-	require.Contains(t, out, "RELATED-TO;RELTYPE=PARENT:track_01h455vbqkfsn02nk084ksn02q@tlc.local")
+	require.Contains(t, out, "\r\nRELATED-TO:track_01h455vbqkfsn02nk084ksn02q@tlc.local\r\n")
 }
 
 // TestConcept_OneTokenPerComponent: every top-level component declares

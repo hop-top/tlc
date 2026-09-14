@@ -115,8 +115,9 @@ func turnsFor(t *core.Task, logs []*core.LogEntry) []claimWindow {
 
 // buildTurnComponent emits one turn as a VEVENT: DTSTART is the claim
 // instant, DTEND the release when the turn is closed (helpers.NewEvent
-// omits DTEND for the zero time), RELATED-TO;RELTYPE=PARENT the
-// assignment, and the player as the task builder writes an assignee.
+// omits DTEND for the zero time), a bare RELATED-TO (PARENT by RFC
+// default) to the assignment, and the player as the task builder
+// writes an assignee.
 // No STATUS: the pinned vstar has no VEVENT status enum, and an open
 // turn is already told apart from a closed one by the absence of
 // DTEND. DTSTAMP is the turn's last modification: its end when closed,
@@ -131,7 +132,7 @@ func buildTurnComponent(t *core.Task, w claimWindow, domain string, exportAt tim
 	if t.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
 	}
-	helpers.AddRelatedTo(&c, uidFor(t.ID, domain), RelTypeParent)
+	addParentRelation(&c, uidFor(t.ID, domain))
 	addAssignee(&c, w.by)
 	finalize(&c)
 	return c, nil
@@ -154,10 +155,11 @@ func turnUID(taskID string, start time.Time, domain string) string {
 // buildPlaythroughComponent emits a recipe run as a VEVENT: DTSTART
 // is the materialisation instant and there is no DTEND, a run having
 // no end timestamp (RFC 5545 §3.6.1 permits it). The recipe identity
-// travels as X-properties, the mission edge as RELATED-TO;RELTYPE=PARENT
-// to the track VTODO when the run has a track; a trackless run is a
-// path through the world and carries no edge. DTSTAMP is the same
-// instant: a run row never changes after it is written.
+// travels as X-properties, the mission edge as a bare RELATED-TO
+// (PARENT by RFC default) to the track VTODO when the run has a track;
+// a trackless run is a path through the world and carries no edge.
+// DTSTAMP is the same instant: a run row never changes after it is
+// written.
 func buildPlaythroughComponent(run *core.RecipeRun, domain string, exportAt time.Time) (vstar.Component, error) {
 	start := dtstampFor(exportAt, run.CreatedAt)
 	c, err := helpers.NewEvent(uidFor(run.ID, domain), start, time.Time{})
@@ -177,7 +179,7 @@ func buildPlaythroughComponent(run *core.RecipeRun, domain string, exportAt time
 		c.Add(vstar.Property{Name: XPropRecipeHash, Value: run.Hash})
 	}
 	if run.TrackID != "" {
-		helpers.AddRelatedTo(&c, uidFor(run.TrackID, domain), RelTypeParent)
+		addParentRelation(&c, uidFor(run.TrackID, domain))
 	}
 	if run.ProjectID != "" {
 		c.Add(vstar.Property{Name: XPropProjectID, Value: run.ProjectID})

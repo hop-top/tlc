@@ -174,7 +174,7 @@ func TestBuildVCalendar_EmptyRRuleNoLine(t *testing.T) {
 	require.NotContains(t, mustSerialize(t, cal), "RRULE:")
 }
 
-func TestBuildVCalendar_TrackChildLinks(t *testing.T) {
+func TestBuildVCalendar_TrackParentEdges(t *testing.T) {
 	track := &core.Track{
 		ID:        "track_01h455vbqkfsn02nk084ksn02q",
 		Slug:      "auth-rewrite",
@@ -194,11 +194,10 @@ func TestBuildVCalendar_TrackChildLinks(t *testing.T) {
 	cal, err := vtodo.BuildVCalendar([]*core.Task{t1, &t2}, []*core.Track{track}, nil)
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
-	// Track CHILD links to both tasks.
-	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn02q@tlc.local")
-	require.Contains(t, out, "RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn0az@tlc.local")
-	// Each task PARENT link back.
-	require.Contains(t, out, "RELATED-TO;RELTYPE=PARENT:track_01h455vbqkfsn02nk084ksn02q@tlc.local")
+	// Each task carries the PARENT edge, bare (RFC 5545 §3.2.15
+	// default); the track carries no CHILD back-reference (spec 02).
+	require.Equal(t, 2, strings.Count(out, "\r\nRELATED-TO:track_01h455vbqkfsn02nk084ksn02q@tlc.local\r\n"))
+	require.NotContains(t, out, "RELTYPE=CHILD")
 	// Track marker for decode classification.
 	require.Contains(t, out, "X-TLC-IS-TRACK:TRUE")
 	require.Contains(t, out, "X-TLC-TRACK-SLUG:auth-rewrite")

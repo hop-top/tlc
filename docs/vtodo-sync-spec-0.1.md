@@ -12,7 +12,7 @@ TLC exports tasks and tracks as RFC 5545–compliant iCalendar VTODO components 
 
 **Key capabilities**:
 - Task ↔ VTODO field mapping with tlc-specific metadata preserved in X-properties
-- Hierarchy: tracks and child tasks linked via RFC 5545 `RELATED-TO` with `RELTYPE=PARENT`/`CHILD`
+- Hierarchy: a task links to its track via a bare RFC 5545 `RELATED-TO` (`RELTYPE` defaults to `PARENT` and is omitted); no `CHILD` back-reference on the track
 - Dependencies: task blocking relationships via RFC 9253 `RELTYPE=DEPENDS-ON` (v1 support; temporal RELTYPEs deferred)
 - Recurring schedules: `Task.RRule` (RFC 5545 §3.3.10) replaces legacy fixed `RemindEvery` duration
 - Log entries: opt-in VJOURNAL export via `--include-logs` CLI flag or `include_logs` plugin config
@@ -37,7 +37,7 @@ Every exported component is one of the V\* agentic concepts below. The mapping, 
 | `Task.RRule` | Cadence | `RRULE` property | — (a property, not a component) |
 | `Task.RemindAt` | Timeout / escalation | VALARM | — |
 
-A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO. On decode the token is consulted first for track-vs-task: `assignment` always decodes as a task, whatever marker or UID prefix the component also carries; `mission` names a track and a standalone task alike, so it defers to `X-TLC-IS-TRACK`, then to the UID prefix, the same ladder a calendar without the token walks. A standalone task is a mission because it carries no `RELATED-TO;RELTYPE=PARENT` edge; an assignment always does. The decoder reports every declared token by wire UID in `ParseResult.Concepts` and never stores it on the entity; the encoder re-derives it from `TrackID` and `Action`.
+A component declares which concept it is with one `X-TLC-CONCEPT` property holding one lowercase token, compared case-insensitively on read. The declaration adds no wire shape: a mission and an assignment are both VTODO. On decode the token is consulted first for track-vs-task: `assignment` always decodes as a task, whatever marker or UID prefix the component also carries; `mission` names a track and a standalone task alike, so it defers to `X-TLC-IS-TRACK`, then to the UID prefix, the same ladder a calendar without the token walks. A standalone task is a mission because it carries no parent `RELATED-TO` edge; an assignment always does. The decoder reports every declared token by wire UID in `ParseResult.Concepts` and never stores it on the entity; the encoder re-derives it from `TrackID` and `Action`.
 
 ---
 
@@ -82,7 +82,7 @@ END:VCALENDAR
 | `Task.DueAt` | `DUE` | UTC format; omitted if not set |
 | `Task.RemindAt` | `VALARM` | TRIGGER set to absolute datetime; omitted if RemindAt not set |
 | `Task.RRule` | `RRULE` | RFC 5545 string (e.g., `FREQ=DAILY;INTERVAL=2`); omitted if empty |
-| `Task.TrackID` | `RELATED-TO;RELTYPE=PARENT` | Points to parent track's UID; omitted if no parent |
+| `Task.TrackID` | `RELATED-TO` | Points to the parent track's UID, bare: RFC 5545 §3.2.15 defaults `RELTYPE` to `PARENT` and spec-vstar 02 requires the parameter be omitted for that value; omitted if no parent |
 | `Task.Effort` | `X-TLC-EFFORT` | Value: `XS` \| `S` \| `M` \| `L` \| `XL`; omitted if not set |
 | `Task.Meta` (map) | `X-TLC-META` | JSON-serialized; omitted if empty. Derived keys excluded — see [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 | `Task.Archived` | `X-TLC-ARCHIVED` | `TRUE`, emitted only when archived. Archived tasks excluded from output by default; include via `--archived` flag |
@@ -93,12 +93,12 @@ Every `X-TLC-*` property, including those this table does not list (`X-TLC-STATU
 
 ---
 
-## Hierarchy: PARENT/CHILD Relationships
+## Hierarchy: PARENT Relationships
 
 **Track ↔ Task**:
-- When exporting a task with `TrackID` set, emit `RELATED-TO;RELTYPE=PARENT:<track-uid>@<domain>`
-- When exporting a track, emit one `RELATED-TO;RELTYPE=CHILD:<task-uid>@<domain>` per member task
-- Both directions present in a single export for clarity; clients that consume one direction should ignore the inverse
+- When exporting a task with `TrackID` set, emit `RELATED-TO:<track-uid>@<domain>` with no `RELTYPE`: RFC 5545 §3.2.15 defaults it to `PARENT`, and spec-vstar 02 ("Relationship types") requires emitters to omit the parameter for that value, `RELATED-TO:x` and `RELATED-TO;RELTYPE=PARENT:x` naming the same edge but canonicalizing, and so hashing, differently
+- A track emits no `RELTYPE=CHILD` back-reference: each edge is encoded once, in the PARENT direction (spec-vstar 02, rule 1). Track membership is derived on import from the member tasks' edges, so a track's `X-VSTAR-HASH` does not move when a task joins it
+- On import an explicit `RELTYPE=PARENT` is accepted as the same edge, in any case; `CHILD` is ignored
 
 **Subtask hierarchy (Task ↔ Task)**: Currently out of scope; requires `Task.ParentID` field in tlc schema.
 
@@ -135,7 +135,7 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 | `By` (user) | `X-TLC-LOG-BY` | Actor name verbatim; omitted if empty. No `ORGANIZER` is emitted |
 | `Action` | `X-TLC-LOG-ACTION` | Action string verbatim (e.g., `created`, `status_change`, `comment`); omitted if empty |
 | `Note` | `DESCRIPTION`, `SUMMARY` | `DESCRIPTION` carries the full note and `SUMMARY` its first line; both omitted if the note is empty, in which case `SUMMARY` carries the action instead |
-| `TaskID` | `RELATED-TO;RELTYPE=PARENT`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID with an explicit `RELTYPE=PARENT` (bare on a supersession entry, which is the same edge: RFC 5545 §3.2.15 defaults `RELTYPE` to `PARENT`); `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
+| `TaskID` | `RELATED-TO`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID, bare on both journal shapes (RFC 5545 §3.2.15 defaults `RELTYPE` to `PARENT`; spec-vstar 02 omits the parameter for that value); `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
 | `Meta` | `X-TLC-META` | JSON-serialized; omitted if empty. See [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 
 **Opt-in**: VJOURNAL export is disabled by default. Enable via:
@@ -204,12 +204,12 @@ Two V\* concepts map to VEVENT (spec-vstar 02): a **turn**, one bounded executio
 | claim instant | `DTSTART` | The `CLAIMED` / `RECLAIMED` entry's timestamp, or `Task.ClaimedAt` |
 | release instant | `DTEND` | The closing entry's timestamp; absent while the turn is open |
 | — | `DTSTAMP` | `DTEND` when closed, `DTSTART` while open (the turn's last modification) |
-| the task | `RELATED-TO;RELTYPE=PARENT`, `SUMMARY` | The assignment's UID; `SUMMARY` is the task title |
+| the task | `RELATED-TO`, `SUMMARY` | The assignment's UID, bare (`PARENT` by default); `SUMMARY` is the task title |
 | the player | `ATTENDEE:mailto:` / `X-TLC-ASSIGNEE` | The opening entry's `By`, or `Task.AssignedTo` for a `ClaimedAt` turn; same email rule as a task |
 
 **Where turns come from.** With `--include-logs` the exported log is the source: `CLAIMED` or `RECLAIMED` opens a window, `DONE`, `RELEASED`, `SKIPPED`, `APPROVED`, `REJECTED`, `RETRY` or `BLOCKED` closes it, a `RECLAIMED` while a window is open closes that window at the reclaim instant and opens the next, a closer with no open window is ignored, and the last window is left open when nothing closed it. Without the log, or when the exported log opens no window, `Task.ClaimedAt` yields the one open turn. The two sources are never combined, so a claim is never emitted twice. A task never claimed emits no turn. Configured status names do not bound a turn: the executor logs the constants above whatever the vocabulary.
 
-**Import.** A VEVENT declaring `X-TLC-CONCEPT:turn` with no `DTEND` sets `ClaimedAt` on the task its `RELATED-TO;RELTYPE=PARENT` names (the latest start when several are open). A VEVENT without the token is not a claim, whatever it is related to.
+**Import.** A VEVENT declaring `X-TLC-CONCEPT:turn` with no `DTEND` sets `ClaimedAt` on the task its parent `RELATED-TO` names (the latest start when several are open). A VEVENT without the token is not a claim, whatever it is related to.
 
 ### Playthrough
 
@@ -220,7 +220,7 @@ Two V\* concepts map to VEVENT (spec-vstar 02): a **turn**, one bounded executio
 | `RecipeID` | `SUMMARY`, `X-TLC-RECIPE-ID` | Omitted when empty |
 | `Version` | `X-TLC-RECIPE-VERSION` | Omitted when empty |
 | `Hash` | `X-TLC-RECIPE-HASH` | The recipe content hash the run pinned; omitted when empty |
-| `TrackID` | `RELATED-TO;RELTYPE=PARENT` | The mission the run went through; absent for a trackless run (a path through the world) |
+| `TrackID` | `RELATED-TO` | The mission the run went through, bare (`PARENT` by default); absent for a trackless run (a path through the world) |
 | `ProjectID` | `X-TLC-PROJECT-ID` | Omitted when empty |
 
 Runs reach the encoder through `vtodo.WithRecipeRuns`; the CLI passes the run behind every exported task that has a `RunID` (`tlc task list/show --format vtodo`). `Vars`, `Selection`, `DroppedDeps`, `ParentRun`, `SubjectType`/`SubjectID` and `CreatedBy` are not exported yet.
@@ -324,7 +324,7 @@ Every `X-TLC-*` property tlc emits, derived from the encoder, the decoder and th
 | `X-TLC-RECIPE-HASH` | VEVENT playthrough | Recipe content hash, verbatim (`sha256:…`) | `RecipeRun.Hash` | 0.1 (2026-09). Omitted when empty. Never decoded |
 | `X-TLC-LOG-ACTION` | VJOURNAL | Action string, verbatim | `LogEntry.Action` | 0.1 (2026-05). Omitted when empty |
 | `X-TLC-LOG-BY` | VJOURNAL | Actor name, verbatim | `LogEntry.By` | 0.1 (2026-05). Omitted when empty. tlc emits no `ORGANIZER` |
-| `X-TLC-LOG-TASK` | VJOURNAL | Bare task TypeID (no `@domain`) | `LogEntry.TaskID` | 0.1 (2026-05). Emitted next to `RELATED-TO;RELTYPE=PARENT`. Import: preferred over `RELATED-TO`, so the TypeID survives even when the calendar carries no matching VTODO |
+| `X-TLC-LOG-TASK` | VJOURNAL | Bare task TypeID (no `@domain`) | `LogEntry.TaskID` | 0.1 (2026-05). Emitted next to the bare `RELATED-TO`. Import: preferred over `RELATED-TO`, so the TypeID survives even when the calendar carries no matching VTODO |
 | `X-TLC-PRIORITY` | VTODO task | Priority name from the configured vocabulary (default `P0`–`P3`) | `Task.Priority` | 0.1 (2026-09). Emitted whenever a priority is set, alongside the rank-derived numeric `PRIORITY`. Import: wins when the name is in the current vocabulary; otherwise nearest-rank fallback from `PRIORITY` |
 | `X-TLC-PRIORITY-SOURCE` | VTODO task | `manual` \| `derived` | `Task.Meta["priority_source"]` | 0.1 (2026-09). Omitted when absent. Not a derived key, so it also appears inside `X-TLC-META`; the two agree on export, and on import the `X-TLC-META` copy is applied last |
 | `X-TLC-PRIORITY-RULE` | VTODO task | Rule name (e.g. `due-soon`) | `Task.Meta["priority_rule"]` | 0.1 (2026-09). Written only next to a `derived` source. Same dual carriage as `X-TLC-PRIORITY-SOURCE` |
@@ -430,7 +430,7 @@ tlc task show T-0042 --format vtodo --output task.ics
 ```bash
 tlc track show auth-rewrite --format vtodo --recursive
 ```
-Emits track as a VTODO (with X-TLC-IS-TRACK marker) plus all member tasks with `RELATED-TO RELTYPE=CHILD`.
+Emits track as a VTODO (with X-TLC-IS-TRACK marker) plus all member tasks, each carrying a `RELATED-TO` to the track.
 
 **Include log entries**:
 ```bash
@@ -538,16 +538,13 @@ BEGIN:VTODO
 UID:track_01h455vbqkfsn02nk084ksn02q@tlc.local
 SUMMARY:auth-rewrite
 X-TLC-IS-TRACK:true
-RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn02q@tlc.local
-RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn02r@tlc.local
-RELATED-TO;RELTYPE=CHILD:task_01h455vb4pex5vsknk084sn02s@tlc.local
 ...
 END:VTODO
 
 BEGIN:VTODO
 UID:task_01h455vb4pex5vsknk084sn02q@tlc.local
 SUMMARY:Add OAuth2 support
-RELATED-TO;RELTYPE=PARENT:track_01h455vbqkfsn02nk084ksn02q@tlc.local
+RELATED-TO:track_01h455vbqkfsn02nk084ksn02q@tlc.local
 ...
 END:VTODO
 …(two more tasks)…
@@ -578,7 +575,7 @@ UID:log-task_01h455vb4pex5vsknk084sn02q-status_change-20260502T143000Z@tlc.local
 SUMMARY:Moved to done
 DESCRIPTION:Moved to done
 CREATED:20260502T143000Z
-RELATED-TO;RELTYPE=PARENT:task_01h455vb4pex5vsknk084sn02q@tlc.local
+RELATED-TO:task_01h455vb4pex5vsknk084sn02q@tlc.local
 X-TLC-LOG-TASK:task_01h455vb4pex5vsknk084sn02q
 X-TLC-LOG-ACTION:status_change
 X-TLC-LOG-BY:jad

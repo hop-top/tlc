@@ -7,7 +7,7 @@ the last section.
 
 ## Spec revision targeted
 
-`hop-top/spec-vstar` at `4d73c0107f0ea256d3aedae5ded42bb11463c6b9`
+`hop-top/spec-vstar` at `a72a5ab5f83a0aae6e62e565edf34c609915bdcd`
 (`specs/v0.1/`). Library: `hop.top/vstar` at the version pinned in
 `go.mod`.
 
@@ -60,6 +60,19 @@ byte-identically (`TestFixture_RoundTripStability`,
   `CATEGORIES:security\,auth`, one category to any RFC reader. Both
   shapes are accepted on import (`TestCategories_OnePropertyPerTag`,
   `TestCategories_BackwardCompatMixedShapes`).
+- Relations follow spec 02 "Relationship types (RELTYPE)". Every edge
+  is encoded once, on the contained component, as a bare `RELATED-TO`:
+  task → track, journal → task, turn → task, playthrough → track.
+  `RELTYPE` is omitted when its value is `PARENT` (rule 2), and no
+  `CHILD` back-reference is written on the track (rule 1); a track's
+  membership is read from its members' edges on import, so the track's
+  hash no longer moves when a task joins it. `DEPENDS-ON` (RFC 9253) is
+  the one explicit `RELTYPE` tlc writes. Values are read through
+  `vstar.RelType`, folded case-insensitively upstream, an absent
+  parameter reading as `PARENT` (rule 3; `TestRelations_ParentRoundTrip`,
+  `TestRelations_NoChildBackReference`, `TestRelations_DependsOnRoundTrip`,
+  `TestRelations_MissingRelTypeDefaultsToParent`,
+  `TestRelations_RelTypeIsCaseInsensitive`).
 - Status transitions are appended as spec 02 supersession entries
   (`hop.top/vstar/supersession`): `journal:status:` UID, bare
   `RELATED-TO`, `CATEGORIES:status-supersession`,
@@ -70,8 +83,8 @@ byte-identically (`TestFixture_RoundTripStability`,
 - Turns and playthroughs are VEVENTs (spec 02 "Core mapping"),
   `X-TLC-CONCEPT:turn` / `playthrough`, every one with `DTSTART`
   (spec 05 §5, VS041 never fires: `TestEvent_NoVS041`), `DTEND` only on
-  a closed turn, `RELATED-TO;RELTYPE=PARENT` to the assignment
-  (turn) or the mission (playthrough), hash last
+  a closed turn, a bare `RELATED-TO` to the assignment (turn) or the
+  mission (playthrough), hash last
   (`TestTurn_OpenClaimFromTaskRow`, `TestTurn_WindowsFromLog`,
   `TestPlaythrough_Shape`). The mapping and its sources are in
   `docs/vtodo-sync-spec-0.1.md`, "VEVENT: Turns and Playthroughs".
@@ -247,16 +260,6 @@ VTODO's own `STATUS` decides
 spec should say which vocabulary the property carries; a system name
 (`X-TLC-STATUS` beside it) is the follow-on if it says "any".
 
-### CHILD back-references
-
-Spec 02 names `RELATED-TO` as the relationship mechanism without
-prescribing direction. tlc emits both directions: each member task
-carries `RELATED-TO;RELTYPE=PARENT:<track>` and the track carries one
-`RELATED-TO;RELTYPE=CHILD:<task>` per member. The CHILD rows make a
-track's hash depend on its membership, so adding a task to a track
-changes the track's `X-VSTAR-HASH` even though no track field changed.
-Deliberate: membership is track content for tlc's purposes.
-
 ### VALARM UID scheme
 
 RFC 5545 gives VALARM no UID; spec 02 requires one. tlc derives it from
@@ -294,24 +297,24 @@ proves byte-identical re-emission.
 |---|---|---|
 | `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:020b85e5ff1b89955052df9617d8b912b5dce0a1c7010f22a8f43f47fe28ab1d` |
 | `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:eb8ba05c6c89d6f83ca320afe70660c3e30a00c2acbdd98bf70aeab747b89b1a` |
-| `track-with-tasks.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:1336f5df6af964db54fac51a1d78d43030d283ebcc10727e5d8fc1676f30d0c0` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:bba4727ecaeb5e7eb6b124c1b784de1519e6783dd0c2f22a26e1a9b9cd800df2` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:7f0633fde59e28f118e8865e25518373475c84f32c55109721cfa0f5f13fb632` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:19e3c19205e10c776126000554b07e45250ed4875889672b1dd4570290395556` |
+| `track-with-tasks.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:47e12299df1fa71afb9f694c1a2d1dab6255c3f86aaf9d28916626bda30bc323` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:060ce2e23bffba98092165ab54adfe944998d3d5d9e4b83c487e2f81d1fafd78` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:401d0730942685635bb60336d9f8d9a2f3eec95f5e8e0f6bbcd2e3d188cbf64c` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:df0b11d60e4a34e514236c77cad4780091f0ad4d7ad4c4b346800f6d40f9c93c` |
 | `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0az@tlc.local` | `sha256:d1b30190e0c98ac1bb870c266608287afeebe9b51db935fe28779c27fe49adc8` |
 | `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0aa@tlc.local` | `sha256:70ef6e34c9f03e55130943e2099541d893e3224994547e724f00f3bd606d1770` |
 | `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:020b85e5ff1b89955052df9617d8b912b5dce0a1c7010f22a8f43f47fe28ab1d` |
 | `with-logs.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z` | `sha256:63232af5c32129151c811defad4b7d3dfa30cd65921697646b29eefc76b05a5d` |
-| `with-logs.ics` | `log-task_01h455vb4pex5vsknk084sn02q-PROGRESS-20260502T163000Z@tlc.local` | `sha256:140c79a5a4a06d152d3421e3ff3eb95d4103156fdea7817353e1fe3cd8c65fe7` |
-| `with-logs.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:7bd1d3f34f76da79d78529ebea1d8e335257219aed6985593cf7a80b7105a084` |
-| `recipe-run.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:e9c19cf8e596c158db6719835bcf34bfd6f76dd1d02cad42cc02451900cd3f41` |
-| `recipe-run.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:e6bc99da99a21b886116112964464381c34b6f1be597f3f5be63f1653ad42202` |
+| `with-logs.ics` | `log-task_01h455vb4pex5vsknk084sn02q-PROGRESS-20260502T163000Z@tlc.local` | `sha256:73acc64829b5caa498dd52037cc5130f3afcc971b06783dde189c61866314e2f` |
+| `with-logs.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:c062e6644313a96da0377f63438b5336564585a7ce7f8cac4737b60274dade09` |
+| `recipe-run.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:30b82a1dd6436c79ebda245c12b52b86da468b82e898270fbddfedc0ed99a08e` |
+| `recipe-run.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:4b58fa0c775f689d559233c4970347908a185ca0b45f924135566e7950635f49` |
 | `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z` | `sha256:7d79dface6fd31001c197a08726bcf88043d20ca7c8149f9e55f2d756ec59c03` |
 | `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T153000Z` | `sha256:8c351916c5dd1cd07a81c0523cf3658688dae5a9a77310876f662c8aa8d6fc33` |
 | `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T183000Z` | `sha256:daa122db8b623a43379876afb4124b13948b6b3108354cd063fa5482f7e2e963` |
-| `recipe-run.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:5ecaa93f00500c2b431f0072e7f5450ba22be8c48f822613cc9b9c29292e45d8` |
-| `recipe-run.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T183000Z@tlc.local` | `sha256:e9596b9c1104c74b605ac4f681706d95795d8c713632074cd5ed594585a07871` |
-| `recipe-run.ics` | `run_01h455vb4pex5vsknk084sn0r1@tlc.local` | `sha256:89383c79e71854f7a463626fb24d570b5a5c5796b8f10a02148dbcdd3ab055f9` |
+| `recipe-run.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:f13d75e7d73f402391f8b519cd76dc385b886fb162bb5a8f9012fe6a8999c74c` |
+| `recipe-run.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T183000Z@tlc.local` | `sha256:b25b1751d177cab6020c4533dce090cf20911c4b9a52ae2e3e9d00aa0f378d67` |
+| `recipe-run.ics` | `run_01h455vb4pex5vsknk084sn0r1@tlc.local` | `sha256:a1d21318374d2205fc7f371587380c519673d9b2c1f57d1109804689e0f7d330` |
 
 ### Regenerating the golden hashes
 
