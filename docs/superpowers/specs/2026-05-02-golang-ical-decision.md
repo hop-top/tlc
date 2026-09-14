@@ -2,8 +2,8 @@
 
 > **SUPERSEDED 2026-05-05** by
 > [`2026-05-05-vstar-codec-decision.md`](2026-05-05-vstar-codec-decision.md).
-> tlc moved off `arran4/golang-ical` to `github.com/hop-top/vstar/go`
-> in T-1230. The content below is preserved for historical context.
+> tlc moved off `arran4/golang-ical` to `hop.top/vstar`. The content
+> below is preserved for historical context.
 
 Context: `2026-05-02-vtodo-export-sync-design.md` calls for an iCalendar
 parser/emitter. First task on the vtodo-export-sync track.

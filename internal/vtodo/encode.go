@@ -147,8 +147,8 @@ func BuildVCalendar(
 //
 // Post-processes the codec output to inject CALSCALE:GREGORIAN +
 // METHOD:PUBLISH after PRODID. vstar.Calendar has no Props field for
-// arbitrary calendar-level properties (vstar T-0135); inject manually
-// until upstream lands. Both lines are RFC 5545 §3.6 standard
+// arbitrary calendar-level properties; inject manually until upstream
+// grows one. Both lines are RFC 5545 §3.6 standard
 // calendar-level properties; CALSCALE defaults to GREGORIAN, METHOD
 // defaults to PUBLISH for tlc's export use case.
 func Serialize(cal vstar.Calendar) (string, error) {
@@ -165,7 +165,8 @@ func Serialize(cal vstar.Calendar) (string, error) {
 // multiple physical CRLF-terminated lines; CALSCALE/METHOD must land
 // AFTER the last continuation, never between them.
 //
-// Workaround for vstar T-0135 — drop when vstar.Calendar gains Props.
+// Workaround for the missing calendar-level property bag — drop when
+// vstar.Calendar gains Props.
 func injectCalendarProps(s string) string {
 	const prodIDPrefix = "PRODID:"
 	const inject = "CALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n"

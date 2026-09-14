@@ -19,7 +19,7 @@ func ptr[T any](v T) *T { return &v }
 
 // mustSerialize encodes cal via vtodo.Serialize and fails the test on
 // error. Replaces *ics.Calendar.Serialize() from the pre-vstar codec
-// era (T-1230).
+// era.
 func mustSerialize(t *testing.T, cal vstar.Calendar) string {
 	t.Helper()
 	s, err := vtodo.Serialize(cal)
