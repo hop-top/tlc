@@ -59,6 +59,42 @@ optional: a missing `X-VSTAR-HASH` is reported, never fatal.
   shapes are accepted on import (`TestCategories_OnePropertyPerTag`,
   `TestCategories_BackwardCompatMixedShapes`).
 
+## Validation gate
+
+Every export path is checked with `hop.top/vstar/validate`, the
+semantic validator behind spec 05, through `vtodo.ValidateExport`
+(`internal/vtodo/validate_gate.go`).
+
+- `validate.Validate` covers the top-level components and never
+  descends into `Sub`. `ValidateExport` therefore also calls
+  `validate.ValidateComponent` on every nested component at every
+  depth, which is what makes the VALARM `UID`/`DTSTAMP`/`X-VSTAR-HASH`
+  claim above checked rather than asserted
+  (`TestValidateGate_WalksSubComponents`). A nested diagnostic's path
+  is anchored under its parent:
+  `VCALENDAR.VTODO[uid=a].VALARM[uid=a-alarm].UID`.
+- Where it runs: every decode round trip (`roundTrip`), the
+  one-of-everything calendar the hash tests share (`fullCalendar`), one
+  build per builder path (`TestValidateGate_EveryBuilderPath`), the
+  five golden fixtures (`TestFixture_ValidatesUnderGate`) and
+  `cmd/genfixtures-vtodo`, which refuses to write a fixture that fails
+  it.
+- Errors: any `SeverityError` fails the export, except the codes in
+  `vtodo.AllowedErrorCodes`, currently `{VS040}`. The set is pinned by
+  `TestValidateGate_AllowedErrorCodesPinned`; every entry is a deviation
+  recorded below. An allowed diagnostic is logged (test output, generator
+  stderr), never dropped.
+- Warnings (`SeverityWarning`: VS020 unknown property, VS050 RRULE
+  feature outside the vstar evaluator's scope) are logged and never
+  fail (`TestValidateGate_WarningsDoNotBlock`). tlc's own extensions
+  live under `X-TLC-*` and its RRULEs are emitted verbatim, so a warning
+  here is a user's RRULE, not tlc's wire form.
+
+At the pinned library version no builder path and no fixture produces
+a blocking diagnostic. VS040 fires on undated open tasks, undated
+cancelled tasks and every undated track (`track-with-tasks.ics`);
+nothing else fires.
+
 ## Known deviations
 
 ### DTSTAMP is the entity's last-modified instant
@@ -106,6 +142,24 @@ the parent: the parent UID with `-alarm` inserted before the domain
 separator (`task_<id>-alarm@<domain>`). One reminder per task keeps it
 unique and stable across exports without stored state.
 
+### Undated VTODOs carry no DUE (VS040)
+
+Spec 05 §5 requires a VTODO to carry `DUE`, or `STATUS=COMPLETED`
+together with `COMPLETED`. A tlc task or track has no due date unless
+someone set one, and an open item without one is the normal case, not
+an error. Synthesising a `DUE` from scheduling defaults would export a
+date the user never entered, so tlc emits the component without `DUE`
+and the validation gate allow-lists the resulting VS040
+(`vtodo.AllowedErrorCodes`, `TestValidateGate_UndatedOpenTaskIsAllowedVS040`).
+
+Completed-role tasks are unaffected: they go through `helpers.Complete`
+and satisfy the second route. A cancelled task trips the rule when
+undated, the rule having no route for `CANCELLED`. So does an undated
+track in any status, a completed one included, because the track
+builder writes `STATUS:COMPLETED` without `COMPLETED`. A consumer that
+needs strict spec 05 §5 must read VS040 on a tlc document as "undated",
+not "malformed".
+
 ## Test artifacts
 
 The golden documents are `tests/fixtures/vtodo/*.ics` (CRLF, stored
@@ -141,5 +195,8 @@ done
 go test ./internal/vtodo/ -run 'TestFixture_'
 ```
 
-The generator writes CRLF; commit the files as written. The round-trip
-and verify tests fail loudly if a fixture and the encoder disagree.
+The generator writes CRLF; commit the files as written. It refuses to
+write a fixture that fails the validation gate (exit 1, findings on
+stderr) and prints allowed and warning diagnostics to stderr. The
+round-trip and verify tests fail loudly if a fixture and the encoder
+disagree.
