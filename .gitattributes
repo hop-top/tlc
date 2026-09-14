@@ -1,0 +1,4 @@
+# iCalendar fixtures are RFC 5545 canonical form: CRLF line endings.
+# -text stops git from converting them on any platform so a fresh
+# clone plus `go run ./cmd/genfixtures-vtodo` is a no-op.
+tests/fixtures/vtodo/*.ics -text
