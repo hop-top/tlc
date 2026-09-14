@@ -159,10 +159,10 @@ func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 	}
 
 	if p, ok := todo.Get("SUMMARY"); ok {
-		t.Title = unescapeText(p.Value)
+		t.Title = p.Value
 	}
 	if p, ok := todo.Get("DESCRIPTION"); ok {
-		t.Description = unescapeText(p.Value)
+		t.Description = p.Value
 	}
 	if p, ok := todo.Get("STATUS"); ok {
 		t.Status = wireToStatus(p.Value)
@@ -174,7 +174,7 @@ func decodeTask(todo vstar.Component) (*core.Task, string, error) {
 	}
 	for _, p := range todo.GetAll("CATEGORIES") {
 		for _, raw := range strings.Split(p.Value, ",") {
-			tag := strings.TrimSpace(unescapeText(raw))
+			tag := strings.TrimSpace(raw)
 			if tag != "" {
 				t.Tags = append(t.Tags, tag)
 			}
@@ -278,7 +278,7 @@ func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 	}
 
 	if p, ok := todo.Get("SUMMARY"); ok {
-		tr.Title = unescapeText(p.Value)
+		tr.Title = p.Value
 	}
 	if p, ok := todo.Get("STATUS"); ok {
 		tr.Status = wireStatusToTrack(p.Value)
@@ -328,9 +328,9 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEn
 		le.By = p.Value
 	}
 	if p, ok := j.Get("DESCRIPTION"); ok {
-		le.Note = unescapeText(p.Value)
+		le.Note = p.Value
 	} else if p, ok := j.Get("SUMMARY"); ok {
-		le.Note = unescapeText(p.Value)
+		le.Note = p.Value
 	}
 	if p, ok := j.Get("DTSTAMP"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
@@ -458,32 +458,4 @@ func parseICSTime(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognised iCalendar time %q", s)
-}
-
-// unescapeText reverses the RFC 5545 §3.3.11 TEXT escapes that the
-// codec applies (\\, \;, \,, \n, \N).
-func unescapeText(s string) string {
-	if !strings.ContainsRune(s, '\\') {
-		return s
-	}
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\\' && i+1 < len(s) {
-			next := s[i+1]
-			switch next {
-			case 'n', 'N':
-				b.WriteByte('\n')
-				i++
-				continue
-			case ',', ';', '\\':
-				b.WriteByte(next)
-				i++
-				continue
-			}
-		}
-		b.WriteByte(c)
-	}
-	return b.String()
 }
