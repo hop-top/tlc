@@ -33,6 +33,7 @@ type options struct {
 	productID   string
 	includeLogs bool
 	exportTime  time.Time
+	statusDefs  []config.StatusDefinition
 	// priorities is the priority vocabulary in rank order, most urgent
 	// first. Never empty after resolve — defaultOptions seeds it from
 	// the project config and WithPriorityVocabulary ignores empty input.
@@ -132,4 +133,36 @@ func WithPriorityVocabulary(defs []config.PriorityDefinition) Option {
 			o.priorities = defs
 		}
 	}
+}
+
+// WithStatusDefinitions supplies the task status vocabulary the encoder
+// and decoder map against. Each definition's Role — not its Name — picks
+// the RFC 5545 STATUS wire value, so a project that renames its statuses
+// still exports meaningful iCalendar.
+//
+// Unset, the vocabulary resolves lazily through
+// core.ConfiguredTaskStatusDefinitions() at encode/decode time, which is
+// what any caller wanting the ambient project config should leave it as.
+// The option exists for callers holding a vocabulary that is not the
+// ambient one — chiefly tests, and any future multi-project export.
+func WithStatusDefinitions(defs []config.StatusDefinition) Option {
+	return func(o *options) {
+		if len(defs) > 0 {
+			o.statusDefs = defs
+		}
+	}
+}
+
+// statusDefinitions returns the vocabulary this invocation maps against,
+// falling back to the ambient project config when none was supplied.
+//
+// Resolved here rather than in defaultOptions() so the config lookup
+// happens only when an encode or decode actually needs it: defaults are
+// materialised on every resolve(), including paths that never touch a
+// status.
+func (o options) statusDefinitions() []config.StatusDefinition {
+	if len(o.statusDefs) > 0 {
+		return o.statusDefs
+	}
+	return core.ConfiguredTaskStatusDefinitions()
 }

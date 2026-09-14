@@ -40,6 +40,7 @@ type ParseResult struct {
 // emitted with TaskID set to the raw UID body.
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	o := resolve(opts)
+	statusDefs := o.statusDefinitions()
 
 	cal, err := rfc5545.Parse(r)
 	if err != nil {
@@ -66,7 +67,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				uidToTrackID[uidBodyVal] = tr.ID
 			}
 		} else {
-			t, uidBodyVal, perr := decodeTask(todo, o.priorities)
+			t, uidBodyVal, perr := decodeTask(todo, o.priorities, statusDefs)
 			if perr != nil {
 				return nil, perr
 			}
@@ -97,10 +98,12 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		if task == nil {
 			continue
 		}
-		for _, rel := range todo.GetAll("RELATED-TO") {
-			reltype := paramFirst(rel.Params, "RELTYPE")
-			body := uidBody(rel.Value)
-			switch reltype {
+		// helpers.RelatedTo applies the RFC 5545 §3.2.15 default of
+		// PARENT when the RELTYPE param is absent, and matches the
+		// param name case-insensitively. Unknown RELTYPEs are ignored.
+		for _, rel := range helpers.RelatedTo(todo) {
+			body := uidBody(rel.UID)
+			switch strings.ToUpper(rel.RelType) {
 			case RelTypeParent:
 				if id, ok := uidToTrackID[body]; ok {
 					tid := id
@@ -117,7 +120,11 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				if task.Meta == nil {
 					task.Meta = map[string]interface{}{}
 				}
-				existing, _ := task.Meta["blocked_by"].([]string)
+				// Normalise rather than assert: Meta may already carry
+				// blocked_by in any supported shape (notably the
+				// []interface{} produced by JSON decoding), and a bare
+				// []string assertion would silently drop it.
+				existing := core.NormalizeBlockedBy(task.Meta["blocked_by"])
 				task.Meta["blocked_by"] = append(existing, blocker)
 			}
 		}
@@ -143,7 +150,11 @@ func isTrackComponent(todo vstar.Component) bool {
 	return false
 }
 
-func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.Task, string, error) {
+func decodeTask(
+	todo vstar.Component,
+	defs []config.PriorityDefinition,
+	statusDefs []config.StatusDefinition,
+) (*core.Task, string, error) {
 	t := &core.Task{}
 
 	uid := getUID(todo)
@@ -166,9 +177,7 @@ func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.T
 	if p, ok := todo.Get("DESCRIPTION"); ok {
 		t.Description = p.Value
 	}
-	if p, ok := todo.Get("STATUS"); ok {
-		t.Status = wireToStatus(p.Value)
-	}
+	t.Status = decodeTaskStatus(todo, statusDefs)
 	t.Priority = priorityFromComponent(todo, defs)
 	if p, ok := todo.Get(XPropPrioritySource); ok {
 		if v := strings.TrimSpace(p.Value); v != "" {
@@ -237,6 +246,9 @@ func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.T
 			t.Seq = n
 		}
 	}
+	if p, ok := todo.Get(XPropArchived); ok {
+		t.Archived = isTrueValue(p.Value)
+	}
 	for _, alarm := range todo.Sub {
 		if alarm.Type != vstar.CompAlarm {
 			continue
@@ -284,9 +296,7 @@ func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 	if p, ok := todo.Get("SUMMARY"); ok {
 		tr.Title = p.Value
 	}
-	if p, ok := todo.Get("STATUS"); ok {
-		tr.Status = wireStatusToTrack(p.Value)
-	}
+	tr.Status = decodeTrackStatus(todo)
 	if ts, ok := propTime(todo, "CREATED"); ok {
 		tr.CreatedAt = ts
 	}
@@ -378,34 +388,107 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEn
 	return le
 }
 
-// wireToStatus maps an RFC 5545 §3.8.1.11 STATUS wire string to a
-// tlc TaskStatus. Comparison is case-sensitive per the RFC.
-func wireToStatus(s string) core.TaskStatus {
-	switch s {
-	case string(vstar.TodoInProcess):
-		return core.StatusInProgress
-	case string(vstar.TodoCompleted):
-		return core.StatusDone
-	case string(vstar.TodoCancelled):
-		return core.StatusSkipped
-	case string(vstar.TodoNeedsAction):
-		return core.StatusTodo
+// decodeTaskStatus recovers a tlc status from a VTODO, preferring the
+// exact name in XPropStatus and falling back to the role the RFC STATUS
+// value implies.
+//
+// The X-property is only trusted when the CURRENT vocabulary declares
+// that name. A calendar exported from another project (or from this one
+// before a vocabulary change) can name a status this config would reject,
+// and importing it would seed the store with a value every later
+// validation refuses. Falling back to the role default keeps the import
+// inside the configured vocabulary while preserving the coarse meaning.
+func decodeTaskStatus(todo vstar.Component, defs []config.StatusDefinition) core.TaskStatus {
+	if p, ok := todo.Get(XPropStatus); ok {
+		name := strings.TrimSpace(p.Value)
+		for _, def := range defs {
+			if strings.EqualFold(def.Name, name) {
+				return core.TaskStatus(def.Name)
+			}
+		}
+	}
+	wire := ""
+	if p, ok := todo.Get("STATUS"); ok {
+		wire = strings.TrimSpace(p.Value)
+	}
+	return roleDefaultStatus(wireToRole(wire), defs)
+}
+
+// wireToRole is roleToWire inverted: an RFC 5545 STATUS value back to the
+// config role it stands for. Comparison is case-insensitive because the
+// value may have come from a foreign producer.
+func wireToRole(wire string) string {
+	switch {
+	case strings.EqualFold(wire, string(vstar.TodoInProcess)):
+		return config.RoleActive
+	case strings.EqualFold(wire, string(vstar.TodoCompleted)):
+		return config.RoleCompleted
+	case strings.EqualFold(wire, string(vstar.TodoCancelled)):
+		return config.RoleSkipped
+	default:
+		return config.RoleInitial
+	}
+}
+
+// roleDefaultStatus picks the vocabulary's status for a role: the FIRST
+// declaring it, matching how WorkflowManager resolves a role to a single
+// transition target. Falls back to the first initial-role status, then to
+// the first declared status, so a decode always lands on something the
+// config accepts.
+func roleDefaultStatus(role string, defs []config.StatusDefinition) core.TaskStatus {
+	for _, def := range defs {
+		if def.Role == role {
+			return core.TaskStatus(def.Name)
+		}
+	}
+	for _, def := range defs {
+		if def.Role == config.RoleInitial {
+			return core.TaskStatus(def.Name)
+		}
+	}
+	if len(defs) > 0 {
+		return core.TaskStatus(defs[0].Name)
 	}
 	return core.StatusTodo
 }
 
-func wireStatusToTrack(s string) core.TrackStatus {
-	switch s {
-	case string(vstar.TodoInProcess):
+// decodeTrackStatus prefers XPropTrackStatus so "completed" and
+// "archived" — which share STATUS:COMPLETED — survive the round trip, and
+// falls back to the RFC STATUS for foreign calendars.
+func decodeTrackStatus(todo vstar.Component) core.TrackStatus {
+	if p, ok := todo.Get(XPropTrackStatus); ok {
+		name := strings.TrimSpace(p.Value)
+		for _, st := range core.TrackStatuses() {
+			if strings.EqualFold(string(st), name) {
+				return st
+			}
+		}
+	}
+	wire := ""
+	if p, ok := todo.Get("STATUS"); ok {
+		wire = strings.TrimSpace(p.Value)
+	}
+	switch {
+	case strings.EqualFold(wire, string(vstar.TodoInProcess)):
 		return core.TrackStatusActive
-	case string(vstar.TodoCompleted):
+	case strings.EqualFold(wire, string(vstar.TodoCompleted)):
 		return core.TrackStatusCompleted
-	case string(vstar.TodoCancelled):
+	case strings.EqualFold(wire, string(vstar.TodoCancelled)):
 		return core.TrackStatusAbandoned
-	case string(vstar.TodoNeedsAction):
+	default:
 		return core.TrackStatusPending
 	}
-	return core.TrackStatusPending
+}
+
+// isTrueValue reads the boolean X-properties tlc emits. Only "TRUE" is
+// ever written; the wider set is accepted because hand-edited .ics files
+// are a real input.
+func isTrueValue(s string) bool {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case "TRUE", "YES", "1":
+		return true
+	}
+	return false
 }
 
 // icsToPriority maps an RFC 5545 PRIORITY integer back onto the

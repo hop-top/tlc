@@ -62,6 +62,10 @@ var knownXProps = map[string]bool{
 	XPropPriority:       true,
 	XPropPrioritySource: true,
 	XPropPriorityRule:   true,
+
+	XPropStatus:      true,
+	XPropTrackStatus: true,
+	XPropArchived:    true,
 }
 
 // metaProperty renders the non-derived entries of meta as a single

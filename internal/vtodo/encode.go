@@ -48,6 +48,22 @@ const (
 	// knows whether a human or a derivation rule set its priority.
 	XPropPrioritySource = "X-TLC-PRIORITY-SOURCE"
 	XPropPriorityRule   = "X-TLC-PRIORITY-RULE"
+
+	// XPropStatus carries the tlc status NAME alongside the RFC 5545
+	// STATUS property. STATUS has four legal values; a tlc status
+	// vocabulary is configurable and may declare more (or rename all of
+	// them), so STATUS alone is lossy. The X-property is what makes the
+	// round trip exact; STATUS stays for foreign consumers.
+	XPropStatus = "X-TLC-STATUS"
+
+	// XPropTrackStatus does the same for tracks, where "completed" and
+	// "archived" both map to STATUS:COMPLETED and would otherwise be
+	// indistinguishable on import.
+	XPropTrackStatus = "X-TLC-TRACK-STATUS"
+
+	// XPropArchived carries Task.Archived, which has no iCalendar
+	// equivalent at all. Emitted only when true.
+	XPropArchived = "X-TLC-ARCHIVED"
 )
 
 // icsPriorityMin and icsPriorityMax bound the DEFINED half of the
@@ -79,6 +95,7 @@ func BuildVCalendar(
 	opts ...Option,
 ) (vstar.Calendar, error) {
 	o := resolve(opts)
+	statusDefs := o.statusDefinitions()
 
 	cal := vstar.Calendar{ProdID: o.productID}
 
@@ -109,7 +126,7 @@ func BuildVCalendar(
 		if t == nil {
 			continue
 		}
-		cal.Append(buildTaskComponent(t, o.uidDomain, o.priorities, o.exportTime))
+		cal.Append(buildTaskComponent(t, o.uidDomain, o.priorities, statusDefs, o.exportTime))
 	}
 
 	// LogEntries → VJOURNAL (gated).
@@ -195,15 +212,61 @@ func uidFor(typeID, domain string) string {
 }
 
 // statusToWire maps a tlc TaskStatus to an RFC 5545 §3.8.1.11 STATUS
-// wire string. Defaults to NEEDS-ACTION for unknown / empty statuses.
-func statusToWire(s core.TaskStatus) string {
-	switch s {
-	case core.StatusInProgress:
+// wire string by looking the status up in the configured vocabulary and
+// reading its ROLE.
+//
+// Role, not name, because the status vocabulary is configurable: a
+// project declaring IN_REVIEW (role "active") and SHIPPED (role
+// "completed") has no status this package could recognise by name, and a
+// name switch would export NEEDS-ACTION for both. The four roles line up
+// one-for-one with the four RFC 5545 VTODO STATUS values, so role is
+// exactly the fact the wire format wants.
+//
+// Falls back to NEEDS-ACTION for a status the vocabulary does not
+// declare, which is the RFC's own "nothing has happened yet" value and
+// the least wrong guess available.
+func statusToWire(s core.TaskStatus, defs []config.StatusDefinition) string {
+	return roleToWire(statusRole(s, defs))
+}
+
+// statusRole resolves a status name to its configured role. Comparison is
+// case-insensitive: config files are hand-written and the wire is not the
+// place to punish a lowercase "done".
+func statusRole(s core.TaskStatus, defs []config.StatusDefinition) string {
+	for _, def := range defs {
+		if strings.EqualFold(def.Name, string(s)) {
+			return def.Role
+		}
+	}
+	return ""
+}
+
+// roleToWire maps a config role constant to its RFC 5545 STATUS value.
+func roleToWire(role string) string {
+	switch role {
+	case config.RoleActive:
 		return string(vstar.TodoInProcess)
-	case core.StatusDone:
+	case config.RoleCompleted:
 		return string(vstar.TodoCompleted)
-	case core.StatusSkipped:
+	case config.RoleSkipped:
 		return string(vstar.TodoCancelled)
+	default:
+		return string(vstar.TodoNeedsAction)
+	}
+}
+
+// trackStatusToWire maps a TrackStatus to an RFC 5545 STATUS value.
+// Tracks carry their own fixed vocabulary (no config knob), but
+// "completed" and "archived" collapse onto COMPLETED, which is why the
+// encoder also emits XPropTrackStatus.
+func trackStatusToWire(s core.TrackStatus) string {
+	switch s {
+	case core.TrackStatusCompleted, core.TrackStatusArchived:
+		return string(vstar.TodoCompleted)
+	case core.TrackStatusAbandoned:
+		return string(vstar.TodoCancelled)
+	case core.TrackStatusActive:
+		return string(vstar.TodoInProcess)
 	default:
 		return string(vstar.TodoNeedsAction)
 	}
@@ -265,7 +328,13 @@ func priorityToICS(p core.Priority, defs []config.PriorityDefinition) int {
 	return ics
 }
 
-func buildTaskComponent(t *core.Task, domain string, defs []config.PriorityDefinition, exportAt time.Time) vstar.Component {
+func buildTaskComponent(
+	t *core.Task,
+	domain string,
+	defs []config.PriorityDefinition,
+	statusDefs []config.StatusDefinition,
+	exportAt time.Time,
+) vstar.Component {
 	c := vstar.Component{Type: vstar.CompTodo}
 	c.Add(vstar.Property{Name: "UID", Value: uidFor(t.ID, domain)})
 
@@ -275,7 +344,10 @@ func buildTaskComponent(t *core.Task, domain string, defs []config.PriorityDefin
 	if t.Description != "" {
 		c.Add(vstar.Property{Name: "DESCRIPTION", Value: t.Description})
 	}
-	c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status)})
+	c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status, statusDefs)})
+	if t.Status != "" {
+		c.Add(vstar.Property{Name: XPropStatus, Value: string(t.Status)})
+	}
 	if p := priorityToICS(t.Priority, defs); p != 0 {
 		c.Add(vstar.Property{Name: "PRIORITY", Value: fmt.Sprintf("%d", p)})
 	}
@@ -342,6 +414,9 @@ func buildTaskComponent(t *core.Task, domain string, defs []config.PriorityDefin
 	if t.Seq > 0 {
 		c.Add(vstar.Property{Name: XPropTaskSeq, Value: fmt.Sprintf("%d", t.Seq)})
 	}
+	if t.Archived {
+		c.Add(vstar.Property{Name: XPropArchived, Value: "TRUE"})
+	}
 	addMeta(&c, t.Meta)
 	addUnknownTLCProps(&c, t.Meta)
 	// CATEGORIES last, and via the helper rather than one Add per tag:
@@ -366,20 +441,13 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	if tr.Title != "" {
 		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
 	}
-	// Tracks have no NEEDS-ACTION/etc states; STATUS COMPLETED for
-	// completed/archived, otherwise NEEDS-ACTION.
-	var status string
-	switch tr.Status {
-	case core.TrackStatusCompleted, core.TrackStatusArchived:
-		status = string(vstar.TodoCompleted)
-	case core.TrackStatusAbandoned:
-		status = string(vstar.TodoCancelled)
-	case core.TrackStatusActive:
-		status = string(vstar.TodoInProcess)
-	default:
-		status = string(vstar.TodoNeedsAction)
+	// STATUS stays for interop, but the track vocabulary does not fit in
+	// it: completed and archived both read as COMPLETED. XPropTrackStatus
+	// carries the real value so decode can tell them apart.
+	c.Add(vstar.Property{Name: "STATUS", Value: trackStatusToWire(tr.Status)})
+	if tr.Status != "" {
+		c.Add(vstar.Property{Name: XPropTrackStatus, Value: string(tr.Status)})
 	}
-	c.Add(vstar.Property{Name: "STATUS", Value: status})
 
 	if !tr.CreatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(tr.CreatedAt)})
