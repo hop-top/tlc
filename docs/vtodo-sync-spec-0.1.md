@@ -79,15 +79,15 @@ END:VCALENDAR
 | `Task.CreatedAt` | `CREATED` | The entity's creation instant, UTC `YYYYMMDDTHHMMSSZ`; omitted when zero |
 | `Task.UpdatedAt` | `LAST-MODIFIED` | The entity's last-modification instant, UTC; omitted when zero. On import, `DTSTAMP` is the fallback when `LAST-MODIFIED` is absent |
 | — | `DTSTAMP` | Required on every VTODO (RFC 5545 §3.6.2); the instant it carries is defined in the hashing section |
-| `Task.DueAt` | `DUE` | UTC format; omitted if not set |
-| `Task.RemindAt` | `VALARM` | TRIGGER set to absolute datetime; omitted if RemindAt not set |
+| `Task.DueAt` | `DUE` | UTC form #2; `DUE;VALUE=DATE:YYYYMMDD` when `Meta["due_date_only"]` is set (see [VALARM: Reminders](#valarm-reminders)); omitted if not set |
+| `Task.RemindAt`, `Task.Meta["reminders"]`, `Task.AutoRemindAt()` | `VALARM` | One VALARM per reminder: absolute `TRIGGER;VALUE=DATE-TIME` for `RemindAt` and each entry of `reminders`, relative `TRIGGER;RELATED=END:-PT12H` for the derived auto reminder; see [VALARM: Reminders](#valarm-reminders) |
 | `Task.RRule` | `RRULE` | RFC 5545 string (e.g., `FREQ=DAILY;INTERVAL=2`); omitted if empty |
 | `Task.TrackID` | `RELATED-TO` | Points to the parent track's UID, bare: RFC 5545 §3.2.15 defaults `RELTYPE` to `PARENT` and spec-vstar 02 requires the parameter be omitted for that value; omitted if no parent |
 | `Task.Effort` | `X-TLC-EFFORT` | Value: `XS` \| `S` \| `M` \| `L` \| `XL`; omitted if not set |
 | `Task.Meta` (map) | `X-TLC-META` | JSON-serialized; omitted if empty. Derived keys excluded — see [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 | `Task.Archived` | `X-TLC-ARCHIVED` | `TRUE`, emitted only when archived. Archived tasks excluded from output by default; include via `--archived` flag |
 
-**Time format**: All datetime fields use UTC ISO 8601 (`20260501T143000Z`) with trailing `Z` to indicate UTC.
+**Time format**: All datetime fields use UTC ISO 8601 (`20260501T143000Z`) with trailing `Z` to indicate UTC. The one date-only field is `DUE` when the entity is due on a day rather than at an instant: `DUE;VALUE=DATE:20260515` (RFC 5545 §3.3.4), never promoted to a midnight `DATE-TIME` (spec-vstar 03 rule 11).
 
 Every `X-TLC-*` property, including those this table does not list (`X-TLC-STATUS`, `X-TLC-PRIORITY`, `X-TLC-PROJECT-ID`, `X-TLC-TASK-SEQ`, …), is specified in the [`X-TLC-*` property registry](#x-tlc--property-registry).
 
@@ -229,6 +229,26 @@ Runs reach the encoder through `vtodo.WithRecipeRuns`; the CLI passes the run be
 
 ---
 
+## VALARM: Reminders
+
+A task's reminders travel as VALARMs nested in its VTODO. Every VALARM carries `UID`, `DTSTAMP` (the parent's), `ACTION:DISPLAY`, `DESCRIPTION` (the task title, RFC 5545 §3.6.6 requiring one on a DISPLAY alarm), one `TRIGGER` and `X-VSTAR-HASH` last. `TRIGGER` follows spec-vstar 03 "TRIGGER conventions": `VALUE=DATE-TIME` explicit and UTC form #2 on an absolute trigger, no `RELATED` there; a relative trigger keeps its authored duration units (rule 12) and omits `RELATED=START`.
+
+| Reminder | `TRIGGER` | `UID` |
+|---|---|---|
+| `Task.RemindAt` | `TRIGGER;VALUE=DATE-TIME:<UTC form #2>` | `task_<id>-alarm@<domain>` |
+| each entry of `Task.Meta["reminders"]` | `TRIGGER;VALUE=DATE-TIME:<UTC form #2>` | `task_<id>-alarm-<UTC form #2>@<domain>` |
+| `Task.AutoRemindAt()` (DUE set, `NoAutoRemind` false) | `TRIGGER;RELATED=END:-PT12H` | `task_<id>-alarm-auto@<domain>` |
+
+Absolute alarms are written first, in time order; the auto reminder last. The auto reminder is the derived "twelve hours before it is due" of `internal/core`; the relative form says exactly that to a foreign reader without pinning an instant that moves whenever `DUE` does, and RFC 5545 §3.8.6.3 anchors `RELATED=END` to a VTODO's `DUE`.
+
+**Import.** Every VALARM is read, not the first: its trigger is parsed with `duration.AlarmTrigger` and resolved with `Trigger.Resolve` against the parent (`DTSTART` for `RELATED=START` or no `RELATED`, the RFC default; `DUE` for `RELATED=END`), so the relative triggers Apple Reminders and Thunderbird emit resolve to an instant. A VALARM with no `TRIGGER`, a malformed one, or one whose anchor the VTODO lacks is skipped. The resolved instants, de-duplicated and sorted, are split: the earliest one still in the future at import time is `RemindAt` (the reminder tlc fires next), falling back to the earliest of all when none is; the rest are `Meta["reminders"]`, RFC 3339 UTC strings in time order, so re-export writes each back as its own VALARM. The auto reminder is recognised by shape (relative, `RELATED=END`, twelve hours by signed length) and stored nowhere: `AutoRemindAt()` derives it from `DUE` again. An absolute trigger that merely falls twelve hours before `DUE` is a reminder someone set and is kept. A relative trigger against a date-only anchor, which the library refuses to resolve, is applied to the day's midnight UTC, the same reading `DueAt` gets.
+
+**Date-only DUE.** `Task.DueAt` and `Track.DueAt` are instants; a task due on a day is flagged with `Meta["due_date_only"] = true` (a Meta key because Meta already round-trips through every store, and the flag is a fact about the wire form). Export writes `DUE;VALUE=DATE:YYYYMMDD` for a flagged entity and a UTC `DATE-TIME` otherwise. Import reads `DUE;VALUE=DATE` (parameter matched case-insensitively) into `DueAt` = midnight UTC of that day and sets the flag; `DUE:YYYYMMDDT000000Z` is a midnight instant, decodes without the flag and re-exports as it was. An untagged eight-octet `DUE` is a malformed `DATE-TIME` and decodes to nothing. `due_date_only` and `reminders` are derived keys: neither is written into `X-TLC-META`, and a copy found there on import is ignored.
+
+**Not on the wire.** `NoAutoRemind`: a task exported without an auto reminder because the flag was set imports with the flag clear. A foreign relative trigger is re-exported as the absolute instant it resolved to.
+
+---
+
 ## RRULE: RFC 5545 Recurrence Rules
 
 `Task.RRule` replaces legacy `RemindEvery` duration field. Stored as an RFC 5545 RRULE string; empty string means no recurrence.
@@ -295,6 +315,8 @@ Consequence of the JSON round-trip: values return with `encoding/json`'s `interf
 | `priority_source`, `priority_rule` | `X-TLC-PRIORITY-SOURCE`, `X-TLC-PRIORITY-RULE` |
 | `effective_status` (log entries) | `X-VSTAR-EFFECTIVE-STATUS` on a supersession journal |
 | `last_sync_hash` (tasks) | nothing: the sync layer's local change-detection baseline, meaningless off this store and never exported |
+| `due_date_only` (tasks, tracks) | the `VALUE=DATE` parameter on `DUE` |
+| `reminders` (tasks) | the task's further VALARMs, one per instant; see [VALARM: Reminders](#valarm-reminders) |
 
 An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
 
@@ -616,8 +638,11 @@ END:VJOURNAL
   parent's stamp. The rows above that say `DTSTAMP` is creation or
   export time are superseded by this. Rationale and the RFC 5545
   deviation: `VSTAR-CONFORMANCE.md`.
-- **VALARM UID** is derived from the parent UID with `-alarm` before the
-  domain separator: `task_<id>-alarm@<domain>`.
+- **VALARM UID** is derived from the parent UID with a suffix before
+  the domain separator: `task_<id>-alarm@<domain>` for `RemindAt`,
+  `task_<id>-alarm-<UTC form #2>@<domain>` for each further reminder,
+  `task_<id>-alarm-auto@<domain>` for the auto reminder (see
+  [VALARM: Reminders](#valarm-reminders)).
 
 ---
 
@@ -629,7 +654,7 @@ END:VJOURNAL
 |---|---|---|---|---|
 | `X-TLC-TRACK-SEQ` | Track | `Track.Seq` as a decimal integer | export + import | Per-project sequence behind the `L-NNNN` alias; omitted when zero. Registered as a typed property, so it never lands in `Meta["x_tlc"]`. |
 | `PERCENT-COMPLETE` | Track | terminal members / all members × 100, rounded | export only | The `tlc track` Progress column. Omitted for a track with no member tasks in the export; `0` when none are done. Derived, never decoded. |
-| `DUE` | Track | `Track.DueAt`, UTC form #2 | export + import | Same mapping tasks already had. |
+| `DUE` | Track | `Track.DueAt`, UTC form #2, or `VALUE=DATE` when `Track.Meta["due_date_only"]` is set | export + import | Same mapping tasks already had, date-only form included. |
 
 `priority_source` and `priority_rule` are excluded from `X-TLC-META`
 (they join `blocked_by`, `external_uid` and `x_tlc` in the derived-key

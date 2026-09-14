@@ -49,6 +49,8 @@ const tlcSystemSlug = "TLC"
 //     change-detection baseline for this store, meaningful only
 //     against the local row; exported, it would make a task's hash
 //     move on every sync and tell a foreign reader nothing.
+//   - due_date_only → the VALUE=DATE parameter on DUE.
+//   - reminders → the task's further VALARMs, one per instant.
 var derivedMetaKeys = map[string]bool{
 	"blocked_by":            true,
 	"external_uid":          true,
@@ -57,6 +59,8 @@ var derivedMetaKeys = map[string]bool{
 	core.MetaPriorityRule:   true,
 	MetaEffectiveStatusKey:  true,
 	core.MetaLastSyncHash:   true,
+	MetaDueDateOnly:         true,
+	MetaReminders:           true,
 }
 
 // knownXProps is the set of X-TLC-* names that already populate a typed

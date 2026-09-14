@@ -77,7 +77,7 @@ func TestConcept_OneTokenPerComponent(t *testing.T) {
 			alarms++
 		}
 	}
-	require.Equal(t, 1, alarms)
+	require.Equal(t, 2, alarms, "the task's reminder and its auto reminder")
 }
 
 // journalConceptFor builds one log entry with the given action and

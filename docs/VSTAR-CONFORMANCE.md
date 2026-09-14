@@ -88,6 +88,42 @@ byte-identically (`TestFixture_RoundTripStability`,
   (`TestTurn_OpenClaimFromTaskRow`, `TestTurn_WindowsFromLog`,
   `TestPlaythrough_Shape`). The mapping and its sources are in
   `docs/vtodo-sync-spec-0.1.md`, "VEVENT: Turns and Playthroughs".
+- `DATE` values follow spec 03 rule 11. A task or track due on a day
+  (`Meta["due_date_only"]`) exports `DUE;VALUE=DATE:YYYYMMDD` through
+  `SetDUEDate` and is never promoted to a midnight `DATE-TIME`; on
+  import `DUE;VALUE=DATE` is read through `DUEDate` (the parameter
+  matched case-insensitively) into `DueAt` = midnight UTC of that day
+  plus the flag, so the two forms stay distinct across a round trip.
+  An untagged eight-octet `DUE` is a malformed `DATE-TIME` to the
+  library and decodes to nothing; the hand-rolled midnight fallback
+  is gone. `CREATED`, `LAST-MODIFIED`, `DTSTAMP` and a turn's
+  `DTSTART` are `DATE-TIME` only (`TestDateOnly_DueRoundTrip`,
+  `TestDateOnly_ForeignLowercaseValueParam`,
+  `TestDateOnly_DistinctFromMidnightDateTime`,
+  `TestDateOnly_UntaggedDateIsNotPromoted`, `TestDateOnly_TrackRoundTrip`,
+  `TestDecode_DateOnlyCreatedIsNotPromoted`).
+- `TRIGGER` follows spec 03 rule 12 and "TRIGGER conventions". tlc's
+  own reminders (`RemindAt`, `Meta["reminders"]`) are absolute:
+  `TRIGGER;VALUE=DATE-TIME:<UTC form #2>`, `VALUE` explicit, no
+  `RELATED`, through `helpers.NewAbsoluteAlarm`
+  (`TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP`). The derived auto
+  reminder (`Task.AutoRemindAt`, twelve hours before due) is relative:
+  `TRIGGER;RELATED=END:-PT12H` through `helpers.NewRelativeAlarm`, the
+  duration in its authored units, `RELATED=START` never written
+  (`TestAutoRemind_EmittedAsRelativeTrigger`). On import every VALARM
+  is resolved through `duration.AlarmTrigger` and `Trigger.Resolve`,
+  `RELATED` honoured (`DUE` for `END`, `DTSTART` for `START`, the RFC
+  default), so the relative triggers Apple Reminders and Thunderbird
+  emit are no longer dropped (`TestRelativeTrigger_ResolvesAgainstDue`,
+  `TestRelativeTrigger_ResolvesAgainstDtstart`). All VALARMs are kept,
+  not the first (`TestReminders_MultipleAlarmsPreserved`); the wire
+  shape of the auto reminder is recognised and derived again rather
+  than stored (`TestAutoRemind_DecodesWithoutDoubleStoring`). See
+  `docs/vtodo-sync-spec-0.1.md`, "VALARM: Reminders".
+- `X-TLC-EFFORT` stays an X-property rather than becoming a
+  `DURATION`: an effort is a size from a configured vocabulary
+  (`XS`…`XL`), not a span of time, and writing it as `PT4H` would
+  assert a number of hours nobody entered.
 
 ## Validation gate
 
@@ -113,7 +149,11 @@ semantic validator behind spec 05, through `vtodo.ValidateExport`
   `vtodo.AllowedErrorCodes`, currently `{VS040}`. The set is pinned by
   `TestValidateGate_AllowedErrorCodesPinned`; every entry is a deviation
   recorded below. An allowed diagnostic is logged (test output, generator
-  stderr), never dropped.
+  stderr), never dropped. VS052 (malformed `DURATION`, relative
+  `TRIGGER` or `REPEAT`) is not allow-listed: every VALARM tlc emits
+  goes through the typed `duration` builders, and the gate's walk into
+  `Sub` is what would catch a malformed one (`TestValidateGate_EveryBuilderPath`,
+  cases "date-only DUE", "several reminders", "auto reminder suppressed").
 - Warnings (`SeverityWarning`: VS020 unknown property, VS050 RRULE
   feature outside the vstar evaluator's scope) are logged and never
   fail (`TestValidateGate_WarningsDoNotBlock`). tlc's own extensions
@@ -262,10 +302,31 @@ spec should say which vocabulary the property carries; a system name
 
 ### VALARM UID scheme
 
-RFC 5545 gives VALARM no UID; spec 02 requires one. tlc derives it from
-the parent: the parent UID with `-alarm` inserted before the domain
-separator (`task_<id>-alarm@<domain>`). One reminder per task keeps it
-unique and stable across exports without stored state.
+RFC 5545 gives VALARM no UID; spec 02 requires one. tlc derives every
+alarm UID from the parent by inserting a suffix before the domain
+separator, so no state is stored: `task_<id>-alarm@<domain>` for the
+`RemindAt` reminder, `task_<id>-alarm-<UTC form #2>@<domain>` for each
+further absolute reminder in `Meta["reminders"]` (instants are unique
+within a task), and `task_<id>-alarm-auto@<domain>` for the derived
+auto reminder. A foreign parent UID without `@` takes the suffix at
+its end.
+
+### Reminders are resolved to instants on import
+
+Every VALARM is kept, but the model holds instants: a foreign relative
+trigger (`TRIGGER:-PT15M`) is resolved against its anchor on import
+and re-exported as an absolute `VALUE=DATE-TIME` trigger, so the
+authored duration does not survive a round trip through tlc. The one
+relative shape tlc recognises and reproduces is its own auto reminder
+(`RELATED=END`, twelve hours, compared by signed length so `-P0DT12H`
+reads the same). `RemindAt` is the earliest reminder still in the
+future at import time, falling back to the earliest of all when none
+is; the rest are `Meta["reminders"]`. A relative trigger against a
+date-only anchor, which the library refuses to resolve, is applied to
+the day's midnight UTC, the same reading `DueAt` gets. `NoAutoRemind`
+is not on the wire: a task exported without an auto reminder because
+the flag was set imports with the flag clear (as before this change;
+the flag was never exported).
 
 ### Undated VTODOs carry no DUE (VS040)
 
@@ -293,22 +354,36 @@ verbatim via `.gitattributes`). `TestFixture_HashesVerify` re-verifies
 every component of every fixture; `TestFixture_RoundTripStability`
 proves byte-identical re-emission.
 
+Every dated task now carries its auto reminder as a nested VALARM
+(`TRIGGER;RELATED=END:-PT12H`), so every task VTODO hash moved with
+this change; track, journal, turn and playthrough hashes did not. The
+VALARM rows are the nested components' own hashes.
+
 | Fixture | Component UID | `X-VSTAR-HASH` |
 |---|---|---|
-| `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:020b85e5ff1b89955052df9617d8b912b5dce0a1c7010f22a8f43f47fe28ab1d` |
-| `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:eb8ba05c6c89d6f83ca320afe70660c3e30a00c2acbdd98bf70aeab747b89b1a` |
+| `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:06121082115c2816c96b47818760bf0e0bf336c2d8f1bd53a89259eaa3a18016` |
+| `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q-alarm-auto@tlc.local` | `sha256:6e0915804164dd58af0d2c142bd0728525a6882da48fa9aa8752f4b4910ee6eb` |
+| `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:353cc6b39f1445bc222fa31c02c3011b27803dabf54dd63d9688c5d8c1e28635` |
+| `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q-alarm-auto@tlc.local` | `sha256:6e0915804164dd58af0d2c142bd0728525a6882da48fa9aa8752f4b4910ee6eb` |
 | `track-with-tasks.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:47e12299df1fa71afb9f694c1a2d1dab6255c3f86aaf9d28916626bda30bc323` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:060ce2e23bffba98092165ab54adfe944998d3d5d9e4b83c487e2f81d1fafd78` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:401d0730942685635bb60336d9f8d9a2f3eec95f5e8e0f6bbcd2e3d188cbf64c` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:df0b11d60e4a34e514236c77cad4780091f0ad4d7ad4c4b346800f6d40f9c93c` |
-| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0az@tlc.local` | `sha256:d1b30190e0c98ac1bb870c266608287afeebe9b51db935fe28779c27fe49adc8` |
-| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0aa@tlc.local` | `sha256:70ef6e34c9f03e55130943e2099541d893e3224994547e724f00f3bd606d1770` |
-| `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:020b85e5ff1b89955052df9617d8b912b5dce0a1c7010f22a8f43f47fe28ab1d` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:2d11aa76cc532c94503da488d53f3ed0f2b1185a2c48c3fc6e1bd177911f6e84` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q-alarm-auto@tlc.local` | `sha256:6e0915804164dd58af0d2c142bd0728525a6882da48fa9aa8752f4b4910ee6eb` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:f5bb1d508545a50ac472893075a5da600fb4685d1e88be219a1ae1f1e9e592e9` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw-alarm-auto@tlc.local` | `sha256:332fccf229157c0f2063b153a6fdc482213f2a278301e624fc4bf43c030c8145` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:9033ef37be1e0b77dabf0ad9dcfdcffff4a1a09ca248e993adf5d79ab7f43e6e` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax-alarm-auto@tlc.local` | `sha256:b100b711f0b2fe057000d244a769cb63882f3921150f54a967848a340dbab1b8` |
+| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0az@tlc.local` | `sha256:f9a3af4285281d10744f457d8281bf73f60369dcd27175dce83e2f212c063c0d` |
+| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0az-alarm-auto@tlc.local` | `sha256:b06b99396004b515adfef9b23a459a75d56aa937e7f0971fde6464f8183ea241` |
+| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0aa@tlc.local` | `sha256:291da43df94c4870f0f96f38ba03b443028807cbf868905116a840b22af5ed3a` |
+| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0aa-alarm-auto@tlc.local` | `sha256:0c39ccc94666fd4a022eba5ac3aafbd3cfa74281b4ff6de78e685c810d8254d1` |
+| `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:06121082115c2816c96b47818760bf0e0bf336c2d8f1bd53a89259eaa3a18016` |
+| `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q-alarm-auto@tlc.local` | `sha256:6e0915804164dd58af0d2c142bd0728525a6882da48fa9aa8752f4b4910ee6eb` |
 | `with-logs.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z` | `sha256:63232af5c32129151c811defad4b7d3dfa30cd65921697646b29eefc76b05a5d` |
 | `with-logs.ics` | `log-task_01h455vb4pex5vsknk084sn02q-PROGRESS-20260502T163000Z@tlc.local` | `sha256:73acc64829b5caa498dd52037cc5130f3afcc971b06783dde189c61866314e2f` |
 | `with-logs.ics` | `turn-task_01h455vb4pex5vsknk084sn02q-20260502T143000Z@tlc.local` | `sha256:c062e6644313a96da0377f63438b5336564585a7ce7f8cac4737b60274dade09` |
 | `recipe-run.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:30b82a1dd6436c79ebda245c12b52b86da468b82e898270fbddfedc0ed99a08e` |
-| `recipe-run.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:4b58fa0c775f689d559233c4970347908a185ca0b45f924135566e7950635f49` |
+| `recipe-run.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:7444fbd9401fae9a16675646c588ed8b305918cbd02c9269917aaab85b368cee` |
+| `recipe-run.ics` | `task_01h455vb4pex5vsknk084sn02q-alarm-auto@tlc.local` | `sha256:6e0915804164dd58af0d2c142bd0728525a6882da48fa9aa8752f4b4910ee6eb` |
 | `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T143000Z` | `sha256:7d79dface6fd31001c197a08726bcf88043d20ca7c8149f9e55f2d756ec59c03` |
 | `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T153000Z` | `sha256:8c351916c5dd1cd07a81c0523cf3658688dae5a9a77310876f662c8aa8d6fc33` |
 | `recipe-run.ics` | `journal:status:task_01h455vb4pex5vsknk084sn02q@tlc.local:20260502T183000Z` | `sha256:daa122db8b623a43379876afb4124b13948b6b3108354cd063fa5482f7e2e963` |
@@ -325,7 +400,9 @@ moves the hashes. Regenerate, then refresh the table:
 go run ./cmd/genfixtures-vtodo
 for f in tests/fixtures/vtodo/*.ics; do
   echo "== $f"
-  tr -d '\r' < "$f" | awk '/^UID:/{u=$0} /^X-VSTAR-HASH:/{h=$0; getline n; if (n ~ /^ /) h=h substr(n,2); print u " | " h}'
+  tr -d '\r' < "$f" \
+    | awk '/^ /{buf=buf substr($0,2); next} {if (buf!="") print buf; buf=$0} END{print buf}' \
+    | awk '/^UID:/{u=substr($0,5)} /^X-VSTAR-HASH:/{print u " | " substr($0,14)}'
 done
 go test ./internal/vtodo/ -run 'TestFixture_'
 ```
@@ -334,8 +411,8 @@ The generator writes CRLF; commit the files as written. It refuses to
 write a fixture that fails the validation gate (exit 1, findings on
 stderr) and prints allowed and warning diagnostics to stderr. The
 round-trip and verify tests fail loudly if a fixture and the encoder
-disagree. A folded `UID` (the supersession scheme is long) spans two
-physical lines; the awk above reads only the first, so join the
-continuation by hand or compare on the parsed component.
+disagree. The first awk unfolds RFC 5545 continuation lines (a
+supersession `UID` and every hash fold), so nested VALARM rows come
+out under their own `UID`.
 
 <!-- added by content-based change detection; belongs under "DTSTAMP is the entity's last-modified instant" -->

@@ -489,10 +489,14 @@ func TestBuildVCalendar_OpenRoleHasNoDoneTriple(t *testing.T) {
 	require.NotContains(t, out, "PERCENT-COMPLETE")
 }
 
-// TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP proves the VALARM is built
-// through helpers.NewAlarm: a UID derived from its parent's, a DTSTAMP
-// pinned to its parent's rather than the constructor's wall clock or
-// the export clock, an absolute TRIGGER, and an X-VSTAR-HASH.
+// TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP proves the reminder
+// VALARM is built through helpers.NewAbsoluteAlarm: a UID derived from
+// its parent's, a DTSTAMP pinned to its parent's rather than the
+// constructor's wall clock or the export clock, an absolute TRIGGER in
+// the form spec-vstar 03 "TRIGGER conventions" asks for (VALUE=DATE-TIME
+// explicit, UTC form #2, no RELATED), and an X-VSTAR-HASH. The dated
+// task also carries its auto reminder, second; reminders_test.go
+// covers that one.
 func TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP(t *testing.T) {
 	exportAt := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
 	task := sampleTask()
@@ -503,7 +507,7 @@ func TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP(t *testing.T) {
 	require.NoError(t, err)
 	todos := cal.Filter(vstar.CompTodo)
 	require.Len(t, todos, 1)
-	require.Len(t, todos[0].Sub, 1)
+	require.Len(t, todos[0].Sub, 2, "RemindAt alarm, then the auto reminder")
 	alarm := todos[0].Sub[0]
 
 	require.Equal(t, vstar.CompAlarm, alarm.Type)
@@ -513,8 +517,10 @@ func TestBuildVCalendar_AlarmCarriesUIDAndDTSTAMP(t *testing.T) {
 	require.Equal(t, task.UpdatedAt, stamp, "VALARM takes its parent's DTSTAMP")
 	trig, ok := alarm.Get("TRIGGER")
 	require.True(t, ok)
-	require.Equal(t, []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}}, trig.Params)
+	require.Equal(t, []vstar.Param{{Name: "VALUE", Value: "DATE-TIME"}}, trig.Params,
+		"exactly VALUE=DATE-TIME: RELATED is meaningless on an absolute trigger")
 	require.Equal(t, "20260503T023000Z", trig.Value)
+	require.True(t, strings.HasSuffix(trig.Value, "Z"), "absolute trigger must be UTC form #2")
 	_, ok = alarm.Get("X-VSTAR-HASH")
 	require.True(t, ok, "VALARM must carry X-VSTAR-HASH")
 }
@@ -529,7 +535,12 @@ func TestBuildVCalendar_AlarmUIDFollowsDomain(t *testing.T) {
 	require.NoError(t, err)
 	todos := cal.Filter(vstar.CompTodo)
 	require.Len(t, todos, 1)
-	require.Len(t, todos[0].Sub, 1)
+	require.Len(t, todos[0].Sub, 2)
+	require.Equal(
+		t,
+		"task_01h455vb4pex5vsknk084sn02q-alarm-auto@calendar.example.com",
+		todos[0].Sub[1].UID(),
+	)
 	require.Equal(
 		t,
 		"task_01h455vb4pex5vsknk084sn02q-alarm@calendar.example.com",
