@@ -9,6 +9,7 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/helpers"
 
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
@@ -179,14 +180,7 @@ func decodeTask(todo vstar.Component, defs []config.PriorityDefinition) (*core.T
 			setMeta(t, core.MetaPriorityRule, v)
 		}
 	}
-	for _, p := range todo.GetAll("CATEGORIES") {
-		for _, raw := range strings.Split(p.Value, ",") {
-			tag := strings.TrimSpace(raw)
-			if tag != "" {
-				t.Tags = append(t.Tags, tag)
-			}
-		}
-	}
+	t.Tags = decodeCategories(todo)
 	if p, ok := todo.Get("CREATED"); ok {
 		if ts, err := parseICSTime(p.Value); err == nil {
 			t.CreatedAt = ts
@@ -547,4 +541,61 @@ func parseICSTime(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognised iCalendar time %q", s)
+}
+
+// decodeCategories reads a task's tags from the CATEGORIES property
+// (RFC 5545 §3.8.1.2), tolerating BOTH wire shapes.
+//
+// The idiomatic shape -- and the only one tlc writes now -- is a single
+// property carrying a comma-separated list, which helpers.Categories
+// reads: it splits on comma, trims, and drops empty tokens.
+//
+// The other shape is one property PER tag. tlc emitted that for its
+// whole history, so it is what every .ics already on disk looks like.
+// helpers.Categories cannot read it: it resolves the property with
+// Component.Get, which returns only the FIRST match, so a file with
+// `CATEGORIES:security` + `CATEGORIES:auth` would silently decode to
+// just ["security"] -- tags dropped with no error, the kind of loss a
+// user only notices later as a filter returning nothing. So when GetAll
+// finds more than one property, each is parsed and the results are
+// concatenated.
+//
+// Order is preserved in both shapes: tlc tags are ordered and callers
+// compare the slice. Duplicates are dropped across the whole set --
+// repeated properties may legitimately repeat a tag -- keeping
+// first-seen order, matching helpers.SetCategories on the write side so
+// a decode/encode round trip is stable.
+func decodeCategories(todo vstar.Component) []string {
+	props := todo.GetAll("CATEGORIES")
+	if len(props) == 0 {
+		return nil
+	}
+	if len(props) == 1 {
+		return dedupeTags(helpers.Categories(todo))
+	}
+	var out []string
+	for _, p := range props {
+		single := vstar.Component{Props: []vstar.Property{p}}
+		out = append(out, helpers.Categories(single)...)
+	}
+	return dedupeTags(out)
+}
+
+// dedupeTags drops repeats while preserving first-seen order. Compare
+// is case-sensitive, matching helpers.SetCategories -- CATEGORIES are
+// user-facing labels, so "Work" and "work" are distinct tags.
+func dedupeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if _, dup := seen[tag]; dup {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
 }

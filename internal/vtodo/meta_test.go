@@ -159,8 +159,12 @@ func TestMeta_NonTLCExtensionIgnored(t *testing.T) {
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
 	require.NotContains(t, out, "X-APPLE-SORT-ORDER")
-	require.NotContains(t, out, "X-VSTAR-HASH")
 	require.NotContains(t, out, "X-EXP-THING")
+	// X-VSTAR-HASH may legitimately appear, but only as a digest vstar
+	// helpers mint over the component they just built -- never the
+	// value carried in on the input, which stays unadopted like any
+	// other foreign extension.
+	require.NotContains(t, out, "X-VSTAR-HASH:sha256:abc")
 }
 
 // TestMeta_ForeignNameInBagNotEmitted guards the export side of the same
