@@ -230,3 +230,69 @@ func TestParseVCalendar_RRuleValidation(t *testing.T) {
 	require.Len(t, res.Tasks, 1)
 	require.Empty(t, res.Tasks[0].RRule, "unsupported FREQ must not survive decode")
 }
+
+// TestRoundTrip_LiteralBackslashSequences pins the boundary between the
+// codec's RFC 5545 §3.3.11 TEXT escaping and this package's model. The
+// codec escapes on emit and unescapes on parse, so any extra unescape
+// pass here would reinterpret a literal backslash sequence written by a
+// user (for example the two characters `\` and `n` inside a code
+// snippet) as the escape it merely resembles.
+func TestRoundTrip_LiteralBackslashSequences(t *testing.T) {
+	const literal = `seq \n stays two chars; \, stays two chars; \\ pair; trailing \`
+
+	in := sampleTask()
+	in.Title = literal
+	in.Description = literal
+	in.Tags = []string{`tag\nnot-newline`}
+
+	res := roundTrip(t, []*core.Task{in}, nil, nil)
+	require.Len(t, res.Tasks, 1)
+	got := res.Tasks[0]
+
+	require.Equal(t, literal, got.Title)
+	require.Equal(t, literal, got.Description)
+	require.Equal(t, in.Tags, got.Tags)
+	require.NotContains(t, got.Description, "\n", "literal backslash-n must not become a newline")
+}
+
+// TestRoundTrip_LiteralBackslashInTrackAndLog covers the same boundary
+// for the track SUMMARY and log note decode paths.
+func TestRoundTrip_LiteralBackslashInTrackAndLog(t *testing.T) {
+	const literal = `path C:\new\table and a \, comma`
+
+	tr := &core.Track{
+		ID:        "track_01h455vbqkfsn02nk084ksn02q",
+		Slug:      "escapes",
+		Title:     literal,
+		Type:      core.TrackTypeFeature,
+		Status:    core.TrackStatusActive,
+		CreatedAt: fixedTime,
+		UpdatedAt: fixedTime,
+	}
+	task := sampleTask()
+	trackID := tr.ID
+	task.TrackID = &trackID
+
+	log := &core.LogEntry{
+		ID:        1,
+		TaskID:    task.ID,
+		Action:    "note",
+		By:        "alice",
+		Note:      literal,
+		Timestamp: fixedTime,
+	}
+
+	res := roundTrip(
+		t,
+		[]*core.Task{task},
+		[]*core.Track{tr},
+		[]*core.LogEntry{log},
+		vtodo.WithIncludeLogs(true),
+	)
+
+	require.Len(t, res.Tracks, 1)
+	require.Equal(t, literal, res.Tracks[0].Title)
+
+	require.Len(t, res.Logs, 1)
+	require.Equal(t, literal, res.Logs[0].Note)
+}
