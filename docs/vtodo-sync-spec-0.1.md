@@ -52,19 +52,22 @@ END:VCALENDAR
 | `Task.Description` | `DESCRIPTION` | — |
 | `Task.Status` | `STATUS` | TODO→NEEDS-ACTION, IN_PROGRESS→IN-PROCESS, DONE→COMPLETED, SKIPPED→CANCELLED |
 | `Task.Priority` | `PRIORITY` | P0→1, P1→3, P2→5, P3→7 (RFC 5545: 1=high, 3=medium, 5=low, 7=lowest) |
-| `Task.AssignedTo` | `ATTENDEE` | If email resolvable: `ATTENDEE;CN=<name>:mailto:<addr>`; else `X-TLC-ASSIGNEE:<name>` |
+| `Task.AssignedTo` | `ATTENDEE` | If the value is an email address: `ATTENDEE:mailto:<addr>` (no `CN`); else `X-TLC-ASSIGNEE:<name>` |
 | `Task.Tags` | `CATEGORIES` | Comma-separated list |
-| `Task.CreatedAt` | `CREATED`, `DTSTAMP` | Both set to creation time; format: UTC `YYYYMMDDTHHMMSSZ` |
-| `Task.UpdatedAt` | `LAST-MODIFIED` | UTC format |
+| `Task.CreatedAt` | `CREATED` | The entity's creation instant, UTC `YYYYMMDDTHHMMSSZ`; omitted when zero |
+| `Task.UpdatedAt` | `LAST-MODIFIED` | The entity's last-modification instant, UTC; omitted when zero. On import, `DTSTAMP` is the fallback when `LAST-MODIFIED` is absent |
+| — | `DTSTAMP` | Required on every VTODO (RFC 5545 §3.6.2); the instant it carries is defined in the hashing section |
 | `Task.DueAt` | `DUE` | UTC format; omitted if not set |
 | `Task.RemindAt` | `VALARM` | TRIGGER set to absolute datetime; omitted if RemindAt not set |
 | `Task.RRule` | `RRULE` | RFC 5545 string (e.g., `FREQ=DAILY;INTERVAL=2`); omitted if empty |
 | `Task.TrackID` | `RELATED-TO;RELTYPE=PARENT` | Points to parent track's UID; omitted if no parent |
 | `Task.Effort` | `X-TLC-EFFORT` | Value: `XS` \| `S` \| `M` \| `L` \| `XL`; omitted if not set |
 | `Task.Meta` (map) | `X-TLC-META` | JSON-serialized; omitted if empty. Derived keys excluded — see [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
-| `Task.Archived` | (omitted) | Archived tasks excluded from output by default; include via `--archived` flag |
+| `Task.Archived` | `X-TLC-ARCHIVED` | `TRUE`, emitted only when archived. Archived tasks excluded from output by default; include via `--archived` flag |
 
 **Time format**: All datetime fields use UTC ISO 8601 (`20260501T143000Z`) with trailing `Z` to indicate UTC.
+
+Every `X-TLC-*` property, including those this table does not list (`X-TLC-STATUS`, `X-TLC-PRIORITY`, `X-TLC-PROJECT-ID`, `X-TLC-TASK-SEQ`, …), is specified in the [`X-TLC-*` property registry](#x-tlc--property-registry).
 
 ---
 
@@ -105,11 +108,12 @@ Log entries naturally map to VJOURNAL components, linked to their task via `RELA
 | LogEntry Field | VJOURNAL Property | Notes |
 |---|---|---|
 | UID (derived) | `UID` | Synthesized: `log-<task-typeid>-<action>-<utc-stamp>@<domain>` — see below |
-| `Timestamp` | `DTSTAMP` | UTC format |
-| `By` (user) | `ORGANIZER` | If email resolvable: `ORGANIZER:mailto:<addr>`; else `X-TLC-LOG-BY:<name>` |
-| `Action` | `SUMMARY` | Abbreviated action string (e.g., `created`, `status_change`, `comment`) |
-| `Note` | `DESCRIPTION` | Full note text; omitted if empty |
-| `TaskID` | `RELATED-TO` | Points to parent task's UID (no RELTYPE; implicit parent) |
+| `Timestamp` | `CREATED` | The entry's own instant, UTC; omitted when zero. On import `CREATED` is preferred; `DTSTAMP` is only a fallback for producers that emit no `CREATED` |
+| — | `DTSTAMP` | Required on every VJOURNAL (RFC 5545 §3.6.3); the instant it carries is defined in the hashing section |
+| `By` (user) | `X-TLC-LOG-BY` | Actor name verbatim; omitted if empty. No `ORGANIZER` is emitted |
+| `Action` | `X-TLC-LOG-ACTION` | Action string verbatim (e.g., `created`, `status_change`, `comment`); omitted if empty |
+| `Note` | `DESCRIPTION`, `SUMMARY` | `DESCRIPTION` carries the full note and `SUMMARY` its first line; both omitted if the note is empty, in which case `SUMMARY` carries the action instead |
+| `TaskID` | `RELATED-TO;RELTYPE=PARENT`, `X-TLC-LOG-TASK` | `RELATED-TO` points at the task's UID with an explicit `RELTYPE=PARENT`; `X-TLC-LOG-TASK` carries the bare task TypeID and is preferred on import |
 | `Meta` | `X-TLC-META` | JSON-serialized; omitted if empty. See [The `X-TLC-*` Extension Namespace](#the-x-tlc--extension-namespace) |
 
 **Opt-in**: VJOURNAL export is disabled by default. Enable via:
@@ -210,7 +214,37 @@ An entity whose Meta holds only derived keys emits no `X-TLC-META` at all.
 
 **Sub-components are walked explicitly.** `ext.ExtensionsByScope` does not recurse into `Component.Sub`, so `VALARM` (and any future nested component) is scanned separately; its `X-TLC-*` properties merge into the parent entity's `x_tlc` bag.
 
-**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
+**Non-tlc extensions are ignored, by design.** Extensions owned by another system (`X-APPLE-SORT-ORDER`), by vstar (`X-VSTAR-*`), or experimental (`X-EXP-*`) are neither imported into tlc `Meta` nor echoed back on export. This is the receiver rule of spec-vstar's extension discipline — receivers MUST ignore unknown `X-*` properties — see <https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>. Rationale: tlc does not own those namespaces, so it cannot know their semantics, lifetime, or whether round-tripping a stale copy would contradict the owning system. Adopting them into `Meta` would also let a foreign producer inject arbitrary keys into tlc's own model. Preserving them is a defensible future change, but it requires a separate per-system passthrough store, not tlc's `Meta` map.
+
+### `X-TLC-*` property registry
+
+Every `X-TLC-*` property tlc emits, derived from the encoder, the decoder and the known-property table. "Since" is the spec version, with the month the property first shipped in parentheses; a calendar written before that month simply lacks the property and decodes through the fallback named in its row.
+
+| Property | Carried on | Value form | Source field | Since / notes |
+|---|---|---|---|---|
+| `X-TLC-EFFORT` | VTODO task | Effort name from the configured vocabulary (default `XS` \| `S` \| `M` \| `L` \| `XL`) | `Task.Effort` | 0.1 (2026-05). Omitted when empty. Import: kept only if the name is in the current vocabulary, else dropped |
+| `X-TLC-ASSIGNEE` | VTODO task, VTODO track | Assignee name, verbatim | `Task.AssignedTo`, `Track.AssignedTo` | 0.1 (2026-05). Task: emitted only when the value is not an email address (an email goes to `ATTENDEE:mailto:` instead). Track: always used; tracks never emit `ATTENDEE`. Import: wins over `ATTENDEE` when both are present |
+| `X-TLC-PROJECT-ID` | VTODO task, VTODO track | Project identifier, verbatim | `Task.ProjectID`, `Track.ProjectID` | 0.1 (2026-05). Omitted when unset or empty |
+| `X-TLC-TASK-SEQ` | VTODO task | Positive base-10 integer | `Task.Seq` | 0.1 (2026-05). Omitted when `Seq <= 0`. Import: an unparsable value is ignored |
+| `X-TLC-TRACK-SLUG` | VTODO track | Slug, verbatim | `Track.Slug` | 0.1 (2026-05). Omitted when empty |
+| `X-TLC-TRACK-TYPE` | VTODO track | Track type, verbatim (e.g. `feature`) | `Track.Type` | 0.1 (2026-05). Omitted when empty |
+| `X-TLC-IS-TRACK` | VTODO track | `TRUE` | (component-kind marker; no model field) | 0.1 (2026-05). Always emitted on a track, never on a task. Import: `TRUE` (case-insensitive) classifies the VTODO as a track; without it, a UID body that is a track TypeID is the fallback |
+| `X-TLC-LOG-ACTION` | VJOURNAL | Action string, verbatim | `LogEntry.Action` | 0.1 (2026-05). Omitted when empty |
+| `X-TLC-LOG-BY` | VJOURNAL | Actor name, verbatim | `LogEntry.By` | 0.1 (2026-05). Omitted when empty. tlc emits no `ORGANIZER` |
+| `X-TLC-LOG-TASK` | VJOURNAL | Bare task TypeID (no `@domain`) | `LogEntry.TaskID` | 0.1 (2026-05). Emitted next to `RELATED-TO;RELTYPE=PARENT`. Import: preferred over `RELATED-TO`, so the TypeID survives even when the calendar carries no matching VTODO |
+| `X-TLC-PRIORITY` | VTODO task | Priority name from the configured vocabulary (default `P0`–`P3`) | `Task.Priority` | 0.1 (2026-09). Emitted whenever a priority is set, alongside the rank-derived numeric `PRIORITY`. Import: wins when the name is in the current vocabulary; otherwise nearest-rank fallback from `PRIORITY` |
+| `X-TLC-PRIORITY-SOURCE` | VTODO task | `manual` \| `derived` | `Task.Meta["priority_source"]` | 0.1 (2026-09). Omitted when absent. Not a derived key, so it also appears inside `X-TLC-META`; the two agree on export, and on import the `X-TLC-META` copy is applied last |
+| `X-TLC-PRIORITY-RULE` | VTODO task | Rule name (e.g. `due-soon`) | `Task.Meta["priority_rule"]` | 0.1 (2026-09). Written only next to a `derived` source. Same dual carriage as `X-TLC-PRIORITY-SOURCE` |
+| `X-TLC-STATUS` | VTODO task | Status name from the configured vocabulary, verbatim | `Task.Status` | 0.1 (2026-09). Emitted whenever a status is set, alongside the role-mapped `STATUS`. Import: wins (case-insensitive) when the name is in the current vocabulary; otherwise the role implied by `STATUS` selects that role's default status |
+| `X-TLC-TRACK-STATUS` | VTODO track | `pending` \| `active` \| `completed` \| `abandoned` \| `archived` | `Track.Status` | 0.1 (2026-09). Distinguishes `completed` from `archived`, which both map to `STATUS:COMPLETED`. Import: case-insensitive match over the closed set, else derived from `STATUS` |
+| `X-TLC-ARCHIVED` | VTODO task | `TRUE` | `Task.Archived` | 0.1 (2026-09). Emitted only when true. Import: `TRUE`, `YES` or `1` (case-insensitive) read as true; anything else, or absence, as false |
+| `X-TLC-META` | VTODO task, VTODO track, VJOURNAL | JSON object, keys sorted | `Task.Meta`, `Track.Meta`, `LogEntry.Meta` minus the derived keys | 0.1 (2026-09). Omitted when nothing non-derived remains. Import: derived keys inside the payload are ignored. A value that will not marshal is dropped from the payload rather than failing the export |
+
+No `X-TLC-*` property is emitted on `VALARM`. On import, `X-TLC-*` properties found on a `VALARM` (or any other sub-component) are read as the parent entity's, and unknown ones re-emit on the parent VTODO, not inside the alarm.
+
+Names absent from this table are, by definition, unknown. On import they land in `Meta["x_tlc"]` as described above; on export they are re-emitted from that bag, sorted by name, only if the name still classifies as TLC-owned, is not in this table, and holds a string value. The bag is never written into `X-TLC-META`.
+
+**Conformance posture.** Every property in the registry sits in the `X-<SYSTEM>-*` tier of spec-vstar's extension discipline (<https://github.com/hop-top/spec-vstar/blob/main/specs/v0.1/04-extensions.md>), under the system slug `TLC`, and is stable per that tier: removing one is a breaking change for consumers, so a property is promoted or replaced, never renamed in place. tlc defines no `X-VSTAR-*` or `X-EXP-*` property of its own; the one `X-VSTAR-*` property in its output, `X-VSTAR-HASH`, is minted by the vstar helpers rather than by tlc (see the hashing section). Unknown non-TLC `X-*` properties are ignored on import and never re-emitted, per the receiver rule above. Promotion of any `X-TLC-*` property to `X-VSTAR-*` goes through spec-vstar's promotion path — two independent systems implementing compatible semantics — and is recorded there, not here. tlc's self-certification against the spec is written up in [VSTAR-CONFORMANCE.md](VSTAR-CONFORMANCE.md) (forthcoming).
 
 ---
 
@@ -444,16 +478,17 @@ END:VTODO
 
 Input: LogEntry for task with timestamp 2026-05-02 14:30:00, by jad, action "status_change", note "Moved to done".
 
-Output (VJOURNAL):
+Output (VJOURNAL; `DTSTAMP` elided — see the hashing section):
 ```
 BEGIN:VJOURNAL
 UID:log-task_01h455vb4pex5vsknk084sn02q-status_change-20260502T143000Z@tlc.local
-DTSTAMP:20260502T143000Z
-ORGANIZER:mailto:jad@example.com
-SUMMARY:status_change
+SUMMARY:Moved to done
 DESCRIPTION:Moved to done
-RELATED-TO:task_01h455vb4pex5vsknk084sn02q@tlc.local
+CREATED:20260502T143000Z
+RELATED-TO;RELTYPE=PARENT:task_01h455vb4pex5vsknk084sn02q@tlc.local
+X-TLC-LOG-TASK:task_01h455vb4pex5vsknk084sn02q
 X-TLC-LOG-ACTION:status_change
+X-TLC-LOG-BY:jad
 END:VJOURNAL
 ```
 
