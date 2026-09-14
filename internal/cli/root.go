@@ -31,6 +31,7 @@ import (
 	"hop.top/tlc/internal/extensions"
 	"hop.top/tlc/internal/storage"
 	"hop.top/tlc/internal/uri"
+	"hop.top/tlc/internal/vtodo"
 )
 
 const backendSQLite = "sqlite"
@@ -1169,6 +1170,13 @@ func setDefaults() {
 	viper.SetDefault("output.format", "table")
 	viper.SetDefault("output.color", true)
 	viper.SetDefault("output.verbose", false)
+
+	// Read by writeVtodo on every `--format vtodo` export and by the
+	// vtodo decoder when it decides whether an incoming UID domain is
+	// ours. Seeded with the vtodo package defaults so the key is
+	// discoverable by name and its effective value is visible.
+	viper.SetDefault("output.vtodo.product_id", vtodo.DefaultProductID)
+	viper.SetDefault("output.vtodo.uid_domain", vtodo.DefaultUIDDomain)
 
 	dataDir := config.UserDataDir()
 	viper.SetDefault("task.todo_file", filepath.Join(dataDir, "todo.txt"))

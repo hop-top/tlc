@@ -438,6 +438,23 @@ func effectiveTaskColumns(cmd *cobra.Command, statusProvided, showProject bool) 
 		})
 }
 
+// vtodoConfigOptions resolves the `output.vtodo.*` config keys into
+// vtodo Options. Both keys are seeded with the vtodo package defaults
+// in setDefaults, and the Option constructors ignore empty strings, so
+// an unset or blank key leaves the package default in force.
+//
+// uid_domain is not cosmetic on the decode side: it is the domain tlc
+// recognizes as its own, so a calendar exported under one domain and
+// reimported under another reads as foreign. The CLI only encodes today
+// (the plugin owns the decode path), but any decode added here must
+// resolve the domain through this same helper.
+func vtodoConfigOptions() []vtodo.Option {
+	return []vtodo.Option{
+		vtodo.WithProductID(viper.GetString("output.vtodo.product_id")),
+		vtodo.WithUIDDomain(viper.GetString("output.vtodo.uid_domain")),
+	}
+}
+
 // writeVtodo serialises the supplied tasks/tracks (and optionally logs)
 // into a VCALENDAR and writes the .ics output. When outputPath is empty
 // the calendar is written to cmd.OutOrStdout(); otherwise it is written
@@ -455,7 +472,7 @@ func writeVtodo(
 	if includeLogs {
 		logs = collectVtodoLogs(tasks)
 	}
-	opts := []vtodo.Option{}
+	opts := vtodoConfigOptions()
 	if includeLogs {
 		opts = append(opts, vtodo.WithIncludeLogs(true))
 	}

@@ -6,9 +6,10 @@
 // RELATED-TO. Optional VJOURNAL components carry log entries.
 //
 // The decoder reverses the mapping: VTODO/VJOURNAL → Task/LogEntry. UIDs
-// minted by tlc (`<typeid>@<domain>`) round-trip; foreign UIDs cause a
-// fresh TypeID to be minted with the original UID stashed in
-// Task.Meta["external_uid"].
+// minted by tlc (`<typeid>@<domain>`, the domain being the configured
+// one) round-trip; foreign UIDs — including a typeid under a domain
+// that is not ours — cause a fresh TypeID to be minted with the
+// original UID stashed in Task.Meta["external_uid"].
 package vtodo
 
 import (
