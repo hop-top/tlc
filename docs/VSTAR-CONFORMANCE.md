@@ -200,3 +200,25 @@ write a fixture that fails the validation gate (exit 1, findings on
 stderr) and prints allowed and warning diagnostics to stderr. The
 round-trip and verify tests fail loudly if a fixture and the encoder
 disagree.
+
+The generator writes CRLF; commit the files as written. The round-trip
+and verify tests fail loudly if a fixture and the encoder disagree.
+
+<!-- added by content-based change detection; belongs under "DTSTAMP is the entity's last-modified instant" -->
+
+### Refinement: what the hash is an ETag for
+
+The DTSTAMP deviation above makes `X-VSTAR-HASH` stable across exports
+of unchanged data, so it is a valid ETag for "same bytes". It is not
+invariant to a modification-only touch: `DTSTAMP` and `LAST-MODIFIED`
+are `UpdatedAt`, and tlc bumps `UpdatedAt` on saves that change nothing
+a remote sees (a stale-timeout firing, an executor claim). Sync change
+and conflict detection therefore hash a content view of the component
+with `UID`, `DTSTAMP`, `LAST-MODIFIED`, `CREATED`, `COMPLETED`,
+`X-TLC-TASK-SEQ`, `X-TLC-PROJECT-ID` and `X-VSTAR-HASH` removed at every
+level; that hash is recorded at each sync as `Meta["last_sync_hash"]`.
+See `docs/vtodo-sync-spec-0.1.md`, "Addendum: change detection". Both
+hashes are `sha256:<hex>` over `hop.top/vstar/canonical` bytes; only
+their inputs differ. Boundary: a component whose entity carries no
+timestamp at all still stamps the export clock, so its `X-VSTAR-HASH`
+follows the clock (`TestExport_TimestamplessTaskIsClockStamped`).
