@@ -78,13 +78,13 @@ func TestBuildVCalendar_TaskFields(t *testing.T) {
 	require.Contains(t, out, "X-TLC-EFFORT:M")
 	require.Contains(t, out, "DUE:20260503T143000Z")
 	require.Contains(t, out, "RRULE:FREQ=DAILY;INTERVAL=2")
-	// One CATEGORIES property holding a comma-separated list, per RFC
-	// 5545 3.8.1.2 -- not one property per tag. The separator comma is
-	// backslash-escaped on the wire because the codec escapes every
-	// comma in a TEXT value; the parser unescapes it symmetrically, so
-	// the round-trip in TestCategories_RoundTrip is what pins meaning.
-	require.Contains(t, out, "CATEGORIES:security\\,auth")
-	require.NotContains(t, out, "CATEGORIES:security\r\n")
+	// One CATEGORIES property per tag (RFC 5545 3.8.1.2 allows either
+	// shape). The comma-joined form is not usable: the codec escapes
+	// every comma in a TEXT value, so it reaches the wire as
+	// `security\,auth`, one category to any RFC 5545 reader.
+	require.Contains(t, out, "CATEGORIES:security\r\n")
+	require.Contains(t, out, "CATEGORIES:auth\r\n")
+	require.NotContains(t, out, "\\,")
 	// Assignee without an email goes into X-TLC-ASSIGNEE.
 	require.Contains(t, out, "X-TLC-ASSIGNEE:alice")
 	// Email-shaped assignee → ATTENDEE.

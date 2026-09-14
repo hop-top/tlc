@@ -325,32 +325,34 @@ func TestCategories_RoundTrip(t *testing.T) {
 	require.Equal(t, in.Tags, res.Tasks[0].Tags)
 }
 
-// TestCategories_SinglePropertyForm asserts the emitted wire form is ONE
-// CATEGORIES property carrying a comma-separated list (RFC 5545
-// 3.8.1.2), not the one-property-per-tag shape tlc used to write.
-func TestCategories_SinglePropertyForm(t *testing.T) {
+// TestCategories_OnePropertyPerTag asserts the emitted wire form is one
+// CATEGORIES property PER tag, never a comma-joined list. The joined
+// form is RFC-legal in the abstract but unusable through this codec:
+// it escapes every comma in a TEXT value, so `security,auth` reaches
+// the wire as `security\,auth`, which any RFC 5545 reader takes as a
+// single category. Trimming, empties and repeats are handled on the
+// way out so the count is exactly the distinct tags.
+func TestCategories_OnePropertyPerTag(t *testing.T) {
 	task := sampleTask()
-	task.Tags = []string{"security", "auth"}
+	task.Tags = []string{"security", " auth ", "", "security", "backend"}
 	cal, err := vtodo.BuildVCalendar([]*core.Task{task}, nil, nil)
 	require.NoError(t, err)
 	out := mustSerialize(t, cal)
 
-	require.Equal(t, 1, strings.Count(out, "CATEGORIES"),
-		"expected exactly one CATEGORIES property in:\n%s", out)
-	// The separator comma is escaped because the codec escapes every
-	// comma in a TEXT value; the parser reverses it, which is why the
-	// round-trip test above is the real guarantee.
-	require.Contains(t, out, "CATEGORIES:security\\,auth")
+	require.Equal(t, 3, strings.Count(out, "\r\nCATEGORIES:"),
+		"expected one CATEGORIES property per distinct tag in:\n%s", out)
+	require.Contains(t, out, "\r\nCATEGORIES:security\r\n")
+	require.Contains(t, out, "\r\nCATEGORIES:auth\r\n")
+	require.Contains(t, out, "\r\nCATEGORIES:backend\r\n")
+	require.NotContains(t, out, "\\,", "no comma-joined CATEGORIES on the wire")
 }
 
-// TestCategories_BackwardCompatRepeatedProperties is the compatibility
-// guarantee. Every .ics tlc wrote before this change -- and the
-// committed fixtures -- carry one CATEGORIES property PER tag.
-// helpers.Categories alone cannot read that shape: it resolves the
-// property through Component.Get, which returns only the first match,
-// so decoding would silently yield just ["security"]. Dropping a user's
+// TestCategories_RepeatedPropertiesDecode reads the shape tlc writes.
+// helpers.Categories alone cannot read it: it resolves the property
+// through Component.Get, which returns only the first match, so
+// decoding would silently yield just ["security"]. Dropping a user's
 // tags with no error is the failure this test exists to catch.
-func TestCategories_BackwardCompatRepeatedProperties(t *testing.T) {
+func TestCategories_RepeatedPropertiesDecode(t *testing.T) {
 	src := categoriesICS("CATEGORIES:security\r\nCATEGORIES:auth\r\nCATEGORIES:backend\r\n")
 
 	res, err := vtodo.ParseVCalendar(strings.NewReader(src))
@@ -360,9 +362,10 @@ func TestCategories_BackwardCompatRepeatedProperties(t *testing.T) {
 }
 
 // TestCategories_BackwardCompatMixedShapes covers a file that carries
-// both shapes at once -- one property holding a list plus a second
-// standalone property. A merge of the two written by different tool
-// versions is exactly how this arises in the wild.
+// both shapes at once -- one property holding a comma-joined list (a
+// foreign producer, or the interim tlc release that wrote that form)
+// plus a standalone property. A merge of the two written by different
+// tool versions is exactly how this arises in the wild.
 func TestCategories_BackwardCompatMixedShapes(t *testing.T) {
 	src := categoriesICS("CATEGORIES:security\\,auth\r\nCATEGORIES:backend\r\n")
 
@@ -373,10 +376,10 @@ func TestCategories_BackwardCompatMixedShapes(t *testing.T) {
 }
 
 // TestCategories_RepeatedPropertiesDedupe pins the dedupe applied across
-// repeated properties: an old file may name the same tag twice, and a
-// task must not come back with a duplicate tag. First-seen order wins,
-// matching helpers.SetCategories on the write side so the value is
-// stable under a decode→encode round trip.
+// repeated properties: a hand-edited file may name the same tag twice,
+// and a task must not come back with a duplicate tag. First-seen order
+// wins, matching the encoder's dedupe so the value is stable under a
+// decode→encode round trip.
 func TestCategories_RepeatedPropertiesDedupe(t *testing.T) {
 	src := categoriesICS("CATEGORIES:security\r\nCATEGORIES:auth\r\nCATEGORIES:security\r\n")
 
@@ -417,16 +420,14 @@ func TestCategories_Empty(t *testing.T) {
 // core.ValidateTags imposes no character restrictions under the default
 // `open` policy -- it returns nil without inspecting the tags at all --
 // so a tag containing a comma is accepted on the write path. On the
-// wire it cannot survive: RFC 5545 3.3.11 makes the comma the value
-// separator for multi-value TEXT, and the codec escapes every comma in
-// a CATEGORIES value uniformly, giving the separator and an in-tag
-// comma an identical encoding. So "a,b" comes back as two tags.
+// wire it does not survive: the encoder writes `CATEGORIES:a\,b` (one
+// property, comma escaped), but the decoder splits every property's
+// value on comma because it must also read the comma-joined shape, so
+// "a,b" comes back as two tags.
 //
-// This is not a regression introduced here -- the previous
-// one-property-per-tag encoder split on comma at decode and lost the
-// same tag. The test pins the loss so a future change that makes
-// commas round-trip (or that rejects them at validation) fails here
-// loudly and gets a deliberate decision instead of passing unnoticed.
+// The test pins the loss so a future change that makes commas
+// round-trip (or that rejects them at validation) fails here loudly
+// and gets a deliberate decision instead of passing unnoticed.
 func TestCategories_TagContainingComma(t *testing.T) {
 	require.NoError(t, core.ValidateTags([]string{"a,b"}),
 		"open tag policy is expected to admit a comma; revisit this test if that changes")

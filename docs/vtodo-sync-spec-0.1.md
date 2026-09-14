@@ -511,3 +511,18 @@ END:VJOURNAL
 set): each has a typed property, `X-TLC-PRIORITY-SOURCE` and
 `X-TLC-PRIORITY-RULE`, and carrying them in the JSON as well wrote them
 twice and let the JSON copy win on import.
+
+---
+
+<!-- added by categories wire form; supersedes the `Task.Tags | CATEGORIES | Comma-separated list` row in the Task mapping -->
+
+## Addendum: CATEGORIES wire form
+
+`Task.Tags` is written as **one `CATEGORIES` property per tag**
+(`CATEGORIES:security` / `CATEGORIES:auth`), trimmed, empties dropped,
+repeats removed keeping first-seen order, case-sensitive. The
+comma-joined single property RFC 5545 §3.8.1.2 also allows is not
+emitted: the codec escapes every comma in a TEXT value, so it reaches
+the wire as `CATEGORIES:security\,auth`, which any RFC 5545 reader
+parses as one category. On import both shapes are accepted, and a file
+mixing them decodes to the union in wire order.

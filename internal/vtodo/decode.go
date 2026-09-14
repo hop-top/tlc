@@ -695,25 +695,26 @@ func parsePropValue(v string) (time.Time, bool) {
 // decodeCategories reads a task's tags from the CATEGORIES property
 // (RFC 5545 §3.8.1.2), tolerating BOTH wire shapes.
 //
-// The idiomatic shape -- and the only one tlc writes now -- is a single
-// property carrying a comma-separated list, which helpers.Categories
-// reads: it splits on comma, trims, and drops empty tokens.
+// The shape tlc writes is one property PER tag (see addCategories). The
+// other legal shape is a single property carrying a comma-separated
+// list, which foreign producers and one interim tlc release write;
+// helpers.Categories reads that one: it splits on comma, trims, and
+// drops empty tokens.
 //
-// The other shape is one property PER tag. tlc emitted that for its
-// whole history, so it is what every .ics already on disk looks like.
-// helpers.Categories cannot read it: it resolves the property with
-// Component.Get, which returns only the FIRST match, so a file with
+// helpers.Categories cannot read the repeated shape: it resolves the
+// property with Component.Get, which returns only the FIRST match, so
 // `CATEGORIES:security` + `CATEGORIES:auth` would silently decode to
 // just ["security"] -- tags dropped with no error, the kind of loss a
 // user only notices later as a filter returning nothing. So when GetAll
 // finds more than one property, each is parsed and the results are
-// concatenated.
+// concatenated. Each property's value is still split on comma, which
+// is what keeps a mixed-shape file readable.
 //
 // Order is preserved in both shapes: tlc tags are ordered and callers
 // compare the slice. Duplicates are dropped across the whole set --
 // repeated properties may legitimately repeat a tag -- keeping
-// first-seen order, matching helpers.SetCategories on the write side so
-// a decode/encode round trip is stable.
+// first-seen order, matching addCategories on the write side so a
+// decode/encode round trip is stable.
 func decodeCategories(todo vstar.Component) []string {
 	props := todo.GetAll("CATEGORIES")
 	if len(props) == 0 {
@@ -731,7 +732,7 @@ func decodeCategories(todo vstar.Component) []string {
 }
 
 // dedupeTags drops repeats while preserving first-seen order. Compare
-// is case-sensitive, matching helpers.SetCategories -- CATEGORIES are
+// is case-sensitive, matching addCategories -- CATEGORIES are
 // user-facing labels, so "Work" and "work" are distinct tags.
 func dedupeTags(tags []string) []string {
 	if len(tags) == 0 {

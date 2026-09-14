@@ -522,10 +522,7 @@ func buildTaskComponent(
 	if t.Archived {
 		c.Add(vstar.Property{Name: XPropArchived, Value: "TRUE"})
 	}
-	// One CATEGORIES property holding a comma-separated list (RFC 5545
-	// §3.8.1.2); SetCategories dedupes, keeps first-seen order and is
-	// case-sensitive.
-	helpers.SetCategories(&c, t.Tags)
+	addCategories(&c, t.Tags)
 	addMeta(&c, t.Meta)
 	addUnknownTLCProps(&c, t.Meta)
 	finalize(&c)
@@ -662,6 +659,34 @@ func buildAlarmComponent(parentUID string, remindAt time.Time, summary string, s
 	}
 	finalize(&c)
 	return c, nil
+}
+
+// addCategories writes one CATEGORIES property per tag.
+//
+// RFC 5545 §3.8.1.2 also allows a single property carrying a
+// comma-separated list, and helpers.SetCategories emits that shape --
+// but the codec escapes EVERY comma in a TEXT value, so the joined
+// form reaches the wire as `CATEGORIES:security\,auth`, which any RFC
+// 5545 reader parses as ONE category named "security,auth". One
+// property per tag is equally legal and needs no separator, so foreign
+// readers see the tags tlc meant. The decoder accepts both shapes.
+//
+// Tags are trimmed, empties dropped and repeats removed keeping
+// first-seen order; comparison is case-sensitive (labels, not tokens),
+// the same rules the decoder applies, so a round trip is stable.
+func addCategories(c *vstar.Component, tags []string) {
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if _, dup := seen[tag]; dup {
+			continue
+		}
+		seen[tag] = struct{}{}
+		c.Add(vstar.Property{Name: "CATEGORIES", Value: tag})
+	}
 }
 
 // alarmUID derives a VALARM's UID from its parent's: the parent UID

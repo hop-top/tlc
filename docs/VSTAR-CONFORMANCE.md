@@ -36,6 +36,12 @@ optional: a missing `X-VSTAR-HASH` is reported, never fatal.
   `TestParse_WarnsOnTamperedAlarm`).
 - Extensions live under the `X-TLC-*` namespace (spec 04); see
   `docs/vtodo-sync-spec-0.1.md`.
+- `CATEGORIES` is written one property per tag. RFC 5545 §3.8.1.2 also
+  allows one comma-joined property, but the codec escapes every comma
+  in a TEXT value, so that shape reaches the wire as
+  `CATEGORIES:security\,auth`, one category to any RFC reader. Both
+  shapes are accepted on import (`TestCategories_OnePropertyPerTag`,
+  `TestCategories_BackwardCompatMixedShapes`).
 
 ## Known deviations
 
@@ -93,15 +99,15 @@ proves byte-identical re-emission.
 
 | Fixture | Component UID | `X-VSTAR-HASH` |
 |---|---|---|
-| `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:9998f7ca8bdf3b38085b0db400921a678f26773c82b2a6f01b48a7354897ba01` |
-| `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:f58e81296facddd51e131fbb43c36a4bd47fc39c50aed8562cfaebc34d1a812a` |
+| `single-task.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:b5e12576d9503b1d17d4ec138b2e4f6a602a77adeec00f1e5a1ae89f99df0067` |
+| `recurring-rrule.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:86b46808ac74160e25a57070182f1e61b2323534682641227af948587bdb75f3` |
 | `track-with-tasks.ics` | `track_01h455vbqkfsn02nk084ksn02q@tlc.local` | `sha256:28b04785cefafd1cb14de98b89741ed6817621fcee941ea5999d07e645362f5c` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:f7c6b44790118afbcae365ab559899cd60d1afa6057b140f5c7b880d96cae52c` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:76d03ab3d85134d0ab690cb1bcf372fba4119cf3a07525eaaa576e9b66187a8d` |
-| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:6e2adfe2b7bdaf58ff64b3eda98d25ed8750f01ad3c5209b0c302585d4f7bb75` |
-| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0az@tlc.local` | `sha256:bc023aeeb250754915abbf5fc6208d0b4889e3f057fdca2fe435cbd0a3c8c3a2` |
-| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0aa@tlc.local` | `sha256:ac6547f7db4ae3063e70ba126a4f21b3d9d50147e0cdd5b8e429843bdf687c62` |
-| `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:9998f7ca8bdf3b38085b0db400921a678f26773c82b2a6f01b48a7354897ba01` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:ce0a7079d9e5bc11f71cf0aba92d4101ba794b14ebcd510747c11d44d20996fe` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0aw@tlc.local` | `sha256:1429814ae7199227563a6bb0019def929bbf19d1ee90b48a865852c0b58d67fb` |
+| `track-with-tasks.ics` | `task_01h455vb4pex5vsknk084sn0ax@tlc.local` | `sha256:327d85f29ecc64158b5b90932824451cb09d8e6609d8bb48de8054433279b334` |
+| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0az@tlc.local` | `sha256:c702770d9ab281ba5fbea5e68fce1d6045e3f72c2e0fd0c831c32cdca5fe6061` |
+| `with-dependencies.ics` | `task_01h455vb4pex5vsknk084sn0aa@tlc.local` | `sha256:3aebe770175a4ecb11258f04df2dc0c1c8aa7f9ea180921ef5c5de3cb0e8ecbe` |
+| `with-logs.ics` | `task_01h455vb4pex5vsknk084sn02q@tlc.local` | `sha256:b5e12576d9503b1d17d4ec138b2e4f6a602a77adeec00f1e5a1ae89f99df0067` |
 | `with-logs.ics` | `log-task_01h455vb4pex5vsknk084sn02q-CLAIMED-20260502T143000Z@tlc.local` | `sha256:073b2ed39a194130c663b93b7d0fde145bffbd4741a39bbbd15209954144e072` |
 | `with-logs.ics` | `log-task_01h455vb4pex5vsknk084sn02q-PROGRESS-20260502T163000Z@tlc.local` | `sha256:68f03b1720322eb2f6fdacfb4cd0d4e934827f3c8f6aa04822bebd2fd8fb3f6c` |
 
