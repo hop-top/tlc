@@ -74,10 +74,16 @@ at each directory level.
 
 2. If cwd path contains a ".hop" segment -> ModeHop
 
-3. Walk up from cwd; if any ancestor has a .hop/ child dir -> ModeHop
+3. Walk up from cwd; if any ancestor has a hop config
+   (.hop/tlc/ directory or .hop/tlc.yaml file) -> ModeHop
 
 4. Otherwise -> ModeStandalone
 ```
+
+A `.hop/` directory that holds neither `.hop/tlc/` nor `.hop/tlc.yaml`
+is **not** a hop indicator. Repair tooling leaves a bare `.hop/`
+(`repair.lock`, `backups/`) in hubs that were initialized standalone;
+those keep loading `.tlc/` and `tlc init` there scaffolds `.tlc/`.
 
 ### Mode-Specific Config Filenames
 
@@ -235,7 +241,20 @@ shown use **standalone** names; substitute `.hop/tlc.yaml` and
 
 In **hop** mode the same cascade applies but every probe uses
 `.hop/tlc.yaml` and `.hop/tlc/config.yaml` instead of the `.tlc`
-variants.
+variants. When hop mode was forced (`TLC_MODE=hop`) or inherited and
+the walk finds no hop config at all, the standalone probes run instead,
+so a project whose only config is `.tlc/` keeps reading its own store.
+
+### Both Layouts Present
+
+A directory may carry both `.tlc/` and `.hop/tlc/` (hubs commonly
+mirror one into the other). Each directory on the walk is checked:
+
+- Same `project.id` **and** same absolute `storage.db_path` (both
+  unset counts as equal): the mode's copy loads, debug-level log only.
+- Any difference: the command exits with code 4 (conflict) naming both
+  files and both `(project.id, db_path)` pairs. Make the files agree or
+  remove one; tlc never lists zero rows silently in this state.
 
 ## Example Scenarios
 
