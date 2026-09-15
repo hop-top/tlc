@@ -179,18 +179,25 @@ func runInit(cmd *cobra.Command, storageBackend *string, dbPath *string, force *
 	// entry, where the absolute path would be wrong.
 	configDirName := config.LocalConfigDir(mode)
 
-	// Refuse to init if the other mode's config already exists.
+	// Refuse to init if a disagreeing standalone/hop pair already exists.
 	if conflictErr := config.CheckConfigConflict(cwd); conflictErr != nil && !*force {
-		return conflictErr
+		return configConflictExit(conflictErr)
 	}
 
-	if _, err := os.Stat(configDir); err == nil && !*force {
-		// Tolerate .tlc/ auto-created by DetectProject with
-		// fallback_mode=auto (GH-1). Auto-created configs are minimal
-		// (no storage section); a full init overwrites them.
-		if !isAutoCreatedConfig(configDir) {
-			return fmt.Errorf("%s directory already exists. Use --force to overwrite",
-				configDirName)
+	// Never write a second config next to an existing one, in either
+	// layout. The one tolerated case is the mode's own config dir
+	// auto-created by DetectProject with fallback_mode=auto (GH-1):
+	// those are minimal (no storage section) and a full init completes
+	// them in place.
+	if !*force {
+		if existing, _, ok := config.ExistingLocalConfig(cwd); ok {
+			if filepath.Dir(existing) != configDir || !isAutoCreatedConfig(configDir) {
+				return errAlreadyInitialized(existing)
+			}
+		} else if _, err := os.Stat(configDir); err == nil {
+			// A config dir with no config.yaml still anchors tracks,
+			// tasks and the DB; do not overwrite it silently.
+			return errAlreadyInitialized(configDir)
 		}
 	}
 
