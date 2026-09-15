@@ -20,22 +20,19 @@ import (
 func resolveConfigDir() string {
 	// First: if viper loaded a config file, derive from it.
 	if used := viper.ConfigFileUsed(); used != "" {
-		dir := filepath.Dir(used)
-		base := filepath.Base(dir)
-		mode := config.DetectMode()
-		configDirName := config.LocalConfigDir(mode)
-		// If the config file is inside a config dir (e.g. .tlc/config.yaml),
-		// the parent dir IS the config dir.
-		if base == filepath.Base(configDirName) {
-			return dir
+		// The config dir follows the loaded file's layout (.tlc or
+		// .hop/tlc), not the detected mode: the two can disagree when
+		// the standalone config was loaded as a fallback under hop mode.
+		candidate := config.ConfigDirForFile(used)
+		// Dir layout: the parent of config.yaml IS the config dir.
+		if filepath.Dir(used) == candidate {
+			return candidate
 		}
-		// Flat config (e.g. .tlc.yaml at project root): look for the
-		// dir-style config dir alongside it.
-		candidate := filepath.Join(dir, configDirName)
+		// Flat config (e.g. .tlc.yaml at project root): use the
+		// dir-style config dir alongside it, creating it if missing.
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			return candidate
 		}
-		// Flat config exists but no dir — create the dir-style config dir.
 		if err := os.MkdirAll(candidate, 0o755); err == nil {
 			return candidate
 		}

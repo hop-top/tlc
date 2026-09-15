@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // EntryMode represents how tlc was invoked.
@@ -21,7 +23,12 @@ const (
 // Returns ModeHop if:
 //   - $TLC_MODE == "hop", OR
 //   - the binary is running from within a .hop/ directory structure, OR
-//   - a .hop/ directory exists in the current or ancestor directory
+//   - the current or an ancestor directory holds a hop config
+//     (.hop/tlc/ or .hop/tlc.yaml)
+//
+// A .hop/ directory without a tlc config inside it is NOT a hop
+// indicator: repair tooling leaves a bare .hop/ in standalone hubs, and
+// treating it as hop mode redirected every read to the global store.
 //
 // Returns ModeStandalone if $TLC_MODE == "standalone" or none of the
 // hop indicators are found.
@@ -55,8 +62,8 @@ func detectModeFrom(startDir string) EntryMode {
 		return ModeHop
 	}
 
-	// 3. Walk up from cwd looking for a .hop/ directory.
-	if findHopDir(dir) {
+	// 3. Walk up from cwd looking for a hop config.
+	if findHopConfigDir(dir) {
 		return ModeHop
 	}
 
@@ -66,20 +73,19 @@ func detectModeFrom(startDir string) EntryMode {
 // containsHopSegment reports whether any path component is ".hop".
 func containsHopSegment(path string) bool {
 	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
-		if seg == ".hop" {
+		if seg == hopDirName {
 			return true
 		}
 	}
 	return false
 }
 
-// findHopDir walks from dir up to the filesystem root looking for a
-// child directory named ".hop".
-func findHopDir(dir string) bool {
+// findHopConfigDir walks from dir up to the filesystem root looking for
+// a directory that holds a hop config (see HasHopConfig).
+func findHopConfigDir(dir string) bool {
 	dir = filepath.Clean(dir)
 	for {
-		candidate := filepath.Join(dir, ".hop")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		if HasHopConfig(dir) {
 			return true
 		}
 		parent := filepath.Dir(dir)
@@ -108,7 +114,7 @@ func findHopDir(dir string) bool {
 func LocalConfigDir(mode EntryMode) string {
 	switch mode {
 	case ModeHop:
-		return filepath.Join(".hop", "tlc")
+		return filepath.Join(hopDirName, hopConfigDirName)
 	default:
 		return ".tlc"
 	}
@@ -147,32 +153,122 @@ func LocalConfigDirAt(baseDir string, mode EntryMode) string {
 func LocalConfigFile(mode EntryMode) string {
 	switch mode {
 	case ModeHop:
-		return filepath.Join(".hop", "tlc.yaml")
+		return filepath.Join(hopDirName, hopFlatConfigName)
 	default:
 		return ".tlc.yaml"
 	}
 }
 
-// CheckConfigConflict returns an error when both standalone (.tlc/ or
-// .tlc.yaml) and hop (.hop/tlc/ or .hop/tlc.yaml) configs exist at
-// the given directory. Having both is ambiguous and must be resolved
-// by the user.
-func CheckConfigConflict(dir string) error {
-	standaloneDir := filepath.Join(dir, ".tlc")
-	standaloneFlat := filepath.Join(dir, ".tlc.yaml")
-	hopDir := filepath.Join(dir, ".hop", "tlc")
-	hopFlat := filepath.Join(dir, ".hop", "tlc.yaml")
+// ConfigConflictError reports a standalone and a hop config at the same
+// directory that resolve to different projects or stores.
+type ConfigConflictError struct {
+	Dir            string
+	StandalonePath string
+	HopPath        string
+	Standalone     ConfigIdentity
+	Hop            ConfigIdentity
+}
 
-	hasStandalone := isDir(standaloneDir) || isFile(standaloneFlat)
-	hasHop := isDir(hopDir) || isFile(hopFlat)
+// ConfigIdentity is the (project.id, storage.db_path) pair a config
+// resolves to. DBPath is absolute when set; empty means the global store.
+type ConfigIdentity struct {
+	ProjectID string
+	DBPath    string
+}
 
-	if hasStandalone && hasHop {
-		return fmt.Errorf(
-			"ambiguous config at %s: both standalone (.tlc) and hop (.hop/tlc) configs exist; remove one to resolve",
-			dir,
-		)
+func (e *ConfigConflictError) Error() string {
+	return fmt.Sprintf(
+		"ambiguous config at %s: standalone %s (project.id=%s, db_path=%s) and hop %s (project.id=%s, db_path=%s) disagree; "+
+			"make both files declare the same project.id and storage.db_path, or remove one of them",
+		e.Dir,
+		e.StandalonePath, orGlobal(e.Standalone.ProjectID), orGlobal(e.Standalone.DBPath),
+		e.HopPath, orGlobal(e.Hop.ProjectID), orGlobal(e.Hop.DBPath),
+	)
+}
+
+func orGlobal(v string) string {
+	if v == "" {
+		return "<unset>"
 	}
-	return nil
+	return v
+}
+
+// BothLayoutsPresent reports whether dir has a config in each layout.
+func BothLayoutsPresent(dir string) bool {
+	_, hasStandalone := localConfigPath(dir, ModeStandalone)
+	_, hasHop := localConfigPath(dir, ModeHop)
+	return hasStandalone && hasHop
+}
+
+// CheckConfigConflict returns a *ConfigConflictError when both a
+// standalone (.tlc/ or .tlc.yaml) and a hop (.hop/tlc/ or .hop/tlc.yaml)
+// config exist at dir AND they resolve to a different project.id or a
+// different absolute storage.db_path. Hubs that mirror one config into
+// the other layout agree on both and are not a conflict.
+func CheckConfigConflict(dir string) error {
+	standalonePath, hasStandalone := localConfigPath(dir, ModeStandalone)
+	hopPath, hasHop := localConfigPath(dir, ModeHop)
+	if !hasStandalone || !hasHop {
+		return nil
+	}
+	standalone := readConfigIdentity(dir, standalonePath)
+	hop := readConfigIdentity(dir, hopPath)
+	if standalone == hop {
+		return nil
+	}
+	return &ConfigConflictError{
+		Dir:            dir,
+		StandalonePath: standalonePath,
+		HopPath:        hopPath,
+		Standalone:     standalone,
+		Hop:            hop,
+	}
+}
+
+// localConfigPath returns the config file for mode at dir: the directory
+// form when it holds a config.yaml, else the flat file. A bare config
+// directory without config.yaml counts as present (it still anchors
+// tracks, tasks and the DB) but contributes no identity.
+func localConfigPath(dir string, mode EntryMode) (string, bool) {
+	dirForm := filepath.Join(dir, LocalConfigDir(mode))
+	if isDir(dirForm) {
+		return filepath.Join(dirForm, "config.yaml"), true
+	}
+	flat := filepath.Join(dir, LocalConfigFile(mode))
+	if isFile(flat) {
+		return flat, true
+	}
+	return "", false
+}
+
+// readConfigIdentity parses just project.id and storage.db_path from
+// path. A relative db_path is anchored at dir so two configs at the same
+// directory compare by the store they actually open. Unreadable or
+// malformed files yield an empty identity.
+func readConfigIdentity(dir, path string) ConfigIdentity {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ConfigIdentity{}
+	}
+	var cfg struct {
+		Project struct {
+			ID string `yaml:"id"`
+		} `yaml:"project"`
+		Storage struct {
+			DBPath string `yaml:"db_path"`
+		} `yaml:"storage"`
+	}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		return ConfigIdentity{}
+	}
+	id := ConfigIdentity{ProjectID: cfg.Project.ID, DBPath: cfg.Storage.DBPath}
+	if id.DBPath != "" && !filepath.IsAbs(id.DBPath) {
+		id.DBPath = filepath.Join(dir, id.DBPath)
+	}
+	if id.DBPath != "" {
+		id.DBPath = filepath.Clean(id.DBPath)
+	}
+	return id
 }
 
 func isDir(path string) bool {
