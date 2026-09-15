@@ -104,14 +104,8 @@ func projectRootFromDBPath(dbPath string) string {
 	if dbPath == "" {
 		return ""
 	}
-	// Walk up: db.sqlite -> .tlc (or tlc) -> root.
-	dir := filepath.Dir(filepath.Dir(dbPath))
-	// Hop-mode repos nest the tlc dir under .hop/, so unwrap one extra
-	// level when the immediate parent is `.hop`.
-	if filepath.Base(dir) == ".hop" {
-		dir = filepath.Dir(dir)
-	}
-	return dir
+	// Walk up: db.sqlite -> .tlc (or .hop/tlc) -> root.
+	return config.ProjectRootFromConfigDir(filepath.Dir(dbPath))
 }
 
 // projectDirName returns the trailing path segment of the project root

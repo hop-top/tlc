@@ -43,24 +43,41 @@ func TestDetectMode_CwdInsideHopPath(t *testing.T) {
 	}
 }
 
-func TestDetectMode_HopDirInAncestor(t *testing.T) {
-	t.Setenv("TLC_MODE", "")
-	tmp := t.TempDir()
-
-	// Create .hop/ in the project root, cwd is a subdirectory.
-	hopDir := filepath.Join(tmp, ".hop")
-	if err := os.Mkdir(hopDir, 0o755); err != nil {
-		t.Fatal(err)
+// TestDetectMode_AncestorLayouts pins the rule that a .hop/ directory
+// is a hop indicator only when it carries a tlc config (.hop/tlc/ or
+// .hop/tlc.yaml). Other tooling drops a bare .hop/ (repair.lock,
+// backups/) into hubs that were initialized standalone; that must not
+// flip the mode, or every read silently moves to the global store.
+func TestDetectMode_AncestorLayouts(t *testing.T) {
+	tests := []struct {
+		name  string
+		dirs  []string
+		files []string
+		want  EntryMode
+	}{
+		{name: "bare .hop", dirs: []string{".hop"}, want: ModeStandalone},
+		{
+			name:  "bare .hop with repair artifacts",
+			dirs:  []string{filepath.Join(".hop", "backups")},
+			files: []string{filepath.Join(".hop", "repair.lock")},
+			want:  ModeStandalone,
+		},
+		{name: ".hop/tlc dir", dirs: []string{filepath.Join(".hop", "tlc")}, want: ModeHop},
+		{name: ".hop/tlc.yaml", dirs: []string{".hop"}, files: []string{filepath.Join(".hop", "tlc.yaml")}, want: ModeHop},
+		{name: ".hop/tlc dir beside .tlc", dirs: []string{filepath.Join(".hop", "tlc"), ".tlc"}, want: ModeHop},
 	}
-
-	subDir := filepath.Join(tmp, "src", "pkg")
-	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	got := detectModeFrom(subDir)
-	if got != ModeHop {
-		t.Errorf("detectModeFrom(%q) = %q, want %q", subDir, got, ModeHop)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TLC_MODE", "")
+			tmp := layoutFixture(t, tt.dirs, tt.files)
+			subDir := filepath.Join(tmp, "src", "pkg")
+			if err := os.MkdirAll(subDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if got := detectModeFrom(subDir); got != tt.want {
+				t.Errorf("detectModeFrom(%q) = %q, want %q", subDir, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -152,22 +169,64 @@ func TestValidateLocalConfig_HopWithStandaloneFallback(t *testing.T) {
 	}
 }
 
-func TestCheckConfigConflict_BothExist(t *testing.T) {
+const (
+	conflictCfgA = "version: 0.1\nproject:\n  id: org/one\nstorage:\n  db_path: /srv/one/db.sqlite\n"
+	conflictCfgB = "version: 0.1\nproject:\n  id: org/two\nstorage:\n  db_path: /srv/two/db.sqlite\n"
+)
+
+func writeConflictFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCheckConfigConflict_AgreeingPair covers hubs that mirror
+// .tlc/config.yaml into .hop/tlc/config.yaml: same project.id and same
+// absolute db_path is not a conflict and must stay silent.
+func TestCheckConfigConflict_AgreeingPair(t *testing.T) {
 	tmp := t.TempDir()
-	// Create both .tlc/ and .hop/tlc/ at the same level.
-	if err := os.MkdirAll(filepath.Join(tmp, ".tlc"), 0o755); err != nil {
-		t.Fatal(err)
+	writeConflictFile(t, filepath.Join(tmp, ".tlc", "config.yaml"), conflictCfgA)
+	writeConflictFile(t, filepath.Join(tmp, ".hop", "tlc", "config.yaml"), conflictCfgA)
+
+	if err := CheckConfigConflict(tmp); err != nil {
+		t.Errorf("CheckConfigConflict() = %v, want nil for an agreeing pair", err)
 	}
-	if err := os.MkdirAll(filepath.Join(tmp, ".hop", "tlc"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+}
+
+// TestCheckConfigConflict_DisagreeingPair requires the error to name
+// both files and both (project.id, db_path) pairs so the fix is obvious.
+func TestCheckConfigConflict_DisagreeingPair(t *testing.T) {
+	tmp := t.TempDir()
+	standalone := filepath.Join(tmp, ".tlc", "config.yaml")
+	hop := filepath.Join(tmp, ".hop", "tlc", "config.yaml")
+	writeConflictFile(t, standalone, conflictCfgA)
+	writeConflictFile(t, hop, conflictCfgB)
 
 	err := CheckConfigConflict(tmp)
 	if err == nil {
-		t.Fatal("CheckConfigConflict() = nil, want error when both .tlc/ and .hop/tlc/ exist")
+		t.Fatal("CheckConfigConflict() = nil, want error for a disagreeing pair")
 	}
-	if !strings.Contains(err.Error(), "ambiguous") {
-		t.Errorf("error should mention ambiguous, got: %v", err)
+	for _, want := range []string{standalone, hop, "org/one", "org/two", "/srv/one/db.sqlite", "/srv/two/db.sqlite", "ambiguous"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+}
+
+// TestCheckConfigConflict_DisagreeOnDBPathOnly: same id, different store
+// is still ambiguous — the rows live in two places.
+func TestCheckConfigConflict_DisagreeOnDBPathOnly(t *testing.T) {
+	tmp := t.TempDir()
+	writeConflictFile(t, filepath.Join(tmp, ".tlc", "config.yaml"), conflictCfgA)
+	writeConflictFile(t, filepath.Join(tmp, ".hop", "tlc", "config.yaml"),
+		"version: 0.1\nproject:\n  id: org/one\n")
+
+	if err := CheckConfigConflict(tmp); err == nil {
+		t.Fatal("CheckConfigConflict() = nil, want error when db_path differs")
 	}
 }
 
@@ -217,21 +276,13 @@ func TestCheckConfigConflict_HopDirWithoutTLC(t *testing.T) {
 
 func TestCheckConfigConflict_FlatFiles(t *testing.T) {
 	tmp := t.TempDir()
-	// Both flat config files exist.
-	if err := os.WriteFile(filepath.Join(tmp, ".tlc.yaml"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	hopDir := filepath.Join(tmp, ".hop")
-	if err := os.MkdirAll(hopDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(hopDir, "tlc.yaml"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// Both flat config files exist and disagree.
+	writeConflictFile(t, filepath.Join(tmp, ".tlc.yaml"), conflictCfgA)
+	writeConflictFile(t, filepath.Join(tmp, ".hop", "tlc.yaml"), conflictCfgB)
 
 	err := CheckConfigConflict(tmp)
 	if err == nil {
-		t.Fatal("CheckConfigConflict() = nil, want error when both .tlc.yaml and .hop/tlc.yaml exist")
+		t.Fatal("CheckConfigConflict() = nil, want error when .tlc.yaml and .hop/tlc.yaml disagree")
 	}
 }
 

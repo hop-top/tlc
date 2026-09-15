@@ -2,7 +2,6 @@ package cli
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
@@ -54,12 +53,7 @@ func projectConfigDir() string {
 	if used == "" {
 		return ""
 	}
-	dir := filepath.Dir(used)
-	configDirName := config.LocalConfigDir(config.DetectMode())
-	if filepath.Base(dir) == filepath.Base(configDirName) {
-		return dir
-	}
-	return filepath.Join(dir, configDirName)
+	return config.ConfigDirForFile(used)
 }
 
 // projectRelativePath anchors a relative config path at the project root
@@ -69,12 +63,7 @@ func projectRelativePath(cfgDir, p string) string {
 	if cfgDir == "" || filepath.IsAbs(p) {
 		return p
 	}
-	root := cfgDir
-	depth := len(strings.Split(filepath.ToSlash(config.LocalConfigDir(config.DetectMode())), "/"))
-	for range depth {
-		root = filepath.Dir(root)
-	}
-	return filepath.Join(root, p)
+	return filepath.Join(config.ProjectRootFromConfigDir(cfgDir), p)
 }
 
 // projectionDirFromConfig returns the projection directory name from
