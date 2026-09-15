@@ -256,6 +256,13 @@ func kitRoot() *kitcli.Root {
 
 	// --- Lifecycle hooks ---
 	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+		// initConfig found an ambiguous project config. Refuse before
+		// anything reads storage; init applies its own --force-aware
+		// check in runInit.
+		if pendingConfigErr != nil && c.Name() != "init" {
+			return pendingConfigErr
+		}
+
 		// cobra.OnInitialize(initConfig) has run by now, so the user's
 		// configured status vocabulary is finally readable. Overwrite the
 		// built-in flag enum kit stamped before argv was parsed.
@@ -833,6 +840,7 @@ func exitCodeFor(err error) int {
 
 func initConfig() {
 	setDefaults()
+	pendingConfigErr = nil
 
 	// Enable AutomaticEnv early so TLC_-prefixed env vars feed every
 	// viper.Get call below, including TLC_CONFIG (documented in
@@ -927,19 +935,18 @@ func initConfig() {
 		if err == nil {
 			mode := config.DetectMode()
 
-			// Check for ambiguous config (both .tlc/ and .hop/tlc/).
-			if conflictErr := config.CheckConfigConflict(curr); conflictErr != nil {
-				log.Warn("Config conflict detected", "error", conflictErr)
-			}
-
 			// Validate that expected local config exists for this mode.
 			if valErr := config.ValidateLocalConfig(mode, curr); valErr != nil {
 				log.Warn("Local config validation failed", "error", valErr)
 			}
 
-			configs := findAllConfigsForMode(
+			// A disagreeing standalone/hop pair is recorded here and
+			// returned from PersistentPreRunE; nothing from the project
+			// layer is merged in that case.
+			configs, cfgErr := resolveProjectConfigs(
 				curr, resolveProjectConfigBoundary(curr), mode,
 			)
+			pendingConfigErr = cfgErr
 			// Merge them in order from root-most to closest
 			// so that closer files overwrite further ones.
 			for i := len(configs) - 1; i >= 0; i-- {
