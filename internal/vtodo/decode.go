@@ -380,7 +380,7 @@ func decodeTask(
 	// it, and the derived auto reminder is told apart by its shape.
 	decodeReminders(t, todo, time.Now())
 
-	// X-TLC-META payload plus any unrecognised X-TLC-* property, so a
+	// X-TLC-META payload plus any unrecognized X-TLC-* property, so a
 	// foreign producer's extensions survive the import. ext's scope
 	// walk covers only the VTODO's own Props; VALARM and every other
 	// sub-component is folded in explicitly below.
@@ -668,7 +668,7 @@ func isTrueValue(s string) bool {
 // closest to n.
 //
 // Inverts priorityToICS: for each rank the encoder would have written
-// 1 + floor(rank*9/N), and the rank minimising |encoded - n| wins. Ties
+// 1 + floor(rank*9/N), and the rank minimizing |encoded - n| wins. Ties
 // go to the MORE urgent rank (the lower index), because over-reporting
 // urgency on an ambiguous import is the recoverable direction.
 //
@@ -705,7 +705,7 @@ func icsToPriority(n int, defs []config.PriorityDefinition) core.Priority {
 // would otherwise smuggle in a value that fails core.ValidPriority, and
 // every downstream consumer (filters, sorts, the enum flags) would then
 // be looking at a priority the project does not have. When the name is
-// unrecognised the numeric value still gives a defensible nearest-rank
+// unrecognized the numeric value still gives a defensible nearest-rank
 // answer in the CURRENT vocabulary, so that is what we fall back to.
 func priorityFromComponent(todo vstar.Component, defs []config.PriorityDefinition) core.Priority {
 	if p, ok := todo.Get(XPropPriority); ok {

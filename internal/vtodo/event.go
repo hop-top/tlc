@@ -16,7 +16,7 @@ import (
 // playthrough edge.
 const (
 	// XPropRun, on a task VTODO, is the UID of the playthrough VEVENT
-	// the task was materialised into (Task.RunID). It is an X-property
+	// the task was materialized into (Task.RunID). It is an X-property
 	// rather than a RELATED-TO because no RELTYPE says "member of a
 	// run": PARENT is taken by the mission edge, CHILD and SIBLING are
 	// hierarchy, DEPENDS-ON (RFC 9253) is ordering, and RFC 5545 readers
@@ -24,7 +24,7 @@ const (
 	// the task. A RELTYPE for run membership is an upstream ask.
 	XPropRun = "X-TLC-RUN"
 	// XPropRecipeID, XPropRecipeVersion and XPropRecipeHash carry the
-	// recipe a playthrough materialised: which one, at which declared
+	// recipe a playthrough materialized: which one, at which declared
 	// version, at which content hash. Version and hash are omitted when
 	// the run recorded none.
 	XPropRecipeID      = "X-TLC-RECIPE-ID"
@@ -153,7 +153,7 @@ func turnUID(taskID string, start time.Time, domain string) string {
 }
 
 // buildPlaythroughComponent emits a recipe run as a VEVENT: DTSTART
-// is the materialisation instant and there is no DTEND, a run having
+// is the materialization instant and there is no DTEND, a run having
 // no end timestamp (RFC 5545 §3.6.1 permits it). The recipe identity
 // travels as X-properties, the mission edge as a bare RELATED-TO
 // (PARENT by RFC default) to the track VTODO when the run has a track;

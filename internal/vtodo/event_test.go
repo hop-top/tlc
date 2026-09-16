@@ -287,7 +287,7 @@ func TestTurn_ForeignEventIsNotAClaim(t *testing.T) {
 }
 
 // TestPlaythrough_Shape: a run is a VEVENT starting at its
-// materialisation, with no end, carrying the recipe identity and the
+// materialization, with no end, carrying the recipe identity and the
 // mission edge.
 func TestPlaythrough_Shape(t *testing.T) {
 	run := sampleRun()
@@ -347,7 +347,7 @@ func TestPlaythrough_EmptyIDRejected(t *testing.T) {
 	require.ErrorIs(t, err, vstar.ErrMissingUID)
 }
 
-// TestPlaythrough_TaskEdge: a task materialised by a run points at the
+// TestPlaythrough_TaskEdge: a task materialized by a run points at the
 // playthrough with X-TLC-RUN, which decodes back to RunID under our
 // domain and is left alone under a foreign one.
 func TestPlaythrough_TaskEdge(t *testing.T) {

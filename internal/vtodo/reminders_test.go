@@ -394,7 +394,7 @@ func TestAutoRemind_NoAutoRemindSuppresses(t *testing.T) {
 
 // TestAutoRemind_DateOnlyDueRoundTrips: the derived reminder on a
 // date-only task resolves against the day's midnight on the way back,
-// so it is recognised and not stored.
+// so it is recognized and not stored.
 func TestAutoRemind_DateOnlyDueRoundTrips(t *testing.T) {
 	task := sampleTask()
 	task.RemindAt = nil

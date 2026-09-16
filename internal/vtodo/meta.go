@@ -11,7 +11,7 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// XPropMeta carries the JSON serialisation of an entity's Meta map.
+// XPropMeta carries the JSON serialization of an entity's Meta map.
 // Shape follows the ratified vtodo sync spec: a single property whose
 // value is a JSON object, rather than one property per key. JSON keeps
 // non-string values (numbers, bools, nested maps, arrays) round-tripping
@@ -19,7 +19,7 @@ import (
 // cannot do without inventing a type-tagging convention.
 const XPropMeta = "X-TLC-META"
 
-// MetaXTLCKey is the Meta key under which unrecognised X-TLC-*
+// MetaXTLCKey is the Meta key under which unrecognized X-TLC-*
 // properties from an incoming calendar are parked. The value is a
 // map[string]interface{} of full property name → raw string value, so
 // nothing an unknown producer wrote is lost across an import/export
@@ -182,12 +182,12 @@ func unknownTLCExtensions(c vstar.Component) []vstar.Property {
 }
 
 // applyMeta merges the wire Meta state of component c into dst: first the
-// JSON payload of X-TLC-META, then any unrecognised X-TLC-* property
+// JSON payload of X-TLC-META, then any unrecognized X-TLC-* property
 // under the MetaXTLCKey sub-map.
 //
 // dst is returned so callers can assign the result back — the map is
 // allocated lazily and stays nil when the component carries no Meta at
-// all, keeping entities that never had Meta serialising exactly as
+// all, keeping entities that never had Meta serializing exactly as
 // before.
 func applyMeta(dst map[string]interface{}, c vstar.Component) map[string]interface{} {
 	if p, ok := c.Get(XPropMeta); ok {

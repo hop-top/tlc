@@ -31,7 +31,7 @@ const (
 	// assignment, open or closed.
 	ConceptTurn = "turn"
 	// ConceptPlaythrough marks one run through a mission or the world:
-	// a recipe materialisation.
+	// a recipe materialization.
 	ConceptPlaythrough = "playthrough"
 
 	// Journal sub-types. A LogEntry is one of these, derived from its

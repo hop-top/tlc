@@ -208,7 +208,7 @@ func buildAlarmComponent(uid string, remindAt time.Time, summary string, stamp t
 // VALARM, TRIGGER;RELATED=END:-PT12H, through helpers.NewRelativeAlarm.
 // "Twelve hours before it is due" is what AutoRemindAt means, and the
 // relative form says so to every reader without pinning an instant
-// that moves whenever DUE does; the decoder recognises the shape and
+// that moves whenever DUE does; the decoder recognizes the shape and
 // lets AutoRemindAt derive it again rather than storing it.
 func buildAutoRemindComponent(parentUID, summary string, stamp time.Time) (vstar.Component, error) {
 	c, err := helpers.NewRelativeAlarm(autoRemindUID(parentUID), alarmAction, autoRemindOffset, duration.RelatedEnd)

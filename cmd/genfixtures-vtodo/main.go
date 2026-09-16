@@ -160,7 +160,7 @@ func main() {
 	write(dir+"/with-logs.ics", cal5)
 
 	// 6. recipe-run.ics: a playthrough (recipe run) through a track, one
-	// assignment it materialised, that assignment's turns from the log
+	// assignment it materialized, that assignment's turns from the log
 	// (one closed, one open) and its X-TLC-RUN edge back to the run.
 	// The track is dated so the fixture carries no VS040.
 	runTrack := *track

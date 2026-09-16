@@ -455,7 +455,7 @@ func vtodoConfigOptions() []vtodo.Option {
 	}
 }
 
-// writeVtodo serialises the supplied tasks/tracks (and optionally logs)
+// writeVtodo serializes the supplied tasks/tracks (and optionally logs)
 // into a VCALENDAR and writes the .ics output. When outputPath is empty
 // the calendar is written to cmd.OutOrStdout(); otherwise it is written
 // to that file path. Returns non-nil on encode/write failure so callers
@@ -525,7 +525,7 @@ func collectVtodoLogs(tasks []*core.Task) []*core.LogEntry {
 }
 
 // collectVtodoRuns fetches the recipe run behind every exported task
-// that was materialised by one (Task.RunID), each once, so the export
+// that was materialized by one (Task.RunID), each once, so the export
 // carries the playthrough VEVENT the task's X-TLC-RUN edge points at.
 // Best-effort like collectVtodoLogs: no storage or a missing run row
 // drops the run, never the export.
@@ -635,7 +635,7 @@ func formatTLS(t *core.Task) string {
 				parts = append(parts, "eva="+strings.Join(eva, ","))
 			}
 		case "prio":
-			// Skip: priority is now a first-class field serialised above.
+			// Skip: priority is now a first-class field serialized above.
 		case "domain":
 			parts = append(parts, "domain:"+fmt.Sprintf("%v", v))
 		case "due":

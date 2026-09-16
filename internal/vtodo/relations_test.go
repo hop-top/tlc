@@ -333,7 +333,7 @@ func TestRelations_UnknownRelTypeIgnored(t *testing.T) {
 
 // TestRelations_ReencodeStable asserts that the X-VSTAR-HASH property
 // helpers.AddRelatedTo stamps on any component carrying a relation does
-// not destabilise the encode→decode→encode cycle.
+// not destabilize the encode→decode→encode cycle.
 func TestRelations_ReencodeStable(t *testing.T) {
 	data := loadFixture(t, "with-dependencies.ics")
 	res, err := vtodo.ParseVCalendar(strings.NewReader(string(data)))

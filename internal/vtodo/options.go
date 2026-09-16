@@ -176,7 +176,7 @@ func WithStatusDefinitions(defs []config.StatusDefinition) Option {
 //
 // Resolved here rather than in defaultOptions() so the config lookup
 // happens only when an encode or decode actually needs it: defaults are
-// materialised on every resolve(), including paths that never touch a
+// materialized on every resolve(), including paths that never touch a
 // status.
 func (o options) statusDefinitions() []config.StatusDefinition {
 	if len(o.statusDefs) > 0 {

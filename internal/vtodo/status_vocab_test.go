@@ -46,7 +46,7 @@ func TestCustomStatusVocab_WireStatusFollowsRole(t *testing.T) {
 		{"BACKLOG", "STATUS:NEEDS-ACTION"},
 		{"IN_REVIEW", "STATUS:IN-PROCESS"},
 		{"SHIPPED", "STATUS:COMPLETED"},
-		{"DROPPED", "STATUS:CANCELLED"},
+		{"DROPPED", "STATUS:CANCELLED"}, //nolint:misspell // RFC 5545 spelling
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.status), func(t *testing.T) {

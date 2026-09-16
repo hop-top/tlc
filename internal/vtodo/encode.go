@@ -84,7 +84,7 @@ const (
 	icsPriorityMax = 9
 )
 
-// BuildVCalendar serialises tasks, tracks and (optionally) log entries
+// BuildVCalendar serializes tasks, tracks and (optionally) log entries
 // into a vstar.Calendar with VTODO and VJOURNAL components. Pair with
 // Serialize to produce an .ics string.
 //
@@ -123,7 +123,7 @@ const (
 //
 // Playthroughs: each run passed through WithRecipeRuns becomes a VEVENT
 // (X-TLC-CONCEPT:playthrough) after the turns, with RELATED-TO the
-// track VTODO when the run has one. A task materialised by a run
+// track VTODO when the run has one. A task materialized by a run
 // points at it with X-TLC-RUN.
 //
 // Hashing: every builder's last step is finalize, so each VTODO,
@@ -311,7 +311,7 @@ func uidFor(typeID, domain string) string {
 //
 // Role, not name, because the status vocabulary is configurable: a
 // project declaring IN_REVIEW (role "active") and SHIPPED (role
-// "completed") has no status this package could recognise by name, and a
+// "completed") has no status this package could recognize by name, and a
 // name switch would export NEEDS-ACTION for both. The four roles line up
 // one-for-one with the four RFC 5545 VTODO STATUS values, so role is
 // exactly the fact the wire format wants.
