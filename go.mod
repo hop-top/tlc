@@ -29,7 +29,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.0
 	hop.top/kit v0.5.0-alpha.7
-	hop.top/vstar v0.0.0-20260526030101-766e6e3a0692
+	hop.top/vstar v1.0.0-alpha.1
 	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.53.0
 )
@@ -149,5 +149,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace hop.top/vstar => ../../../../poly-vstar/hops/main/go
