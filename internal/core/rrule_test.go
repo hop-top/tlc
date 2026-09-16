@@ -36,10 +36,8 @@ func TestValidateRRule(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, rrule.ErrUnsupportedRRule), "got %v", err)
 	})
-	t.Run("minutely is unsupported", func(t *testing.T) {
-		err := core.ValidateRRule("FREQ=MINUTELY")
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, rrule.ErrUnsupportedRRule), "got %v", err)
+	t.Run("minutely ok", func(t *testing.T) {
+		assert.NoError(t, core.ValidateRRule("FREQ=MINUTELY;INTERVAL=5"))
 	})
 	t.Run("garbage is invalid", func(t *testing.T) {
 		err := core.ValidateRRule("not-an-rrule")

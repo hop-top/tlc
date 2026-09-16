@@ -297,7 +297,7 @@ func TestValidateGate_WalksSubComponents(t *testing.T) {
 // produce, since it emits a user's RRULE verbatim.
 func TestValidateGate_WarningsDoNotBlock(t *testing.T) {
 	tk := sampleTask()
-	tk.RRule = "FREQ=MINUTELY;INTERVAL=5"
+	tk.RRule = "FREQ=SECONDLY;INTERVAL=5"
 	cal, err := vtodo.BuildVCalendar([]*core.Task{tk}, nil, nil)
 	require.NoError(t, err)
 
