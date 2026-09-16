@@ -408,23 +408,7 @@ func storePathForConfig(cfgPath string) (string, error) {
 // project that mixes flat and dir layouts (transient state during
 // migration) shares one store.
 func projectStorePathFor(cfgPath string) string {
-	dir := filepath.Dir(cfgPath)
-	base := filepath.Base(cfgPath)
-	switch base {
-	case ".tlc.yaml":
-		return filepath.Join(dir, ".tlc", "aliases.yaml")
-	case "tlc.yaml":
-		// .hop/tlc.yaml: dir is "<root>/.hop", store at "<root>/.hop/tlc/aliases.yaml"
-		if filepath.Base(dir) == ".hop" {
-			return filepath.Join(dir, "tlc", "aliases.yaml")
-		}
-		// Bare tlc.yaml without .hop parent: degrade to sibling.
-		return filepath.Join(dir, "tlc", "aliases.yaml")
-	default:
-		// Dir layout: cfgPath is .../{.tlc,tlc}/config.yaml; store sits
-		// next to it.
-		return filepath.Join(dir, "aliases.yaml")
-	}
+	return filepath.Join(config.ConfigDirForFile(cfgPath), "aliases.yaml")
 }
 
 // verifyEntriesInStore confirms every entry in src is present in store

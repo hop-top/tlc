@@ -147,10 +147,15 @@ or **hop**. Mode determines config directory layout and validation.
    immediately (case-insensitive)
 2. **CWD path contains `.hop/` segment** -- any path component literally
    named `.hop` triggers hop mode
-3. **Ancestor directory has `.hop/` child** -- walks from cwd to
-   filesystem root; if any ancestor contains a `.hop/` directory,
-   returns hop mode
+3. **Ancestor directory has a hop config** -- walks from cwd to
+   filesystem root; if any ancestor contains `.hop/tlc/` (directory) or
+   `.hop/tlc.yaml` (file), returns hop mode. A bare `.hop/` without
+   either (what repair tooling leaves behind) does not count.
 4. **Default** -- standalone
+
+`tlc init` scaffolds into the directory this rule selects: `.tlc/`
+unless a hop config already exists. It refuses (exit 4) when a local
+config already exists at the target in either layout, unless `--force`.
 
 ### Config Paths per Mode
 
