@@ -17,7 +17,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/machinebox/graphql v0.2.2
 	github.com/mattn/go-isatty v0.0.22
-	github.com/robfig/cron/v3 v3.0.1
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -30,7 +29,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.0
 	hop.top/kit v0.5.0-alpha.7
-	hop.top/vstar v0.0.0-20260526030101-766e6e3a0692
+	hop.top/vstar v1.0.0-alpha.1
 	hop.top/xrr v0.1.0-alpha.4
 	modernc.org/sqlite v1.53.0
 )
@@ -116,6 +115,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect

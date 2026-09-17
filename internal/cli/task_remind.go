@@ -134,7 +134,14 @@ into the configured display timezone (ui.timezone) before bucketing.`,
 				label := ""
 				if t.DueAt != nil {
 					label = "due " + DisplayTimePtrRelative(t.DueAt)
-				} else if nr := t.NextReminder(); nr != nil {
+				} else if nr, err := t.NextReminder(); err != nil {
+					// A broken rule is not "no reminder": say so on
+					// the row and on stderr, so the task neither
+					// vanishes from the list nor looks scheduled.
+					label = "next unknown (bad RRULE)"
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"warning: %s: %v\n", t.ID, err)
+				} else if nr != nil {
 					label = "next " + DisplayTimeRelative(*nr)
 				}
 				fmt.Fprintf(

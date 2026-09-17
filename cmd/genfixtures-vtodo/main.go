@@ -19,23 +19,57 @@ import (
 
 var fixedTime = time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
 
+// exportTime pins the export clock. DTSTAMP is each entity's own
+// last-modified instant, so every fixture entity below carries
+// UpdatedAt and the clock is only a backstop against a timestamp-less
+// entity making a regeneration non-deterministic.
+var exportTime = fixedTime
+
 func ptr[T any](v T) *T { return &v }
 
-func write(path, content string) {
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		panic(err)
+// emit builds the calendar for one fixture and writes it. A build error
+// stops the run with the fixture named: a fixture that cannot be built
+// must not be left stale on disk as if it had been regenerated.
+func emit(path string, tasks []*core.Task, tracks []*core.Track, logs []*core.LogEntry, opts ...vtodo.Option) {
+	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: build calendar: %v\n", path, err)
+		os.Exit(1)
 	}
-	fmt.Printf("wrote %s (%d bytes)\n", path, len(content))
+	write(path, cal)
 }
 
-// mustSerialize encodes cal via vtodo.Serialize and panics on error.
-// Replaces *ics.Calendar.Serialize() from the pre-vstar codec era.
-func mustSerialize(cal vstar.Calendar) string {
+// write gates cal, encodes it and writes the fixture. A calendar
+// that fails the validation gate is never written: the golden documents
+// are the conformance claim, so they must pass what the tests enforce.
+func write(path string, cal vstar.Calendar) {
+	gate(path, cal)
 	s, err := vtodo.Serialize(cal)
 	if err != nil {
 		panic(err)
 	}
-	return s
+	if err := os.WriteFile(path, []byte(s), 0o644); err != nil { //nolint:gosec // G306: committed golden fixture, world-readable like the rest of the repo
+		panic(err)
+	}
+	fmt.Printf("wrote %s (%d bytes)\n", path, len(s))
+}
+
+// gate runs the V* validation gate (docs/VSTAR-CONFORMANCE.md,
+// "Validation gate") and exits non-zero on a blocking diagnostic.
+// Allowed errors and warnings go to stderr so a regeneration shows
+// exactly what the fixtures carry.
+func gate(path string, cal vstar.Calendar) {
+	r := vtodo.ValidateExport(cal)
+	for _, d := range r.Warnings {
+		fmt.Fprintf(os.Stderr, "%s: warning %s %s: %s\n", path, d.Code, d.Path, d.Message)
+	}
+	for _, d := range r.Allowed {
+		fmt.Fprintf(os.Stderr, "%s: allowed %s %s: %s\n", path, d.Code, d.Path, d.Message)
+	}
+	if err := r.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", path, err)
+		os.Exit(1)
+	}
 }
 
 func main() {
@@ -64,8 +98,7 @@ func main() {
 	}
 
 	// 1. single-task.ics
-	cal, _ := vtodo.BuildVCalendar([]*core.Task{base}, nil, nil)
-	write(dir+"/single-task.ics", mustSerialize(cal))
+	emit(dir+"/single-task.ics", []*core.Task{base}, nil, nil, vtodo.WithExportTime(exportTime))
 
 	// 2. track-with-tasks.ics
 	track := &core.Track{
@@ -87,17 +120,17 @@ func main() {
 	tt3.ID = "task_01h455vb4pex5vsknk084sn0ax"
 	tt3.Title = "Bench rotation throughput"
 	tt3.TrackID = ptr(track.ID)
-	cal2, _ := vtodo.BuildVCalendar(
+	emit(
+		dir+"/track-with-tasks.ics",
 		[]*core.Task{&tt1, &tt2, &tt3},
 		[]*core.Track{track}, nil,
+		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/track-with-tasks.ics", mustSerialize(cal2))
 
 	// 3. recurring-rrule.ics
 	rec := *base
 	rec.RRule = "FREQ=DAILY;INTERVAL=2"
-	cal3, _ := vtodo.BuildVCalendar([]*core.Task{&rec}, nil, nil)
-	write(dir+"/recurring-rrule.ics", mustSerialize(cal3))
+	emit(dir+"/recurring-rrule.ics", []*core.Task{&rec}, nil, nil, vtodo.WithExportTime(exportTime))
 
 	// 4. with-dependencies.ics
 	blockerID := "task_01h455vb4pex5vsknk084sn0az"
@@ -111,8 +144,7 @@ func main() {
 	dep.Meta = map[string]interface{}{
 		"blocked_by": []string{blockerID},
 	}
-	cal4, _ := vtodo.BuildVCalendar([]*core.Task{&blocker, &dep}, nil, nil)
-	write(dir+"/with-dependencies.ics", mustSerialize(cal4))
+	emit(dir+"/with-dependencies.ics", []*core.Task{&blocker, &dep}, nil, nil, vtodo.WithExportTime(exportTime))
 
 	// 5. with-logs.ics
 	log1 := &core.LogEntry{
@@ -129,9 +161,41 @@ func main() {
 		Action:    "PROGRESS",
 		Note:      "tests passing for ES256 path",
 	}
-	cal5, _ := vtodo.BuildVCalendar(
+	emit(
+		dir+"/with-logs.ics",
 		[]*core.Task{base}, nil, []*core.LogEntry{log1, log2},
 		vtodo.WithIncludeLogs(true),
+		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/with-logs.ics", mustSerialize(cal5))
+
+	// 6. recipe-run.ics: a playthrough (recipe run) through a track, one
+	// assignment it materialized, that assignment's turns from the log
+	// (one closed, one open) and its X-TLC-RUN edge back to the run.
+	// The track is dated so the fixture carries no VS040.
+	runTrack := *track
+	runTrack.DueAt = ptr(fixedTime.Add(7 * 24 * time.Hour))
+	run := &core.RecipeRun{
+		ID:        "run_01h455vb4pex5vsknk084sn0r1",
+		RecipeID:  "auth-rotation",
+		Version:   "1.0.0",
+		Hash:      "sha256:0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+		TrackID:   runTrack.ID,
+		CreatedBy: "alice",
+		CreatedAt: fixedTime.Add(-time.Hour),
+	}
+	step := *base
+	step.TrackID = ptr(runTrack.ID)
+	step.RunID = run.ID
+	step.StepID = "rotate-signer"
+	step.ClaimedAt = ptr(fixedTime.Add(4 * time.Hour))
+	claim1 := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime, By: "alice", Action: "CLAIMED", Note: "first attempt"}
+	release := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime.Add(time.Hour), By: "alice", Action: "RELEASED", Note: "handing back"}
+	claim2 := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime.Add(4 * time.Hour), By: "alice", Action: "CLAIMED", Note: "second attempt"}
+	emit(
+		dir+"/recipe-run.ics",
+		[]*core.Task{&step}, []*core.Track{&runTrack}, []*core.LogEntry{claim1, release, claim2},
+		vtodo.WithIncludeLogs(true),
+		vtodo.WithRecipeRuns([]*core.RecipeRun{run}),
+		vtodo.WithExportTime(exportTime),
+	)
 }
