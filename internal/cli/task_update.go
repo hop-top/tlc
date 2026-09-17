@@ -309,6 +309,21 @@ before any row is removed.`,
 				continue
 			}
 
+			// Validation and the policy gate have both run, so a
+			// preview is refused by exactly what refuses a real
+			// delete. Stop before the three writes that follow: the
+			// remote delete, the audit note recorded against the task
+			// while the row still exists, and the row itself.
+			// Validation and the policy gate have both run, so a
+			// preview is refused by exactly what refuses a real
+			// delete. Stop before the three writes that follow: the
+			// remote delete, the audit note recorded against the task
+			// while the row still exists, and the row itself.
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "delete", deleteDryRunDetail(task))
+				continue
+			}
+
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
 				if err := deleteSyncedTask(policyCtx, task, res.Storage); err != nil {
 					errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
@@ -442,6 +457,17 @@ func init() {
 // commands its verb alone says nothing about what would change. Flags
 // the user actually set are the honest answer: Visit walks exactly
 // those, and the kit-owned --dry-run itself is not one of them.
+// deleteDryRunDetail names what the delete would take with it. The
+// title is echoed because a delete is identified by an alias the user
+// may have reached through a pattern, and confirming which task the
+// alias resolved to is the point of rehearsing the command.
+func deleteDryRunDetail(task *core.Task) string {
+	if task.Title == "" {
+		return ""
+	}
+	return task.Title
+}
+
 func updateDryRunDetail(cmd *cobra.Command) string {
 	var fields []string
 	cmd.Flags().Visit(func(f *pflag.Flag) {
