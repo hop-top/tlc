@@ -110,6 +110,20 @@ type TaskFieldChanges struct {
 	// don't want auto-create (e.g. a strict HTTP API) can leave this nil;
 	// the shared function then surfaces ErrTrackNotFound directly.
 	AutoCreateTrack func(ctx context.Context, s *storage.SQLiteStorage, input string) (string, error)
+
+	// DryRun previews the edit: every field is applied to task in
+	// memory and every rule that governs an update still runs, but
+	// nothing is persisted — no task row, no log row, no auto-created
+	// track. The caller reports what would change and discards task.
+	//
+	// It lives here rather than in the CLI because the writes are
+	// interleaved with field application (a status change logs its
+	// transition before the row is written, and --track can create a
+	// track mid-apply), so no caller-side guard can suppress them all
+	// without re-implementing this function and drifting from it —
+	// which is the exact failure this shared function exists to
+	// prevent. The HTTP API leaves it false and is unaffected.
+	DryRun bool
 }
 
 // resolveOrCreateTrackID resolves a non-empty, non-clear-sentinel track
@@ -184,8 +198,13 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		if transErr != nil {
 			return changed, fmt.Errorf("%w: failed to transition: %v", domain.ErrInvalidTransition, transErr)
 		}
-		if err := taskStorage.AddLog(ctx, log); err != nil {
-			fmt.Printf("Warning: failed to write log for %s: %v\n", formatTaskAlias(task), err)
+		// The transition itself has already been validated above, so a
+		// preview is refused by exactly what refuses a real update; only
+		// the row it would leave behind is withheld.
+		if !changes.DryRun {
+			if err := taskStorage.AddLog(ctx, log); err != nil {
+				fmt.Printf("Warning: failed to write log for %s: %v\n", formatTaskAlias(task), err)
+			}
 		}
 		changed = true
 	}
@@ -331,7 +350,16 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		if *changes.Track == "-" || *changes.Track == "" {
 			task.TrackID = nil
 		} else {
-			resolvedID, err := resolveOrCreateTrackID(ctx, taskStorage, *changes.Track, changes.AutoCreateTrack)
+			// Auto-create is itself a write, so a preview resolves the
+			// reference but never creates the track: passing a nil
+			// autoCreate surfaces ErrTrackNotFound instead, which is
+			// the honest answer for a run that would not have created
+			// anything.
+			autoCreate := changes.AutoCreateTrack
+			if changes.DryRun {
+				autoCreate = nil
+			}
+			resolvedID, err := resolveOrCreateTrackID(ctx, taskStorage, *changes.Track, autoCreate)
 			if err != nil {
 				return changed, err
 			}
@@ -385,7 +413,9 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 	// not a no-op, so it must not be swallowed by the !changed return.
 	if !changed {
 		if changes.Note != "" {
-			addUpdateNoteLog(ctx, taskStorage, task, changes)
+			if !changes.DryRun {
+				addUpdateNoteLog(ctx, taskStorage, task, changes)
+			}
 			return true, nil
 		}
 		return false, nil
@@ -408,6 +438,14 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		Reference:   task.Reference,
 	}); err != nil {
 		return changed, fmt.Errorf("%w: %v", domain.ErrValidation, err)
+	}
+
+	// Everything that could refuse this update has now run — the field
+	// normalizers, the blocked-by and tag gates, and ValidateTaskOp
+	// above. Stop here on a preview: a dry run is refused by exactly
+	// what would refuse the real thing, and writes nothing.
+	if changes.DryRun {
+		return changed, nil
 	}
 
 	task.UpdatedAt = time.Now().UTC()

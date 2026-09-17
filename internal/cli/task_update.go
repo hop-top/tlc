@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -73,8 +74,13 @@ against the workflow state machine unless --force is set.`,
 				if res.Storage != s {
 					defer func() { _ = res.Storage.Close() }()
 				}
-				if err := amendLatestLogNote(ctx, res.Storage, task, taskUpdateNote, taskUpdateForce); err != nil {
+				dryRun := dryRunSkipsWrite(cmd)
+				if err := amendLatestLogNote(ctx, res.Storage, task, taskUpdateNote, taskUpdateForce, dryRun); err != nil {
 					amendErrs = append(amendErrs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
+					continue
+				}
+				if dryRun {
+					printTaskDryRun(cmd, task, "amend the latest log of", "")
 					continue
 				}
 				fmt.Printf("Amended latest log for %s\n", formatTaskAlias(task))
@@ -94,6 +100,7 @@ against the workflow state machine unless --force is set.`,
 			}
 
 			changes := TaskFieldChanges{
+				DryRun:         dryRunSkipsWrite(cmd),
 				ClearBlockedBy: taskUpdateClearBlockedBy,
 				ClearEva:       taskUpdateClearEva,
 				AddEva:         taskUpdateAddEva,
@@ -164,6 +171,14 @@ against the workflow state machine unless --force is set.`,
 				continue
 			}
 
+			if dryRunSkipsWrite(cmd) {
+				// Nothing was persisted, so the push is skipped too: a
+				// mirror of an edit that did not happen is a write of
+				// its own, to someone else's system.
+				printTaskDryRun(cmd, task, "update", updateDryRunDetail(cmd))
+				continue
+			}
+
 			if task.OriginSystem != nil && *task.OriginSystem != "" {
 				// Mirror to the origin system as a best-effort side
 				// effect. Sync failure surfaces as a warning but does
@@ -181,6 +196,12 @@ against the workflow state machine unless --force is set.`,
 		}
 
 		if len(resolved) > 0 {
+			if dryRunSkipsWrite(cmd) {
+				// Nothing was written, so the projection already
+				// describes the store; rewriting it would be a side
+				// effect of the flag that suppresses side effects.
+				return nil
+			}
 			return writeProjection()
 		}
 		fmt.Println("No changes specified; use --title, --description, --status, --assigned-to, or other flags to update")
@@ -415,6 +436,27 @@ func init() {
 	TaskDeleteCmd.Flags().StringVarP(&taskDeleteNote, "note", "n", "", "Delete note (recorded against the transition log)")
 }
 
+// updateDryRunDetail names the fields this invocation would write.
+//
+// `task update` takes twenty-odd field flags, so unlike the lifecycle
+// commands its verb alone says nothing about what would change. Flags
+// the user actually set are the honest answer: Visit walks exactly
+// those, and the kit-owned --dry-run itself is not one of them.
+func updateDryRunDetail(cmd *cobra.Command) string {
+	var fields []string
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if f.Name == "dry-run" {
+			return
+		}
+		fields = append(fields, f.Name)
+	})
+	if len(fields) == 0 {
+		return ""
+	}
+	sort.Strings(fields)
+	return "fields: " + strings.Join(fields, ", ")
+}
+
 // editedFieldNames returns the names of the non-status fields this
 // invocation actually changed, for the `fields` key in an UPDATED log
 // row's meta. "status" is excluded because the transition row already
@@ -442,9 +484,14 @@ func editedFieldNames(cmd *cobra.Command) []string {
 // in the log row's meta as `amended_at` (ISO timestamp) so the audit
 // trail still shows the row was edited; no schema migration is needed
 // because task_logs.meta is a JSON column.
+//
+// With dryRun set it runs the terminal-status gate and the "is there
+// anything to amend" lookup, then returns without writing — so a preview
+// is refused by exactly what would refuse the real amend, including the
+// case of a task with no log entries at all.
 func amendLatestLogNote(ctx context.Context, store interface {
 	core.LogRepository
-}, task *core.Task, newNote string, force bool,
+}, task *core.Task, newNote string, force, dryRun bool,
 ) error {
 	wm := core.DefaultWorkflow()
 	if wm.IsTerminal(task.Status) && !force {
@@ -482,6 +529,12 @@ func amendLatestLogNote(ctx context.Context, store interface {
 		if idx := strings.Index(latest.Note, ": "); idx > 0 {
 			rewritten = latest.Note[:idx+2] + newNote
 		}
+	}
+
+	// Every gate a real amend answers to has now run: the terminal-status
+	// check above, and the lookup that proves there is a row to rewrite.
+	if dryRun {
+		return nil
 	}
 
 	meta := latest.Meta
