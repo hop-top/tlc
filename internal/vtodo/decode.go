@@ -9,7 +9,11 @@ import (
 
 	vstar "hop.top/vstar"
 	"hop.top/vstar/codec/rfc5545"
+	"hop.top/vstar/hashing"
+	"hop.top/vstar/helpers"
+	"hop.top/vstar/supersession"
 
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
 
@@ -18,33 +22,62 @@ type ParseResult struct {
 	Tasks  []*core.Task
 	Tracks []*core.Track
 	Logs   []*core.LogEntry
+	// Warnings lists integrity findings that did not stop the import:
+	// one entry per component (nested VALARMs included) whose
+	// X-VSTAR-HASH is absent or does not match its content. Empty for
+	// a calendar tlc wrote and nobody altered.
+	Warnings []string
+	// Concepts maps a component's wire UID to the agentic concept it
+	// declared through X-TLC-CONCEPT (lowercased), for every component
+	// that carried one, VEVENT and sub-components included. Keyed by
+	// UID rather than entity ID because the declaration is a fact
+	// about the wire component: log entries have no ID of their own,
+	// and a VEVENT maps to no entity at all. Nil when nothing in the
+	// calendar declared a concept. The token is never stored on the
+	// entities themselves; the encoder re-derives it from TrackID and
+	// Action on export.
+	Concepts map[string]string
 }
 
 // ParseVCalendar reads an iCalendar stream and returns the tasks,
 // tracks, and log entries it contained.
 //
-// VTODO classification:
+// VTODO classification, first match wins:
+//   - X-TLC-CONCEPT=assignment → Task (an assignment is a scoped unit
+//     inside a mission, and tlc has no track inside a track)
 //   - X-TLC-IS-TRACK=TRUE marker → Track
+//   - UID body is a track TypeID → Track
 //   - otherwise → Task
 //
-// UID handling: a UID of the form `<typeid>@<anything>` where typeid
-// matches core.IsTaskID/IsTrackID is reused as the entity ID. Otherwise
-// the decoder mints a fresh ID and stashes the original UID in
-// Meta["external_uid"].
+// X-TLC-CONCEPT=mission is not decisive on its own: a track and a
+// standalone task are both missions, so the marker and the UID prefix
+// still pick the Go type.
+//
+// UID handling: a UID of the form `<typeid>@<our-domain>` — the domain
+// being the one WithUIDDomain configured, DefaultUIDDomain otherwise —
+// where typeid matches core.IsTaskID/IsTrackID is reused as the entity
+// ID. So is a bare `<typeid>` carrying no domain at all. Everything
+// else is foreign, a well-formed typeid under someone else's domain
+// included: the decoder mints a fresh ID and stashes the original UID
+// in Meta["external_uid"].
 //
 // VJOURNAL: each becomes a LogEntry. The TaskID is taken from the first
 // RELATED-TO property whose value (after stripping the @domain) maps to
 // a known Task UID; if the link can't be resolved the LogEntry is still
 // emitted with TaskID set to the raw UID body.
+//
+// VEVENT: an open turn (X-TLC-CONCEPT:turn, no DTEND) sets ClaimedAt on
+// the task its PARENT edge names; nothing else is decoded from events.
 func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
-	_ = resolve(opts) // currently no decode-time options consume from o
+	o := resolve(opts)
+	statusDefs := o.statusDefinitions()
 
 	cal, err := rfc5545.Parse(r)
 	if err != nil {
 		return nil, fmt.Errorf("parse calendar: %w", err)
 	}
 
-	res := &ParseResult{}
+	res := &ParseResult{Warnings: verifyHashes(cal), Concepts: collectConcepts(cal)}
 
 	// Build a map UID-body → entity ID for cross-component linkage and
 	// VJOURNAL TaskID resolution. Two passes because VJOURNAL parsing
@@ -54,34 +87,24 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 
 	todos := cal.Filter(vstar.CompTodo)
 	for _, todo := range todos {
-		if isTrackComponent(todo) {
-			tr, uidBodyVal, perr := decodeTrack(todo)
-			if perr != nil {
-				return nil, perr
-			}
+		if isTrackComponent(todo, o.uidDomain) {
+			tr, uidBodyVal := decodeTrack(todo, o.uidDomain)
 			res.Tracks = append(res.Tracks, tr)
-			if uidBodyVal != "" {
-				uidToTrackID[uidBodyVal] = tr.ID
-			}
-		} else {
-			t, uidBodyVal, perr := decodeTask(todo)
-			if perr != nil {
-				return nil, perr
-			}
-			res.Tasks = append(res.Tasks, t)
-			if uidBodyVal != "" {
-				uidToTaskID[uidBodyVal] = t.ID
-			}
+			indexUID(uidToTrackID, uidBodyVal, tr.ID)
+			continue
 		}
+		t, uidBodyVal := decodeTask(todo, cal.Components, o.uidDomain, o.priorities, statusDefs)
+		res.Tasks = append(res.Tasks, t)
+		indexUID(uidToTaskID, uidBodyVal, t.ID)
 	}
 
 	// Resolve PARENT links to track IDs and DEPENDS-ON to task IDs.
 	for _, todo := range todos {
-		if isTrackComponent(todo) {
+		if isTrackComponent(todo, o.uidDomain) {
 			continue
 		}
 		uid := getUID(todo)
-		taskID := uidToTaskID[uidBody(uid)]
+		taskID := uidToTaskID[uidBody(uid, o.uidDomain)]
 		if taskID == "" {
 			continue
 		}
@@ -95,11 +118,15 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 		if task == nil {
 			continue
 		}
-		for _, rel := range todo.GetAll("RELATED-TO") {
-			reltype := paramFirst(rel.Params, "RELTYPE")
-			body := uidBody(rel.Value)
-			switch reltype {
-			case RelTypeParent:
+		// helpers.RelatedTo applies the RFC 5545 §3.2.15 default of
+		// PARENT when the RELTYPE param is absent, matches the param
+		// name case-insensitively and folds a registered value to its
+		// canonical spelling, so the typed constants compare directly.
+		// Unknown RELTYPEs are ignored.
+		for _, rel := range helpers.RelatedTo(todo) {
+			body := uidBody(rel.UID, o.uidDomain)
+			switch rel.RelType {
+			case vstar.RelParent:
 				if id, ok := uidToTrackID[body]; ok {
 					tid := id
 					task.TrackID = &tid
@@ -107,7 +134,7 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 					tid := body
 					task.TrackID = &tid
 				}
-			case RelTypeDependsOn:
+			case vstar.RelDependsOn:
 				blocker := body
 				if id, ok := uidToTaskID[body]; ok {
 					blocker = id
@@ -115,197 +142,190 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 				if task.Meta == nil {
 					task.Meta = map[string]interface{}{}
 				}
-				existing, _ := task.Meta["blocked_by"].([]string)
-				task.Meta["blocked_by"] = append(existing, blocker)
+				// Normalise rather than assert. Meta may already carry
+				// blocked_by in any supported shape (notably the
+				// []interface{} produced by JSON decoding), and a bare
+				// []string assertion would silently drop it. Re-running
+				// the coercion over the appended slice also collapses a
+				// repeated DEPENDS-ON edge to a single blocker.
+				merged := append(
+					core.NormalizeBlockedBy(task.Meta["blocked_by"]),
+					blocker,
+				)
+				task.Meta["blocked_by"] = core.NormalizeBlockedBy(merged)
 			}
 		}
 	}
 
 	// VJOURNAL → LogEntry.
 	for _, j := range cal.Filter(vstar.CompJournal) {
-		le := decodeJournal(j, uidToTaskID)
+		le := decodeJournal(j, uidToTaskID, o.uidDomain, statusDefs)
 		res.Logs = append(res.Logs, le)
+	}
+
+	// An open turn VEVENT is the wire form of Task.ClaimedAt: the task
+	// row itself carries no claim property. Only a VEVENT that declares
+	// itself a turn counts; a foreign event related to a task is not a
+	// claim. VEVENTs are otherwise not decoded: a turn is a log-derived
+	// window and a playthrough has no entity the decoder mints.
+	for _, ev := range cal.Filter(vstar.CompEvent) {
+		if declaredConcept(ev) != ConceptTurn {
+			continue
+		}
+		if _, closed := ev.Get("DTEND"); closed {
+			continue
+		}
+		start, ok := propTime(ev, "DTSTART")
+		if !ok {
+			continue
+		}
+		for _, rel := range helpers.RelatedTo(ev) {
+			if rel.RelType != vstar.RelParent {
+				continue
+			}
+			id, ok := uidToTaskID[uidBody(rel.UID, o.uidDomain)]
+			if !ok {
+				continue
+			}
+			for _, t := range res.Tasks {
+				if t.ID == id && (t.ClaimedAt == nil || start.After(*t.ClaimedAt)) {
+					at := start
+					t.ClaimedAt = &at
+				}
+			}
+		}
 	}
 
 	return res, nil
 }
 
-func isTrackComponent(todo vstar.Component) bool {
-	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, "TRUE") {
+// verifyHashes checks X-VSTAR-HASH on every component of cal, nested
+// sub-components included, and returns one warning per component that
+// fails: a missing hash (the producer is not V*-conformant) or a
+// mismatch (the component changed after it was hashed, or its bytes
+// were altered in transit). Warnings rather than errors: the entities
+// are still importable, and the caller decides how loudly to say so.
+func verifyHashes(cal vstar.Calendar) []string {
+	var out []string
+	var walk func(c vstar.Component, parent string)
+	walk = func(c vstar.Component, parent string) {
+		label := string(c.Type)
+		if uid := c.UID(); uid != "" {
+			label += " " + uid
+		}
+		if parent != "" {
+			label = parent + " > " + label
+		}
+		ok, want, got := hashing.VerifyXVSTAR(c)
+		switch {
+		case ok:
+		case got == "":
+			out = append(out, label+": no X-VSTAR-HASH")
+		default:
+			out = append(out, fmt.Sprintf("%s: X-VSTAR-HASH mismatch: stored %s, computed %s", label, got, want))
+		}
+		for _, sub := range c.Sub {
+			walk(sub, label)
+		}
+	}
+	for _, c := range cal.Components {
+		walk(c, "")
+	}
+	return out
+}
+
+// isTrackComponent picks the Go type of a VTODO. The concept token is
+// consulted first, the track marker second, the UID prefix last, so a
+// declaration a producer made on purpose beats a marker and a marker
+// beats a naming convention.
+//
+// Only `assignment` decides: it names a unit inside a mission, which in
+// tlc is always a task, whatever marker or UID prefix the component
+// also carries. `mission` covers tracks and standalone tasks alike and
+// so falls through to the marker; any other token (or none, the case
+// for every calendar written before the property existed) does too.
+func isTrackComponent(todo vstar.Component, domain string) bool {
+	if declaredConcept(todo) == ConceptAssignment {
+		return false
+	}
+	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, xPropTrue) {
 		return true
 	}
 	// Fall-back: if UID body looks like a track typeid, treat as track.
-	if core.IsTrackID(uidBody(getUID(todo))) {
+	if core.IsTrackID(uidBody(getUID(todo), domain)) {
 		return true
 	}
 	return false
 }
 
-func decodeTask(todo vstar.Component) (*core.Task, string, error) {
+func decodeTask(
+	todo vstar.Component,
+	ledger []vstar.Component,
+	domain string,
+	defs []config.PriorityDefinition,
+	statusDefs []config.StatusDefinition,
+) (*core.Task, string) {
 	t := &core.Task{}
 
-	uid := getUID(todo)
-	body := uidBody(uid)
-	if core.IsTaskID(body) {
-		t.ID = body
-	} else {
-		t.ID = core.NewTaskID()
-		if uid != "" {
-			if t.Meta == nil {
-				t.Meta = map[string]interface{}{}
-			}
-			t.Meta["external_uid"] = uid
-		}
+	id, body, external := decodeIdentity(todo, domain, core.IsTaskID, core.NewTaskID)
+	t.ID = id
+	if external != "" {
+		setMeta(t, "external_uid", external)
 	}
 
-	if p, ok := todo.Get("SUMMARY"); ok {
-		t.Title = unescapeText(p.Value)
+	if p, ok := todo.Get(propSummary); ok {
+		t.Title = p.Value
 	}
-	if p, ok := todo.Get("DESCRIPTION"); ok {
-		t.Description = unescapeText(p.Value)
+	if p, ok := todo.Get(propDescription); ok {
+		t.Description = p.Value
 	}
-	if p, ok := todo.Get("STATUS"); ok {
-		t.Status = wireToStatus(p.Value)
-	}
-	if p, ok := todo.Get("PRIORITY"); ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(p.Value)); err == nil {
-			t.Priority = icsToPriority(n)
-		}
-	}
-	for _, p := range todo.GetAll("CATEGORIES") {
-		for _, raw := range strings.Split(p.Value, ",") {
-			tag := strings.TrimSpace(unescapeText(raw))
-			if tag != "" {
-				t.Tags = append(t.Tags, tag)
-			}
-		}
-	}
-	if p, ok := todo.Get("CREATED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			t.CreatedAt = ts
-		}
-	}
-	if p, ok := todo.Get("LAST-MODIFIED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			t.UpdatedAt = ts
-		}
-	}
-	if t.UpdatedAt.IsZero() {
-		// Fallback to DTSTAMP when LAST-MODIFIED is absent.
-		if p, ok := todo.Get("DTSTAMP"); ok {
-			if ts, err := parseICSTime(p.Value); err == nil {
-				t.UpdatedAt = ts
-			}
-		}
-	}
-	if p, ok := todo.Get("DUE"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			due := ts
-			t.DueAt = &due
-		}
-	}
-	if p, ok := todo.Get("RRULE"); ok {
-		if err := core.ValidateRRule(p.Value); err == nil {
-			t.RRule = p.Value
-		}
-	}
+	t.Status = decodeTaskStatus(todo, ledger, statusDefs)
+	decodeTaskPriority(t, todo, defs)
+	t.Tags = decodeCategories(todo)
+	t.CreatedAt, t.UpdatedAt = entityTimestamps(todo)
+	decodeTaskSchedule(t, todo)
 	if p, ok := todo.Get("URL"); ok {
 		t.Reference = p.Value
 	}
-	if p, ok := todo.Get(XPropEffort); ok {
-		eff := core.Effort(strings.TrimSpace(p.Value))
-		if core.ValidEffort(eff) {
-			t.Effort = eff
-		}
-	}
-	if p, ok := todo.Get(XPropAssignee); ok {
-		val := p.Value
-		t.AssignedTo = &val
-	} else if p, ok := todo.Get("ATTENDEE"); ok {
-		// First ATTENDEE wins for v1. Strip mailto: prefix when present;
-		// URI scheme is case-insensitive (RFC 3986 §3.1) so MAILTO:,
-		// Mailto:, etc. all need to drop.
-		email := p.Value
-		if len(email) >= len("mailto:") && strings.EqualFold(email[:len("mailto:")], "mailto:") {
-			email = email[len("mailto:"):]
-		}
-		if email != "" {
-			t.AssignedTo = &email
-		}
-	}
-	if p, ok := todo.Get(XPropProjectID); ok {
-		val := p.Value
-		t.ProjectID = &val
-	}
-	if p, ok := todo.Get(XPropTaskSeq); ok {
-		if n, err := strconv.ParseInt(strings.TrimSpace(p.Value), 10, 64); err == nil {
-			t.Seq = n
-		}
-	}
-	for _, alarm := range todo.Sub {
-		if alarm.Type != vstar.CompAlarm {
-			continue
-		}
-		trig, ok := alarm.Get("TRIGGER")
-		if !ok {
-			continue
-		}
-		if ts, err := parseICSTime(trig.Value); err == nil {
-			tt := ts
-			t.RemindAt = &tt
-			break
-		}
-	}
+	decodeTaskAssignee(t, todo)
+	decodeTaskTLCFields(t, todo, domain)
+	// After DUE: a relative trigger anchored to END resolves against
+	// it, and the derived auto reminder is told apart by its shape.
+	decodeReminders(t, todo, time.Now())
 
-	return t, body, nil
+	// X-TLC-META payload plus any unrecognized X-TLC-* property, so a
+	// foreign producer's extensions survive the import.
+	t.Meta = applyMetaTree(t.Meta, todo)
+
+	return t, body
 }
 
-func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
+func decodeTrack(todo vstar.Component, domain string) (*core.Track, string) {
 	tr := &core.Track{}
 
-	uid := getUID(todo)
-	body := uidBody(uid)
-	if core.IsTrackID(body) {
-		tr.ID = body
-	} else {
-		tr.ID = core.NewTrackID()
-		if uid != "" {
-			if tr.Meta == nil {
-				tr.Meta = map[string]any{}
-			}
-			tr.Meta["external_uid"] = uid
-		}
+	id, body, external := decodeIdentity(todo, domain, core.IsTrackID, core.NewTrackID)
+	tr.ID = id
+	if external != "" {
+		tr.Meta = map[string]any{"external_uid": external}
 	}
 
-	if p, ok := todo.Get("SUMMARY"); ok {
-		tr.Title = unescapeText(p.Value)
+	if p, ok := todo.Get(propSummary); ok {
+		tr.Title = p.Value
 	}
-	if p, ok := todo.Get("STATUS"); ok {
-		tr.Status = wireStatusToTrack(p.Value)
-	}
-	if p, ok := todo.Get("CREATED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			tr.CreatedAt = ts
-		}
-	}
-	if p, ok := todo.Get("LAST-MODIFIED"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			tr.UpdatedAt = ts
-		}
-	}
-	if tr.UpdatedAt.IsZero() {
-		if p, ok := todo.Get("DTSTAMP"); ok {
-			if ts, err := parseICSTime(p.Value); err == nil {
-				tr.UpdatedAt = ts
-			}
-		}
-	}
+	tr.Status = decodeTrackStatus(todo)
+	tr.CreatedAt, tr.UpdatedAt = entityTimestamps(todo)
 	if p, ok := todo.Get(XPropTrackSlug); ok {
 		tr.Slug = p.Value
 	}
 	if p, ok := todo.Get(XPropTrackType); ok {
 		tr.Type = p.Value
 	}
+	if p, ok := todo.Get(XPropTrackSeq); ok {
+		if n, err := strconv.ParseInt(strings.TrimSpace(p.Value), 10, 64); err == nil {
+			tr.Seq = n
+		}
+	}
+	decodeTrackDue(tr, todo)
 	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
 		tr.AssignedTo = &val
@@ -315,35 +335,32 @@ func decodeTrack(todo vstar.Component) (*core.Track, string, error) {
 		tr.ProjectID = &val
 	}
 
-	return tr, body, nil
+	tr.Meta = applyMetaTree(tr.Meta, todo)
+
+	return tr, body
 }
 
-func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEntry {
+func decodeJournal(
+	j vstar.Component,
+	uidToTaskID map[string]string,
+	domain string,
+	statusDefs []config.StatusDefinition,
+) *core.LogEntry {
 	le := &core.LogEntry{}
 
 	if p, ok := j.Get(XPropLogAction); ok {
 		le.Action = p.Value
 	}
+	decodeJournalStatus(le, j, statusDefs)
 	if p, ok := j.Get(XPropLogBy); ok {
 		le.By = p.Value
 	}
-	if p, ok := j.Get("DESCRIPTION"); ok {
-		le.Note = unescapeText(p.Value)
-	} else if p, ok := j.Get("SUMMARY"); ok {
-		le.Note = unescapeText(p.Value)
+	if p, ok := j.Get(propDescription); ok {
+		le.Note = p.Value
+	} else if p, ok := j.Get(propSummary); ok {
+		le.Note = p.Value
 	}
-	if p, ok := j.Get("DTSTAMP"); ok {
-		if ts, err := parseICSTime(p.Value); err == nil {
-			le.Timestamp = ts
-		}
-	}
-	if le.Timestamp.IsZero() {
-		if p, ok := j.Get("CREATED"); ok {
-			if ts, err := parseICSTime(p.Value); err == nil {
-				le.Timestamp = ts
-			}
-		}
-	}
+	le.Timestamp = journalTimestamp(j)
 
 	// Prefer X-TLC-LOG-TASK if present (preserves the raw typeid even
 	// when the calendar didn't include a matching VTODO).
@@ -351,139 +368,309 @@ func decodeJournal(j vstar.Component, uidToTaskID map[string]string) *core.LogEn
 		le.TaskID = p.Value
 	}
 	if le.TaskID == "" {
-		for _, rel := range j.GetAll("RELATED-TO") {
-			body := uidBody(rel.Value)
-			if id, ok := uidToTaskID[body]; ok {
-				le.TaskID = id
-				break
-			}
-			if core.IsTaskID(body) {
-				le.TaskID = body
-				break
-			}
-		}
+		le.TaskID = journalTaskFromRelations(j, uidToTaskID, domain)
 	}
+
+	// VJOURNAL is a top-level component, so ext's non-recursive walk
+	// needs to be invoked on it directly rather than inherited from the
+	// VTODO pass above.
+	le.Meta = applyMetaTree(le.Meta, j)
 
 	return le
 }
 
-// wireToStatus maps an RFC 5545 §3.8.1.11 STATUS wire string to a
-// tlc TaskStatus. Comparison is case-sensitive per the RFC.
-func wireToStatus(s string) core.TaskStatus {
-	switch s {
-	case string(vstar.TodoInProcess):
-		return core.StatusInProgress
-	case string(vstar.TodoCompleted):
-		return core.StatusDone
-	case string(vstar.TodoCancelled):
-		return core.StatusSkipped
-	case string(vstar.TodoNeedsAction):
-		return core.StatusTodo
+// decodeTaskStatus recovers a tlc status from a VTODO, walking a
+// three-step ladder:
+//
+//  1. The exact name in XPropStatus, when the CURRENT vocabulary declares
+//     it. tlc writes the property with the task's current status, so a
+//     VTODO carrying it is a mutated-in-place snapshot and the ledger
+//     behind it is history, not a correction.
+//  2. The ledger. A VTODO without a usable XPropStatus is foreign, or
+//     from a vocabulary this config no longer has; for it the spec 02
+//     discipline applies: the original component is never mutated and
+//     the latest supersession journal pointing at it holds the truth.
+//     supersession.Superseded picks that entry (latest DTSTAMP wins);
+//     its value is used when it is one of the four RFC 5545 VTODO
+//     STATUS values, the vocabulary tlc writes and the one the spec
+//     example shows. Any other vocabulary is opaque here and falls
+//     through.
+//  3. The role the VTODO's own STATUS value implies.
+//
+// The X-property is only trusted when the CURRENT vocabulary declares
+// that name. A calendar exported from another project (or from this one
+// before a vocabulary change) can name a status this config would reject,
+// and importing it would seed the store with a value every later
+// validation refuses. Falling back to the role default keeps the import
+// inside the configured vocabulary while preserving the coarse meaning.
+func decodeTaskStatus(todo vstar.Component, ledger []vstar.Component, defs []config.StatusDefinition) core.TaskStatus {
+	if p, ok := todo.Get(XPropStatus); ok {
+		name := strings.TrimSpace(p.Value)
+		for _, def := range defs {
+			if strings.EqualFold(def.Name, name) {
+				return core.TaskStatus(def.Name)
+			}
+		}
+	}
+	wire := ""
+	if eff, ok := supersession.Superseded(todo, ledger); ok && isTodoStatusWire(eff) {
+		wire = strings.TrimSpace(eff)
+	} else if p, ok := todo.Get("STATUS"); ok {
+		wire = strings.TrimSpace(p.Value)
+	}
+	return roleDefaultStatus(wireToRole(wire), defs)
+}
+
+// wireToRole is roleToWire inverted: an RFC 5545 STATUS value back to the
+// config role it stands for. Comparison is case-insensitive because the
+// value may have come from a foreign producer.
+func wireToRole(wire string) string {
+	switch {
+	case strings.EqualFold(wire, string(vstar.TodoInProcess)):
+		return config.RoleActive
+	case strings.EqualFold(wire, string(vstar.TodoCompleted)):
+		return config.RoleCompleted
+	case strings.EqualFold(wire, string(vstar.TodoCancelled)):
+		return config.RoleSkipped
+	default:
+		return config.RoleInitial
+	}
+}
+
+// roleDefaultStatus picks the vocabulary's status for a role: the FIRST
+// declaring it, matching how WorkflowManager resolves a role to a single
+// transition target. Falls back to the first initial-role status, then to
+// the first declared status, so a decode always lands on something the
+// config accepts.
+func roleDefaultStatus(role string, defs []config.StatusDefinition) core.TaskStatus {
+	for _, def := range defs {
+		if def.Role == role {
+			return core.TaskStatus(def.Name)
+		}
+	}
+	for _, def := range defs {
+		if def.Role == config.RoleInitial {
+			return core.TaskStatus(def.Name)
+		}
+	}
+	if len(defs) > 0 {
+		return core.TaskStatus(defs[0].Name)
 	}
 	return core.StatusTodo
 }
 
-func wireStatusToTrack(s string) core.TrackStatus {
-	switch s {
-	case string(vstar.TodoInProcess):
+// decodeTrackStatus prefers XPropTrackStatus so "completed" and
+// "archived" — which share STATUS:COMPLETED — survive the round trip, and
+// falls back to the RFC STATUS for foreign calendars.
+func decodeTrackStatus(todo vstar.Component) core.TrackStatus {
+	if p, ok := todo.Get(XPropTrackStatus); ok {
+		name := strings.TrimSpace(p.Value)
+		for _, st := range core.TrackStatuses() {
+			if strings.EqualFold(string(st), name) {
+				return st
+			}
+		}
+	}
+	wire := ""
+	if p, ok := todo.Get("STATUS"); ok {
+		wire = strings.TrimSpace(p.Value)
+	}
+	switch {
+	case strings.EqualFold(wire, string(vstar.TodoInProcess)):
 		return core.TrackStatusActive
-	case string(vstar.TodoCompleted):
+	case strings.EqualFold(wire, string(vstar.TodoCompleted)):
 		return core.TrackStatusCompleted
-	case string(vstar.TodoCancelled):
+	case strings.EqualFold(wire, string(vstar.TodoCancelled)):
 		return core.TrackStatusAbandoned
-	case string(vstar.TodoNeedsAction):
+	default:
 		return core.TrackStatusPending
 	}
-	return core.TrackStatusPending
 }
 
-func icsToPriority(n int) core.Priority {
-	switch {
-	case n <= 0:
-		return ""
-	case n <= 2:
-		return core.PriorityP0
-	case n <= 4:
-		return core.PriorityP1
-	case n <= 6:
-		return core.PriorityP2
-	default:
-		return core.PriorityP3
+// isTrueValue reads the boolean X-properties tlc emits. Only "TRUE" is
+// ever written; the wider set is accepted because hand-edited .ics files
+// are a real input.
+func isTrueValue(s string) bool {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case xPropTrue, "YES", "1":
+		return true
 	}
+	return false
+}
+
+// icsToPriority maps an RFC 5545 PRIORITY integer back onto the
+// CONFIGURED priority vocabulary by nearest rank.
+//
+// This is the FALLBACK path, used when a component carries no
+// X-TLC-PRIORITY - a calendar written by some other tool, or by a tlc
+// old enough to predate the X-property. It is inherently lossy: nine
+// numeric slots cannot name a vocabulary entry that was never in the
+// file, so the best available answer is the rank whose encoded slot sits
+// closest to n.
+//
+// Inverts priorityToICS: for each rank the encoder would have written
+// 1 + floor(rank*9/N), and the rank minimizing |encoded - n| wins. Ties
+// go to the MORE urgent rank (the lower index), because over-reporting
+// urgency on an ambiguous import is the recoverable direction.
+//
+// n <= 0 is RFC 5545's "undefined" and decodes to the empty priority -
+// NOT to the least urgent one. "Nobody set a priority" is a different
+// fact from "somebody set the lowest", and conflating them would invent
+// a triage decision the author never made.
+func icsToPriority(n int, defs []config.PriorityDefinition) core.Priority {
+	if n <= 0 || len(defs) == 0 {
+		return ""
+	}
+	best, bestDist := 0, -1
+	for rank := range defs {
+		d := icsPriorityMin + rank*(icsPriorityMax+1-icsPriorityMin)/len(defs)
+		if d > icsPriorityMax {
+			d = icsPriorityMax
+		}
+		dist := d - n
+		if dist < 0 {
+			dist = -dist
+		}
+		if bestDist < 0 || dist < bestDist {
+			best, bestDist = rank, dist
+		}
+	}
+	return core.Priority(defs[best].Name)
+}
+
+// priorityFromComponent resolves a task's priority, preferring the
+// verbatim X-TLC-PRIORITY name over the lossy numeric PRIORITY.
+//
+// The name only wins when it NAMES a currently-configured priority. A
+// calendar exported under one vocabulary and imported under another
+// would otherwise smuggle in a value that fails core.ValidPriority, and
+// every downstream consumer (filters, sorts, the enum flags) would then
+// be looking at a priority the project does not have. When the name is
+// unrecognized the numeric value still gives a defensible nearest-rank
+// answer in the CURRENT vocabulary, so that is what we fall back to.
+func priorityFromComponent(todo vstar.Component, defs []config.PriorityDefinition) core.Priority {
+	if p, ok := todo.Get(XPropPriority); ok {
+		name := strings.TrimSpace(p.Value)
+		for _, d := range defs {
+			if d.Name == name {
+				return core.Priority(name)
+			}
+		}
+	}
+	if p, ok := todo.Get("PRIORITY"); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(p.Value)); err == nil {
+			return icsToPriority(n, defs)
+		}
+	}
+	return ""
+}
+
+// setMeta writes a Task.Meta entry, allocating the map on first use.
+func setMeta(t *core.Task, key string, value interface{}) {
+	if t.Meta == nil {
+		t.Meta = map[string]interface{}{}
+	}
+	t.Meta[key] = value
 }
 
 func getUID(todo vstar.Component) string {
 	return todo.UID()
 }
 
-// uidBody strips the "@domain" suffix (if any) from a UID, leaving the
-// typeid (or foreign body) for matching.
-func uidBody(uid string) string {
+// uidBody strips our own "@domain" suffix from a UID, leaving the
+// typeid for matching. A UID carrying any other domain is returned
+// whole: the domain is what distinguishes a UID tlc minted from one a
+// foreign calendar minted, and discarding it would let
+// `task_<26 chars>@someone-else.example` be mistaken for our own
+// identity and silently overwrite that row. Left intact, the body
+// fails core.IsTaskID and the caller takes the foreign-UID path —
+// fresh TypeID, original UID preserved in Meta["external_uid"].
+//
+// A bare UID with no "@" at all keeps its historical treatment: it is
+// its own body, so a domainless typeid still round-trips.
+func uidBody(uid, domain string) string {
 	if uid == "" {
 		return ""
 	}
-	if i := strings.IndexByte(uid, '@'); i >= 0 {
+	i := strings.IndexByte(uid, '@')
+	if i < 0 {
+		return uid
+	}
+	if strings.EqualFold(uid[i+1:], domain) {
 		return uid[:i]
 	}
 	return uid
 }
 
-func paramFirst(params []vstar.Param, key string) string {
-	for _, p := range params {
-		if strings.EqualFold(p.Name, key) {
-			return p.Value
-		}
+// propTime reads a DATE-TIME property from c through vstar.ParseTime:
+// RFC 5545 §3.3.5 form #2 only. The properties read this way
+// (CREATED, LAST-MODIFIED, DTSTAMP, DTSTART of a turn) are DATE-TIME
+// by definition; a VALUE=DATE among them is non-conforming input and
+// decodes to nothing rather than to a midnight the producer never
+// wrote. DUE, the one property tlc reads in both forms, goes through
+// decodeDue.
+func propTime(c vstar.Component, name string) (time.Time, bool) {
+	p, ok := c.Get(name)
+	if !ok {
+		return time.Time{}, false
 	}
-	return ""
+	return vstar.ParseTime(p.Value)
 }
 
-// parseICSTime parses iCalendar DATE-TIME forms. Only UTC ("Z") and
-// floating local forms are handled; v1 emits UTC exclusively.
-func parseICSTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, fmt.Errorf("empty time value")
+// decodeCategories reads a task's tags from the CATEGORIES property
+// (RFC 5545 §3.8.1.2), tolerating BOTH wire shapes.
+//
+// The shape tlc writes is one property PER tag (see addCategories). The
+// other legal shape is a single property carrying a comma-separated
+// list, which foreign producers and one interim tlc release write;
+// helpers.Categories reads that one: it splits on comma, trims, and
+// drops empty tokens.
+//
+// helpers.Categories cannot read the repeated shape: it resolves the
+// property with Component.Get, which returns only the FIRST match, so
+// `CATEGORIES:security` + `CATEGORIES:auth` would silently decode to
+// just ["security"] -- tags dropped with no error, the kind of loss a
+// user only notices later as a filter returning nothing. So when GetAll
+// finds more than one property, each is parsed and the results are
+// concatenated. Each property's value is still split on comma, which
+// is what keeps a mixed-shape file readable.
+//
+// Order is preserved in both shapes: tlc tags are ordered and callers
+// compare the slice. Duplicates are dropped across the whole set --
+// repeated properties may legitimately repeat a tag -- keeping
+// first-seen order, matching addCategories on the write side so a
+// decode/encode round trip is stable.
+func decodeCategories(todo vstar.Component) []string {
+	props := todo.GetAll("CATEGORIES")
+	if len(props) == 0 {
+		return nil
 	}
-	formats := []string{
-		"20060102T150405Z",
-		"20060102T150405",
-		"20060102",
-		"2006-01-02T15:04:05Z",
-		"2006-01-02T15:04:05",
-		time.RFC3339,
+	if len(props) == 1 {
+		return dedupeTags(helpers.Categories(todo))
 	}
-	for _, f := range formats {
-		if t, err := time.ParseInLocation(f, s, time.UTC); err == nil {
-			return t.UTC(), nil
-		}
+	var out []string
+	for _, p := range props {
+		single := vstar.Component{Props: []vstar.Property{p}}
+		out = append(out, helpers.Categories(single)...)
 	}
-	return time.Time{}, fmt.Errorf("unrecognised iCalendar time %q", s)
+	return dedupeTags(out)
 }
 
-// unescapeText reverses the RFC 5545 §3.3.11 TEXT escapes that the
-// codec applies (\\, \;, \,, \n, \N).
-func unescapeText(s string) string {
-	if !strings.ContainsRune(s, '\\') {
-		return s
+// dedupeTags drops repeats while preserving first-seen order. Compare
+// is case-sensitive, matching addCategories -- CATEGORIES are
+// user-facing labels, so "Work" and "work" are distinct tags.
+func dedupeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
 	}
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\\' && i+1 < len(s) {
-			next := s[i+1]
-			switch next {
-			case 'n', 'N':
-				b.WriteByte('\n')
-				i++
-				continue
-			case ',', ';', '\\':
-				b.WriteByte(next)
-				i++
-				continue
-			}
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if _, dup := seen[tag]; dup {
+			continue
 		}
-		b.WriteByte(c)
+		seen[tag] = struct{}{}
+		out = append(out, tag)
 	}
-	return b.String()
+	return out
 }

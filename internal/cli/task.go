@@ -291,8 +291,7 @@ func pushSyncedTask(ctx context.Context, task *core.Task, s core.Repository) err
 		return err
 	}
 
-	now := time.Now().UTC()
-	task.LastSyncAt = &now
+	markSynced(task, time.Now().UTC())
 	if err := s.UpdateTask(ctx, task); err != nil {
 		return fmt.Errorf("failed to update task after sync: %w", err)
 	}

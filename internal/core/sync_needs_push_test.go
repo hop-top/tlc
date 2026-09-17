@@ -145,3 +145,84 @@ func TestTask_NeedsPush_EdgeCases(t *testing.T) {
 		assert.False(t, task.NeedsPush(), "should not need push when updated before last sync")
 	})
 }
+
+// The cases above pin the timestamp FALLBACK: none of them records a
+// last-sync hash, so they hold with or without a content hasher. The
+// cases below pin the seam itself with a stub hasher; the real,
+// exporter-backed hasher is exercised in internal/sync.
+
+func withStubHasher(t *testing.T, fn func(*Task) (string, error)) {
+	t.Helper()
+	RegisterContentHasher(fn)
+	t.Cleanup(func() { RegisterContentHasher(nil) })
+}
+
+func TestTask_NeedsPush_HashOutranksTimestamps(t *testing.T) {
+	origin := testOriginGitHub
+	now := time.Now().UTC()
+	withStubHasher(t, func(task *Task) (string, error) { return "sha256:" + task.Title, nil })
+
+	synced := func(title, recorded string, updatedAt time.Time) *Task {
+		return &Task{
+			Title:        title,
+			OriginSystem: &origin,
+			UpdatedAt:    updatedAt,
+			LastSyncAt:   &now,
+			Meta:         map[string]interface{}{MetaLastSyncHash: recorded},
+		}
+	}
+
+	t.Run("Touched after sync, content unchanged", func(t *testing.T) {
+		task := synced("same", "sha256:same", now.Add(time.Hour))
+		assert.False(t, task.NeedsPush(), "hash equal: a later UpdatedAt is not a change")
+	})
+
+	t.Run("Content changed, UpdatedAt before sync", func(t *testing.T) {
+		task := synced("edited", "sha256:same", now.Add(-time.Hour))
+		assert.True(t, task.NeedsPush(), "hash differs: an earlier UpdatedAt does not hide it")
+	})
+
+	t.Run("No hash recorded falls back to timestamps", func(t *testing.T) {
+		task := synced("edited", "", now.Add(-time.Hour))
+		assert.False(t, task.NeedsPush())
+		task.UpdatedAt = now.Add(time.Hour)
+		assert.True(t, task.NeedsPush())
+	})
+
+	t.Run("Hasher failure falls back to timestamps", func(t *testing.T) {
+		withStubHasher(t, func(*Task) (string, error) { return "", assert.AnError })
+		task := synced("edited", "sha256:same", now.Add(-time.Hour))
+		assert.False(t, task.NeedsPush())
+		task.UpdatedAt = now.Add(time.Hour)
+		assert.True(t, task.NeedsPush())
+	})
+
+	t.Run("No origin system still wins", func(t *testing.T) {
+		task := synced("edited", "sha256:same", now.Add(time.Hour))
+		task.OriginSystem = nil
+		assert.False(t, task.NeedsPush())
+	})
+}
+
+func TestTask_LastSyncHash(t *testing.T) {
+	var nilTask *Task
+	_, ok := nilTask.LastSyncHash()
+	assert.False(t, ok)
+
+	task := &Task{}
+	_, ok = task.LastSyncHash()
+	assert.False(t, ok, "no Meta")
+
+	task.Meta = map[string]interface{}{MetaLastSyncHash: 42}
+	_, ok = task.LastSyncHash()
+	assert.False(t, ok, "non-string value is not a hash")
+
+	task.Meta[MetaLastSyncHash] = ""
+	_, ok = task.LastSyncHash()
+	assert.False(t, ok, "empty string is not a hash")
+
+	task.Meta[MetaLastSyncHash] = "sha256:abc"
+	h, ok := task.LastSyncHash()
+	assert.True(t, ok)
+	assert.Equal(t, "sha256:abc", h)
+}

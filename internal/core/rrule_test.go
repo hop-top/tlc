@@ -1,11 +1,14 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hop.top/tlc/internal/core"
+	"hop.top/vstar/rrule"
 )
 
 func TestValidateRRule(t *testing.T) {
@@ -25,9 +28,16 @@ func TestValidateRRule(t *testing.T) {
 		assert.NoError(t,
 			core.ValidateRRule("FREQ=MONTHLY;UNTIL=20260601T000000Z"))
 	})
-	t.Run("yearly is unsupported", func(t *testing.T) {
-		err := core.ValidateRRule("FREQ=YEARLY")
-		assert.Error(t, err)
+	t.Run("yearly ok", func(t *testing.T) {
+		assert.NoError(t, core.ValidateRRule("FREQ=YEARLY"))
+	})
+	t.Run("secondly is unsupported", func(t *testing.T) {
+		err := core.ValidateRRule("FREQ=SECONDLY")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, rrule.ErrUnsupportedRRule), "got %v", err)
+	})
+	t.Run("minutely ok", func(t *testing.T) {
+		assert.NoError(t, core.ValidateRRule("FREQ=MINUTELY;INTERVAL=5"))
 	})
 	t.Run("garbage is invalid", func(t *testing.T) {
 		err := core.ValidateRRule("not-an-rrule")
@@ -234,7 +244,29 @@ func TestNextFireFromRRule_Garbage(t *testing.T) {
 
 func TestNextFireFromRRule_UnsupportedFreq(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	_, ok, err := core.NextFireFromRRule("FREQ=YEARLY", now, now)
-	assert.Error(t, err)
+	_, ok, err := core.NextFireFromRRule("FREQ=SECONDLY", now, now)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, rrule.ErrUnsupportedRRule), "got %v", err)
+	assert.False(t, ok)
+}
+
+func TestNextFireFromRRule_Yearly(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	next, ok, err := core.NextFireFromRRule("FREQ=YEARLY", now, now)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, now.AddDate(1, 0, 0), next)
+}
+
+// TestNextFireFromRRule_IterationCap pins that a rule which never
+// fires reaches the caller as rrule.ErrIterationCap, distinguishable
+// from the (zero, false, nil) shape that means "series ended".
+func TestNextFireFromRRule_IterationCap(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	_, ok, err := core.NextFireFromRRule(
+		"FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30", now, now,
+	)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, rrule.ErrIterationCap), "got %v", err)
 	assert.False(t, ok)
 }

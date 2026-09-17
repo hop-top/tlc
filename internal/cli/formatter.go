@@ -438,7 +438,24 @@ func effectiveTaskColumns(cmd *cobra.Command, statusProvided, showProject bool) 
 		})
 }
 
-// writeVtodo serialises the supplied tasks/tracks (and optionally logs)
+// vtodoConfigOptions resolves the `output.vtodo.*` config keys into
+// vtodo Options. Both keys are seeded with the vtodo package defaults
+// in setDefaults, and the Option constructors ignore empty strings, so
+// an unset or blank key leaves the package default in force.
+//
+// uid_domain is not cosmetic on the decode side: it is the domain tlc
+// recognizes as its own, so a calendar exported under one domain and
+// reimported under another reads as foreign. The CLI only encodes today
+// (the plugin owns the decode path), but any decode added here must
+// resolve the domain through this same helper.
+func vtodoConfigOptions() []vtodo.Option {
+	return []vtodo.Option{
+		vtodo.WithProductID(viper.GetString("output.vtodo.product_id")),
+		vtodo.WithUIDDomain(viper.GetString("output.vtodo.uid_domain")),
+	}
+}
+
+// writeVtodo serializes the supplied tasks/tracks (and optionally logs)
 // into a VCALENDAR and writes the .ics output. When outputPath is empty
 // the calendar is written to cmd.OutOrStdout(); otherwise it is written
 // to that file path. Returns non-nil on encode/write failure so callers
@@ -455,9 +472,12 @@ func writeVtodo(
 	if includeLogs {
 		logs = collectVtodoLogs(tasks)
 	}
-	opts := []vtodo.Option{}
+	opts := vtodoConfigOptions()
 	if includeLogs {
 		opts = append(opts, vtodo.WithIncludeLogs(true))
+	}
+	if runs := collectVtodoRuns(tasks); len(runs) > 0 {
+		opts = append(opts, vtodo.WithRecipeRuns(runs))
 	}
 	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
 	if err != nil {
@@ -500,6 +520,41 @@ func collectVtodoLogs(tasks []*core.Task) []*core.LogEntry {
 			continue
 		}
 		out = append(out, entries...)
+	}
+	return out
+}
+
+// collectVtodoRuns fetches the recipe run behind every exported task
+// that was materialized by one (Task.RunID), each once, so the export
+// carries the playthrough VEVENT the task's X-TLC-RUN edge points at.
+// Best-effort like collectVtodoLogs: no storage or a missing run row
+// drops the run, never the export.
+func collectVtodoRuns(tasks []*core.Task) []*core.RecipeRun {
+	seen := make(map[string]bool)
+	var ids []string
+	for _, t := range tasks {
+		if t == nil || t.RunID == "" || seen[t.RunID] {
+			continue
+		}
+		seen[t.RunID] = true
+		ids = append(ids, t.RunID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	s, err := getStorageRaw()
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = s.Close() }()
+	ctx := context.Background()
+	var out []*core.RecipeRun
+	for _, id := range ids {
+		run, gErr := s.GetRecipeRun(ctx, id)
+		if gErr != nil || run == nil {
+			continue
+		}
+		out = append(out, run)
 	}
 	return out
 }
@@ -580,7 +635,7 @@ func formatTLS(t *core.Task) string {
 				parts = append(parts, "eva="+strings.Join(eva, ","))
 			}
 		case "prio":
-			// Skip: priority is now a first-class field serialised above.
+			// Skip: priority is now a first-class field serialized above.
 		case "domain":
 			parts = append(parts, "domain:"+fmt.Sprintf("%v", v))
 		case "due":

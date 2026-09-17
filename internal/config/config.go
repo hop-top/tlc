@@ -373,10 +373,24 @@ func InferAdapterFromURI(uri string) string {
 // consumer, and no code path reads a `output.quiet` config key. A field
 // here would advertise a setting that does nothing.
 type OutputConfig struct {
-	Format  string `yaml:"format"`
-	Color   bool   `yaml:"color"`
-	Verbose bool   `yaml:"verbose"`
-	LogFile string `yaml:"log_file"`
+	Format  string      `yaml:"format"`
+	Color   bool        `yaml:"color"`
+	Verbose bool        `yaml:"verbose"`
+	LogFile string      `yaml:"log_file"`
+	Vtodo   VtodoConfig `yaml:"vtodo"`
+}
+
+// VtodoConfig holds the iCalendar identity knobs applied to every
+// `--format vtodo` export and to vtodo decoding.
+//
+// ProductID lands in the VCALENDAR PRODID property. UIDDomain is the
+// "@domain" suffix appended to a TypeID in a component UID, and on the
+// decode side the domain tlc recognizes as its own when deciding
+// whether an incoming UID carries a tlc identity or a foreign one.
+// Empty means "use the vtodo package default".
+type VtodoConfig struct {
+	ProductID string `yaml:"product_id"`
+	UIDDomain string `yaml:"uid_domain"`
 }
 
 // Validate validates the output configuration.

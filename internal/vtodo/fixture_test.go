@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -117,7 +118,13 @@ func TestFixture_WithLogs(t *testing.T) {
 // is stable: re-encoding the parsed result of a fixture must reproduce
 // byte-for-byte the original fixture content. This is the primary
 // guarantee of the package.
+//
+// DTSTAMP is the entity's own last-modified instant, so it round-trips
+// from the decoded entity like every other property; the export clock
+// is pinned only so a timestamp-less entity could never make the
+// comparison non-deterministic.
 func TestFixture_RoundTripStability(t *testing.T) {
+	fixtureStamp := time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC)
 	for _, name := range []string{
 		"single-task.ics",
 		"recurring-rrule.ics",
@@ -127,14 +134,13 @@ func TestFixture_RoundTripStability(t *testing.T) {
 			res, err := vtodo.ParseVCalendar(strings.NewReader(string(data)))
 			require.NoError(t, err)
 
-			cal, err := vtodo.BuildVCalendar(res.Tasks, res.Tracks, res.Logs)
+			cal, err := vtodo.BuildVCalendar(
+				res.Tasks, res.Tracks, res.Logs,
+				vtodo.WithExportTime(fixtureStamp),
+			)
 			require.NoError(t, err)
 			got := mustSerialize(t, cal)
-			require.Equal(t, normaliseEOL(string(data)), normaliseEOL(got))
+			require.Equal(t, string(data), got)
 		})
 	}
-}
-
-func normaliseEOL(s string) string {
-	return strings.ReplaceAll(s, "\r\n", "\n")
 }

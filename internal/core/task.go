@@ -69,6 +69,50 @@ func (t *Task) Transition(next TaskStatus, by string, note string) (*LogEntry, e
 	return t.TransitionWithWorkflow(next, by, note, DefaultWorkflow(), false)
 }
 
+// MetaLastSyncHash is the task-meta key holding the sync content hash
+// recorded by the last successful sync (internal/sync.MarkSynced writes
+// it). NeedsPush compares the task's current content hash against it;
+// the UpdatedAt-vs-LastSyncAt timestamp rule applies only while no hash
+// has been recorded. Meta rather than a column for the same reason as
+// MetaPrioritySource: it already round-trips through storage.
+const MetaLastSyncHash = "last_sync_hash"
+
+// contentHasher computes a task's sync content hash. internal/sync owns
+// the exporter-backed implementation and registers it at init; core
+// cannot import it without a cycle. nil until registered, in which case
+// NeedsPush falls back to the timestamp rule.
+var contentHasher func(*Task) (string, error)
+
+// RegisterContentHasher installs the function NeedsPush hashes a task's
+// content with. Called once, at init, by internal/sync.
+func RegisterContentHasher(fn func(*Task) (string, error)) {
+	contentHasher = fn
+}
+
+// LastSyncHash returns the content hash recorded at the last sync, or
+// ok=false when none was recorded: never synced, or synced before hashes
+// were kept.
+func (t *Task) LastSyncHash() (string, bool) {
+	if t == nil || t.Meta == nil {
+		return "", false
+	}
+	h, ok := t.Meta[MetaLastSyncHash].(string)
+	return h, ok && h != ""
+}
+
+// NeedsPush reports whether the task carries local changes its origin
+// system has not seen.
+//
+// With a hash recorded at the last sync the answer is content-based: the
+// task needs a push iff its current content hash differs from the
+// recorded one, whatever UpdatedAt says. A save that bumps UpdatedAt
+// without changing exported content (a stale-timeout firing, an executor
+// claim) is therefore not a pending push.
+//
+// Fallback, applied only when no hash was recorded (first sync, or a
+// task last synced before hashes were kept), no hasher is registered, or
+// the hasher fails: the task needs a push iff UpdatedAt is more than one
+// millisecond after LastSyncAt, the rule this method always applied.
 func (t *Task) NeedsPush() bool {
 	if t.OriginSystem == nil || *t.OriginSystem == "" {
 		return false
@@ -76,7 +120,11 @@ func (t *Task) NeedsPush() bool {
 	if t.LastSyncAt == nil {
 		return true
 	}
-	// Use a small buffer to avoid jitter issues with time precision
+	if recorded, ok := t.LastSyncHash(); ok && contentHasher != nil {
+		if current, err := contentHasher(t); err == nil {
+			return current != recorded
+		}
+	}
 	return t.UpdatedAt.After(t.LastSyncAt.Add(time.Millisecond))
 }
 

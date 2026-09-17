@@ -653,8 +653,11 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 }
 
 func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, error) {
-	// A task needs push if it has an origin system AND (it has never been synced OR updated_at > last_sync_at)
-	// AND it is NOT archived.
+	// The SQL clause is the cheap superset: an origin system, not
+	// archived, and never synced or saved since. Every content change
+	// bumps updated_at, so nothing that needs a push is filtered out
+	// here; Task.NeedsPush then decides by content hash, dropping the
+	// saves that moved updated_at without moving anything a remote sees.
 	sqlQuery := "SELECT " + taskColumns + ` FROM tasks
 		WHERE origin_system IS NOT NULL AND origin_system != ''
 		AND (last_sync_at IS NULL OR updated_at > last_sync_at)
@@ -670,6 +673,9 @@ func (s *SQLiteStorage) GetTasksNeedingPush(ctx context.Context) ([]*core.Task, 
 		task, err := scanTask(rows)
 		if err != nil {
 			return nil, err
+		}
+		if !task.NeedsPush() {
+			continue
 		}
 		tasks = append(tasks, task)
 	}
