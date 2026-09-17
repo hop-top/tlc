@@ -225,7 +225,7 @@ func buildAutoRemindComponent(parentUID, summary string, stamp time.Time) (vstar
 func finishAlarm(c *vstar.Component, summary string, stamp time.Time) {
 	setDTSTAMP(c, stamp)
 	if summary != "" {
-		c.Add(vstar.Property{Name: "DESCRIPTION", Value: summary})
+		c.Add(vstar.Property{Name: propDescription, Value: summary})
 	}
 	finalize(c)
 }

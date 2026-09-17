@@ -74,6 +74,17 @@ const (
 	// escapes every comma in a TEXT value, so a token appended there
 	// would be glued to the user's labels.
 	XPropConcept = "X-TLC-CONCEPT"
+
+	// Standard RFC 5545 property names this package reads and writes by
+	// hand on more than one component kind; the rest go through vstar's
+	// typed accessors or appear once.
+	propSummary     = "SUMMARY"
+	propDescription = "DESCRIPTION"
+	propCreated     = "CREATED"
+
+	// xPropTrue is the value tlc writes for its boolean X-properties
+	// (XPropTrackKind, XPropArchived). isTrueValue accepts more on read.
+	xPropTrue = "TRUE"
 )
 
 // icsPriorityMin and icsPriorityMax bound the DEFINED half of the
@@ -509,10 +520,10 @@ func buildTaskComponent(
 	c.Add(vstar.Property{Name: XPropConcept, Value: taskConcept(t)})
 
 	if t.Title != "" {
-		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
+		c.Add(vstar.Property{Name: propSummary, Value: t.Title})
 	}
 	if t.Description != "" {
-		c.Add(vstar.Property{Name: "DESCRIPTION", Value: t.Description})
+		c.Add(vstar.Property{Name: propDescription, Value: t.Description})
 	}
 	if statusRole(t.Status, statusDefs) == config.RoleCompleted {
 		// Complete writes STATUS, COMPLETED and PERCENT-COMPLETE=100 as
@@ -545,7 +556,7 @@ func buildTaskComponent(
 		c.Add(vstar.Property{Name: XPropPriorityRule, Value: v})
 	}
 	if !t.CreatedAt.IsZero() {
-		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(t.CreatedAt)})
+		c.Add(vstar.Property{Name: propCreated, Value: vstar.FormatTime(t.CreatedAt)})
 	}
 	if !t.UpdatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(t.UpdatedAt)})
@@ -580,7 +591,7 @@ func buildTaskComponent(
 		c.Add(vstar.Property{Name: XPropTaskSeq, Value: fmt.Sprintf("%d", t.Seq)})
 	}
 	if t.Archived {
-		c.Add(vstar.Property{Name: XPropArchived, Value: "TRUE"})
+		c.Add(vstar.Property{Name: XPropArchived, Value: xPropTrue})
 	}
 	if t.RunID != "" {
 		// The assignment → playthrough edge; see XPropRun for why it is
@@ -607,7 +618,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	c.Add(vstar.Property{Name: XPropConcept, Value: ConceptMission})
 
 	if tr.Title != "" {
-		c.Add(vstar.Property{Name: "SUMMARY", Value: tr.Title})
+		c.Add(vstar.Property{Name: propSummary, Value: tr.Title})
 	}
 	// STATUS stays for interop, but the track vocabulary does not fit in
 	// it: completed and archived both read as COMPLETED. XPropTrackStatus
@@ -635,7 +646,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 
 	if !tr.CreatedAt.IsZero() {
-		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(tr.CreatedAt)})
+		c.Add(vstar.Property{Name: propCreated, Value: vstar.FormatTime(tr.CreatedAt)})
 	}
 	if !tr.UpdatedAt.IsZero() {
 		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(tr.UpdatedAt)})
@@ -651,7 +662,7 @@ func buildTrackComponent(tr *core.Track, members []*core.Task, domain string, ex
 	}
 	// Marker so decode can distinguish a track-VTODO from a task-VTODO
 	// when the UID is foreign (rare but real for cross-system sync).
-	c.Add(vstar.Property{Name: XPropTrackKind, Value: "TRUE"})
+	c.Add(vstar.Property{Name: XPropTrackKind, Value: xPropTrue})
 	if tr.AssignedTo != nil && *tr.AssignedTo != "" {
 		c.Add(vstar.Property{Name: XPropAssignee, Value: *tr.AssignedTo})
 	}
@@ -729,13 +740,13 @@ func buildLogComponent(
 	c.Add(vstar.Property{Name: XPropConcept, Value: concept})
 
 	if le.Note != "" {
-		c.Add(vstar.Property{Name: "SUMMARY", Value: firstLine(le.Note)})
-		c.Add(vstar.Property{Name: "DESCRIPTION", Value: le.Note})
+		c.Add(vstar.Property{Name: propSummary, Value: firstLine(le.Note)})
+		c.Add(vstar.Property{Name: propDescription, Value: le.Note})
 	} else if le.Action != "" {
-		c.Add(vstar.Property{Name: "SUMMARY", Value: le.Action})
+		c.Add(vstar.Property{Name: propSummary, Value: le.Action})
 	}
 	if !le.Timestamp.IsZero() {
-		c.Add(vstar.Property{Name: "CREATED", Value: vstar.FormatTime(le.Timestamp)})
+		c.Add(vstar.Property{Name: propCreated, Value: vstar.FormatTime(le.Timestamp)})
 	}
 	if le.TaskID != "" {
 		// Supersedes already wrote the edge for a ledger entry; the

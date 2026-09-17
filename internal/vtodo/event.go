@@ -130,7 +130,7 @@ func buildTurnComponent(t *core.Task, w claimWindow, domain string, exportAt tim
 	setDTSTAMP(&c, dtstampFor(exportAt, w.end, w.start))
 	c.Add(vstar.Property{Name: XPropConcept, Value: ConceptTurn})
 	if t.Title != "" {
-		c.Add(vstar.Property{Name: "SUMMARY", Value: t.Title})
+		c.Add(vstar.Property{Name: propSummary, Value: t.Title})
 	}
 	addParentRelation(&c, uidFor(t.ID, domain))
 	addAssignee(&c, w.by)
@@ -169,7 +169,7 @@ func buildPlaythroughComponent(run *core.RecipeRun, domain string, exportAt time
 	setDTSTAMP(&c, start)
 	c.Add(vstar.Property{Name: XPropConcept, Value: ConceptPlaythrough})
 	if run.RecipeID != "" {
-		c.Add(vstar.Property{Name: "SUMMARY", Value: run.RecipeID})
+		c.Add(vstar.Property{Name: propSummary, Value: run.RecipeID})
 		c.Add(vstar.Property{Name: XPropRecipeID, Value: run.RecipeID})
 	}
 	if run.Version != "" {

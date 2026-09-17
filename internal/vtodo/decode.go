@@ -258,7 +258,7 @@ func isTrackComponent(todo vstar.Component, domain string) bool {
 	if declaredConcept(todo) == ConceptAssignment {
 		return false
 	}
-	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, "TRUE") {
+	if p, ok := todo.Get(XPropTrackKind); ok && strings.EqualFold(p.Value, xPropTrue) {
 		return true
 	}
 	// Fall-back: if UID body looks like a track typeid, treat as track.
@@ -291,10 +291,10 @@ func decodeTask(
 		}
 	}
 
-	if p, ok := todo.Get("SUMMARY"); ok {
+	if p, ok := todo.Get(propSummary); ok {
 		t.Title = p.Value
 	}
-	if p, ok := todo.Get("DESCRIPTION"); ok {
+	if p, ok := todo.Get(propDescription); ok {
 		t.Description = p.Value
 	}
 	t.Status = decodeTaskStatus(todo, ledger, statusDefs)
@@ -310,7 +310,7 @@ func decodeTask(
 		}
 	}
 	t.Tags = decodeCategories(todo)
-	if ts, ok := propTime(todo, "CREATED"); ok {
+	if ts, ok := propTime(todo, propCreated); ok {
 		t.CreatedAt = ts
 	}
 	if ts, ok := propTime(todo, "LAST-MODIFIED"); ok {
@@ -409,11 +409,11 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 		}
 	}
 
-	if p, ok := todo.Get("SUMMARY"); ok {
+	if p, ok := todo.Get(propSummary); ok {
 		tr.Title = p.Value
 	}
 	tr.Status = decodeTrackStatus(todo)
-	if ts, ok := propTime(todo, "CREATED"); ok {
+	if ts, ok := propTime(todo, propCreated); ok {
 		tr.CreatedAt = ts
 	}
 	if ts, ok := propTime(todo, "LAST-MODIFIED"); ok {
@@ -490,16 +490,16 @@ func decodeJournal(
 	if p, ok := j.Get(XPropLogBy); ok {
 		le.By = p.Value
 	}
-	if p, ok := j.Get("DESCRIPTION"); ok {
+	if p, ok := j.Get(propDescription); ok {
 		le.Note = p.Value
-	} else if p, ok := j.Get("SUMMARY"); ok {
+	} else if p, ok := j.Get(propSummary); ok {
 		le.Note = p.Value
 	}
 	// CREATED carries the log entry's own instant. tlc writes DTSTAMP
 	// with the same value, but a foreign producer's DTSTAMP is whatever
 	// its clock said, so it is only a fallback for calendars that emit
 	// no CREATED.
-	if ts, ok := propTime(j, "CREATED"); ok {
+	if ts, ok := propTime(j, propCreated); ok {
 		le.Timestamp = ts
 	}
 	if le.Timestamp.IsZero() {
@@ -651,7 +651,7 @@ func decodeTrackStatus(todo vstar.Component) core.TrackStatus {
 // are a real input.
 func isTrueValue(s string) bool {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case "TRUE", "YES", "1":
+	case xPropTrue, "YES", "1":
 		return true
 	}
 	return false
