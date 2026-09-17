@@ -194,16 +194,18 @@ func TestSupersession_LatestWinsOnOwnLedger(t *testing.T) {
 // never mutated (STATUS still NEEDS-ACTION, no X-TLC-STATUS) and two
 // supersession journals out of order, the later one completing it.
 func foreignLedger(extraTodoLines ...string) string {
-	lines := []string{
+	lines := make([]string, 0, 8+len(extraTodoLines)+17)
+	lines = append(
+		lines,
 		"BEGIN:VCALENDAR",
 		"VERSION:2.0",
 		"PRODID:-//other//ledger//EN",
 		"BEGIN:VTODO",
-		"UID:" + ledgerTaskUID,
+		"UID:"+ledgerTaskUID,
 		"DTSTAMP:20260502T120000Z",
 		"SUMMARY:Foreign task",
 		"STATUS:NEEDS-ACTION",
-	}
+	)
 	lines = append(lines, extraTodoLines...)
 	lines = append(
 		lines,

@@ -27,7 +27,7 @@ func oneTodo(t *testing.T, task *core.Task, opts ...vtodo.Option) (vstar.Calenda
 // alarmTriggers lists the TRIGGER wire lines of every VALARM under c.
 func alarmTriggers(t *testing.T, c vstar.Component) []string {
 	t.Helper()
-	var out []string
+	out := make([]string, 0, len(c.Sub))
 	for _, sub := range c.Sub {
 		require.Equal(t, vstar.CompAlarm, sub.Type)
 		p, ok := sub.Get("TRIGGER")

@@ -444,7 +444,9 @@ func TestCategories_TagContainingComma(t *testing.T) {
 
 // calWith wraps the supplied VTODO body lines in a minimal VCALENDAR.
 func calWith(lines ...string) string {
-	out := []string{
+	out := make([]string, 0, 9+len(lines)+3)
+	out = append(
+		out,
 		"BEGIN:VCALENDAR",
 		"VERSION:2.0",
 		"PRODID:-//tlc//vtodo//EN",
@@ -454,7 +456,7 @@ func calWith(lines ...string) string {
 		"UID:task_01h455vb4pex5vsknk084sn02q@tlc.local",
 		"SUMMARY:x",
 		"STATUS:NEEDS-ACTION",
-	}
+	)
 	out = append(out, lines...)
 	out = append(out, "END:VTODO", "END:VCALENDAR", "")
 	return strings.Join(out, "\r\n")
