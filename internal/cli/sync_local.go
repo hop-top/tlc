@@ -36,6 +36,37 @@ func taskAliasSeq(id string) (int64, bool) {
 	return seq, true
 }
 
+// todoFileIn resolves the configured task.todo_file against configDir.
+//
+// The key holds an ABSOLUTE path on the happy path — root.go seeds the
+// default as UserDataDir()/todo.txt, and a user pointing tlc at a shared
+// store writes an absolute one by hand — so the join has to be
+// conditional. filepath.Join(dir, "/abs/todo.txt") does not return
+// "/abs/todo.txt": Join cleans the leading separator away and nests,
+// yielding dir+"/abs/todo.txt". Done unconditionally on the local
+// projection path, that mirrored the absolute path's entire directory
+// chain inside the project config directory on every task write, and
+// never wrote the file the user had named.
+//
+// The stray tree was not merely litter. A mirror rooted at the hop
+// config directory manufactured a .hop/tlc/ that held no config.yaml,
+// and the config-presence predicate then read that directory as "a hop
+// config exists here" and failed every command as ambiguous.
+//
+// Relative values keep resolving against configDir, which is the
+// documented project-local form: `todo_file: todo.txt` means the file
+// beside the config that named it.
+func todoFileIn(configDir string) string {
+	name := viper.GetString("task.todo_file")
+	if name == "" {
+		name = "todo.txt"
+	}
+	if filepath.IsAbs(name) {
+		return filepath.Clean(name)
+	}
+	return filepath.Join(configDir, name)
+}
+
 // writeProjection syncs tasks to both global and project-specific todo.txt files.
 func writeProjection() error {
 	if err := writeProjectionGlobal(); err != nil {
@@ -104,11 +135,7 @@ func writeProjectionLocal() error {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	todoName := viper.GetString("task.todo_file")
-	if todoName == "" {
-		todoName = "todo.txt"
-	}
-	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), todoName)
+	todoFile := todoFileIn(filepath.Dir(proj.ConfigPath))
 	if err := os.MkdirAll(filepath.Dir(todoFile), 0o750); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}

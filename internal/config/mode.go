@@ -225,14 +225,26 @@ func CheckConfigConflict(dir string) error {
 	}
 }
 
-// localConfigPath returns the config file for mode at dir: the directory
-// form when it holds a config.yaml, else the flat file. A bare config
-// directory without config.yaml counts as present (it still anchors
-// tracks, tasks and the DB) but contributes no identity.
+// localConfigPath returns the config FILE for mode at dir: the directory
+// form's config.yaml when that file exists, else the flat file.
+//
+// Presence is the existence of the file, never of the directory holding
+// it. A bare .tlc/ or .hop/tlc/ directory used to count as present and
+// report the config.yaml it does not contain as the path it had found.
+// The two halves compounded: CheckConfigConflict read the missing file,
+// got the empty identity, compared it against the real config's
+// identity, found them unequal and refused every command as ambiguous —
+// naming a file that is not on disk. A bare hop config directory is
+// ordinary (anything that mkdir -p's a path beneath it makes one), so
+// that turned a stray directory into a total outage.
+//
+// Falling through to the flat file rather than returning early on a bare
+// directory is the other half of the same rule: an empty .hop/tlc/ must
+// not shadow a real .hop/tlc.yaml beside it.
 func localConfigPath(dir string, mode EntryMode) (string, bool) {
-	dirForm := filepath.Join(dir, LocalConfigDir(mode))
-	if isDir(dirForm) {
-		return filepath.Join(dirForm, "config.yaml"), true
+	dirForm := filepath.Join(dir, LocalConfigDir(mode), "config.yaml")
+	if isFile(dirForm) {
+		return dirForm, true
 	}
 	flat := filepath.Join(dir, LocalConfigFile(mode))
 	if isFile(flat) {
