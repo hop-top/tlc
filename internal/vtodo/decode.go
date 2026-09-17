@@ -88,24 +88,14 @@ func ParseVCalendar(r io.Reader, opts ...Option) (*ParseResult, error) {
 	todos := cal.Filter(vstar.CompTodo)
 	for _, todo := range todos {
 		if isTrackComponent(todo, o.uidDomain) {
-			tr, uidBodyVal, perr := decodeTrack(todo, o.uidDomain)
-			if perr != nil {
-				return nil, perr
-			}
+			tr, uidBodyVal := decodeTrack(todo, o.uidDomain)
 			res.Tracks = append(res.Tracks, tr)
-			if uidBodyVal != "" {
-				uidToTrackID[uidBodyVal] = tr.ID
-			}
-		} else {
-			t, uidBodyVal, perr := decodeTask(todo, cal.Components, o.uidDomain, o.priorities, statusDefs)
-			if perr != nil {
-				return nil, perr
-			}
-			res.Tasks = append(res.Tasks, t)
-			if uidBodyVal != "" {
-				uidToTaskID[uidBodyVal] = t.ID
-			}
+			indexUID(uidToTrackID, uidBodyVal, tr.ID)
+			continue
 		}
+		t, uidBodyVal := decodeTask(todo, cal.Components, o.uidDomain, o.priorities, statusDefs)
+		res.Tasks = append(res.Tasks, t)
+		indexUID(uidToTaskID, uidBodyVal, t.ID)
 	}
 
 	// Resolve PARENT links to track IDs and DEPENDS-ON to task IDs.
@@ -274,21 +264,13 @@ func decodeTask(
 	domain string,
 	defs []config.PriorityDefinition,
 	statusDefs []config.StatusDefinition,
-) (*core.Task, string, error) {
+) (*core.Task, string) {
 	t := &core.Task{}
 
-	uid := getUID(todo)
-	body := uidBody(uid, domain)
-	if core.IsTaskID(body) {
-		t.ID = body
-	} else {
-		t.ID = core.NewTaskID()
-		if uid != "" {
-			if t.Meta == nil {
-				t.Meta = map[string]interface{}{}
-			}
-			t.Meta["external_uid"] = uid
-		}
+	id, body, external := decodeIdentity(todo, domain, core.IsTaskID, core.NewTaskID)
+	t.ID = id
+	if external != "" {
+		setMeta(t, "external_uid", external)
 	}
 
 	if p, ok := todo.Get(propSummary); ok {
@@ -298,132 +280,40 @@ func decodeTask(
 		t.Description = p.Value
 	}
 	t.Status = decodeTaskStatus(todo, ledger, statusDefs)
-	t.Priority = priorityFromComponent(todo, defs)
-	if p, ok := todo.Get(XPropPrioritySource); ok {
-		if v := strings.TrimSpace(p.Value); v != "" {
-			setMeta(t, core.MetaPrioritySource, v)
-		}
-	}
-	if p, ok := todo.Get(XPropPriorityRule); ok {
-		if v := strings.TrimSpace(p.Value); v != "" {
-			setMeta(t, core.MetaPriorityRule, v)
-		}
-	}
+	decodeTaskPriority(t, todo, defs)
 	t.Tags = decodeCategories(todo)
-	if ts, ok := propTime(todo, propCreated); ok {
-		t.CreatedAt = ts
-	}
-	if ts, ok := propTime(todo, "LAST-MODIFIED"); ok {
-		t.UpdatedAt = ts
-	}
-	if t.UpdatedAt.IsZero() {
-		// Fallback to DTSTAMP when LAST-MODIFIED is absent.
-		if ts, ok := propTime(todo, "DTSTAMP"); ok {
-			t.UpdatedAt = ts
-		}
-	}
-	if due, dateOnly := decodeDue(todo); due != nil {
-		t.DueAt = due
-		if dateOnly {
-			setMeta(t, MetaDueDateOnly, true)
-		}
-	}
-	if p, ok := todo.Get("RRULE"); ok {
-		if err := core.ValidateRRule(p.Value); err == nil {
-			t.RRule = p.Value
-		}
-	}
+	t.CreatedAt, t.UpdatedAt = entityTimestamps(todo)
+	decodeTaskSchedule(t, todo)
 	if p, ok := todo.Get("URL"); ok {
 		t.Reference = p.Value
 	}
-	if p, ok := todo.Get(XPropEffort); ok {
-		eff := core.Effort(strings.TrimSpace(p.Value))
-		if core.ValidEffort(eff) {
-			t.Effort = eff
-		}
-	}
-	if p, ok := todo.Get(XPropAssignee); ok {
-		val := p.Value
-		t.AssignedTo = &val
-	} else if p, ok := todo.Get("ATTENDEE"); ok {
-		// First ATTENDEE wins for v1. Strip mailto: prefix when present;
-		// URI scheme is case-insensitive (RFC 3986 §3.1) so MAILTO:,
-		// Mailto:, etc. all need to drop.
-		email := p.Value
-		if len(email) >= len("mailto:") && strings.EqualFold(email[:len("mailto:")], "mailto:") {
-			email = email[len("mailto:"):]
-		}
-		if email != "" {
-			t.AssignedTo = &email
-		}
-	}
-	if p, ok := todo.Get(XPropProjectID); ok {
-		val := p.Value
-		t.ProjectID = &val
-	}
-	if p, ok := todo.Get(XPropTaskSeq); ok {
-		if n, err := strconv.ParseInt(strings.TrimSpace(p.Value), 10, 64); err == nil {
-			t.Seq = n
-		}
-	}
-	if p, ok := todo.Get(XPropArchived); ok {
-		t.Archived = isTrueValue(p.Value)
-	}
-	if p, ok := todo.Get(XPropRun); ok {
-		// Only a run TypeID under our domain is ours to reference; a
-		// foreign playthrough UID names a run this store has no row for.
-		if body := uidBody(strings.TrimSpace(p.Value), domain); core.IsRecipeRunID(body) {
-			t.RunID = body
-		}
-	}
+	decodeTaskAssignee(t, todo)
+	decodeTaskTLCFields(t, todo, domain)
 	// After DUE: a relative trigger anchored to END resolves against
 	// it, and the derived auto reminder is told apart by its shape.
 	decodeReminders(t, todo, time.Now())
 
 	// X-TLC-META payload plus any unrecognized X-TLC-* property, so a
-	// foreign producer's extensions survive the import. ext's scope
-	// walk covers only the VTODO's own Props; VALARM and every other
-	// sub-component is folded in explicitly below.
-	t.Meta = applyMeta(t.Meta, todo)
-	for _, sub := range todo.Sub {
-		t.Meta = applyMeta(t.Meta, sub)
-	}
+	// foreign producer's extensions survive the import.
+	t.Meta = applyMetaTree(t.Meta, todo)
 
-	return t, body, nil
+	return t, body
 }
 
-func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, error) {
+func decodeTrack(todo vstar.Component, domain string) (*core.Track, string) {
 	tr := &core.Track{}
 
-	uid := getUID(todo)
-	body := uidBody(uid, domain)
-	if core.IsTrackID(body) {
-		tr.ID = body
-	} else {
-		tr.ID = core.NewTrackID()
-		if uid != "" {
-			if tr.Meta == nil {
-				tr.Meta = map[string]any{}
-			}
-			tr.Meta["external_uid"] = uid
-		}
+	id, body, external := decodeIdentity(todo, domain, core.IsTrackID, core.NewTrackID)
+	tr.ID = id
+	if external != "" {
+		tr.Meta = map[string]any{"external_uid": external}
 	}
 
 	if p, ok := todo.Get(propSummary); ok {
 		tr.Title = p.Value
 	}
 	tr.Status = decodeTrackStatus(todo)
-	if ts, ok := propTime(todo, propCreated); ok {
-		tr.CreatedAt = ts
-	}
-	if ts, ok := propTime(todo, "LAST-MODIFIED"); ok {
-		tr.UpdatedAt = ts
-	}
-	if tr.UpdatedAt.IsZero() {
-		if ts, ok := propTime(todo, "DTSTAMP"); ok {
-			tr.UpdatedAt = ts
-		}
-	}
+	tr.CreatedAt, tr.UpdatedAt = entityTimestamps(todo)
 	if p, ok := todo.Get(XPropTrackSlug); ok {
 		tr.Slug = p.Value
 	}
@@ -435,15 +325,7 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 			tr.Seq = n
 		}
 	}
-	if due, dateOnly := decodeDue(todo); due != nil {
-		tr.DueAt = due
-		if dateOnly {
-			if tr.Meta == nil {
-				tr.Meta = map[string]any{}
-			}
-			tr.Meta[MetaDueDateOnly] = true
-		}
-	}
+	decodeTrackDue(tr, todo)
 	if p, ok := todo.Get(XPropAssignee); ok {
 		val := p.Value
 		tr.AssignedTo = &val
@@ -453,12 +335,9 @@ func decodeTrack(todo vstar.Component, domain string) (*core.Track, string, erro
 		tr.ProjectID = &val
 	}
 
-	tr.Meta = applyMeta(tr.Meta, todo)
-	for _, sub := range todo.Sub {
-		tr.Meta = applyMeta(tr.Meta, sub)
-	}
+	tr.Meta = applyMetaTree(tr.Meta, todo)
 
-	return tr, body, nil
+	return tr, body
 }
 
 func decodeJournal(
@@ -472,21 +351,7 @@ func decodeJournal(
 	if p, ok := j.Get(XPropLogAction); ok {
 		le.Action = p.Value
 	}
-	// X-VSTAR-* properties are not tlc's to adopt (see applyMeta), with
-	// one exception: the effective status of a supersession journal is
-	// the ledger's fact about the task, and dropping it would re-export
-	// a foreign ledger entry as a plain journal. It is kept only when
-	// the entry's own action cannot reproduce it, so tlc's own output
-	// decodes to the Meta it was exported from.
-	if eff, ok := supersessionStatus(j); ok {
-		if !isStatusTransition(le.Action, statusDefs) ||
-			!strings.EqualFold(eff, derivedEffectiveStatus(le.Action, statusDefs)) {
-			if le.Meta == nil {
-				le.Meta = map[string]interface{}{}
-			}
-			le.Meta[MetaEffectiveStatusKey] = eff
-		}
-	}
+	decodeJournalStatus(le, j, statusDefs)
 	if p, ok := j.Get(XPropLogBy); ok {
 		le.By = p.Value
 	}
@@ -495,18 +360,7 @@ func decodeJournal(
 	} else if p, ok := j.Get(propSummary); ok {
 		le.Note = p.Value
 	}
-	// CREATED carries the log entry's own instant. tlc writes DTSTAMP
-	// with the same value, but a foreign producer's DTSTAMP is whatever
-	// its clock said, so it is only a fallback for calendars that emit
-	// no CREATED.
-	if ts, ok := propTime(j, propCreated); ok {
-		le.Timestamp = ts
-	}
-	if le.Timestamp.IsZero() {
-		if ts, ok := propTime(j, "DTSTAMP"); ok {
-			le.Timestamp = ts
-		}
-	}
+	le.Timestamp = journalTimestamp(j)
 
 	// Prefer X-TLC-LOG-TASK if present (preserves the raw typeid even
 	// when the calendar didn't include a matching VTODO).
@@ -514,26 +368,13 @@ func decodeJournal(
 		le.TaskID = p.Value
 	}
 	if le.TaskID == "" {
-		for _, rel := range j.GetAll("RELATED-TO") {
-			body := uidBody(rel.Value, domain)
-			if id, ok := uidToTaskID[body]; ok {
-				le.TaskID = id
-				break
-			}
-			if core.IsTaskID(body) {
-				le.TaskID = body
-				break
-			}
-		}
+		le.TaskID = journalTaskFromRelations(j, uidToTaskID, domain)
 	}
 
 	// VJOURNAL is a top-level component, so ext's non-recursive walk
 	// needs to be invoked on it directly rather than inherited from the
 	// VTODO pass above.
-	le.Meta = applyMeta(le.Meta, j)
-	for _, sub := range j.Sub {
-		le.Meta = applyMeta(le.Meta, sub)
-	}
+	le.Meta = applyMetaTree(le.Meta, j)
 
 	return le
 }

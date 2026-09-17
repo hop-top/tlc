@@ -525,42 +525,9 @@ func buildTaskComponent(
 	if t.Description != "" {
 		c.Add(vstar.Property{Name: propDescription, Value: t.Description})
 	}
-	if statusRole(t.Status, statusDefs) == config.RoleCompleted {
-		// Complete writes STATUS, COMPLETED and PERCENT-COMPLETE=100 as
-		// one unit, so a foreign reader sees a consistent "done" triple
-		// rather than a bare STATUS. COMPLETED is the instant of the last
-		// completing transition when the log has one, else the last
-		// modification, the closest fact the model holds.
-		if doneAt.IsZero() {
-			doneAt = t.UpdatedAt
-		}
-		helpers.Complete(&c, doneAt)
-	} else {
-		c.Add(vstar.Property{Name: "STATUS", Value: statusToWire(t.Status, statusDefs)})
-	}
-	if t.Status != "" {
-		c.Add(vstar.Property{Name: XPropStatus, Value: string(t.Status)})
-	}
-	if p := priorityToICS(t.Priority, defs); p != 0 {
-		c.Add(vstar.Property{Name: "PRIORITY", Value: fmt.Sprintf("%d", p)})
-	}
-	if t.Priority != "" {
-		// Name alongside the number: the number is a lossy projection
-		// onto nine slots, the name is the fact.
-		c.Add(vstar.Property{Name: XPropPriority, Value: string(t.Priority)})
-	}
-	if v := metaString(t.Meta, core.MetaPrioritySource); v != "" {
-		c.Add(vstar.Property{Name: XPropPrioritySource, Value: v})
-	}
-	if v := metaString(t.Meta, core.MetaPriorityRule); v != "" {
-		c.Add(vstar.Property{Name: XPropPriorityRule, Value: v})
-	}
-	if !t.CreatedAt.IsZero() {
-		c.Add(vstar.Property{Name: propCreated, Value: vstar.FormatTime(t.CreatedAt)})
-	}
-	if !t.UpdatedAt.IsZero() {
-		c.Add(vstar.Property{Name: "LAST-MODIFIED", Value: vstar.FormatTime(t.UpdatedAt)})
-	}
+	addTaskStatus(&c, t, statusDefs, doneAt)
+	addTaskPriority(&c, t, defs)
+	addTaskDates(&c, t)
 	if t.RRule != "" {
 		c.Add(vstar.Property{Name: "RRULE", Value: t.RRule})
 	}
@@ -572,32 +539,8 @@ func buildTaskComponent(
 	if err := addReminderAlarms(&c, t, stamp); err != nil {
 		return vstar.Component{}, err
 	}
-	if t.TrackID != nil && *t.TrackID != "" {
-		addParentRelation(&c, uidFor(*t.TrackID, domain))
-	}
-	for _, blocker := range blockedByList(t.Meta) {
-		helpers.AddRelatedTo(&c, uidFor(blocker, domain), vstar.RelDependsOn)
-	}
-	if t.Effort != "" {
-		c.Add(vstar.Property{Name: XPropEffort, Value: string(t.Effort)})
-	}
-	if t.AssignedTo != nil {
-		addAssignee(&c, *t.AssignedTo)
-	}
-	if t.ProjectID != nil && *t.ProjectID != "" {
-		c.Add(vstar.Property{Name: XPropProjectID, Value: *t.ProjectID})
-	}
-	if t.Seq > 0 {
-		c.Add(vstar.Property{Name: XPropTaskSeq, Value: fmt.Sprintf("%d", t.Seq)})
-	}
-	if t.Archived {
-		c.Add(vstar.Property{Name: XPropArchived, Value: xPropTrue})
-	}
-	if t.RunID != "" {
-		// The assignment → playthrough edge; see XPropRun for why it is
-		// not a RELATED-TO.
-		c.Add(vstar.Property{Name: XPropRun, Value: uidFor(t.RunID, domain)})
-	}
+	addTaskRelations(&c, t, domain)
+	addTaskTLCFields(&c, t, domain)
 	addCategories(&c, t.Tags)
 	addMeta(&c, t.Meta)
 	addUnknownTLCProps(&c, t.Meta)

@@ -191,20 +191,7 @@ func unknownTLCExtensions(c vstar.Component) []vstar.Property {
 // before.
 func applyMeta(dst map[string]interface{}, c vstar.Component) map[string]interface{} {
 	if p, ok := c.Get(XPropMeta); ok {
-		var decoded map[string]interface{}
-		if err := json.Unmarshal([]byte(p.Value), &decoded); err == nil {
-			for k, v := range decoded {
-				if derivedMetaKeys[k] {
-					// Never let wire Meta clobber state that decode
-					// rebuilds from UID / RELATED-TO.
-					continue
-				}
-				if dst == nil {
-					dst = map[string]interface{}{}
-				}
-				dst[k] = v
-			}
-		}
+		dst = mergeMetaJSON(dst, p.Value)
 	}
 
 	unknown := unknownTLCExtensions(c)
@@ -224,6 +211,39 @@ func applyMeta(dst map[string]interface{}, c vstar.Component) map[string]interfa
 		bag[strings.ToUpper(p.Name)] = p.Value
 	}
 	dst[MetaXTLCKey] = bag
+	return dst
+}
+
+// mergeMetaJSON copies the entries of an X-TLC-META payload into dst,
+// skipping derived keys so wire Meta never clobbers state decode
+// rebuilds from UID / RELATED-TO. A payload that is not a JSON object
+// contributes nothing. dst is allocated on the first entry kept.
+func mergeMetaJSON(dst map[string]interface{}, raw string) map[string]interface{} {
+	var decoded map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return dst
+	}
+	for k, v := range decoded {
+		if derivedMetaKeys[k] {
+			continue
+		}
+		if dst == nil {
+			dst = map[string]interface{}{}
+		}
+		dst[k] = v
+	}
+	return dst
+}
+
+// applyMetaTree folds the wire Meta of c and of each of its direct
+// sub-components into dst. ext's scope walk covers only a component's
+// own Props, so VALARM and every other sub-component is visited
+// explicitly here.
+func applyMetaTree(dst map[string]interface{}, c vstar.Component) map[string]interface{} {
+	dst = applyMeta(dst, c)
+	for _, sub := range c.Sub {
+		dst = applyMeta(dst, sub)
+	}
 	return dst
 }
 
