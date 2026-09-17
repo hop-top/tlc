@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	kitcli "hop.top/kit/go/console/cli"
 	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/core"
 )
@@ -19,7 +21,11 @@ var trackUpdateCmd = &cobra.Command{
 a plan file.
 
 Status transitions follow the TrackService state machine. --add-plan
-attaches an additional planning document to the track's plan directory.`,
+attaches an additional planning document to the track's plan directory.
+
+--dry-run reports what would change — including the tasks --add-plan
+would create or reconcile — and writes nothing. The preview is refused
+by the same validation and state machine as a real update.`,
 	Annotations: map[string]string{
 		"kit/side-effect": "write-local",
 	},
@@ -135,7 +141,10 @@ attaches an additional planning document to the track's plan directory.`,
 			}
 		}
 
-		err = svc.UpdateTrack(ctx, id, func(t *core.Track) error {
+		// Named once and shared by the write path and the dry-run
+		// preview below, so the preview cannot describe a different
+		// mutation from the one a real run would apply.
+		applyUpdates := func(t *core.Track) error {
 			if titleChanged {
 				t.Title = trimMatchingQuotes(trackUpdateTitle)
 			}
@@ -166,8 +175,26 @@ attaches an additional planning document to the track's plan directory.`,
 				}
 			}
 			return nil
-		})
-		if err != nil {
+		}
+
+		// Everything that can refuse this update up front has now run:
+		// the flag set, the track type, the plan's frontmatter and its
+		// track references, and --due. The state machine is checked
+		// inside the preview, against the same mutation, so a dry run
+		// is refused by exactly what would refuse the real one.
+		//
+		// The preview must also cover the plan branch below: --add-plan
+		// creates or reconciles tasks, which is a far larger write than
+		// the track row itself.
+		if kitcli.IsDryRun(cmd) {
+			return trackUpdateDryRun(ctx, w, svc, id, applyUpdates, planTaskSpecs{
+				addPlan: addPlanChanged && trackUpdateAddPlan != "",
+				path:    trackUpdateAddPlan,
+				fm:      planFm,
+			})
+		}
+
+		if err := svc.UpdateTrack(ctx, id, applyUpdates); err != nil {
 			return err
 		}
 
@@ -175,25 +202,11 @@ attaches an additional planning document to the track's plan directory.`,
 		_, _ = fmt.Fprintf(w, "Updated track %s\n", displayID)
 
 		// Resolve task specs: frontmatter first, then extractor fallback.
-		var taskSpecs []core.PlanTaskSpec
-		if planFm != nil && len(planFm.Tasks) > 0 {
-			taskSpecs = planFm.Tasks
-		} else if addPlanChanged && trackUpdateAddPlan != "" {
-			// Try configured plan extractor.
-			extCmd := viper.GetString("tracks.plan_extractor")
-			if extCmd != "" {
-				extracted, extErr := core.RunPlanExtractor(
-					extCmd, trackUpdateAddPlan,
-				)
-				if extErr != nil {
-					_, _ = fmt.Fprintf(
-						w, "Warning: extractor failed: %v\n", extErr,
-					)
-				} else {
-					taskSpecs = extracted
-				}
-			}
-		}
+		taskSpecs := resolvePlanTaskSpecs(w, planTaskSpecs{
+			addPlan: addPlanChanged && trackUpdateAddPlan != "",
+			path:    trackUpdateAddPlan,
+			fm:      planFm,
+		})
 
 		if len(taskSpecs) > 0 || (addPlanChanged && trackUpdateAddPlan != "") {
 			var projectID string
@@ -339,6 +352,122 @@ attaches an additional planning document to the track's plan directory.`,
 
 		return nil
 	},
+}
+
+// planTaskSpecs names the --add-plan inputs the task-ingest branch
+// works from, so the write path and the dry-run preview resolve specs
+// through one code path instead of two that can drift.
+type planTaskSpecs struct {
+	addPlan bool
+	path    string
+	fm      *core.PlanFrontmatter
+}
+
+// resolvePlanTaskSpecs returns the tasks a plan would contribute:
+// frontmatter when it declares any, otherwise the configured extractor.
+// An extractor failure is reported and treated as "no specs", as the
+// write path has always done.
+func resolvePlanTaskSpecs(w io.Writer, p planTaskSpecs) []core.PlanTaskSpec {
+	if p.fm != nil && len(p.fm.Tasks) > 0 {
+		return p.fm.Tasks
+	}
+	if !p.addPlan {
+		return nil
+	}
+	extCmd := viper.GetString("tracks.plan_extractor")
+	if extCmd == "" {
+		return nil
+	}
+	extracted, extErr := core.RunPlanExtractor(extCmd, p.path)
+	if extErr != nil {
+		_, _ = fmt.Fprintf(w, "Warning: extractor failed: %v\n", extErr)
+		return nil
+	}
+	return extracted
+}
+
+// trackUpdateDryRun previews a `track update` without writing anything:
+// no track row, no plan link, no tasks created or reconciled from the
+// plan.
+//
+// The mutation is applied to a COPY of the stored track so the state
+// machine can be checked against the result the real run would produce.
+// That check is the reason the preview reads the track at all: without
+// it, --dry-run would report a would-update for a transition
+// UpdateTrack refuses, and the flag would become a way around the
+// rules rather than a preview of them.
+func trackUpdateDryRun(
+	ctx context.Context,
+	w io.Writer,
+	svc *core.TrackService,
+	id string,
+	apply func(*core.Track) error,
+	plan planTaskSpecs,
+) error {
+	track, _, progress, err := svc.GetTrackWithState(ctx, id, 0)
+	if err != nil {
+		return err //nolint:wrapcheck // the service names the track it could not read
+	}
+
+	before := track.Status
+	preview := *track
+	if err := apply(&preview); err != nil {
+		return err
+	}
+
+	if preview.Status != before {
+		allTerminal := progress.TotalTasks == progress.CompletedTasks
+		if err := core.ValidateTrackTransition(
+			before, preview.Status, progress.TotalTasks, allTerminal,
+		); err != nil {
+			return err //nolint:wrapcheck // the error names both statuses and the allowed set
+		}
+	}
+
+	displayID := formatTrackAlias(track)
+	_, _ = fmt.Fprintf(w, "Dry run — would update track %s\n", displayID)
+	if preview.Title != track.Title {
+		_, _ = fmt.Fprintf(w, "  Title:  %s\n", preview.Title)
+	}
+	if preview.Status != before {
+		_, _ = fmt.Fprintf(w, "  Status: %s → %s\n", before, preview.Status)
+	}
+	if preview.Type != track.Type {
+		_, _ = fmt.Fprintf(w, "  Type:   %s\n", preview.Type)
+	}
+	if preview.AssignedTo == nil {
+		if track.AssignedTo != nil {
+			_, _ = fmt.Fprint(w, "  Assigned: (cleared)\n")
+		}
+	} else if track.AssignedTo == nil || *preview.AssignedTo != *track.AssignedTo {
+		_, _ = fmt.Fprintf(w, "  Assigned: %s\n", *preview.AssignedTo)
+	}
+
+	if !plan.addPlan {
+		return nil
+	}
+
+	// The plan branch is the larger half of this command's blast
+	// radius: it creates or reconciles one task per spec. Name them
+	// rather than reporting a count, so the preview says what would
+	// land and under which heading.
+	_, _ = fmt.Fprintf(w, "  Plan:   %s\n", plan.path)
+	specs := resolvePlanTaskSpecs(w, plan)
+	if len(specs) == 0 {
+		_, _ = fmt.Fprint(w, "  Would extract no tasks from the plan\n")
+		return nil
+	}
+	verb := "create"
+	if len(track.PlanMapping) > 0 {
+		// A track that already carries a mapping takes the
+		// reconciliation path on a real run, not a first ingest.
+		verb = "reconcile"
+	}
+	_, _ = fmt.Fprintf(w, "  Would %s %d task(s) from the plan:\n", verb, len(specs))
+	for _, spec := range specs {
+		_, _ = fmt.Fprintf(w, "    %s\n", spec.Title)
+	}
+	return nil
 }
 
 // linkPlanToTrack appends planPath to track.Meta["plans"] if not already
