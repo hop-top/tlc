@@ -11,6 +11,7 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
+	kitcli "hop.top/kit/go/console/cli"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
@@ -30,7 +31,9 @@ into --track, into the track of the task named by --for (which is
 bound as subject.* and blocked on the run's leaves), into a track named
 by --for, or trackless. --var binds the recipe's vars, --task keeps a
 subset of the steps, --assign picks assignees for steps that name none.
---dry-run prints what would be created without writing.
+
+--dry-run prints what would be created without writing, for both a
+single task and a recipe run. It is not available with --interactive.
 
 Examples:
   tlc task create "Fix login" --track auth
@@ -55,6 +58,15 @@ Examples:
 			if !interactiveAvailable(cmd) {
 				return fmt.Errorf(
 					"interactive task creation requires a terminal; " +
+						"pass a title and flags instead",
+				)
+			}
+			// The form collects the fields and then stores them, so a
+			// dry run here would prompt for a whole task only to throw
+			// it away. Refuse instead of misleading either way.
+			if kitcli.IsDryRun(cmd) {
+				return fmt.Errorf(
+					"--dry-run cannot preview an interactive create; " +
 						"pass a title and flags instead",
 				)
 			}
@@ -88,9 +100,16 @@ Examples:
 			return err
 		}
 
-		err = saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, status, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched)
+		dryRun := kitcli.IsDryRun(cmd)
+		err = saveTask(cmd.OutOrStdout(), taskID, title, taskDescription, status, taskAssignedTo, taskEffort, taskPriority, taskTags, taskReference, meta, staleTimeout, &sched, dryRun)
 		if err != nil {
 			return err
+		}
+		if dryRun {
+			// Nothing was written, so there is no new state for the
+			// projection to describe. Rewriting it here would be a
+			// side effect of the flag that suppresses side effects.
+			return nil
 		}
 		return writeProjection()
 	},
@@ -178,7 +197,9 @@ func createTaskInteractive(initialTitle string) error {
 		meta["domain"] = domain
 	}
 
-	err := saveTask(os.Stdout, "", title, description, status, assignee, effort, prio, tags, "", meta, nil, nil)
+	// Never a dry run: the caller refuses --dry-run before showing the
+	// form rather than prompting for a task it would discard.
+	err := saveTask(os.Stdout, "", title, description, status, assignee, effort, prio, tags, "", meta, nil, nil, false)
 	if err != nil {
 		return err
 	}
@@ -274,7 +295,13 @@ func vocabOptionLabel(name, label string) string {
 	return fmt.Sprintf("%s (%s)", name, label)
 }
 
-func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling) error {
+// saveTask builds the task, runs every rule that governs a create, and
+// stores it. With dryRun set it stops short of the write and reports
+// what would have been created — after the validation, the derivation
+// and the stage gate, so a preview is refused by exactly what would
+// refuse the real thing rather than reporting a create that cannot
+// happen.
+func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, priority string, tags []string, reference string, meta map[string]interface{}, staleTimeout *time.Duration, sched *taskScheduling, dryRun bool) error {
 	description = unescapeMarkdown(description)
 	log.Debug("Saving task", "id", id, "title", title, "status", status)
 
@@ -431,6 +458,15 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		task.Reference = buildTaskReference(task.ID, core.DetectProject())
 	}
 
+	// Everything that could refuse this create has now run. Stop here
+	// on a dry run: seq is allocated by storage on insert, so reaching
+	// CreateTask would burn a per-project sequence number and leave a
+	// gap in the alias run with no task behind it.
+	if dryRun {
+		printTaskCreateDryRun(w, task)
+		return nil
+	}
+
 	// Retry with a fresh TypeID if the generated ID collides. TypeIDs are
 	// uuidv7-backed so collisions are vanishingly rare, but the retry is
 	// cheap and keeps create-task robust under any concurrent insert that
@@ -469,6 +505,36 @@ func saveTask(w io.Writer, id, title, description, status, assignedTo, effort, p
 		_, _ = fmt.Fprintf(w, "  ID: %s\n", task.ID)
 	}
 	return nil
+}
+
+// printTaskCreateDryRun reports the task a real create would have
+// stored, mirroring `track create --dry-run`.
+//
+// No alias is printed: the per-project seq behind it is allocated by
+// storage on insert, so naming one here would either invent a number or
+// burn a real one. The durable TypeID is already settled and is shown
+// under the same --verbose gate the create path uses.
+func printTaskCreateDryRun(w io.Writer, task *core.Task) {
+	_, _ = fmt.Fprintf(w, "Dry run — would create task: %s\n", task.Title)
+	_, _ = fmt.Fprintf(w, "  Status: %s\n", task.Status)
+	if task.AssignedTo != nil && *task.AssignedTo != "" {
+		_, _ = fmt.Fprintf(w, "  Assigned: %s\n", *task.AssignedTo)
+	}
+	if task.Priority != "" {
+		_, _ = fmt.Fprintf(w, "  Priority: %s\n", task.Priority)
+	}
+	if task.Effort != "" {
+		_, _ = fmt.Fprintf(w, "  Effort: %s\n", task.Effort)
+	}
+	if len(task.Tags) > 0 {
+		_, _ = fmt.Fprintf(w, "  Tags: %s\n", strings.Join(task.Tags, ", "))
+	}
+	if task.TrackID != nil && *task.TrackID != "" {
+		_, _ = fmt.Fprintf(w, "  Track: %s\n", *task.TrackID)
+	}
+	if isShowTypeIDOutput() {
+		_, _ = fmt.Fprintf(w, "  ID: %s\n", task.ID)
+	}
 }
 
 // buildTaskReference constructs an absolute task URI.
