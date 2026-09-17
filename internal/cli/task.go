@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	kitcli "hop.top/kit/go/console/cli"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/rpc"
 	"hop.top/tlc/internal/storage"
@@ -216,11 +217,23 @@ func appendAuditLog(task *core.Task, author, action, details, note string, ts ti
 // push. Sync failures surface as warnings but never roll back local
 // truth: the local DB is the source of truth, the remote is a downstream
 // mirror. See T-0750.
+//
+// Under --dry-run it writes nothing and returns nil. Every lifecycle
+// command funnels its write through here, so this is the one place that
+// can guarantee no row, no log row and no remote push escapes a preview
+// even if a caller forgets its own guard. It is a backstop, not the
+// whole fix: callers still own their preview output and the side effects
+// that live outside this function (the projection, the track
+// auto-transition) — see dryRunSkipsWrite.
 func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, log *core.LogEntry, s interface {
 	core.Repository
 	core.LogRepository
 },
 ) error {
+	if kitcli.IsDryRun(cmd) {
+		return nil
+	}
+
 	// Step 1: atomic local commit — task row + audit log entry in one tx.
 	// This is the source of truth; nothing downstream may invalidate it.
 	if err := s.UpdateTaskWithLog(ctx, task, log); err != nil {
@@ -235,6 +248,37 @@ func saveTaskWithLog(ctx context.Context, cmd *cobra.Command, task *core.Task, l
 		}
 	}
 	return nil
+}
+
+// dryRunSkipsWrite reports whether this invocation is a preview.
+//
+// It reads the same kit-owned flag saveTaskWithLog's backstop reads, and
+// exists so a RunE can ask the question by name at the three points the
+// backstop cannot reach: the success line it prints per task, the work
+// it does after the save (a track auto-transition is a write too), and
+// the trailing writeProjection — rewriting the projection would be a
+// side effect of the flag whose whole job is to suppress side effects.
+func dryRunSkipsWrite(cmd *cobra.Command) bool {
+	return kitcli.IsDryRun(cmd)
+}
+
+// printTaskDryRun reports one task a real run would have changed,
+// mirroring the phrasing of `track create --dry-run` and
+// `task create --dry-run`.
+//
+// verb is the lowercase action ("claim", "block"), and detail is the
+// consequence in the command's own terms ("TODO → IN_PROGRESS, assign to
+// @jadb"), empty when the verb already says everything. Printing happens
+// per task rather than once per batch: these commands take
+// `<task-id|pattern>...` and a preview that named only the first
+// resolved task would under-report what the real run does.
+func printTaskDryRun(cmd *cobra.Command, task *core.Task, verb, detail string) {
+	w := cmd.OutOrStdout()
+	if detail == "" {
+		_, _ = fmt.Fprintf(w, "Dry run — would %s task %s\n", verb, taskDisplayID(task))
+		return
+	}
+	_, _ = fmt.Fprintf(w, "Dry run — would %s task %s (%s)\n", verb, taskDisplayID(task), detail)
 }
 
 // syncPushFn pushes a task to its origin system. It is wired here so

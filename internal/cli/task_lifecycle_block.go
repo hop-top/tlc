@@ -126,10 +126,21 @@ Re-running on an already-skipped task converges.`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "skip",
+					fmt.Sprintf("%s → %s", prevStatus, skippedStatus))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			// Nothing was written, so the projection already describes
+			// the store; rewriting it would be a side effect of the
+			// flag that suppresses side effects.
+			return nil
 		}
 		return writeProjection()
 	},
@@ -220,10 +231,17 @@ Re-running with the same reason converges.`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "block", blockDryRunDetail(prevReason, reason))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Blocked task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
 		}
 		return writeProjection()
 	},
@@ -298,13 +316,39 @@ Re-running on an unblocked task converges.`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "unblock", unblockDryRunDetail(prevReason))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unblocked task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
+		}
 		return writeProjection()
 	},
+}
+
+// blockDryRunDetail and unblockDryRunDetail phrase the reason change a
+// preview would make, mirroring the audit-log details the real path
+// records. Both name the PRIOR reason, which is the fact a reader cannot
+// recover from the command line they just typed — and the fact that
+// decides whether the real run sets a reason or replaces one.
+func blockDryRunDetail(prevReason, reason string) string {
+	if prevReason != "" && prevReason != reason {
+		return fmt.Sprintf("reason changed from %q to %q", prevReason, reason)
+	}
+	return fmt.Sprintf("blocked: %s", reason)
+}
+
+func unblockDryRunDetail(prevReason string) string {
+	if prevReason != "" {
+		return fmt.Sprintf("clear reason %q", prevReason)
+	}
+	return "already unblocked"
 }
 
 // unblockLogNote composes the log note for an unblock, preserving the

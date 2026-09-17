@@ -85,6 +85,16 @@ converges (assignee + status already set), so the operation is idempotent.`,
 				continue
 			}
 
+			// The transition above has already been validated, so the
+			// preview reports exactly the change a real run would make
+			// — and stops short of the track auto-transition below,
+			// which is a second write and not the one being previewed.
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "claim",
+					fmt.Sprintf("%s → %s, assign to @%s", prevStatus, activeStatus, user))
+				continue
+			}
+
 			// Auto-transition track pending → active on claim.
 			if task.TrackID != nil && *task.TrackID != "" {
 				svc := core.NewTrackService(res.Storage, res.Storage)
@@ -98,6 +108,12 @@ converges (assignee + status already set), so the operation is idempotent.`,
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			// Nothing was written, so the projection already describes
+			// the store. Rewriting it here would be a side effect of
+			// the flag that suppresses side effects.
+			return nil
 		}
 		return writeProjection()
 	},
@@ -166,10 +182,18 @@ tasks converges.`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "unclaim",
+					fmt.Sprintf("%s → %s, unassign", prevStatus, initialStatus))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unclaimed task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
 		}
 		return writeProjection()
 	},
@@ -243,10 +267,17 @@ state, so the operation is idempotent.`,
 				continue
 			}
 
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "assign", assignDryRunDetail(prevAssignee, assignee))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned task %s to %s\n", taskDisplayID(task), assignee)
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
 		}
 		return writeProjection()
 	},
@@ -320,10 +351,17 @@ task audit log. Re-running on an already-unassigned task converges.`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "unassign", unassignDryRunDetail(prevAssignee))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
 		}
 		return writeProjection()
 	},
@@ -394,10 +432,18 @@ task converges (no transition fires).`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "complete",
+					fmt.Sprintf("%s → %s", prevStatus, completedStatus))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Completed task %s\n", formatTaskAlias(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
+		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
 		}
 		return writeProjection()
 	},
@@ -464,7 +510,8 @@ tasks instead.`,
 			}
 
 			user := core.GetCurrentUser()
-			details := fmt.Sprintf("(%s → %s)", task.Status, initialStatus)
+			prevStatus := task.Status
+			details := fmt.Sprintf("(%s → %s)", prevStatus, initialStatus)
 			appendAuditLog(task, user, "REOPENED", details, taskReopenNote, time.Now().UTC())
 			logEntry, transErr := task.TransitionWithWorkflow(
 				initialStatus, user, taskReopenNote, wm, true,
@@ -478,13 +525,40 @@ tasks instead.`,
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
 				continue
 			}
+			if dryRunSkipsWrite(cmd) {
+				printTaskDryRun(cmd, task, "reopen",
+					fmt.Sprintf("%s → %s", prevStatus, initialStatus))
+				continue
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reopened task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
 		}
+		if dryRunSkipsWrite(cmd) {
+			return nil
+		}
 		return writeProjection()
 	},
+}
+
+// assignDryRunDetail and unassignDryRunDetail phrase the assignee change
+// a preview would make. They mirror the wording of the audit-log details
+// the real path records, so a preview and the trail it predicts read the
+// same way — and they name the PREVIOUS assignee, which is the part a
+// reader cannot see from the command line they just typed.
+func assignDryRunDetail(prevAssignee, assignee string) string {
+	if prevAssignee != "" {
+		return fmt.Sprintf("reassign from @%s to @%s", prevAssignee, assignee)
+	}
+	return fmt.Sprintf("assign to @%s", assignee)
+}
+
+func unassignDryRunDetail(prevAssignee string) string {
+	if prevAssignee != "" {
+		return fmt.Sprintf("unassign from @%s", prevAssignee)
+	}
+	return "already unassigned"
 }
 
 func init() {
