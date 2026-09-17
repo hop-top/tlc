@@ -13,11 +13,33 @@ permissions:
   contents: read
 
 jobs:
-  # PR runs: annotate + comment, no repo write. Scoped to cmd/ (the
-  # command-surface tree). internal/ is excluded: it holds runtime config
-  # (e.g. internal/config/policies_*.yaml) that verify-stories would
-  # mis-parse as story docs. tlc's strict command-surface contract is
-  # separately enforced in-repo via TestStrictValidationPasses.
+  # PR runs: annotate + comment, no repo write.
+  #
+  # SCOPE, AND WHAT THIS JOB DOES *NOT* COVER.
+  #
+  # Both leaves scan only .yaml/.yml/.md/.json — never Go source. So this
+  # job cannot observe command behavior at all, whatever `paths` is set to,
+  # and a green run here is not evidence that any command does what its help
+  # claims. It says one thing: no scenario-shaped documents leak.
+  #
+  # `paths: cmd/` therefore scans nothing (cmd/tlc/main.go is a shim, and it
+  # is Go besides), which is why this job reported a clean sweep while
+  # fifteen commands wrote to the store under --dry-run.
+  #
+  # internal/ stays excluded, and the constraint is real rather than
+  # inherited: the action exposes no ignore input, and
+  # `kit conformance verify-stories --paths=internal/` parses
+  # internal/config/policies_*.yaml as story docs and exits 2 (in fail-on).
+  # Widening paths here would red-light CI without adding any behavioral
+  # coverage.
+  #
+  # Command-surface contracts are enforced in-repo by the ci workflow's test
+  # job, which is where they can actually be checked:
+  #   - TestStrictValidationPasses          annotations are present
+  #   - TestDryRunAdvertisersAreAccountedFor every advertising leaf is
+  #                                         exercised or exempted
+  #   - TestDryRunDoesNotMutateStore        leaves advertising dry-run
+  #                                         support do not write under it
   conformance:
     name: 12-factor AI-CLI conformance
     if: github.event_name == 'pull_request'
@@ -46,6 +68,17 @@ jobs:
 
   # Push-to-main: same check, plus commit the refreshed badge. This is the
   # only job granted contents:write.
+  #
+  # Same blind spot as the PR job above, and the same unresolved question:
+  # locally, `kit conformance verify-no-leak --paths=cmd/` exits 5 with
+  # "directory holds no scannable files" (cmd/ holds only Go), and 5 is in
+  # fail-on. With diff: "" both jobs take the --paths branch rather than the
+  # diff branch, so that exit should reach the verdict step. Whether it does
+  # on the runner is unverified here — this cannot be exercised locally, and
+  # the pinned action may resolve paths differently from the kit build on
+  # this machine. Left as-is deliberately: changing `paths` to silence it
+  # would buy no behavioral coverage, and guessing at the scan source of a
+  # job that gates the badge is worse than recording the finding.
   conformance-badge:
     name: 12-factor AI-CLI conformance (badge)
     if: github.event_name == 'push'
