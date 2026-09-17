@@ -837,7 +837,10 @@ func metaString(meta map[string]interface{}, key string) string {
 	if meta == nil {
 		return ""
 	}
-	s, _ := meta[key].(string)
+	s, ok := meta[key].(string)
+	if !ok {
+		return ""
+	}
 	return s
 }
 

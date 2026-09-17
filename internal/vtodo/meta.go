@@ -214,8 +214,10 @@ func applyMeta(dst map[string]interface{}, c vstar.Component) map[string]interfa
 	if dst == nil {
 		dst = map[string]interface{}{}
 	}
-	bag, _ := dst[MetaXTLCKey].(map[string]interface{})
-	if bag == nil {
+	// A bag of any other shape (absent, nil, or a store that widened the
+	// type) is started fresh; the parked names are re-read from the wire.
+	bag, ok := dst[MetaXTLCKey].(map[string]interface{})
+	if !ok || bag == nil {
 		bag = map[string]interface{}{}
 	}
 	for _, p := range unknown {

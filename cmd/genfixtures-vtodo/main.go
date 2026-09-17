@@ -27,6 +27,18 @@ var exportTime = fixedTime
 
 func ptr[T any](v T) *T { return &v }
 
+// emit builds the calendar for one fixture and writes it. A build error
+// stops the run with the fixture named: a fixture that cannot be built
+// must not be left stale on disk as if it had been regenerated.
+func emit(path string, tasks []*core.Task, tracks []*core.Track, logs []*core.LogEntry, opts ...vtodo.Option) {
+	cal, err := vtodo.BuildVCalendar(tasks, tracks, logs, opts...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: build calendar: %v\n", path, err)
+		os.Exit(1)
+	}
+	write(path, cal)
+}
+
 // write gates cal, encodes it and writes the fixture. A calendar
 // that fails the validation gate is never written: the golden documents
 // are the conformance claim, so they must pass what the tests enforce.
@@ -86,8 +98,7 @@ func main() {
 	}
 
 	// 1. single-task.ics
-	cal, _ := vtodo.BuildVCalendar([]*core.Task{base}, nil, nil, vtodo.WithExportTime(exportTime))
-	write(dir+"/single-task.ics", cal)
+	emit(dir+"/single-task.ics", []*core.Task{base}, nil, nil, vtodo.WithExportTime(exportTime))
 
 	// 2. track-with-tasks.ics
 	track := &core.Track{
@@ -109,18 +120,17 @@ func main() {
 	tt3.ID = "task_01h455vb4pex5vsknk084sn0ax"
 	tt3.Title = "Bench rotation throughput"
 	tt3.TrackID = ptr(track.ID)
-	cal2, _ := vtodo.BuildVCalendar(
+	emit(
+		dir+"/track-with-tasks.ics",
 		[]*core.Task{&tt1, &tt2, &tt3},
 		[]*core.Track{track}, nil,
 		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/track-with-tasks.ics", cal2)
 
 	// 3. recurring-rrule.ics
 	rec := *base
 	rec.RRule = "FREQ=DAILY;INTERVAL=2"
-	cal3, _ := vtodo.BuildVCalendar([]*core.Task{&rec}, nil, nil, vtodo.WithExportTime(exportTime))
-	write(dir+"/recurring-rrule.ics", cal3)
+	emit(dir+"/recurring-rrule.ics", []*core.Task{&rec}, nil, nil, vtodo.WithExportTime(exportTime))
 
 	// 4. with-dependencies.ics
 	blockerID := "task_01h455vb4pex5vsknk084sn0az"
@@ -134,8 +144,7 @@ func main() {
 	dep.Meta = map[string]interface{}{
 		"blocked_by": []string{blockerID},
 	}
-	cal4, _ := vtodo.BuildVCalendar([]*core.Task{&blocker, &dep}, nil, nil, vtodo.WithExportTime(exportTime))
-	write(dir+"/with-dependencies.ics", cal4)
+	emit(dir+"/with-dependencies.ics", []*core.Task{&blocker, &dep}, nil, nil, vtodo.WithExportTime(exportTime))
 
 	// 5. with-logs.ics
 	log1 := &core.LogEntry{
@@ -152,12 +161,12 @@ func main() {
 		Action:    "PROGRESS",
 		Note:      "tests passing for ES256 path",
 	}
-	cal5, _ := vtodo.BuildVCalendar(
+	emit(
+		dir+"/with-logs.ics",
 		[]*core.Task{base}, nil, []*core.LogEntry{log1, log2},
 		vtodo.WithIncludeLogs(true),
 		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/with-logs.ics", cal5)
 
 	// 6. recipe-run.ics: a playthrough (recipe run) through a track, one
 	// assignment it materialized, that assignment's turns from the log
@@ -182,11 +191,11 @@ func main() {
 	claim1 := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime, By: "alice", Action: "CLAIMED", Note: "first attempt"}
 	release := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime.Add(time.Hour), By: "alice", Action: "RELEASED", Note: "handing back"}
 	claim2 := &core.LogEntry{TaskID: step.ID, Timestamp: fixedTime.Add(4 * time.Hour), By: "alice", Action: "CLAIMED", Note: "second attempt"}
-	cal6, _ := vtodo.BuildVCalendar(
+	emit(
+		dir+"/recipe-run.ics",
 		[]*core.Task{&step}, []*core.Track{&runTrack}, []*core.LogEntry{claim1, release, claim2},
 		vtodo.WithIncludeLogs(true),
 		vtodo.WithRecipeRuns([]*core.RecipeRun{run}),
 		vtodo.WithExportTime(exportTime),
 	)
-	write(dir+"/recipe-run.ics", cal6)
 }

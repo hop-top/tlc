@@ -298,17 +298,18 @@ func dueDateOnly(meta map[string]interface{}) bool {
 // SetDUEDate when dateOnly, the UTC DATE-TIME NewTodo writes
 // otherwise, nothing for a nil due.
 func newTodoWithDue(uid string, due *time.Time, dateOnly bool) (vstar.Component, error) {
-	if due == nil || due.IsZero() {
-		return helpers.NewTodo(uid, time.Time{})
+	hasDue := due != nil && !due.IsZero()
+	at := time.Time{}
+	if hasDue && !dateOnly {
+		at = *due
 	}
-	if !dateOnly {
-		return helpers.NewTodo(uid, *due)
-	}
-	c, err := helpers.NewTodo(uid, time.Time{})
+	c, err := helpers.NewTodo(uid, at)
 	if err != nil {
-		return vstar.Component{}, err
+		return vstar.Component{}, fmt.Errorf("new VTODO %q: %w", uid, err)
 	}
-	c.SetDUEDate(vstar.DateOf(due.UTC()))
+	if hasDue && dateOnly {
+		c.SetDUEDate(vstar.DateOf(due.UTC()))
+	}
 	return c, nil
 }
 
