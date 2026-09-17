@@ -547,11 +547,14 @@ func checkProjectTodoSynced(fix bool) checkResult {
 		}
 	}
 
-	todoName := viper.GetString("task.todo_file")
-	if todoName == "" {
-		todoName = "todo.txt"
-	}
-	todoFile := filepath.Join(filepath.Dir(proj.ConfigPath), todoName)
+	// Same resolution as the writer, deliberately: the check compares the
+	// store against the projection the writer produced, so reading a
+	// different file than writeProjectionLocal writes would make the
+	// check answer about a file nothing maintains. Under the old
+	// unconditional join an absolute task.todo_file — the seeded default
+	// — resolved to a nested path that does not exist, and the check
+	// silently reported "no project todo.txt or empty" for every project.
+	todoFile := todoFileIn(filepath.Dir(proj.ConfigPath))
 	data, err := os.ReadFile(todoFile)
 	if err != nil || len(strings.TrimSpace(string(data))) == 0 {
 		return checkResult{
