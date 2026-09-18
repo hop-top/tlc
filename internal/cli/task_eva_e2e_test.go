@@ -149,7 +149,7 @@ func TestTaskUpdateClearEva(t *testing.T) {
 
 func TestTaskShowEvaHiddenForAssignee(t *testing.T) {
 	withTestLock(func() {
-		_, cleanup := setupTestDir(t)
+		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
 
 		s, err := getStorageRaw()
@@ -166,7 +166,7 @@ func TestTaskShowEvaHiddenForAssignee(t *testing.T) {
 			AssignedTo: &currentUser,
 			Meta:       map[string]interface{}{"eva": []string{"secret-hint"}},
 		}
-		if err := s.CreateTask(nil, task); err != nil {
+		if err := s.CreateTask(ctx, task); err != nil {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
@@ -193,7 +193,7 @@ func TestTaskShowEvaHiddenForAssignee(t *testing.T) {
 
 func TestTaskShowEvaVisibleForNonAssignee(t *testing.T) {
 	withTestLock(func() {
-		_, cleanup := setupTestDir(t)
+		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
 
 		s, err := getStorageRaw()
@@ -210,7 +210,7 @@ func TestTaskShowEvaVisibleForNonAssignee(t *testing.T) {
 			AssignedTo: &other,
 			Meta:       map[string]interface{}{"eva": []string{"visible-hint"}},
 		}
-		if err := s.CreateTask(nil, task); err != nil {
+		if err := s.CreateTask(ctx, task); err != nil {
 			t.Fatalf("CreateTask: %v", err)
 		}
 

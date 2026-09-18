@@ -100,7 +100,29 @@ func NewSQLiteStorage(path string) (*SQLiteStorage, error) {
 	return s, nil
 }
 
+// ctxOrBackground replaces a nil context with a usable one.
+//
+// A nil context reaching database/sql is not a clean error. sql.(*DB).conn
+// takes db.mu and THEN evaluates `<-ctx.Done()`, so a nil ctx panics with
+// the connection mutex still held; every later use of the pool — Close
+// included — blocks on that mutex forever. The panic never surfaces and
+// the process hangs, with a goroutine dump naming whoever was waiting
+// rather than whoever passed nil.
+//
+// Callers should pass a real context and vet catches most that do not
+// (SA1012), but the cost of the mistake is wildly out of proportion to
+// it: two tests that passed nil were quarantined for months as an
+// unexplained deadlock. Coercing here keeps a caller bug a caller bug.
+func ctxOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 func (s *SQLiteStorage) withWriteTransaction(ctx context.Context, fn func(*sql.Tx) error) error {
+	ctx = ctxOrBackground(ctx)
+
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
 
@@ -122,6 +144,12 @@ func (s *SQLiteStorage) withWriteTransaction(ctx context.Context, fn func(*sql.T
 }
 
 func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
+	// Normalised here, not only inside withWriteTransaction: the closure
+	// below CAPTURES this ctx and hands it to allocSeqInTx, so coercing
+	// the transaction helper's local copy alone still lets a nil reach
+	// database/sql one frame deeper.
+	ctx = ctxOrBackground(ctx)
+
 	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		// encodeTask coalesces a nil ProjectID to "" for consistent scoping.
 		row := encodeTask(task)
@@ -155,6 +183,8 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 }
 
 func (s *SQLiteStorage) GetTask(ctx context.Context, id string) (*core.Task, error) {
+	ctx = ctxOrBackground(ctx)
+
 	proj := core.DetectProject()
 	var row *sql.Row
 	if proj != nil && proj.InProject && proj.ProjectID != "" {
