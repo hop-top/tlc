@@ -22,7 +22,29 @@ jobs:
       # Without this the flowtest shim set is empty on a clean checkout and
       # the embed assertions skip themselves, so shim-naming drift ships green.
       - run: make build-shims
-      - run: go test -race -short -skip 'TestTaskShowEva|TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove' ./...
+      # -timeout is explicit because go's 10m default is per PACKAGE, and
+      # internal/cli is a single serialized package: every CLI test holds
+      # one global mutex (tests mutate cobra flag vars and viper state, so
+      # they cannot run in parallel), and a growing share shell out to a
+      # real built binary. That package alone runs ~440-600s under -race on
+      # CI hardware, so the default left no margin and the suite failed as
+      # `panic: test timed out` — with a goroutine dump naming whichever
+      # test happened to hold the lock, which reads like an unrelated hang
+      # in innocent code and misdirects every diagnosis.
+      #
+      # 25m is headroom, not a target. The guard below is what keeps this
+      # honest: it fails while the suite is merely slow, rather than
+      # letting it silently creep up on the new ceiling too.
+      # `set -o pipefail` is load-bearing: the default GitHub shell is
+      # `bash -e` WITHOUT it, so `go test | tee` would report tee's exit
+      # status and a genuinely failing suite would land green.
+      - name: Test
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -race -short -timeout 25m -skip 'TestTaskShowEva|TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove' ./... 2>&1 | tee /tmp/gotest.log
+      - name: Guard internal/cli suite runtime
+        run: ./scripts/check-suite-runtime.sh /tmp/gotest.log
 
   lint:
     runs-on: ubuntu-latest
