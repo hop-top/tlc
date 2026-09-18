@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go test -race -short -timeout 25m -skip 'TestTaskShowEva|TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove' ./... 2>&1 | tee /tmp/gotest.log
+          go test -race -short -timeout 25m -skip 'TestFlowList.*Limit|TestHumanStepGate_TimeoutKeepWaiting_ResolvedByLaterApprove' ./... 2>&1 | tee /tmp/gotest.log
       - name: Guard internal/cli suite runtime
         run: ./scripts/check-suite-runtime.sh /tmp/gotest.log
 
