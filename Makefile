@@ -1,6 +1,6 @@
 # Makefile for oss-tlc-cli
 
-.PHONY: help install build build-plugins build-shims test test-plugins test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild smoke-chdir pre-merge
+.PHONY: help check-go-version install build build-plugins build-shims test test-plugins test-short lint lint-fix fmt fmt-check vet tidy tidy-check coverage clean watch watch-lint watch-test dev check tools pre-commit-install verify validate-docs docs-links docs-links-offline prebuild smoke-chdir pre-merge
 
 # Colors for output
 COLOR_RESET=\033[0m
@@ -12,6 +12,9 @@ COLOR_BLUE=\033[34m
 # Variables
 BINARY_NAME=tlc
 BIN_DIR=bin
+# Go minor this repo is pinned to, read from the kit-managed mise.toml.
+# CI resolves the same toolchain via go-version-file: go.mod.
+GO_VERSION_PIN := $(shell awk -F'"' '/^go = "/ { print $$2; exit }' $(CURDIR)/mise.toml 2>/dev/null)
 PLUGIN_DIRS=$(wildcard plugins/*/main.go)
 # Plugins carrying their own go.mod. The root module's ./... cannot reach them,
 # so `go test ./...` skips them silently — they need an explicit per-module run.
@@ -110,7 +113,36 @@ test-plugins: ## Run tests for nested plugin modules (skipped by root ./...)
 			{ echo "$(COLOR_YELLOW)✗ Tests failed in nested module $$m$(COLOR_RESET)" >&2; exit 1; }; \
 	done
 
-lint: ## Run golangci-lint
+check-go-version: ## Fail fast when the active Go minor differs from mise.toml's pin
+	@if [ -z "$(GO_VERSION_PIN)" ]; then \
+		echo "ERROR: no Go pin found in mise.toml." >&2; \
+		echo "  mise.toml is kit-managed; regenerate it with kit's emitter:" >&2; \
+		echo "    bash -c 'source <poly-kit>/templates/shared/emit-mise.sh && emit_mise \"\$$PWD\" go'" >&2; \
+		exit 1; \
+	fi
+	@have=$$(go version 2>/dev/null | awk '{ print $$3 }' | sed 's/^go//'); \
+	if [ -z "$$have" ]; then \
+		echo "ERROR: no 'go' on PATH (mise.toml pins go $(GO_VERSION_PIN))." >&2; \
+		echo "  fix: mise install    # or install Go $(GO_VERSION_PIN) by hand" >&2; \
+		exit 1; \
+	fi; \
+	have_mm=$$(echo "$$have" | awk -F. '{ print $$1"."$$2 }'); \
+	if [ "$$have_mm" != "$(GO_VERSION_PIN)" ]; then \
+		echo "ERROR: Go toolchain does not match the repo pin." >&2; \
+		echo "  active : go $$have  ($$(command -v go))" >&2; \
+		echo "  pinned : go $(GO_VERSION_PIN)  (mise.toml)" >&2; \
+		echo "" >&2; \
+		echo "  Linter findings drift between Go minors: the same tree reports" >&2; \
+		echo "  different staticcheck/unparam counts under go1.26 and go1.27," >&2; \
+		echo "  so a local run against the wrong toolchain disagrees with CI." >&2; \
+		echo "" >&2; \
+		echo "  fix: mise install && eval \"\$$(mise env -s bash)\"" >&2; \
+		echo "       (or run any make target through: mise exec -- make <target>)" >&2; \
+		exit 1; \
+	fi; \
+	echo "==> go $$have matches pin $(GO_VERSION_PIN)"
+
+lint: check-go-version ## Run golangci-lint
 	@echo "$(COLOR_BLUE)Running linters...$(COLOR_RESET)"
 	@golangci-lint run --config .golangci.yml
 	@echo "$(COLOR_GREEN)✓ Linting passed$(COLOR_RESET)"
