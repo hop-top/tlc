@@ -47,7 +47,9 @@ func TestRecipeList_E2E_TableJSONAndSourceFilter(t *testing.T) {
 	dir := recipeDirFixture(t)
 	viper.Set("recipe.dir", dir)
 
-	out, err := runRecipeCmd(t, "list")
+	// One layer only: the temp dir's long relative path plus the built-in
+	// rows would push DESCRIPTION past the non-TTY fallback width.
+	out, err := runRecipeCmd(t, "list", "--source", dir)
 	if err != nil {
 		t.Fatalf("recipe list: %v\n%s", err, out)
 	}
@@ -65,17 +67,46 @@ func TestRecipeList_E2E_TableJSONAndSourceFilter(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &infos); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
-	if len(infos) != 3 || infos[0].Name != "code-review" || infos[0].Version != "1.1.0" || infos[2].Name != "security-scan" {
-		t.Errorf("json rows = %+v; want name asc, version desc", infos)
+	if len(infos) != 4 || infos[0].Name != "code-review" || infos[0].Version != "1.1.0" || infos[2].Name != "security-scan" || infos[3].Source != core.BuiltinSource {
+		t.Errorf("json rows = %+v; want name asc, version desc, the built-in layer last", infos)
 	}
 	if infos[0].Source != dir {
 		t.Errorf("source = %q; want the recipe.dir %q", infos[0].Source, dir)
 	}
 
-	// --source keeps only one layer; nothing is embedded yet.
+	// --source keeps only one layer: the embedded set alone.
 	out, err = runRecipeCmd(t, "list", "--source", "builtin")
-	if err != nil || !contains(out, "No recipes") {
-		t.Errorf("--source builtin: err = %v, out = %q; want an empty-result line", err, out)
+	if err != nil || !contains(out, "track-consolidate") || contains(out, "code-review") {
+		t.Errorf("--source builtin: err = %v, out = %q; want only the built-in recipes", err, out)
+	}
+}
+
+// The embedded set is the lowest layer: available with no directory on
+// the search path, shadowed by a same-name recipe in any directory, and
+// still reachable by a pinned version.
+func TestRecipe_E2E_BuiltinLayerPrecedence(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+
+	out, err := runRecipeCmd(t, "show", "track-consolidate")
+	if err != nil || !contains(out, "track-consolidate@1.0.0") || !contains(out, "builtin:") {
+		t.Fatalf("show built-in: err = %v\n%s", err, out)
+	}
+	if out, err := runRecipeCmd(t, "validate", "track-consolidate"); err != nil || !contains(out, "is valid") {
+		t.Fatalf("validate built-in: err = %v\n%s", err, out)
+	}
+
+	dir := t.TempDir()
+	writeRecipeFixture(t, dir, "mine.yaml", "recipe: track-consolidate\nversion: 0.0.1\nsteps:\n  - id: local\n")
+	viper.Set("recipe.dir", relRecipeDir(t, dir))
+
+	out, err = runRecipeCmd(t, "show", "track-consolidate")
+	if err != nil || !contains(out, "track-consolidate@0.0.1") {
+		t.Errorf("a project recipe must shadow the built-in, even at a lower version: err = %v\n%s", err, out)
+	}
+	out, err = runRecipeCmd(t, "show", "track-consolidate@1.0.0")
+	if err != nil || !contains(out, "track-consolidate@1.0.0") || !contains(out, "builtin:") {
+		t.Errorf("a pinned built-in version must still resolve: err = %v\n%s", err, out)
 	}
 }
 

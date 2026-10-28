@@ -295,7 +295,8 @@ tlc task reject <id> --reason "<why>"
 ```
 
 A recipe is referenced by name, `name@version`, or file path. Search path:
-`recipe.dir` → `.tlc/recipes` → `~/.config/tlc/recipes`.
+`recipe.dir` → `.tlc/recipes` → `~/.config/tlc/recipes` → built-in (compiled
+into tlc; `tlc recipe list --source builtin`).
 
 ---
 

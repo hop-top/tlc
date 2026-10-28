@@ -209,7 +209,7 @@ Complete list of valid log action keywords across TLC system (34 actions total):
   - The persistence layer for task entities. May be file-per-task, JSON array, SQLite database, or hybrid.
 
 - **Recipe Search Path**
-  - Where recipe files are looked up, in order: `recipe.dir` from config (relative to the project root), the project's `.tlc/recipes`, then `~/.config/tlc/recipes`. An unpinned name resolves to the first layer that has it, highest version in that layer; a pinned `name@version` is searched across every layer.
+  - Where recipe files are looked up, in order: `recipe.dir` from config (relative to the project root), the project's `.tlc/recipes`, then `~/.config/tlc/recipes`, then the built-in set compiled into tlc. An unpinned name resolves to the first layer that has it, highest version in that layer; a pinned `name@version` is searched across every layer.
 
 - **Run Ledger Tables**
   - `recipe_runs` holds one row per materialization; `recipe_run_tasks` maps each of its steps to the task it created.

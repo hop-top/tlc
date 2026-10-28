@@ -1,0 +1,31 @@
+xrr: "1"
+adapter: exec
+fingerprint: ac612f32
+recorded_at: "2026-10-28T01:44:35Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. Build the list of tracks this run audits.
+
+          1. Resolve the scope "L-0001 L-0002". When it is a list of track ids,
+             take those. Otherwise treat it as a topic: run
+             `tlc track list --format json` and keep the tracks whose title
+             or plan matches it.
+          2. Drop the excluded tracks: "". Drop the track this
+             run itself created, if any.
+          3. Mark the pinned tracks: "L-0001". A pinned track is never
+             closed, abandoned or merged away; it may gain tasks.
+          4. For each track record its id, title, status, type, task counts
+             by status and progress, from `tlc track show <id>` and
+             `tlc task list --track <id> --format json`.
+
+          Write track-consolidate/inventory.md: one table of tracks (id, title,
+          status, pinned, done/total) and, per track, its open tasks (id,
+          title, status, blocked-by). End your summary with the track count.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

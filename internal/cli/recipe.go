@@ -23,17 +23,18 @@ tasks: an ordered list of steps with dependencies, kinds (agent, exec,
 human), retries, gates and due dates, plus the variables a run binds.
 
 Recipes are searched in recipe.dir (relative to the project root), then
-the project's .tlc/recipes, then the user config dir's recipes. Reference
-one by name, by name@version, or by file path.`,
+the project's .tlc/recipes, then the user config dir's recipes, then the
+recipes built into tlc. Reference one by name, by name@version, or by
+file path.`,
 }
 
 var recipeListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List recipes in the search path",
 	Long: `List every recipe found in the search path: recipe.dir, the project's
-.tlc/recipes and the user config dir's recipes. Rows keep layer order,
-then sort by name and descending version. --source keeps one layer: a
-directory path, or "builtin" for the embedded set.`,
+.tlc/recipes, the user config dir's recipes and the built-in set. Rows
+keep layer order, then sort by name and descending version. --source
+keeps one layer: a directory path, or "builtin" for the embedded set.`,
 	Args: cobra.NoArgs,
 	Annotations: map[string]string{
 		"kit/side-effect": "read",

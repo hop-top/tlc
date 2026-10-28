@@ -702,8 +702,9 @@ steps:
   `until: "results.review.verdict == 'approved'"` unrolls a block into
   bounded iterations.
 - **Search path**: `recipe.dir` from `.tlc/config.yaml`, then `.tlc/recipes/`,
-  then `~/.config/tlc/recipes/`. Reference a recipe by name, `name@version`
-  or file path.
+  then `~/.config/tlc/recipes/`, then the recipes built into tlc
+  (`tlc recipe list --source builtin`). Reference a recipe by name,
+  `name@version` or file path.
 
 ```bash
 tlc recipe list                       # every recipe in the search path

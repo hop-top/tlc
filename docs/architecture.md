@@ -139,7 +139,8 @@ list, `recipe_template.go` + `recipe_render.go` bind vars,
 `subject.*`, `run.*` and `steps.*` placeholders, `recipe_select.go`
 applies `--task` / `--with-deps`, and `recipe_materialize.go`
 creates the tasks and writes the run to the ledger. Recipe files
-are found by `recipe_locator.go` over the three-layer search path.
+are found by `recipe_locator.go` over the three directory layers, then
+the built-in set embedded from `internal/recipes`.
 `recipe_reconcile.go` compares a track against the ledger so
 `tlc track execute --recipe` creates only the steps with no ledger
 row. `recipe_capture.go` and `recipe_importer.go` run the inverse:

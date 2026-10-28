@@ -218,7 +218,8 @@ Recipes are searched in order:
 
 1. `recipe.dir` from config, relative to the project root (no default);
 2. the project's `.tlc/recipes`;
-3. the user config dir, `~/.config/tlc/recipes`.
+3. the user config dir, `~/.config/tlc/recipes`;
+4. the built-in set compiled into tlc (`--source builtin`).
 
 ```bash
 tlc recipe list                          # every recipe, by layer then name and version
@@ -230,7 +231,10 @@ tlc recipe validate code-review@1.0.0    # exit 0 when valid, 1 with the first p
 
 A recipe is referenced by name, by `name@version`, or by file path. An
 unpinned name resolves to the first layer that has it, highest version in
-that layer; a pinned `name@version` is searched across every layer.
+that layer; a pinned `name@version` is searched across every layer. A
+recipe of the same name in any directory therefore shadows a built-in one,
+whatever its version, while `name@<built-in version>` still reaches the
+built-in.
 
 ```yaml
 # .tlc/config.yaml
@@ -238,6 +242,40 @@ recipe:
   dir: recipes                # extra project layer, searched first
   assignees_dir: examples/assignees
 ```
+
+### Built-in recipes
+
+These ship inside the tlc binary, so every project has them with nothing
+to copy. Their sources and test fixtures live in `internal/recipes/`.
+
+| Recipe | Needs | What it does |
+|---|---|---|
+| `track-consolidate` | `scope` | Audit a set of tracks against the code and end with fewer tracks, losing no work |
+
+`track-consolidate` takes `scope` (a topic matched against track titles
+and plans, or track ids separated by spaces), `keep` (pinned track ids,
+never removed, may gain tasks), `exclude`, `code_root` (default `.`) and
+`workdir` (default `track-consolidate`, where it writes its files). List
+values are space-separated because `--var` splits on commas.
+
+Its steps: inventory the tracks; verify every open task against the code
+(DONE needs a file:line or commit SHA; SUPERSEDED and DUPLICATE cite the
+replacement; anything uncertain stays open); propose the regrouping;
+generate `apply.sh`, a script of exact tlc commands; a human approval
+task; run the script, logging each failure and carrying on; verify the
+result. The first four steps only read tlc. Nothing in tlc changes until
+the approval task is approved.
+
+```bash
+tlc track create --recipe track-consolidate --var "scope=L-0003 L-0007" --var keep=L-0003
+tlc track execute <track>      # runs up to the approval task
+# read track-consolidate/proposal.md and apply.sh, then:
+tlc task approve <approval-task>
+tlc track execute <track>      # apply and verify
+```
+
+To replace a built-in, put a recipe with the same name in any directory
+on the search path; `tlc recipe show <name>` names the source in use.
 
 ## Create a track or tasks from a recipe
 

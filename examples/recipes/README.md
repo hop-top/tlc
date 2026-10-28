@@ -19,6 +19,9 @@ search path — `recipe.dir` in `.tlc/config.yaml`, `.tlc/recipes/`, or
 tlc -c recipe.dir=examples/recipes recipe list
 ```
 
+Recipes built into tlc (`tlc recipe list --source builtin`) live in
+`internal/recipes/` instead, with their fixtures beside them.
+
 ## Recipes
 
 | Recipe | Needs | What it does |

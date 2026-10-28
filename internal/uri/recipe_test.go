@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
 
@@ -34,21 +35,22 @@ func TestRegisterTypes_RecipeCompleter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, reg.Types(), "recipe")
 
-	// Names are deduplicated across versions and filtered by prefix.
+	// Names are deduplicated across versions and filtered by prefix; the
+	// built-in set is offered alongside the directories.
 	got, err := reg.Complete(context.Background(), "recipe", "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"code-review", "release"}, got)
+	assert.Equal(t, []string{"code-review", "release", "track-consolidate"}, got)
 
 	got, err = reg.Complete(context.Background(), "recipe", "rel")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"release"}, got)
 
-	// A missing layer is not an error.
+	// A missing layer is not an error; only the built-in set is left.
 	reg, err = GetRegistry(s, &TypesDirConfig{RecipeDirs: []string{filepath.Join(dir, "nope")}})
 	require.NoError(t, err)
 	got, err = reg.Complete(context.Background(), "recipe", "")
 	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Equal(t, []string{"track-consolidate"}, got)
 }
 
 func TestResolver_ResolveRecipe(t *testing.T) {
@@ -89,4 +91,27 @@ func TestResolver_ResolveRecipe(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nope")
 	assert.Contains(t, err.Error(), recipes)
+}
+
+// The embedded set resolves with no directory configured, by name and by
+// URI, and completes alongside directory recipes.
+func TestResolver_ResolveRecipe_Builtin(t *testing.T) {
+	dir := t.TempDir()
+	s, err := storage.NewSQLiteStorage(filepath.Join(dir, "test.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	ctx := context.Background()
+
+	r := NewResolver(s)
+	for _, ref := range []string{"track-consolidate", "tlc://recipe/track-consolidate"} {
+		got, err := r.ResolveRecipe(ctx, ref)
+		require.NoError(t, err, ref)
+		assert.Equal(t, core.BuiltinSource, got.Source, ref)
+	}
+
+	reg, err := GetRegistry(s, &TypesDirConfig{})
+	require.NoError(t, err)
+	got, err := reg.Complete(ctx, "recipe", "track-c")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"track-consolidate"}, got)
 }

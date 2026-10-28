@@ -10,6 +10,7 @@ import (
 
 	"hop.top/cite/scheme"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/recipes"
 	"hop.top/tlc/internal/uriutil"
 )
 
@@ -19,12 +20,12 @@ const (
 )
 
 // recipeCompletion completes recipe names across the configured search
-// path, deduplicated over versions.
+// path and the built-in set, deduplicated over versions.
 func recipeCompletion(dc *TypesDirConfig) scheme.TypeRegistration {
 	return scheme.TypeRegistration{
 		Name: recipeTypeName,
 		Completer: func(_ context.Context, prefix string) ([]string, error) {
-			loc := &core.DirLocator{Dirs: dc.recipeDirs()}
+			loc := &core.DirLocator{Dirs: dc.recipeDirs(), Builtin: recipes.FS()}
 			infos, err := loc.List()
 			if err != nil {
 				return nil, fmt.Errorf("list recipes: %w", err)
@@ -46,9 +47,9 @@ func recipeCompletion(dc *TypesDirConfig) scheme.TypeRegistration {
 
 // ResolveRecipe resolves a recipe reference: a file path, a name, a pinned
 // name@version, tlc://recipe/<name>, or the project-scoped
-// tlc://<project>/recipe:<name>. Names are searched through RecipeDirs;
-// a project-scoped reference searches that project's config-dir recipes
-// first.
+// tlc://<project>/recipe:<name>. Names are searched through RecipeDirs,
+// then the built-in set; a project-scoped reference searches that
+// project's config-dir recipes first.
 func (r *Resolver) ResolveRecipe(ctx context.Context, input string) (*core.Recipe, error) {
 	if _, err := os.Stat(input); err == nil {
 		return (&core.DirLocator{}).Locate(input) //nolint:wrapcheck // locator errors already name the file
@@ -67,7 +68,7 @@ func (r *Resolver) ResolveRecipe(ctx context.Context, input string) (*core.Recip
 			}
 		}
 	}
-	loc := &core.DirLocator{Dirs: dirs}
+	loc := &core.DirLocator{Dirs: dirs, Builtin: recipes.FS()}
 	return loc.Locate(ref) //nolint:wrapcheck // the not-found error names the ref and the search path
 }
 
