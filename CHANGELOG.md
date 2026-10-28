@@ -4,6 +4,11 @@
 
 ### Added
 
+- Built-in recipes: an embedded set compiled into tlc, searched after
+  `recipe.dir`, `.tlc/recipes` and the user recipes dir, so any same-name
+  recipe shadows it. First entry: `track-consolidate`, which audits a
+  set of tracks against the code and ends with fewer tracks, read-only
+  until a human approves the generated apply script.
 - Root `tlc status` subcommand: read-only project + caller snapshot
   (detected project, caller identity, in-progress/TODO task counts,
   overdue items). Satisfies kit's `checkReservedStatus` shape rule

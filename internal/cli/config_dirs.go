@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/recipes"
 	"hop.top/tlc/internal/uri"
 )
 
@@ -40,9 +41,10 @@ func recipeDirsFromConfig() []string {
 	return dirs
 }
 
-// recipeLocator returns the locator over the configured search path.
+// recipeLocator returns the locator over the configured search path,
+// with the built-in set as its last layer.
 func recipeLocator() *core.DirLocator {
-	return &core.DirLocator{Dirs: recipeDirsFromConfig()}
+	return &core.DirLocator{Dirs: recipeDirsFromConfig(), Builtin: recipes.FS()}
 }
 
 // projectConfigDir returns the project's config directory (.tlc or

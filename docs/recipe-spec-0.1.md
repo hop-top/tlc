@@ -80,8 +80,9 @@ A recipe reference is one of:
 
 Search path, in precedence order: `recipe.dir` (config, relative to the
 project root; no default), the project's `<config dir>/recipes`
-(`.tlc/recipes`), the user config dir's `recipes`. Missing directories
-are skipped. A reference no layer resolves is an error naming the
+(`.tlc/recipes`), the user config dir's `recipes`, then the built-in set
+compiled into tlc (source `builtin`, path `builtin:<file>`). Missing
+directories are skipped. A reference no layer resolves is an error naming the
 reference and the directories searched.
 
 `recipe.dir` and `recipe.assignees_dir` MUST be relative paths.

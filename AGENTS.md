@@ -191,7 +191,8 @@ tlc recipe diff <track> [--recipe <recipe>]
 
 A recipe is referenced by name, by `name@version`, or by file path. The
 search path is `recipe.dir` (relative to the project root), then
-`.tlc/recipes`, then `~/.config/tlc/recipes`.
+`.tlc/recipes`, then `~/.config/tlc/recipes`, then the built-in set compiled
+into tlc (`internal/recipes`), which any same-name recipe above shadows.
 
 Human-kind steps wait for a decision:
 ```bash
@@ -419,7 +420,8 @@ return the configured value or a default. Never hardcode directory names
 like `"tracks"` or `"examples/assignees"` — always use the accessor method
 from the relevant config struct. The recipe search path is assembled by
 `recipeDirsFromConfig()` in `internal/cli/config_dirs.go` (`recipe.dir`,
-then `.tlc/recipes`, then the user config dir); use `recipeLocator()`
+then `.tlc/recipes`, then the user config dir); `recipeLocator()` adds the
+embedded set from `internal/recipes` as the last layer. Use `recipeLocator()`
 rather than scanning directories by hand.
 
 ## Required Docs to Keep Updated

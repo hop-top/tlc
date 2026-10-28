@@ -225,7 +225,8 @@ tlc recipe import <track|url>                # capture or convert into a recipe
 ```
 
 Reference a recipe by name, `name@version`, or file path. Search path:
-`recipe.dir` → `.tlc/recipes` → `~/.config/tlc/recipes`.
+`recipe.dir` → `.tlc/recipes` → `~/.config/tlc/recipes` → built-in (compiled
+into tlc; `tlc recipe list --source builtin`).
 
 ### 9 · Manage tracks
 
