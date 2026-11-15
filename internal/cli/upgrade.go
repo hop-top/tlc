@@ -25,6 +25,7 @@ var upgradeCmd = &cobra.Command{
 	Short: "Check for and install updates",
 	Long:  `Check for a newer version of tlc and optionally install it.`,
 	Annotations: map[string]string{
+		"kit/side-effect":    "write-local",
 		"kit/top-level-verb": "true",
 	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
