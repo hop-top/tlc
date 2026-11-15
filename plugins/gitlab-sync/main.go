@@ -266,7 +266,7 @@ func fetchGitLabIssues(repoFull, lastSyncAt string, vocab *Vocabulary) ([]interf
 
 // fetchBlockingLinks retrieves issue links and populates blocked_by metadata.
 func fetchBlockingLinks(
-	client *gitlab.Client, pid string, iid int, task *Task,
+	client *gitlab.Client, pid string, iid int64, task *Task,
 ) {
 	links, _, err := client.IssueLinks.ListIssueRelations(pid, iid, nil)
 	if err != nil {
@@ -296,7 +296,7 @@ func createGitLabIssue(client *gitlab.Client, repoFull string, task *Task, vocab
 
 	if task.AssignedTo != "" {
 		if uid, lookupErr := lookupUserID(client, task.AssignedTo); lookupErr == nil {
-			opts.AssigneeIDs = &[]int{uid}
+			opts.AssigneeIDs = &[]int64{uid}
 		}
 	}
 
@@ -335,7 +335,7 @@ func updateGitLabIssue(client *gitlab.Client, repoFull string, task *Task, vocab
 
 	if task.AssignedTo != "" {
 		if uid, lookupErr := lookupUserID(client, task.AssignedTo); lookupErr == nil {
-			opts.AssigneeIDs = &[]int{uid}
+			opts.AssigneeIDs = &[]int64{uid}
 		}
 	}
 
@@ -370,7 +370,7 @@ func closeGitLabIssue(client *gitlab.Client, repoFull string, task *Task) error 
 
 // createBlockedByLinks creates "is_blocked_by" issue links for blocked_by meta.
 func createBlockedByLinks(
-	client *gitlab.Client, pid string, iid int, task *Task,
+	client *gitlab.Client, pid string, iid int64, task *Task,
 ) {
 	blockedBy, ok := task.Meta["blocked_by"].(string)
 	if !ok || blockedBy == "" {
@@ -397,13 +397,13 @@ func createBlockedByLinks(
 	}
 }
 
-func extractIID(task *Task) (int, error) {
+func extractIID(task *Task) (int64, error) {
 	originIDStr, ok := task.Meta["origin_id"].(string)
 	if !ok {
 		return 0, fmt.Errorf("origin_id missing or not a string for task %s", task.ID)
 	}
 
-	iid, err := strconv.Atoi(originIDStr)
+	iid, err := strconv.ParseInt(originIDStr, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid origin_id %q for task %s: %w", originIDStr, task.ID, err)
 	}
@@ -411,7 +411,7 @@ func extractIID(task *Task) (int, error) {
 }
 
 // lookupUserID resolves a GitLab username to a user ID.
-func lookupUserID(client *gitlab.Client, username string) (int, error) {
+func lookupUserID(client *gitlab.Client, username string) (int64, error) {
 	users, _, err := client.Users.ListUsers(&gitlab.ListUsersOptions{
 		Username: &username,
 	})

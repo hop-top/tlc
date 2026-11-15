@@ -50,6 +50,7 @@ AND/OR semantics for filter mode:
   tlc tag feat bug          → tasks tagged feat AND bug
   tlc tag feat feat,bug     → tasks tagged feat AND (feat OR bug)`,
 	Annotations: map[string]string{
+		"kit/side-effect":    "write-local",
 		"kit/top-level-verb": "true",
 	},
 	Args: cobra.ArbitraryArgs,
