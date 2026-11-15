@@ -9,6 +9,10 @@
   recipe shadows it. First entry: `track-consolidate`, which audits a
   set of tracks against the code and ends with fewer tracks, read-only
   until a human approves the generated apply script.
+- Built-in recipe `decision-record`: options with trade-offs, a
+  recommendation, the owner's decision as a human gate, then a numbered
+  record in `docs/decisions` and a `decision:<record>` tag on every
+  affected task.
 - Root `tlc status` subcommand: read-only project + caller snapshot
   (detected project, caller identity, in-progress/TODO task counts,
   overdue items). Satisfies kit's `checkReservedStatus` shape rule

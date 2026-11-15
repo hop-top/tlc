@@ -2,15 +2,35 @@ package uri
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"hop.top/tlc/internal/core"
+	builtin "hop.top/tlc/internal/recipes"
 	"hop.top/tlc/internal/storage"
 )
+
+// builtinRecipeNames lists the embedded recipe names, one per file, so
+// the assertions follow the built-in set as it grows.
+func builtinRecipeNames(t *testing.T) []string {
+	t.Helper()
+	entries, err := fs.ReadDir(builtin.FS(), ".")
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+			names = append(names, strings.TrimSuffix(e.Name(), ".yaml"))
+		}
+	}
+	require.NotEmpty(t, names)
+	return names
+}
 
 func writeRecipeFile(t *testing.T, dir, file, body string) string {
 	t.Helper()
@@ -39,7 +59,9 @@ func TestRegisterTypes_RecipeCompleter(t *testing.T) {
 	// built-in set is offered alongside the directories.
 	got, err := reg.Complete(context.Background(), "recipe", "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"code-review", "release", "track-consolidate"}, got)
+	want := append([]string{"code-review", "release"}, builtinRecipeNames(t)...)
+	sort.Strings(want)
+	assert.Equal(t, want, got)
 
 	got, err = reg.Complete(context.Background(), "recipe", "rel")
 	require.NoError(t, err)
@@ -50,7 +72,7 @@ func TestRegisterTypes_RecipeCompleter(t *testing.T) {
 	require.NoError(t, err)
 	got, err = reg.Complete(context.Background(), "recipe", "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"track-consolidate"}, got)
+	assert.Equal(t, builtinRecipeNames(t), got)
 }
 
 func TestResolver_ResolveRecipe(t *testing.T) {

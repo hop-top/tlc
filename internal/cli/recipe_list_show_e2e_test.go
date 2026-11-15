@@ -67,8 +67,13 @@ func TestRecipeList_E2E_TableJSONAndSourceFilter(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &infos); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
-	if len(infos) != 4 || infos[0].Name != "code-review" || infos[0].Version != "1.1.0" || infos[2].Name != "security-scan" || infos[3].Source != core.BuiltinSource {
-		t.Errorf("json rows = %+v; want name asc, version desc, the built-in layer last", infos)
+	if len(infos) < 4 || infos[0].Name != "code-review" || infos[0].Version != "1.1.0" || infos[2].Name != "security-scan" {
+		t.Fatalf("json rows = %+v; want name asc, version desc, the built-in layer last", infos)
+	}
+	for _, info := range infos[3:] {
+		if info.Source != core.BuiltinSource {
+			t.Errorf("row %s from %q after the recipe.dir rows; want only the built-in layer last", info.Name, info.Source)
+		}
 	}
 	if infos[0].Source != dir {
 		t.Errorf("source = %q; want the recipe.dir %q", infos[0].Source, dir)
