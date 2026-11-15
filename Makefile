@@ -230,7 +230,7 @@ check: fmt-check vet lint tidy-check test ## Full pre-build gate (non-mutating: 
 # Pinned tool versions. Formatters and linters drift between releases; pin so
 # CI and developer machines agree on rules + whitespace. Keep in sync with the
 # pins in .github/workflows/ci.yml.
-GOLANGCI_LINT_VERSION = v2.12.2
+GOLANGCI_LINT_VERSION = v2.15.0
 GOFUMPT_VERSION = v0.10.0
 GOIMPORTS_VERSION = v0.44.0
 
