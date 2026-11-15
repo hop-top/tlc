@@ -1,0 +1,39 @@
+xrr: "1"
+adapter: exec
+fingerprint: 0f39f437
+recorded_at: "2026-11-15T22:20:36Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. Turn decision-record/record.md and decision-record/context.md
+          into decision-record/apply.sh, a POSIX sh script that, in this order:
+
+          1. Numbers the record: one more than the highest four-digit prefix
+             in docs/decisions/, 0001 when there is none, then a slug of the
+             title, as `<NNNN>-<slug>.md`. Compute it when the script runs,
+             not now, so a record written in between does not collide.
+          2. Creates docs/decisions/ when missing and copies
+             decision-record/record.md into it under that name, with the status
+             set to Accepted and the date of the run.
+          3. When the record supersedes an earlier one, sets that one's
+             status to "Superseded by <NNNN>".
+          4. Tags every affected task:
+             `tlc task update <id> --add-tag decision:<NNNN>-<slug>`. A note
+             on a plain field update is dropped, so do not rely on `--note`
+             here.
+
+          The script runs every command even when one fails: no `set -e`.
+          Wrap each command in a `run` helper that echoes it, appends any
+          failure (exit code and command) to decision-record/apply-failures.log,
+          and carries on. The script ends by printing the record path, how
+          many commands ran and how many failed, and exits 0 so the verify
+          step always runs.
+
+          Do not run the script.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

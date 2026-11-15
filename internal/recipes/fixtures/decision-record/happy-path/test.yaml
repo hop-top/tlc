@@ -1,0 +1,13 @@
+name: happy-path
+description: >
+  A storage decision with two affected tasks and a named owner. Replays
+  the read-only analysis (frame, options, recommend, generate-script);
+  the decision task and everything after it need a human decision, so
+  run this with --task 1-4. The cassettes were recorded against a
+  stand-in agent with canned answers: they pin the prompts and the step
+  wiring, not the quality of an analysis.
+expected_exit: 0
+vars:
+  question: Keep SQLite as the only storage backend?
+  owner: alice
+  affected: T-0001 T-0002

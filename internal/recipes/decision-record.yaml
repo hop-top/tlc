@@ -1,0 +1,203 @@
+recipe: decision-record
+version: 1.0.0
+description: Weigh the options, let the owner decide, record the decision and tag the tasks it affects
+agent: claude
+vars:
+  question:
+    description: "The decision to make, phrased as a question"
+    required: true
+  owner:
+    description: "Who decides: assignee of the decision task"
+    default: ""
+  affected:
+    description: "Tasks the decision affects: task ids separated by spaces, or a topic to match task titles against"
+    default: ""
+  source_of_truth:
+    description: "Where the facts live: a repo, a contracts dir, an export or a doc store"
+    default: "."
+  record_dir:
+    description: "Directory of the decision records; the new record is numbered after the highest one there"
+    default: docs/decisions
+  workdir:
+    description: "Directory for the context, options, draft record, apply script and logs"
+    default: decision-record
+track:
+  title: "Decide: {{question}}"
+  type: chore
+  plan: |
+    # Decision record
+
+    Question: {{question}}
+    Owner: {{owner}}
+    Affected tasks: {{affected}}
+    Facts checked against: {{source_of_truth}}
+    Records: {{record_dir}}/
+    Working files: {{workdir}}/
+
+    ## Objective
+
+    Lay out the options with their trade-offs, recommend one, get the
+    owner's decision, then write it down as a numbered record and tag
+    every task it affects.
+
+    ## Read-only until the decision
+
+    Framing, options, the recommendation, the draft record and the apply
+    script are agent work that reads tlc and {{source_of_truth}} and
+    writes only under {{workdir}}/. Nothing in tlc or {{record_dir}}
+    changes before the owner approves the decision task.
+
+    ## Links run one way
+
+    The tasks point at the record, the record names no task ids: a tag
+    `decision:<record>` on each affected task. The record outlives the
+    task store and reads the same without it.
+
+    ## Known tlc gotchas the apply script encodes
+
+    - `--note` is recorded only on a status transition; a note on a
+      plain field update is dropped, so the link is a tag, not a note.
+    - Blocker edges show only in the human `tlc task show` view; the JSON
+      output omits them.
+steps:
+  - id: frame
+    title: "Frame the decision: {{question}}"
+    description: |
+      Read-only. Pin down what is being decided and what it touches.
+
+      1. Restate the question "{{question}}" as one sentence a reader
+         can answer, and list what is out of scope.
+      2. Gather the facts from {{source_of_truth}}: the constraints,
+         the current state and anything already ruled out. Cite each
+         fact (a file:line, a commit SHA, a document and section).
+      3. Resolve the affected tasks "{{affected}}". When it is a list of
+         task ids, take those. Otherwise treat it as a topic: run
+         `tlc task list --format json` and keep the open tasks whose
+         title or description matches it. For each record its id,
+         title, status and track, and its edges from the human
+         `tlc task show <id>` view; the JSON output omits them.
+      4. List the records already in {{record_dir}}/ that bear on the
+         question, and the one this decision would supersede, if any.
+
+      Write {{workdir}}/context.md. End your summary with the number of
+      affected tasks.
+
+  - id: options
+    title: Lay out the options and their trade-offs
+    depends_on: [frame]
+    description: |
+      Read-only. From {{workdir}}/context.md, list the options worth
+      weighing: at least two, one of them leaving things as they are.
+
+      For each option give what it is, what it costs (effort, risk,
+      reversibility), what it enables and what it rules out, and which
+      affected tasks it changes and how. Back every claim with a fact
+      from {{workdir}}/context.md or a new citation; an unbacked claim
+      is marked as an assumption.
+
+      End with one table: options as rows, the same criteria as
+      columns. Write {{workdir}}/options.md. Do not change anything.
+
+  - id: recommend
+    title: Recommend an option and draft the record
+    depends_on: [options]
+    description: |
+      Read-only. From {{workdir}}/options.md, pick one option and say
+      why it beats the others on the criteria that matter most here.
+      Name what would make you change your mind, and the open questions
+      for the owner.
+
+      Draft the record in {{workdir}}/record.md, in this shape:
+
+      - title: the decision, stated as done ("Use X for Y");
+      - status: Proposed;
+      - context: the question and the facts that force it;
+      - options: one line each, with the deciding trade-off;
+      - decision: the recommended option;
+      - consequences: what gets easier, what gets harder, what follows;
+      - supersedes: the earlier record it replaces, if any.
+
+      The record names no task ids: tasks point at it, not the other
+      way round. Write {{workdir}}/recommendation.md with the pick, the
+      reasoning and the open questions. Do not change anything.
+
+  - id: generate-script
+    title: Generate the apply script
+    depends_on: [recommend]
+    description: |
+      Read-only. Turn {{workdir}}/record.md and {{workdir}}/context.md
+      into {{workdir}}/apply.sh, a POSIX sh script that, in this order:
+
+      1. Numbers the record: one more than the highest four-digit prefix
+         in {{record_dir}}/, 0001 when there is none, then a slug of the
+         title, as `<NNNN>-<slug>.md`. Compute it when the script runs,
+         not now, so a record written in between does not collide.
+      2. Creates {{record_dir}}/ when missing and copies
+         {{workdir}}/record.md into it under that name, with the status
+         set to Accepted and the date of the run.
+      3. When the record supersedes an earlier one, sets that one's
+         status to "Superseded by <NNNN>".
+      4. Tags every affected task:
+         `tlc task update <id> --add-tag decision:<NNNN>-<slug>`. A note
+         on a plain field update is dropped, so do not rely on `--note`
+         here.
+
+      The script runs every command even when one fails: no `set -e`.
+      Wrap each command in a `run` helper that echoes it, appends any
+      failure (exit code and command) to {{workdir}}/apply-failures.log,
+      and carries on. The script ends by printing the record path, how
+      many commands ran and how many failed, and exits 0 so the verify
+      step always runs.
+
+      Do not run the script.
+
+  - id: decide
+    kind: human
+    title: "Decide: {{question}}"
+    depends_on: [generate-script]
+    assignee: "{{owner}}"
+    description: |
+      Nothing has been written yet. Read {{workdir}}/options.md and
+      {{workdir}}/recommendation.md, then {{workdir}}/record.md and
+      {{workdir}}/apply.sh.
+
+      To take a different option than the one recommended, edit the
+      decision and consequences in {{workdir}}/record.md before
+      approving; the script records whatever the draft says.
+
+      Approve with `tlc task approve <this-task>` to write the record and
+      tag the affected tasks. Reject with
+      `tlc task reject <this-task> --reason "..."` and nothing is
+      written.
+
+  - id: apply
+    kind: exec
+    title: Record the decision and tag the affected tasks
+    depends_on: [decide]
+    exec:
+      argv: [sh, "{{workdir}}/apply.sh"]
+      timeout: 10m
+    description: |
+      Run {{workdir}}/apply.sh as approved. Each failing command is
+      logged to {{workdir}}/apply-failures.log and the script keeps
+      going.
+
+  - id: verify
+    title: Verify the record and the links
+    depends_on: [apply]
+    description: |
+      Read-only. Check the result of the apply step:
+
+      1. Read the new record in {{record_dir}}/: numbered after the
+         highest one before it, status Accepted, and the decision the
+         owner approved in {{workdir}}/record.md.
+      2. When it supersedes an earlier record, check that one now says
+         so.
+      3. Run `tlc task list --tag decision:<NNNN>-<slug> --format json`
+         and compare it with the affected tasks in {{workdir}}/context.md:
+         none missing, none extra.
+      4. Read {{workdir}}/apply-failures.log.
+
+      Write {{workdir}}/report.md: the record path, every command that
+      failed and why, every task left untagged, and the follow-ups the
+      decision creates for the owner.

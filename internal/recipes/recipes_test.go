@@ -108,3 +108,61 @@ func TestTrackConsolidate_Shape(t *testing.T) {
 	assert.Contains(t, byID["verify-tasks"].Description, "file:line")
 	assert.Contains(t, byID["verify-tasks"].Description, "commit SHA")
 }
+
+func TestDecisionRecord_Shape(t *testing.T) {
+	t.Parallel()
+	loc := &core.DirLocator{Builtin: recipes.FS()}
+	r, err := loc.Locate("decision-record")
+	require.NoError(t, err)
+
+	assert.True(t, r.Vars["question"].Required, "question is required")
+	for name, want := range map[string]string{
+		"owner": "", "affected": "", "source_of_truth": ".",
+		"record_dir": "docs/decisions", "workdir": "decision-record",
+	} {
+		def, ok := r.Vars[name]
+		require.True(t, ok, "var %s declared", name)
+		assert.False(t, def.Required, "var %s optional", name)
+		assert.Equal(t, want, def.Default, "var %s default", name)
+	}
+
+	steps, err := core.Expand(r, loc)
+	require.NoError(t, err)
+	ids := make([]string, len(steps))
+	byID := map[string]*core.RecipeStep{}
+	for i, s := range steps {
+		ids[i] = s.ID
+		byID[s.ID] = &steps[i]
+	}
+	assert.Equal(t, []string{
+		"frame", "options", "recommend", "generate-script",
+		"decide", "apply", "verify",
+	}, ids)
+
+	// Everything before the gate is agent work that only reads.
+	for _, id := range []string{"frame", "options", "recommend", "generate-script"} {
+		assert.Equal(t, core.TaskKindAgent, byID[id].EffectiveKind(), "%s is agent work", id)
+	}
+	// The owner decides, and the only write path sits behind the decision.
+	decide := byID["decide"]
+	assert.Equal(t, core.TaskKindHuman, decide.EffectiveKind())
+	assert.Equal(t, []string{"generate-script"}, decide.DependsOn)
+	assert.Equal(t, "{{owner}}", decide.Assignee, "the owner is the step assignee, the field materialize applies")
+	assert.Equal(t, core.TaskKindExec, byID["apply"].EffectiveKind())
+	assert.Equal(t, []string{"decide"}, byID["apply"].DependsOn)
+	assert.Equal(t, []string{"apply"}, byID["verify"].DependsOn)
+
+	// At least two options, one of them the status quo.
+	assert.Contains(t, byID["options"].Description, "at least two, one of them leaving things as they are")
+	// Links run one way: the record names no task ids, tasks carry a tag.
+	assert.Contains(t, byID["recommend"].Description, "The record names no task ids")
+	gen := byID["generate-script"].Description
+	for _, want := range []string{
+		"--add-tag decision:<NNNN>-<slug>", "Compute it when the script runs",
+		"Superseded by", "no `set -e`", "apply-failures.log",
+	} {
+		assert.Contains(t, gen, want)
+	}
+	assert.Contains(t, byID["frame"].Description, "the JSON output omits them")
+	assert.Contains(t, byID["verify"].Description, "--tag decision:<NNNN>-<slug>")
+}

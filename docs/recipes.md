@@ -251,6 +251,7 @@ to copy. Their sources and test fixtures live in `internal/recipes/`.
 | Recipe | Needs | What it does |
 |---|---|---|
 | `track-consolidate` | `scope` | Audit a set of tracks against the code and end with fewer tracks, losing no work |
+| `decision-record` | `question` | Weigh the options, let the owner decide, write a numbered record and tag the tasks it affects |
 
 `track-consolidate` takes `scope` (a topic matched against track titles
 and plans, or track ids separated by spaces), `keep` (pinned track ids,
@@ -272,6 +273,32 @@ tlc track execute <track>      # runs up to the approval task
 # read track-consolidate/proposal.md and apply.sh, then:
 tlc task approve <approval-task>
 tlc track execute <track>      # apply and verify
+```
+
+`decision-record` takes `question` (the decision, phrased as a question),
+`owner` (assignee of the decision task), `affected` (task ids separated by
+spaces, or a topic matched against task titles), `source_of_truth` (where
+the facts live, default `.`), `record_dir` (default `docs/decisions`) and
+`workdir` (default `decision-record`).
+
+Its steps: frame the question with cited facts and resolve the affected
+tasks; lay out at least two options, one of them the status quo, with
+their trade-offs; recommend one and draft the record (status Proposed);
+generate `apply.sh`; a human decision task assigned to the owner; run the
+script, which numbers the record after the highest one in `record_dir`,
+marks it Accepted, marks any record it supersedes, and tags each affected
+task `decision:<NNNN>-<slug>`; verify. To take a different option than the
+one recommended, edit the draft before approving. Links run one way: the
+record names no task ids, the tasks carry the tag.
+
+```bash
+tlc track create --recipe decision-record --var "question=Keep SQLite as the only backend?" \
+  --var owner=alice --var "affected=T-0012 T-0019"
+tlc track execute <track>      # runs up to the decision task
+# read decision-record/options.md, recommendation.md and record.md, then:
+tlc task approve <decision-task>
+tlc track execute <track>      # record and tag
+tlc task list --tag decision:0001-keep-sqlite-as-the-only-backend
 ```
 
 To replace a built-in, put a recipe with the same name in any directory
