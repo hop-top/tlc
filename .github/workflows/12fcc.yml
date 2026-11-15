@@ -55,11 +55,15 @@ jobs:
 
       # Pinned to a full commit SHA (supply-chain hardening) rather than a
       # mutable ref. spec-12fc has no tag yet (v0.1 alpha in flight); this is
-      # main as of 2026-07-02. Re-pin to the @v1 tag SHA once published.
-      - uses: hop-top/spec-12fc@fbd05973d8c0ec1acd9b20994d3db9bbfc3ac141 # main @ 2026-07-02 (verify-no-leak diff-paths fix)
+      # main as of 2026-11-11. Re-pin to the @v1 tag SHA once published.
+      - uses: hop-top/spec-12fc@2da962b62b40f7cef5e9d20170d561f8b90c27c1 # main @ 2026-11-11 (verify-stories own paths)
         with:
           command: all
           paths: cmd/
+          # verify-stories has its own input; tlc ships no kit stories (docs/stories
+          # holds markdown user stories), and the default e2e/stories/ is absent,
+          # which exits 5 (in fail-on). cmd/ holds no YAML: same no-op as before.
+          stories-paths: cmd/
           diff: ""            # scan paths, not PR diff; --diff+--paths are mutually exclusive
           fail-on: 2,3,5
           upload-sarif: true
@@ -91,10 +95,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: hop-top/spec-12fc@fbd05973d8c0ec1acd9b20994d3db9bbfc3ac141 # main @ 2026-07-02 (verify-no-leak diff-paths fix)
+      - uses: hop-top/spec-12fc@2da962b62b40f7cef5e9d20170d561f8b90c27c1 # main @ 2026-11-11 (verify-stories own paths)
         with:
           command: all
           paths: cmd/
+          # verify-stories has its own input; tlc ships no kit stories (docs/stories
+          # holds markdown user stories), and the default e2e/stories/ is absent,
+          # which exits 5 (in fail-on). cmd/ holds no YAML: same no-op as before.
+          stories-paths: cmd/
           diff: ""            # scan paths, not PR diff; --diff+--paths are mutually exclusive
           fail-on: 2,3,5
           upload-sarif: true
