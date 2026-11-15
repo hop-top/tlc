@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.26+ (project uses 1.26.1)
+- Go 1.27+ (project uses 1.27.4)
 - Git
 - Make (pre-installed on macOS/Linux)
 

@@ -4,14 +4,14 @@
 
 # >>> kit-managed >>>
 [tools]
-go = "1.26"
-golangci-lint = "2.12"
-lychee = "0.18"
-hadolint = "2.12"
+go = "1.27"
+golangci-lint = "2.15"
+lychee = "0.24"
+hadolint = "2.15"
 actionlint = "1.7"
-shellcheck = "0.10"
-shfmt = "3.10"
-"npm:release-please" = "16"
+shellcheck = "0.11"
+shfmt = "3.14"
+"npm:release-please" = "17"
 
 [env]
 _.file = ".env"
