@@ -85,3 +85,34 @@ func TestDefaultStatuses_Seven(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultConfig_NoDefaultStatus(t *testing.T) {
+	if got := DefaultConfig().Task.DefaultStatus; got != "" {
+		t.Errorf("DefaultConfig().Task.DefaultStatus = %q, want unset", got)
+	}
+}
+
+func TestDefaultStatus_Validation(t *testing.T) {
+	declared := &TaskConfig{DefaultStatus: "backlog"}
+	if err := declared.ValidateWorkflow(); err != nil {
+		t.Fatalf("declared default_status rejected: %v", err)
+	}
+
+	for _, bad := range []string{"TODO", "Todo", "nope"} {
+		err := (&TaskConfig{DefaultStatus: bad}).ValidateWorkflow()
+		if err == nil {
+			t.Fatalf("default_status %q accepted, want error", bad)
+		}
+		msg := err.Error()
+		for _, want := range []string{"task.default_status", `"` + bad + `"`, "backlog, todo, in_progress, in_review, blocked, done, cancelled"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("error for %q lacks %q: %s", bad, want, msg)
+			}
+		}
+	}
+
+	err := (&TaskConfig{DefaultStatus: "done"}).ValidateWorkflow()
+	if err == nil || !strings.Contains(err.Error(), "task.default_status") {
+		t.Errorf("terminal default_status error should name the key, got %v", err)
+	}
+}

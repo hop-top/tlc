@@ -263,6 +263,14 @@ func kitRoot() *kitcli.Root {
 		if pendingConfigErr != nil && c.Name() != "init" {
 			return pendingConfigErr
 		}
+		// An invalid task workflow (an undeclared default_status, a rule
+		// naming an unknown status) is a config error like any other:
+		// refuse here, with the key and value named, instead of letting
+		// the first DefaultWorkflow call terminate the process. init and
+		// the config commands stay usable so the value can be fixed.
+		if err := workflowConfigError(c); err != nil {
+			return err
+		}
 
 		// cobra.OnInitialize(initConfig) has run by now, so the user's
 		// configured status vocabulary is finally readable. Overwrite the

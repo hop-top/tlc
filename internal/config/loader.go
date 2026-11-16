@@ -16,7 +16,6 @@ func DefaultConfig() *Config {
 			Verbose: false,
 		},
 		Task: TaskConfig{
-			DefaultStatus: "todo",
 			Statuses:      GetDefaultStatuses(),
 			StateMachine:  GetDefaultStateMachine(),
 		},
