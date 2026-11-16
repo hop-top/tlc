@@ -27,7 +27,7 @@ func loadTaskConfig() *config.TaskConfig {
 	return &cfg
 }
 
-// workflowConfigError validates the merged task workflow config for the
+// workflowConfigError validates the merged task.default_status for the
 // command about to run. It returns nil for init and the config commands,
 // which must keep working so a bad value can be repaired.
 func workflowConfigError(c *cobra.Command) error {
@@ -43,7 +43,7 @@ func workflowConfigError(c *cobra.Command) error {
 	if cfg == nil {
 		return nil
 	}
-	if err := cfg.ValidateWorkflow(); err != nil {
+	if err := cfg.ValidateDefaultStatus(); err != nil {
 		return fmt.Errorf("invalid task config: %w", err)
 	}
 	return nil
