@@ -133,20 +133,20 @@ func TestValidTaskStatus_HonoursConfiguredVocabulary(t *testing.T) {
 	withTaskConfigProvider(t, func() *config.TaskConfig {
 		return &config.TaskConfig{
 			Statuses: []config.StatusDefinition{
-				{Name: "TODO", Label: "To Do", Role: "initial"},
-				{Name: "IN_PROGRESS", Label: "In Progress", Role: "active"},
+				{Name: "todo", Label: "To Do", Role: "initial"},
+				{Name: "in_progress", Label: "In Progress", Role: "active"},
 				{Name: "IN_REVIEW", Label: "In Review", Role: "active"},
-				{Name: "DONE", Label: "Done", IsTerminal: true, Role: "completed"},
+				{Name: "done", Label: "Done", IsTerminal: true, Role: "completed"},
 			},
 		}
 	})
 
-	for _, s := range []TaskStatus{"", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"} {
+	for _, s := range []TaskStatus{"", "todo", "in_progress", "IN_REVIEW", "done"} {
 		if !ValidTaskStatus(s) {
 			t.Errorf("configured status %q should be valid", s)
 		}
 	}
-	for _, s := range []TaskStatus{"SKIPPED", "in_review", "NOPE"} {
+	for _, s := range []TaskStatus{"cancelled", "in_review", "NOPE"} {
 		if ValidTaskStatus(s) {
 			t.Errorf("undeclared status %q should be invalid", s)
 		}

@@ -130,7 +130,7 @@ func TestConfig_Validate(t *testing.T) {
 
 func TestTaskConfig_TerminalDefaultStatusRejected(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Task.DefaultStatus = "DONE"
+	cfg.Task.DefaultStatus = "done"
 	err := cfg.Validate()
 	if err == nil {
 		t.Error("expected error for terminal default_status, got nil")
@@ -179,7 +179,7 @@ func TestTaskConfig_DuplicateTLSMarkerRejected(t *testing.T) {
 func TestTaskConfig_DuplicateStatusNameRejected(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Task.Statuses = append(cfg.Task.Statuses, StatusDefinition{
-		Name:       "TODO",
+		Name:       "todo",
 		Label:      "Duplicate Todo",
 		IsTerminal: false,
 		Role:       "initial",
@@ -193,7 +193,7 @@ func TestTaskConfig_DuplicateStatusNameRejected(t *testing.T) {
 
 func TestTaskConfig_StateMachineUnknownStatusRejected(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Task.StateMachine.Rules["NONEXISTENT"] = []string{"TODO"}
+	cfg.Task.StateMachine.Rules["NONEXISTENT"] = []string{"todo"}
 	err := cfg.Validate()
 	if err == nil {
 		t.Error("expected error for state machine rule referencing unknown status, got nil")
@@ -202,7 +202,7 @@ func TestTaskConfig_StateMachineUnknownStatusRejected(t *testing.T) {
 
 func TestTaskConfig_StateMachineUnknownTargetStatusRejected(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Task.StateMachine.Rules["TODO"] = []string{"NONEXISTENT"}
+	cfg.Task.StateMachine.Rules["todo"] = []string{"NONEXISTENT"}
 	err := cfg.Validate()
 	if err == nil {
 		t.Error("expected error for state machine rule referencing unknown target status, got nil")
@@ -537,12 +537,12 @@ func TestTaskConfig_ValidateWorkflowSkipsSchedulingKeys(t *testing.T) {
 // the config fails loudly and names the status.
 func TestTaskConfig_StateMachineRuleFromTerminalStatusRejected(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Task.StateMachine.Rules["DONE"] = []string{"TODO"}
+	cfg.Task.StateMachine.Rules["done"] = []string{"todo"}
 	err := cfg.Validate()
 	if err == nil {
 		t.Fatal("expected error for state machine rule out of terminal status DONE, got nil")
 	}
-	if !strings.Contains(err.Error(), "DONE") {
+	if !strings.Contains(err.Error(), "done") {
 		t.Errorf("error must name the offending status, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "reopen") {
@@ -558,7 +558,7 @@ func TestTaskConfig_WorkflowOverrideRuleFromTerminalStatusRejected(t *testing.T)
 	cfg.Task.Workflows = map[string]WorkflowOverride{
 		"reopenable": {
 			StateMachine: &WorkflowDefinition{
-				Rules: map[string][]string{"DONE": {"TODO"}},
+				Rules: map[string][]string{"done": {"todo"}},
 			},
 		},
 	}
@@ -576,7 +576,7 @@ func TestTaskConfig_WorkflowOverrideRuleFromTerminalStatusRejected(t *testing.T)
 // cannot creep into forbidding completion.
 func TestTaskConfig_TerminalStatusAllowedAsRuleTarget(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Task.StateMachine.Rules["TODO"] = []string{"IN_PROGRESS", "DONE", "SKIPPED"}
+	cfg.Task.StateMachine.Rules["todo"] = []string{"in_progress", "done", "cancelled"}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("terminal status as a rule target must stay valid, got: %v", err)
 	}

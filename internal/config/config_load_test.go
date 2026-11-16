@@ -74,7 +74,7 @@ func assertListDefaultsUnmarshaled(t *testing.T, cfg *Config) {
 	if want := []string{"id", "title"}; !slicesEqual(cfg.Task.List.Columns, want) {
 		t.Errorf("Task.List.Columns = %v, want %v", cfg.Task.List.Columns, want)
 	}
-	if want := []string{"TODO"}; !slicesEqual(cfg.Task.List.Status, want) {
+	if want := []string{"todo"}; !slicesEqual(cfg.Task.List.Status, want) {
 		t.Errorf("Task.List.Status = %v, want %v", cfg.Task.List.Status, want)
 	}
 
