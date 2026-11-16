@@ -30,10 +30,10 @@ func TestValidateTransition_DefaultConfig(t *testing.T) {
 		wantErr bool
 	}{
 		{"TODO to IN_PROGRESS", StatusTodo, StatusInProgress, false},
-		{"TODO to SKIPPED", StatusTodo, StatusSkipped, false},
+		{"TODO to SKIPPED", StatusTodo, StatusCancelled, false},
 		{"IN_PROGRESS to DONE", StatusInProgress, StatusDone, false},
 		{"IN_PROGRESS to TODO", StatusInProgress, StatusTodo, false},
-		{"IN_PROGRESS to SKIPPED", StatusInProgress, StatusSkipped, false},
+		{"IN_PROGRESS to SKIPPED", StatusInProgress, StatusCancelled, false},
 		{"same status", StatusTodo, StatusTodo, false},
 	}
 
@@ -54,8 +54,8 @@ func TestValidateTransition_RejectsTerminalToAnything(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	terminalStatuses := []TaskStatus{StatusDone, StatusSkipped}
-	targets := []TaskStatus{StatusTodo, StatusInProgress, StatusDone, StatusSkipped}
+	terminalStatuses := []TaskStatus{StatusDone, StatusCancelled}
+	targets := []TaskStatus{StatusTodo, StatusInProgress, StatusDone, StatusCancelled}
 
 	for _, from := range terminalStatuses {
 		for _, to := range targets {
@@ -173,7 +173,7 @@ func TestStatusForTLSMarker(t *testing.T) {
 		{" ", StatusTodo, true},
 		{">", StatusInProgress, true},
 		{"x", StatusDone, true},
-		{"-", StatusSkipped, true},
+		{"-", StatusCancelled, true},
 		{"?", "", false},
 	}
 
@@ -224,7 +224,7 @@ func TestIsTerminal(t *testing.T) {
 		{StatusTodo, false},
 		{StatusInProgress, false},
 		{StatusDone, true},
-		{StatusSkipped, true},
+		{StatusCancelled, true},
 	}
 
 	for _, tt := range tests {

@@ -236,7 +236,7 @@ func renderPhaseTask(w io.Writer, task *core.Task) {
 		styled = doneStyle.Render("[DONE]")
 	case core.StatusInProgress:
 		styled = inProgressStyle.Render("[IN_PROGRESS]")
-	case core.StatusSkipped:
+	case core.StatusCancelled:
 		styled = skippedStyle.Render("[SKIPPED]")
 	default:
 		styled = fmt.Sprintf("[%s]", statusStr)

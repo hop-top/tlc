@@ -15,6 +15,7 @@ type WorkflowManager struct {
 	statuses    map[string]*config.StatusDefinition
 	statusOrder []string
 	rules       map[string][]string
+	guards      []config.GuardDefinition
 	workflows   map[string]*WorkflowManager
 	roleIndex   map[string]string // role -> first status name with that role
 	markerIndex map[string]string // TLS marker -> status name
@@ -55,14 +56,21 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 		sm = &config.WorkflowDefinition{}
 	}
 	rules := sm.Rules
-	if rules == nil && config.UsesDefaultStatuses(statuses) {
-		rules = config.GetDefaultStateMachine().Rules
+	guards := sm.Guards
+	if config.UsesDefaultStatuses(statuses) {
+		if rules == nil {
+			rules = config.GetDefaultStateMachine().Rules
+		}
+		if guards == nil {
+			guards = config.GetDefaultGuards()
+		}
 	}
 
 	wm, err := newWorkflowManagerFromRules(statuses, rules)
 	if err != nil {
 		return nil, err
 	}
+	wm.guards = guards
 	wm.defaultStatus = cfg.DefaultStatus
 
 	// Build per-tag workflow overrides
@@ -90,6 +98,13 @@ func NewWorkflowManager(cfg *config.TaskConfig) (*WorkflowManager, error) {
 				return nil, fmt.Errorf("workflow override for tag %q: %w", tag, err)
 			}
 			tagWM.defaultStatus = cfg.DefaultStatus
+			// A per-tag guard list REPLACES the base list; an override
+			// that declares none inherits the base guards, as it does
+			// the base rules.
+			tagWM.guards = override.StateMachine.Guards
+			if tagWM.guards == nil {
+				tagWM.guards = wm.guards
+			}
 			// overrideTag keeps the spelling the config author wrote,
 			// because it is what error messages quote back at them; the
 			// MAP key is folded, because it is what tags are matched
@@ -344,8 +359,8 @@ func (wm *WorkflowManager) SkippedStatus() (TaskStatus, SkippedResolution) {
 	if name, ok := wm.roleIndex[config.RoleSkipped]; ok {
 		return TaskStatus(name), SkippedByRole
 	}
-	if _, ok := wm.statuses[string(StatusSkipped)]; ok {
-		return StatusSkipped, SkippedByName
+	if _, ok := wm.statuses[string(StatusCancelled)]; ok {
+		return StatusCancelled, SkippedByName
 	}
 	return "", SkippedUnresolved
 }

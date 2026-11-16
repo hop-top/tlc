@@ -44,23 +44,44 @@ func ValidateTransition(current, next TaskStatus) error {
 // overrides has no workflow to force past — reporting that is better than
 // silently forcing under an arbitrary one.
 func (t *Task) TransitionWithWorkflow(next TaskStatus, by string, note string, wm *WorkflowManager, force bool) (*LogEntry, error) {
+	tc := NewTransitionContext(t, next)
+	tc.Note = note
+	tc.Force = force
+	return t.TransitionWithContext(tc, by, wm)
+}
+
+// TransitionWithContext is TransitionWithWorkflow with the full guard
+// context: the caller supplies Note, Reason and Blockers. tc.From is
+// overwritten with the task's current status. Rules and guards are
+// judged by the task's own workflow; tc.Force bypasses both, and a
+// bypass that was needed is recorded on the log entry (Meta "forced").
+func (t *Task) TransitionWithContext(tc TransitionContext, by string, wm *WorkflowManager) (*LogEntry, error) {
 	wm, err := wm.WorkflowForTask(t)
 	if err != nil {
 		return nil, err
 	}
-	if err := wm.ValidateTransition(t.Status, next, force); err != nil {
+	tc.From = t.Status
+	forced, bypassed, err := wm.CheckTransition(tc)
+	if err != nil {
 		return nil, err
 	}
 	oldStatus := t.Status
-	t.Status = next
+	t.Status = tc.To
 	t.UpdatedAt = time.Now().UTC()
-	return &LogEntry{
+	entry := &LogEntry{
 		TaskID:    t.ID,
 		Timestamp: t.UpdatedAt,
 		By:        by,
-		Action:    string(next),
-		Note:      fmt.Sprintf("Status changed from %s to %s: %s", oldStatus, next, note),
-	}, nil
+		Action:    string(tc.To),
+		Note:      fmt.Sprintf("Status changed from %s to %s: %s", oldStatus, tc.To, tc.Note),
+	}
+	if forced {
+		entry.Meta = map[string]interface{}{
+			"forced":   true,
+			"bypassed": bypassed.Error(),
+		}
+	}
+	return entry, nil
 }
 
 // Transition transitions the task using the default workflow.

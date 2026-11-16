@@ -87,7 +87,7 @@ func TestTaskToCore_AllStatuses(t *testing.T) {
 		{"TODO", core.StatusTodo},
 		{"IN_PROGRESS", core.StatusInProgress},
 		{"DONE", core.StatusDone},
-		{"SKIPPED", core.StatusSkipped},
+		{"SKIPPED", core.StatusCancelled},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

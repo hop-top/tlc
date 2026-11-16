@@ -155,7 +155,7 @@ task:
 
 // TestSkipResolvesRoleNotName is the headline: with a vocabulary whose
 // skip status is called WONTFIX, `task skip` must land the task in
-// WONTFIX. A command that reached for core.StatusSkipped would fail here
+// WONTFIX. A command that reached for core.StatusCancelled would fail here
 // with "unknown status: SKIPPED", because SKIPPED is not declared.
 func TestSkipResolvesRoleNotName(t *testing.T) {
 	bin, home, env := statusVocabFixture(t, wontfixConfig)

@@ -385,7 +385,7 @@ func TestTrackService_LinkedNonTerminalTasks(t *testing.T) {
 		{ID: "T-0001", Status: StatusTodo, TrackID: &trackID},
 		{ID: "T-0002", Status: StatusInProgress, TrackID: &trackID},
 		{ID: "T-0003", Status: StatusDone, TrackID: &trackID},
-		{ID: "T-0004", Status: StatusSkipped, TrackID: &trackID},
+		{ID: "T-0004", Status: StatusCancelled, TrackID: &trackID},
 	}}
 	trackRepo := newStubTrackRepo()
 	trackRepo.tracks[trackID] = &Track{
@@ -448,7 +448,7 @@ func TestTrackService_AbandonTrackWithTasks(t *testing.T) {
 	for _, task := range taskRepo.tasks {
 		switch task.ID {
 		case "T-0001", "T-0002":
-			if task.Status != StatusSkipped {
+			if task.Status != StatusCancelled {
 				t.Errorf("task %s: expected SKIPPED, got %s",
 					task.ID, task.Status)
 			}

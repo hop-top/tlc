@@ -114,7 +114,7 @@ func TestBuildVCalendar_StatusMapping(t *testing.T) {
 		{core.StatusTodo, "STATUS:NEEDS-ACTION"},
 		{core.StatusInProgress, "STATUS:IN-PROCESS"},
 		{core.StatusDone, "STATUS:COMPLETED"},
-		{core.StatusSkipped, "STATUS:CANCELLED"},
+		{core.StatusCancelled, "STATUS:CANCELLED"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.status), func(t *testing.T) {

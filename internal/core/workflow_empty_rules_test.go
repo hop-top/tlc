@@ -199,7 +199,7 @@ func TestOverrideWithEmptyRulesInheritsBaseOnBuiltinVocabulary(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if err := tagWM.ValidateTransition(StatusTodo, StatusSkipped, false); err != nil {
+	if err := tagWM.ValidateTransition(StatusTodo, StatusCancelled, false); err != nil {
 		t.Errorf("empty override must inherit base TODO -> SKIPPED: %v", err)
 	}
 	if err := tagWM.ValidateTransition(StatusTodo, StatusInProgress, false); err == nil {

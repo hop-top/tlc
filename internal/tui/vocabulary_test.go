@@ -3,7 +3,7 @@ package tui
 // The TUI under a RENAMED status vocabulary.
 //
 // Every literal the TUI spelled as core.StatusTodo / StatusInProgress /
-// StatusDone / StatusSkipped was a WHOLE-VOCABULARY assumption, not one
+// StatusDone / StatusCancelled was a WHOLE-VOCABULARY assumption, not one
 // constant standing in for a role: the rotate ring, the create default,
 // the kanban columns, the sort rank and the glyph table each enumerated
 // the built-in four and had no answer for anything else. A config
