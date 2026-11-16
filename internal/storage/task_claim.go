@@ -20,18 +20,23 @@ var _ core.TaskClaimer = (*SQLiteStorage)(nil)
 func (s *SQLiteStorage) ClaimTask(
 	ctx context.Context, id, projectID string, from, to core.TaskStatus, actor string, now time.Time,
 ) (bool, error) {
+	if err := validateStatusWrite(to); err != nil {
+		return false, err
+	}
+
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
+
+	fromNames := statusSQLNames(string(from))
 
 	stamp := util.FormatStorageTime(now)
 	res, err := s.db.ExecContext(
 		ctx, `
 		UPDATE tasks
 		SET status = ?, assigned_to = ?, claimed_at = ?, updated_at = ?
-		WHERE id = ? AND project_id = ? AND status = ?
+		WHERE id = ? AND project_id = ? AND `+statusColumn("status")+` IN (`+placeholderList(len(fromNames))+`)
 		  AND (assigned_to IS NULL OR assigned_to = '' OR assigned_to = ?)`,
-		string(to), actor, stamp, stamp,
-		id, projectID, string(from), actor,
+		claimArgs(string(to), actor, stamp, id, projectID, fromNames)...,
 	)
 	if err != nil {
 		return false, fmt.Errorf("failed to claim task %s: %w", id, err)
