@@ -50,7 +50,11 @@ type transitionOpts struct {
 // guards through the task's workflow and applies the move.
 func transitionTask(ctx context.Context, repo core.Repository, task *core.Task, to core.TaskStatus, wm *core.WorkflowManager, o transitionOpts) (*core.LogEntry, error) {
 	tc := transitionContext(ctx, repo, task, to, o)
-	return task.TransitionWithContext(tc, o.By, wm)
+	entry, err := task.TransitionWithContext(tc, o.By, wm)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+	return entry, nil
 }
 
 // transitionContext fills a core.TransitionContext for moving task to `to`.
@@ -71,7 +75,10 @@ func resolveBlockers(ctx context.Context, repo core.Repository, task *core.Task)
 	if len(refs) == 0 || repo == nil {
 		return nil
 	}
-	sq, _ := repo.(*storage.SQLiteStorage)
+	sq, ok := repo.(*storage.SQLiteStorage)
+	if !ok {
+		sq = nil
+	}
 	out := make(map[string]core.TaskStatus, len(refs))
 	for _, ref := range refs {
 		lookup := ref
