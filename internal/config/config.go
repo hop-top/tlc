@@ -426,6 +426,9 @@ const (
 	RoleActive    = "active"
 	RoleCompleted = "completed"
 	RoleSkipped   = "skipped"
+	RoleBacklog   = "backlog"
+	RoleReview    = "review"
+	RoleBlocked   = "blocked"
 )
 
 type StatusDefinition struct {
@@ -581,7 +584,34 @@ func (t TagsConfig) Validate() error {
 
 // WorkflowDefinition defines allowed state transitions.
 type WorkflowDefinition struct {
-	Rules map[string][]string `yaml:"rules"` // map[from][]to
+	Rules  map[string][]string `yaml:"rules"`            // map[from][]to
+	Guards []GuardDefinition   `yaml:"guards,omitempty"` // see GuardDefinition
+}
+
+// Named guard checks. The set is fixed: guards are config, not code.
+const (
+	// CheckNote passes when the transition carries a non-empty note.
+	CheckNote = "note"
+	// CheckReason passes when the transition carries a non-empty reason.
+	CheckReason = "reason"
+	// CheckAssignee passes when the task has an assignee after the move.
+	CheckAssignee = "assignee"
+	// CheckBlockersClear passes when every blocked_by task is terminal.
+	CheckBlockersClear = "blockers_clear"
+)
+
+// GuardChecks lists the known guard check names.
+func GuardChecks() []string {
+	return []string{CheckNote, CheckReason, CheckAssignee, CheckBlockersClear}
+}
+
+// GuardDefinition is a condition set on a transition. It applies to every
+// transition matching its From and To; each is optional but at least one
+// must be set. Every check in Require must pass.
+type GuardDefinition struct {
+	From    string   `yaml:"from,omitempty"`
+	To      string   `yaml:"to,omitempty"`
+	Require []string `yaml:"require"`
 }
 
 // WorkflowOverride allows per-tag workflow customization.
@@ -747,41 +777,16 @@ func (t *TaskConfig) TodoFilePath() string {
 	return "todo.txt"
 }
 
-// GetDefaultStatuses returns the four default task statuses.
+// GetDefaultStatuses returns the seven default task statuses.
 func GetDefaultStatuses() []StatusDefinition {
 	return []StatusDefinition{
-		{
-			Name:       "TODO",
-			Label:      "To Do",
-			IsTerminal: false,
-			Color:      "yellow",
-			Role:       RoleInitial,
-			TLSMarker:  " ",
-		},
-		{
-			Name:       "IN_PROGRESS",
-			Label:      "In Progress",
-			IsTerminal: false,
-			Color:      "blue",
-			Role:       RoleActive,
-			TLSMarker:  ">",
-		},
-		{
-			Name:       "DONE",
-			Label:      "Done",
-			IsTerminal: true,
-			Color:      "green",
-			Role:       RoleCompleted,
-			TLSMarker:  "x",
-		},
-		{
-			Name:       "SKIPPED",
-			Label:      "Skipped",
-			IsTerminal: true,
-			Color:      "gray",
-			Role:       RoleSkipped,
-			TLSMarker:  "-",
-		},
+		{Name: "backlog", Label: "Backlog", Color: "gray", Role: RoleBacklog, TLSMarker: "-"},
+		{Name: "todo", Label: "To Do", Color: "yellow", Role: RoleInitial, TLSMarker: " "},
+		{Name: "in_progress", Label: "In Progress", Color: "blue", Role: RoleActive, TLSMarker: ">"},
+		{Name: "in_review", Label: "In Review", Color: "magenta", Role: RoleReview, TLSMarker: "?"},
+		{Name: "blocked", Label: "Blocked", Color: "red", Role: RoleBlocked, TLSMarker: "!"},
+		{Name: "done", Label: "Done", IsTerminal: true, Color: "green", Role: RoleCompleted, TLSMarker: "x"},
+		{Name: "cancelled", Label: "Cancelled", IsTerminal: true, Color: "gray", Role: RoleSkipped, TLSMarker: "~"},
 	}
 }
 
@@ -837,13 +842,28 @@ func GetDefaultEfforts() []EffortDefinition {
 	}
 }
 
-// GetDefaultStateMachine returns the default workflow transition rules.
+// GetDefaultStateMachine returns the default workflow transition rules
+// and guards.
 func GetDefaultStateMachine() *WorkflowDefinition {
 	return &WorkflowDefinition{
 		Rules: map[string][]string{
-			"TODO":        {"IN_PROGRESS", "SKIPPED"},
-			"IN_PROGRESS": {"DONE", "TODO", "SKIPPED"},
+			"backlog":     {"todo", "cancelled"},
+			"todo":        {"backlog", "in_progress", "blocked", "cancelled"},
+			"in_progress": {"todo", "in_review", "blocked", "done", "cancelled"},
+			"in_review":   {"in_progress", "done", "blocked", "cancelled"},
+			"blocked":     {"todo", "in_progress", "in_review", "cancelled"},
 		},
+		Guards: GetDefaultGuards(),
+	}
+}
+
+// GetDefaultGuards returns the default transition guards.
+func GetDefaultGuards() []GuardDefinition {
+	return []GuardDefinition{
+		{To: "blocked", Require: []string{CheckReason}},
+		{To: "cancelled", Require: []string{CheckNote}},
+		{To: "done", Require: []string{CheckBlockersClear}},
+		{From: "in_progress", To: "in_review", Require: []string{CheckAssignee}},
 	}
 }
 
@@ -891,8 +911,13 @@ func (t *TaskConfig) applyWorkflowDefaults() {
 	if t.StateMachine == nil {
 		t.StateMachine = &WorkflowDefinition{}
 	}
-	if t.StateMachine.Rules == nil && UsesDefaultStatuses(t.Statuses) {
-		t.StateMachine.Rules = GetDefaultStateMachine().Rules
+	if UsesDefaultStatuses(t.Statuses) {
+		if t.StateMachine.Rules == nil {
+			t.StateMachine.Rules = GetDefaultStateMachine().Rules
+		}
+		if t.StateMachine.Guards == nil {
+			t.StateMachine.Guards = GetDefaultGuards()
+		}
 	}
 }
 
@@ -985,6 +1010,9 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	if err := validateRules(t.StateMachine, statusSet, terminalSet, ""); err != nil {
 		return err
 	}
+	if err := validateGuards(t.StateMachine, statusSet, ""); err != nil {
+		return err
+	}
 
 	// Per-tag overrides get the same check. They share the base
 	// vocabulary, so a rule naming an undeclared status is the same
@@ -992,6 +1020,9 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	// silently, then refuse every transition for that tag.
 	for _, tag := range slices.Sorted(maps.Keys(t.Workflows)) {
 		if err := validateRules(t.Workflows[tag].StateMachine, statusSet, terminalSet, tag); err != nil {
+			return err
+		}
+		if err := validateGuards(t.Workflows[tag].StateMachine, statusSet, tag); err != nil {
 			return err
 		}
 	}
@@ -1295,6 +1326,38 @@ func validateRules(def *WorkflowDefinition, statusSet, terminalSet map[string]bo
 		for _, to := range def.Rules[from] {
 			if !statusSet[to] {
 				return fmt.Errorf("%s rule references unknown target status: %s", where, to)
+			}
+		}
+	}
+	return nil
+}
+
+// validateGuards checks one guard list: known checks only, declared
+// statuses only, and at least one of from/to per guard.
+func validateGuards(def *WorkflowDefinition, statusSet map[string]bool, tag string) error {
+	if def == nil {
+		return nil
+	}
+	where := "state machine"
+	if tag != "" {
+		where = fmt.Sprintf("workflow override for tag %q", tag)
+	}
+	for i, g := range def.Guards {
+		if g.From == "" && g.To == "" {
+			return fmt.Errorf("%s guard #%d sets neither from nor to", where, i+1)
+		}
+		if g.From != "" && !statusSet[g.From] {
+			return fmt.Errorf("%s guard #%d references unknown status: %s", where, i+1, g.From)
+		}
+		if g.To != "" && !statusSet[g.To] {
+			return fmt.Errorf("%s guard #%d references unknown status: %s", where, i+1, g.To)
+		}
+		for _, c := range g.Require {
+			if !slices.Contains(GuardChecks(), c) {
+				return fmt.Errorf(
+					"%s guard #%d requires unknown check %q (known: %s)",
+					where, i+1, c, strings.Join(GuardChecks(), ", "),
+				)
 			}
 		}
 	}

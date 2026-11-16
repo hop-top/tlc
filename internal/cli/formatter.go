@@ -724,7 +724,7 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	emphasis := make(map[int]output.EmphasisKind)
 	for i, t := range tasks {
 		switch {
-		case t.Status == core.StatusDone, t.Status == core.StatusSkipped:
+		case t.Status == core.StatusDone, t.Status == core.StatusCancelled:
 			// none — terminal statuses stay neutral.
 		case t.Status == core.StatusInProgress:
 			emphasis[i] = output.EmphasisPrimary
@@ -999,7 +999,7 @@ func formatStatus(status core.TaskStatus) string {
 		return inProgressStyle.Render(label)
 	case core.StatusDone:
 		return doneStyle.Render(label)
-	case core.StatusSkipped:
+	case core.StatusCancelled:
 		return skippedStyle.Render(label)
 	default:
 		return label

@@ -330,7 +330,7 @@ func dotColor(status core.TaskStatus) string {
 		return "#aee4f8"
 	case core.StatusDone:
 		return "#a8e6a3"
-	case core.StatusSkipped:
+	case core.StatusCancelled:
 		return "#f5dfa5"
 	default:
 		return "#eeeeee"

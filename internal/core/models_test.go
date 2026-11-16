@@ -158,7 +158,7 @@ func TestValidTaskStatus_HonoursConfiguredVocabulary(t *testing.T) {
 func TestValidTaskStatus_NilProviderUsesBuiltins(t *testing.T) {
 	withTaskConfigProvider(t, nil)
 
-	valid := []TaskStatus{"", StatusTodo, StatusInProgress, StatusDone, StatusSkipped}
+	valid := []TaskStatus{"", StatusTodo, StatusInProgress, StatusDone, StatusCancelled}
 	for _, s := range valid {
 		if !ValidTaskStatus(s) {
 			t.Errorf("built-in status %q should be valid", s)

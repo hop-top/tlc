@@ -50,7 +50,7 @@ func TestTaskSkip(t *testing.T) {
 		if task == nil {
 			t.Fatal("task not found after skip")
 		}
-		if task.Status != core.StatusSkipped {
+		if task.Status != core.StatusCancelled {
 			t.Errorf("expected SKIPPED, got %s", task.Status)
 		}
 	})
@@ -121,7 +121,7 @@ func TestTaskSkip(t *testing.T) {
 		if out, err := runTaskCmd(t, "skip", "T-0001", "--no-verify"); err != nil {
 			t.Fatalf("task skip --no-verify failed: %v\n%s", err, out)
 		}
-		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusSkipped {
+		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusCancelled {
 			t.Errorf("expected SKIPPED after --no-verify, got %s", task.Status)
 		}
 	})
@@ -146,7 +146,7 @@ func TestTaskSkip(t *testing.T) {
 		if out, err := runTaskCmd(t, "skip", "T-0001"); err != nil {
 			t.Fatalf("second skip should converge, got: %v\n%s", err, out)
 		}
-		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusSkipped {
+		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusCancelled {
 			t.Errorf("expected SKIPPED, got %s", task.Status)
 		}
 	})
@@ -170,7 +170,7 @@ func TestTaskSkip(t *testing.T) {
 			t.Fatalf("batch skip failed: %v\n%s", err, out)
 		}
 		for _, id := range []string{"T-0001", "T-0002"} {
-			if task := getTaskByAlias(t, ctx, id); task.Status != core.StatusSkipped {
+			if task := getTaskByAlias(t, ctx, id); task.Status != core.StatusCancelled {
 				t.Errorf("%s should be SKIPPED, got %s", id, task.Status)
 			}
 		}

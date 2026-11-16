@@ -30,7 +30,7 @@ func errNoSkippedStatus(statuses []string) error {
 			"(declared statuses: %s); add `role: %s` to the status that means "+
 			"\"finished, but not done\" in task.statuses, or use "+
 			"'tlc task update <id> --status <status>' to set it explicitly",
-		config.RoleSkipped, core.StatusSkipped, strings.Join(statuses, ", "), config.RoleSkipped,
+		config.RoleSkipped, core.StatusCancelled, strings.Join(statuses, ", "), config.RoleSkipped,
 	)
 }
 

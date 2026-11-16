@@ -96,8 +96,8 @@ func buildStateMachine(
 ) *domain.StateMachine {
 	if configRules == nil {
 		configRules = map[string][]string{
-			"TODO":        {"IN_PROGRESS", "SKIPPED"},
-			"IN_PROGRESS": {"DONE", "TODO", "SKIPPED"},
+			"todo": {"in_progress", "cancelled"},
+			"in_progress": {"done", "todo", "cancelled"},
 		}
 	}
 
