@@ -186,7 +186,7 @@ func TestMoveTask_TargetsVisibleColumns(t *testing.T) {
 	}
 }
 
-// TestMoveTask_DoesNotStepOntoHiddenColumn pins the behaviour, not just
+// TestMoveTask_DoesNotStepOntoHiddenColumn pins the behavior, not just
 // the column list: at 80 columns blocked is the last visible column, so
 // moving right from it has nowhere to go and must do nothing, rather than
 // transitioning the task to the hidden done column.
