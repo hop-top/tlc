@@ -264,7 +264,7 @@ func (m Model) kanbanView() string {
 	s.WriteString(m.styles.Title.Render("Kanban Board"))
 	s.WriteString("\n\n")
 
-	columns := kanbanStatusOrder()
+	columns, hint := m.kanbanColumns()
 
 	groups := make(map[core.TaskStatus][]*core.Task)
 	for _, t := range m.tasks {
@@ -319,5 +319,9 @@ func (m Model) kanbanView() string {
 	}
 
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
+	if hint != "" {
+		s.WriteString("\n\n")
+		s.WriteString(m.styles.Muted.Render(hint))
+	}
 	return s.String()
 }
