@@ -259,8 +259,23 @@ func formatTasks(
 	}
 
 	out := cmd.OutOrStdout()
+	ro, roErr := resolveRecordOpts(cmd, taskRecordFields)
+	if roErr != nil {
+		return roErr
+	}
+	// The caller's resolved format wins over the viper read, unless
+	// --json/--jq already forced json.
+	if !cmd.Flags().Changed(flagRecordJSON) && !cmd.Flags().Changed(flagRecordJQ) {
+		ro.format = format
+	}
+	if aggregateFormatValue(format) == "" && ro.structured() {
+		format = ro.format
+		if ro.tmpl != "" && format != formatYAML && format != formatCSV {
+			format = formatJSON // writeDoc renders the template
+		}
+	}
 	switch format {
-	case formatJSON, formatYAML:
+	case formatJSON, formatYAML, formatCSV:
 		// Grouped structured output NESTS, so a script consumes the same
 		// shape a human reads. The wrap is conditional on purpose: with
 		// no grouping key the payload stays the top-level array every
@@ -282,10 +297,12 @@ func formatTasks(
 			// table shows titles would make the two views of one listing
 			// disagree about what the groups are called.
 			groups = applyGroupLabels(groups, o.labeler)
-			_ = output.Render(out, format, groupedPayload(groups)) //nolint:errcheck // best-effort output
-			return nil
+			if format == formatCSV {
+				return usageErr(fmt.Errorf("--format csv cannot carry --group-by groups; drop --group-by"))
+			}
+			return writeGroupedRecords(out, ro, groups)
 		}
-		_ = output.Render(out, format, normalizeEmptySlices(tasks)) //nolint:errcheck // best-effort output
+		return writeRecords(out, ro, taskRecordFields, taskRecords(tasks), false)
 	case "tls":
 		for _, t := range tasks {
 			_, _ = fmt.Fprintln(out, formatTLS(t))
@@ -572,11 +589,14 @@ func printTaskWithBlockers(
 	out := cmd.OutOrStdout()
 	switch format {
 	case formatJSON, formatYAML:
-		result := map[string]interface{}{
-			"task": taskShowJSON{Task: task, BlockedBy: blockers},
+		if logs == nil {
+			logs = []*core.LogEntry{}
+		}
+		doc := map[string]interface{}{
+			"task": newTaskRecord(task, blockers),
 			"logs": logs,
 		}
-		_ = output.Render(out, format, normalizeEmptySlices(result)) //nolint:errcheck // best-effort output
+		_ = writeDoc(out, recordOpts{format: format}, doc, nil) //nolint:errcheck // best-effort output
 	default:
 		renderTaskDetail(out, task, logs)
 	}

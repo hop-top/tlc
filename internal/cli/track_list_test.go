@@ -661,8 +661,8 @@ func TestTrackList_AllProjects_JSONIncludesProject(t *testing.T) {
 		}
 
 		out := buf.String()
-		if !contains(out, `"project"`) {
-			t.Errorf("expected 'project' field in JSON output, got:\n%s", out)
+		if !contains(out, `"project_id"`) {
+			t.Errorf("expected 'project_id' field in JSON output, got:\n%s", out)
 		}
 		if !contains(out, "hop-top/tlc") {
 			t.Errorf("expected project ID in JSON output, got:\n%s", out)

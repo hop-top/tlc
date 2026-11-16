@@ -32,3 +32,12 @@ states facts about the pinned version.
   releases through 2026-03 on the module proxy.
 - Advisories: OSV query returns none for this module at
   the pinned version.
+
+## github.com/itchyny/gojq v0.12.20
+
+- New direct dependency: evaluates `--jq` expressions on `task`/`track`
+  list and show output. Pure Go; pulls `github.com/itchyny/timefmt-go`
+  v0.1.9 (same author) indirectly.
+- v0.12.20 published 2026-11-01; past the age gate.
+- License MIT. `rsx analyze`: PASS, score 6.1/10, policy balanced.
+- Advisories: OSV query returns none for the pinned version.

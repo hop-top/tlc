@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -306,9 +307,13 @@ func TestTrackShow_WithoutDepsOmitsStrategy(t *testing.T) {
 		}
 
 		out := buf.String()
-		// Without deps, execution_strategy should be null/omitted.
-		if contains(out, "\"execution_strategy\"") {
-			t.Errorf("track show without deps should omit execution_strategy:\n%s", out)
+		// Without deps, execution_strategy is null (fields are never dropped).
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("invalid JSON: %v\n%s", err, out)
+		}
+		if v, ok := doc["execution_strategy"]; !ok || v != nil {
+			t.Errorf("track show without deps should carry execution_strategy: null, got %v (present=%v)", v, ok)
 		}
 	})
 }

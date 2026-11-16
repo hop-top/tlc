@@ -10,7 +10,6 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"hop.top/kit/go/console/output"
 	"hop.top/tlc/internal/core"
 )
 
@@ -31,6 +30,11 @@ indicators based on the project's tracks.stale_threshold.`,
 
 func runTrackShow(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+	applyRecordFormat(cmd)
+	ro, err := resolveRecordOpts(cmd, trackShowRecordFields)
+	if err != nil {
+		return err
+	}
 
 	s, err := getStorage()
 	if err != nil {
@@ -86,60 +90,24 @@ func runTrackShow(cmd *cobra.Command, args []string) error {
 	}
 
 	format := viper.GetString("output.format")
-	switch format {
-	case formatJSON, formatYAML:
-		out := buildTrackShowOutput(track, flags, progress, strategy)
-		return output.Render(cmd.OutOrStdout(), format, out) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
-	case formatVtodo:
+	switch {
+	case ro.structured():
+		recs := taskRecords(tasks)
+		if recs == nil {
+			recs = []taskRecord{}
+		}
+		out := trackShowRecord{
+			trackRecord:       newTrackRecord(track, flags, *progress),
+			Tasks:             recs,
+			ExecutionStrategy: strategy,
+		}
+		return writeRecords(cmd.OutOrStdout(), ro, trackShowRecordFields, out, true)
+	case format == formatVtodo:
 		return writeVtodo(cmd, tasks, []*core.Track{track}, trackShowOutputPath, trackShowIncludeLogs)
 	default:
 		renderTrackShowDetail(cmd.OutOrStdout(), track, flags, progress, tasks, strategy)
 	}
 	return nil
-}
-
-// trackShowOutput is the structured output for JSON/YAML rendering.
-type trackShowOutput struct {
-	ID                string                  `json:"id" yaml:"id"`
-	Slug              string                  `json:"slug,omitempty" yaml:"slug,omitempty"`
-	Title             string                  `json:"title" yaml:"title"`
-	Type              string                  `json:"type" yaml:"type"`
-	Status            string                  `json:"status" yaml:"status"`
-	State             []string                `json:"state" yaml:"state"`
-	Assignee          string                  `json:"assignee" yaml:"assignee"`
-	CreatedAt         string                  `json:"created_at" yaml:"created_at"`
-	UpdatedAt         string                  `json:"updated_at" yaml:"updated_at"`
-	Progress          *core.TrackProgress     `json:"progress" yaml:"progress"`
-	ExecutionStrategy *core.ExecutionStrategy `json:"execution_strategy,omitempty" yaml:"execution_strategy,omitempty"`
-}
-
-func buildTrackShowOutput(
-	t *core.Track,
-	flags []core.TrackStateFlag,
-	progress *core.TrackProgress,
-	strategy *core.ExecutionStrategy,
-) trackShowOutput {
-	stateStrs := make([]string, len(flags))
-	for i, f := range flags {
-		stateStrs[i] = string(f)
-	}
-	assignee := "-"
-	if t.AssignedTo != nil && *t.AssignedTo != "" {
-		assignee = "@" + *t.AssignedTo
-	}
-	return trackShowOutput{
-		ID:                t.ID,
-		Slug:              t.Slug,
-		Title:             t.Title,
-		Type:              t.Type,
-		Status:            string(t.Status),
-		State:             stateStrs,
-		Assignee:          assignee,
-		CreatedAt:         DisplayTime(t.CreatedAt, LayoutDate),
-		UpdatedAt:         DisplayTime(t.UpdatedAt, LayoutDate),
-		Progress:          progress,
-		ExecutionStrategy: strategy,
-	}
 }
 
 func renderTrackShowDetail(
@@ -304,6 +272,7 @@ func extractPhaseNum(tags []string) (int, bool) {
 }
 
 func init() {
+	registerRecordFlags(trackShowCmd, trackShowRecordFields)
 	trackShowCmd.Flags().StringVar(&trackShowOutputPath, "output", "", "Write output to a file instead of stdout")
 	trackShowCmd.Flags().BoolVar(&trackShowIncludeLogs, "include-logs", false, "Include audit log entries (vtodo: emit VJOURNAL components)")
 	TrackCmd.AddCommand(trackShowCmd)

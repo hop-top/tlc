@@ -38,6 +38,7 @@ and --state (single state flag); both can be combined.`,
 }
 
 func runTrackList(cmd *cobra.Command, _ []string) error {
+	applyRecordFormat(cmd)
 	ctx := context.Background()
 
 	fromConfig, err := applyConfigDefaults(cmd)
@@ -142,31 +143,22 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		rows = filtered
 	}
 
-	format := viper.GetString("output.format")
-	switch format {
-	case formatJSON, formatYAML:
-		out := make([]trackListOutput, len(rows))
+	ro, err := resolveRecordOpts(cmd, trackRecordFields)
+	if err != nil {
+		return err
+	}
+	switch {
+	case ro.structured():
+		out := make([]trackRecord, len(rows))
 		for i, r := range rows {
-			out[i] = toTrackListOutput(r.Track, r.State, r.Progress)
+			out[i] = newTrackRecord(r.Track, r.State, r.Progress)
 		}
-		return output.Render(cmd.OutOrStdout(), format, out) //nolint:wrapcheck // pass-through helper; kit's typed errors surface verbatim
+		return writeRecords(cmd.OutOrStdout(), ro, trackRecordFields, out, false)
 	default:
 		cols := effectiveTrackColumns(cmd, statusProvided, trackListAllProjects)
 		renderTrackListTable(cmd.OutOrStdout(), rows, trackListAllProjects, cols)
 	}
 	return nil
-}
-
-type trackListOutput struct {
-	ID       string   `json:"id" yaml:"id"`
-	Slug     string   `json:"slug,omitempty" yaml:"slug,omitempty"`
-	Project  string   `json:"project,omitempty" yaml:"project,omitempty"`
-	Title    string   `json:"title" yaml:"title"`
-	Type     string   `json:"type" yaml:"type"`
-	Status   string   `json:"status" yaml:"status"`
-	State    []string `json:"state" yaml:"state"`
-	Progress string   `json:"progress" yaml:"progress"`
-	Assignee string   `json:"assignee" yaml:"assignee"`
 }
 
 // trackTableRow is the table-only schema (no Project column).
@@ -193,32 +185,6 @@ type trackTableRowWithProject struct {
 	State    string `table:"State"`
 	Progress string `table:"Progress"`
 	Assignee string `table:"Assignee"`
-}
-
-func toTrackListOutput(t *core.Track, state []core.TrackStateFlag, p core.TrackProgress) trackListOutput {
-	flags := make([]string, len(state))
-	for i, f := range state {
-		flags[i] = string(f)
-	}
-	assignee := "-"
-	if t.AssignedTo != nil && *t.AssignedTo != "" {
-		assignee = "@" + *t.AssignedTo
-	}
-	project := ""
-	if t.ProjectID != nil && *t.ProjectID != "" {
-		project = *t.ProjectID
-	}
-	return trackListOutput{
-		ID:       t.ID,
-		Slug:     t.Slug,
-		Project:  project,
-		Title:    t.Title,
-		Type:     t.Type,
-		Status:   string(t.Status),
-		State:    flags,
-		Progress: core.FormatProgress(p),
-		Assignee: assignee,
-	}
 }
 
 type trackRowData struct {
@@ -338,6 +304,7 @@ func resetTrackListFlags() {
 
 func init() {
 	TrackCmd.AddCommand(trackListCmd)
+	registerRecordFlags(trackListCmd, trackRecordFields)
 
 	trackListCmd.Flags().StringSliceVar(
 		&trackListStatus, "status", []string{}, "Filter by status (repeatable)",
