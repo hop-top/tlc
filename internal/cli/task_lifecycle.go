@@ -422,9 +422,8 @@ task converges (no transition fires).`,
 			if wmErr != nil {
 				return fmt.Errorf("workflow has no completed status: %w", wmErr)
 			}
-			logEntry, transErr := task.TransitionWithWorkflow(
-				completedStatus, user, taskCompleteNote, wm, taskCompleteNoVerify,
-			)
+			logEntry, transErr := transitionTask(ctx, res.Storage, task, completedStatus, wm,
+				transitionOpts{By: user, Note: taskCompleteNote, Force: taskCompleteNoVerify})
 			if transErr == nil {
 				details := fmt.Sprintf("(%s → %s)", prevStatus, completedStatus)
 				appendAuditLog(task, user, "COMPLETED", details, taskCompleteNote, task.UpdatedAt)
