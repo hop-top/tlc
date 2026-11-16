@@ -448,7 +448,7 @@ func TestBuildVCalendar_CompletedRoleEmitsDoneTriple(t *testing.T) {
 	require.Contains(t, out, "\r\nSTATUS:COMPLETED\r\n")
 	require.Contains(t, out, "\r\nCOMPLETED:20260503T090000Z\r\n")
 	require.Contains(t, out, "\r\nPERCENT-COMPLETE:100\r\n")
-	require.Contains(t, out, "X-TLC-STATUS:DONE")
+	require.Contains(t, out, "X-TLC-STATUS:done")
 }
 
 // TestBuildVCalendar_CompletedAtFromLog proves COMPLETED is the LATEST
