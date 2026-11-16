@@ -30,7 +30,7 @@ func withVocab(t *testing.T, names []string, terminal map[string]bool) {
 // withDefaultVocab declares the seven default statuses.
 func withDefaultVocab(t *testing.T) {
 	t.Helper()
-	withVocab(t, defaultStatusNames, map[string]bool{"done": true, "cancelled": true})
+	withVocab(t, core.TaskStatusStrings(), map[string]bool{"done": true, "cancelled": true})
 }
 
 // withLegacyVocab declares a custom vocabulary that spells its names the

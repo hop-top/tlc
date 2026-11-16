@@ -10,13 +10,9 @@ import (
 	"fmt"
 	"strings"
 
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
-
-// defaultStatusNames is the built-in vocabulary.
-var defaultStatusNames = []string{
-	"backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled",
-}
 
 // legacyStatusAliases maps a lowercased stored label to the default name
 // it now reads as, where it is not simply the same word.
@@ -28,20 +24,7 @@ var legacyStatusAliases = map[string]string{
 // built-in set. A custom vocabulary, even one reusing some of the same
 // words, is left exactly as stored.
 func usesDefaultVocabulary() bool {
-	cfg := core.ConfiguredTaskStatusStrings()
-	if len(cfg) != len(defaultStatusNames) {
-		return false
-	}
-	have := make(map[string]struct{}, len(cfg))
-	for _, n := range cfg {
-		have[n] = struct{}{}
-	}
-	for _, n := range defaultStatusNames {
-		if _, ok := have[n]; !ok {
-			return false
-		}
-	}
-	return true
+	return config.UsesDefaultStatuses(core.ConfiguredTaskStatusDefinitions())
 }
 
 // canonicalDefaultStatus maps a stored or typed label to its default
@@ -52,7 +35,7 @@ func canonicalDefaultStatus(s string) (string, bool) {
 	if a, found := legacyStatusAliases[l]; found {
 		return a, true
 	}
-	for _, n := range defaultStatusNames {
+	for _, n := range core.TaskStatusStrings() {
 		if l == n {
 			return n, true
 		}
