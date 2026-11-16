@@ -462,3 +462,31 @@ func ruleKeys(def *config.WorkflowDefinition) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+// A `-c task.<key>=value` override lives in viper's override layer as a
+// partial `task` map. Decoding the `task` subtree must still see the
+// statuses the config files declared, not only the overridden key.
+func TestUnmarshalConfigKeyKeepsFileKeysUnderKeyValueOverride(t *testing.T) {
+	loadViper(t, `
+task:
+  statuses:
+    - name: OPEN
+      label: Open
+      role: initial
+    - name: WIP
+      label: Wip
+      role: active
+`)
+	viper.Set("task.default_status", "OPEN")
+
+	var taskCfg config.TaskConfig
+	if err := unmarshalConfigKey("task", &taskCfg); err != nil {
+		t.Fatalf("unmarshalConfigKey: %v", err)
+	}
+	if taskCfg.DefaultStatus != "OPEN" {
+		t.Errorf("default_status = %q, want the override OPEN", taskCfg.DefaultStatus)
+	}
+	if len(taskCfg.Statuses) != 2 || taskCfg.Statuses[0].Name != "OPEN" {
+		t.Errorf("statuses = %+v, want the two declared by the file", taskCfg.Statuses)
+	}
+}
