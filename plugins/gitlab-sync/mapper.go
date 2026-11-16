@@ -161,7 +161,7 @@ func deriveStatus(state string, labels []string) string {
 
 // deriveStatusWith resolves the status through the vocabulary, so a
 // renamed active status pulls back under its declared name instead of a
-// hardcoded IN_PROGRESS.
+// hardcoded in_progress.
 func deriveStatusWith(state string, labels []string, vocab *Vocabulary) string {
 	hasLabel := labelSet(labels)
 

@@ -29,7 +29,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 			wantStatus: "todo",
 		},
 		{
-			name: "open with status:in-progress maps to IN_PROGRESS",
+			name: "open with status:in-progress maps to in_progress",
 			issue: &GiteaIssue{
 				Index: 2, Title: "wip", State: "open",
 				Labels:    []GiteaLabel{{Name: "status:in-progress"}},

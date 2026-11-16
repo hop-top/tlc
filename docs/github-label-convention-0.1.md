@@ -103,10 +103,10 @@ Track issue lifecycle. This axis is deliberately small, because an issue's open/
 
 | Label | Color | Description |
 |-------|-------|-------------|
-| `status:backlog` | `#808080` | Parked, not yet ready to start |
+| `status:backlog` | `#6A737D` | Parked, not yet ready to start |
 | `status:in-progress` | `#1D76DB` | Actively being worked on |
-| `status:in-review` | `#C71FC7` | Submitted, awaiting review |
-| `status:blocked` | `#D93F0B` | Cannot proceed; the task carries a block reason |
+| `status:in-review` | `#B5289E` | Submitted, awaiting review |
+| `status:blocked` | `#5C1A00` | Cannot proceed; the task carries a block reason |
 
 The built-in vocabulary is the seven default statuses: `backlog`, `todo`, `in_progress`, `in_review`, `blocked`, `done`, `cancelled`. A status label is generated only for a workflow status that is neither terminal nor initial. A terminal status (`done`, `cancelled`) is a closed issue and the initial status (`todo`) is an open issue nobody has touched, so labelling either would restate what the issue state already says, and the two could then disagree after an edit on the forge. That leaves `backlog`, `in_progress`, `in_review` and `blocked`; a vocabulary that adds another open status yields its label as well.
 

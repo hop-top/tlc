@@ -91,7 +91,7 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 			wantStatus: "todo",
 		},
 		{
-			name:       "open + status:in-progress → IN_PROGRESS",
+			name:       "open + status:in-progress → in_progress",
 			issue:      makeIssue(withLabels("status:in-progress")),
 			wantStatus: "in_progress",
 		},
