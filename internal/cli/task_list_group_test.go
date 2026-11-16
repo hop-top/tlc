@@ -138,7 +138,7 @@ func TestGroupTasksLifecycleOrdering(t *testing.T) {
 			{ID: "T-0003", Status: core.StatusTodo},
 		}
 		got := groupNames(groupTasks(tasks, "status"))
-		want := []string{"todo", "in_progress", "DONE"}
+		want := []string{"todo", "in_progress", "done"}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("status group order = %v, want %v (lifecycle, not alphabetical)", got, want)
 		}
