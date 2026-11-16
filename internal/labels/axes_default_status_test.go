@@ -43,3 +43,18 @@ func TestDefaultVocabularyStatusLabels(t *testing.T) {
 		t.Errorf("status:blocked emitted %d times, want 1", countByName(labels)["status:blocked"])
 	}
 }
+
+// TestStatusAxisGeneratesBlockedOnceForBlockedRole checks the axis itself,
+// before any dedupe can hide a duplicate: a vocabulary with a blocked-role
+// status must not also get the fixed flag label.
+func TestStatusAxisGeneratesBlockedOnceForBlockedRole(t *testing.T) {
+	n := 0
+	for _, l := range statusAxis(config.GetDefaultStatuses()) {
+		if l.Name == "status:blocked" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("status:blocked generated %d times by statusAxis, want 1", n)
+	}
+}
