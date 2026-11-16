@@ -34,14 +34,14 @@ func TestComputeProjectHealth_ActiveTracks(t *testing.T) {
 	}
 	tasks := map[string][]*Task{
 		"t1": {
-			{ID: "task-1", Status: "DONE"},
-			{ID: "task-2", Status: "TODO"},
+			{ID: "task-1", Status: "done"},
+			{ID: "task-2", Status: "todo"},
 		},
 		"t2": {
-			{ID: "task-3", Status: "DONE"},
-			{ID: "task-4", Status: "DONE"},
-			{ID: "task-5", Status: "DONE"},
-			{ID: "task-6", Status: "TODO"},
+			{ID: "task-3", Status: "done"},
+			{ID: "task-4", Status: "done"},
+			{ID: "task-5", Status: "done"},
+			{ID: "task-6", Status: "todo"},
 		},
 	}
 
@@ -87,7 +87,7 @@ func TestComputeProjectHealth_LowProgress(t *testing.T) {
 		{ID: "t1", Status: TrackStatusActive},
 	}
 	tasks := map[string][]*Task{
-		"t1": {{ID: "a", Status: "TODO"}},
+		"t1": {{ID: "a", Status: "todo"}},
 	}
 
 	h := ComputeProjectHealth(tracks, tasks, 3, 50)
@@ -105,7 +105,7 @@ func TestComputeProjectHealth_AboveMinProgress(t *testing.T) {
 		{ID: "t1", Status: TrackStatusActive},
 	}
 	tasks := map[string][]*Task{
-		"t1": {{ID: "a", Status: "DONE"}},
+		"t1": {{ID: "a", Status: "done"}},
 	}
 
 	h := ComputeProjectHealth(tracks, tasks, 3, 50)
@@ -121,9 +121,9 @@ func TestComputeProjectHealth_Overcommitted(t *testing.T) {
 		{ID: "t3", Status: TrackStatusActive},
 	}
 	tasks := map[string][]*Task{
-		"t1": {{ID: "a", Status: "TODO"}},
-		"t2": {{ID: "b", Status: "TODO"}},
-		"t3": {{ID: "c", Status: "TODO"}},
+		"t1": {{ID: "a", Status: "todo"}},
+		"t2": {{ID: "b", Status: "todo"}},
+		"t3": {{ID: "c", Status: "todo"}},
 	}
 
 	h := ComputeProjectHealth(tracks, tasks, 3, 50)

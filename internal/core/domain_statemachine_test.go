@@ -18,11 +18,11 @@ func TestNewTaskStateMachine_DefaultConfig(t *testing.T) {
 
 	// Allowed transitions.
 	allowed := []struct{ from, to domain.State }{
-		{"TODO", "IN_PROGRESS"},
-		{"TODO", "SKIPPED"},
-		{"IN_PROGRESS", "DONE"},
-		{"IN_PROGRESS", "TODO"},
-		{"IN_PROGRESS", "SKIPPED"},
+		{"todo", "in_progress"},
+		{"todo", "cancelled"},
+		{"in_progress", "done"},
+		{"in_progress", "todo"},
+		{"in_progress", "cancelled"},
 	}
 	for _, tt := range allowed {
 		if err := sm.Transition(ctx, tt.from, tt.to, false); err != nil {
@@ -33,8 +33,8 @@ func TestNewTaskStateMachine_DefaultConfig(t *testing.T) {
 
 	// Disallowed transitions.
 	disallowed := []struct{ from, to domain.State }{
-		{"TODO", "DONE"},
-		{"DONE", "TODO"},
+		{"todo", "done"},
+		{"done", "todo"},
 	}
 	for _, tt := range disallowed {
 		if err := sm.Transition(ctx, tt.from, tt.to, false); err == nil {
@@ -53,7 +53,7 @@ func TestNewTaskStateMachine_ForceBypass(t *testing.T) {
 	ctx := context.Background()
 
 	// Force bypasses rules.
-	if err := sm.Transition(ctx, "DONE", "TODO", true); err != nil {
+	if err := sm.Transition(ctx, "done", "todo", true); err != nil {
 		t.Errorf("forced Transition(DONE -> TODO) unexpected error: %v", err)
 	}
 }
@@ -63,10 +63,10 @@ func TestNewTaskStateMachineFromWorkflow(t *testing.T) {
 	sm := NewTaskStateMachineFromWorkflow(wm, nil)
 	ctx := context.Background()
 
-	if err := sm.Transition(ctx, "TODO", "IN_PROGRESS", false); err != nil {
+	if err := sm.Transition(ctx, "todo", "in_progress", false); err != nil {
 		t.Errorf("Transition(TODO -> IN_PROGRESS) unexpected error: %v", err)
 	}
-	if err := sm.Transition(ctx, "TODO", "DONE", false); err == nil {
+	if err := sm.Transition(ctx, "todo", "done", false); err == nil {
 		t.Error("Transition(TODO -> DONE) expected error, got nil")
 	}
 }
@@ -128,7 +128,7 @@ func TestNewTaskStateMachine_NilConfig(t *testing.T) {
 	ctx := context.Background()
 
 	// Should fall back to defaults.
-	if err := sm.Transition(ctx, "TODO", "IN_PROGRESS", false); err != nil {
+	if err := sm.Transition(ctx, "todo", "in_progress", false); err != nil {
 		t.Errorf("Transition(TODO -> IN_PROGRESS) unexpected error: %v", err)
 	}
 }

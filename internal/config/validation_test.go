@@ -163,11 +163,11 @@ func TestValidateTaskOp_Delete_StatusRule(t *testing.T) {
 		},
 	}
 
-	if err := cfg.ValidateTaskOp(ValidationOpDelete, TaskFields{Status: "DONE"}); err != nil {
+	if err := cfg.ValidateTaskOp(ValidationOpDelete, TaskFields{Status: "done"}); err != nil {
 		t.Errorf("expected no error for DONE status, got: %v", err)
 	}
 
-	err := cfg.ValidateTaskOp(ValidationOpDelete, TaskFields{Status: "TODO"})
+	err := cfg.ValidateTaskOp(ValidationOpDelete, TaskFields{Status: "todo"})
 	if err == nil {
 		t.Fatal("expected error for non-terminal status")
 	}
@@ -196,7 +196,7 @@ func TestValidateTaskOp_TagsField(t *testing.T) {
 
 func TestValidateTaskOp_NoConfig_Noop(t *testing.T) {
 	cfg := ValidationConfig{}
-	fields := TaskFields{Title: "", Description: "", Status: "TODO"}
+	fields := TaskFields{Title: "", Description: "", Status: "todo"}
 	if err := cfg.ValidateTaskOp(ValidationOpCreate, fields); err != nil {
 		t.Fatalf("empty config should be no-op, got: %v", err)
 	}

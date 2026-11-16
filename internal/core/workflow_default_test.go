@@ -25,16 +25,16 @@ func TestDefaultWorkflow_ProviderSuppliesStatuses(t *testing.T) {
 	withTaskConfigProvider(t, func() *config.TaskConfig {
 		return &config.TaskConfig{
 			Statuses: []config.StatusDefinition{
-				{Name: "TODO", Label: "To Do", Role: "initial", TLSMarker: " "},
-				{Name: "IN_PROGRESS", Label: "In Progress", Role: "active", TLSMarker: ">"},
+				{Name: "todo", Label: "To Do", Role: "initial", TLSMarker: " "},
+				{Name: "in_progress", Label: "In Progress", Role: "active", TLSMarker: ">"},
 				{Name: "IN_REVIEW", Label: "In Review", Role: "active", TLSMarker: "r"},
-				{Name: "DONE", Label: "Done", IsTerminal: true, Role: "completed", TLSMarker: "x"},
+				{Name: "done", Label: "Done", IsTerminal: true, Role: "completed", TLSMarker: "x"},
 			},
 			StateMachine: &config.WorkflowDefinition{
 				Rules: map[string][]string{
-					"TODO":        {"IN_PROGRESS"},
-					"IN_PROGRESS": {"IN_REVIEW"},
-					"IN_REVIEW":   {"DONE"},
+					"todo":        {"in_progress"},
+					"in_progress": {"IN_REVIEW"},
+					"IN_REVIEW":   {"done"},
 				},
 			},
 		}
@@ -48,7 +48,7 @@ func TestDefaultWorkflow_ProviderSuppliesStatuses(t *testing.T) {
 		t.Errorf("provider status IN_REVIEW missing: %v", err)
 	}
 	if err := wm.ValidateTransition(
-		TaskStatus("IN_PROGRESS"), TaskStatus("IN_REVIEW"), false,
+		TaskStatus("in_progress"), TaskStatus("IN_REVIEW"), false,
 	); err != nil {
 		t.Errorf("IN_PROGRESS -> IN_REVIEW should be allowed: %v", err)
 	}
@@ -75,11 +75,11 @@ func TestDefaultWorkflow_FatalOnInvalidConfig(t *testing.T) {
 	withTaskConfigProvider(t, func() *config.TaskConfig {
 		return &config.TaskConfig{
 			Statuses: []config.StatusDefinition{
-				{Name: "TODO", Label: "To Do", Role: "initial"},
-				{Name: "IN_PROGRESS", Label: "In Progress", Role: "active"},
+				{Name: "todo", Label: "To Do", Role: "initial"},
+				{Name: "in_progress", Label: "In Progress", Role: "active"},
 			},
 			StateMachine: &config.WorkflowDefinition{
-				Rules: map[string][]string{"TODO": {"NOPE"}},
+				Rules: map[string][]string{"todo": {"NOPE"}},
 			},
 		}
 	})
