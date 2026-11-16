@@ -65,11 +65,11 @@ const (
 
 	// builtinActiveStatus and builtinActiveLabel are the single active
 	// status of the built-in vocabulary and its label.
-	builtinActiveStatus = "IN_PROGRESS"
+	builtinActiveStatus = "in_progress"
 	builtinActiveLabel  = "status:in-progress"
 
 	// builtinInitialStatus is the built-in vocabulary's initial status.
-	builtinInitialStatus = "TODO"
+	builtinInitialStatus = "todo"
 )
 
 // priorityLabel returns the label for a priority name, and whether one

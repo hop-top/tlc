@@ -18,7 +18,7 @@ func TestValidationConfig_Validate_Valid(t *testing.T) {
 		},
 		Delete: ValidationOpConfig{
 			Rules: []ValidationRule{
-				{Field: "status", Pattern: `^(DONE|SKIPPED)$`, Message: "only done tasks may be deleted"},
+				{Field: "status", Pattern: `^(done|cancelled)$`, Message: "only done tasks may be deleted"},
 			},
 		},
 	}
@@ -158,7 +158,7 @@ func TestValidateTaskOp_Delete_StatusRule(t *testing.T) {
 	cfg := ValidationConfig{
 		Delete: ValidationOpConfig{
 			Rules: []ValidationRule{
-				{Field: "status", Pattern: `^(DONE|SKIPPED)$`, Message: "only terminal tasks may be deleted"},
+				{Field: "status", Pattern: `^(done|cancelled)$`, Message: "only terminal tasks may be deleted"},
 			},
 		},
 	}

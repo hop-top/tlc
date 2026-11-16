@@ -154,17 +154,17 @@ func TestValidTaskStatus_HonoursConfiguredVocabulary(t *testing.T) {
 }
 
 // TestValidTaskStatus_NilProviderUsesBuiltins keeps library consumers and
-// unit tests on the built-in four-status set when config declares none.
+// unit tests on the built-in seven-status set when config declares none.
 func TestValidTaskStatus_NilProviderUsesBuiltins(t *testing.T) {
 	withTaskConfigProvider(t, nil)
 
-	valid := []TaskStatus{"", StatusTodo, StatusInProgress, StatusDone, StatusCancelled}
+	valid := []TaskStatus{"", StatusBacklog, StatusTodo, StatusInProgress, StatusInReview, StatusBlocked, StatusDone, StatusCancelled}
 	for _, s := range valid {
 		if !ValidTaskStatus(s) {
 			t.Errorf("built-in status %q should be valid", s)
 		}
 	}
-	for _, s := range []TaskStatus{"IN_REVIEW", "todo", "1"} {
+	for _, s := range []TaskStatus{"IN_REVIEW", "TODO", "1"} {
 		if ValidTaskStatus(s) {
 			t.Errorf("status %q should be invalid", s)
 		}

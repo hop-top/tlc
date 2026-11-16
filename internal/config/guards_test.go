@@ -29,6 +29,8 @@ func TestGuards_Validation(t *testing.T) {
 		{"unknown check", GuardDefinition{To: "done", Require: []string{"nope"}}, "unknown check"},
 		{"undeclared to", GuardDefinition{To: "zzz", Require: []string{CheckNote}}, "unknown status"},
 		{"undeclared from", GuardDefinition{From: "zzz", Require: []string{CheckNote}}, "unknown status"},
+		{"terminal from", GuardDefinition{From: "done", Require: []string{CheckNote}}, "terminal status"},
+		{"terminal to is fine", GuardDefinition{To: "done", Require: []string{CheckNote}}, ""},
 		{"neither", GuardDefinition{Require: []string{CheckNote}}, "neither from nor to"},
 	}
 	for _, tt := range tests {

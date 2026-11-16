@@ -29,14 +29,14 @@ var tlcUIDRe = regexp.MustCompile(`<!-- tlc-uid: (task_[0-9a-z]{26}) -->`)
 
 // MapJiraIssueToTask maps a Jira issue to a TLC task.
 func MapJiraIssueToTask(issue *jira.Issue) *Task {
-	status := "TODO"
+	status := "todo"
 	if issue.Fields.Status != nil {
 		s := issue.Fields.Status.Name
 		switch s {
 		case "Done", "Closed", "Resolved":
-			status = "DONE"
+			status = "done"
 		case "In Progress":
-			status = "IN_PROGRESS"
+			status = "in_progress"
 		}
 	}
 

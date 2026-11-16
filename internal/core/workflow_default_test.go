@@ -41,8 +41,8 @@ func TestDefaultWorkflow_ProviderSuppliesStatuses(t *testing.T) {
 	})
 
 	wm := DefaultWorkflow()
-	if got := len(wm.GetAllStatuses()); got != 4 {
-		t.Fatalf("statuses = %d, want 4: %v", got, wm.GetAllStatuses())
+	if got := len(wm.GetAllStatuses()); got != 7 {
+		t.Fatalf("statuses = %d, want 7: %v", got, wm.GetAllStatuses())
 	}
 	if _, err := wm.GetStatusDef(TaskStatus("IN_REVIEW")); err != nil {
 		t.Errorf("provider status IN_REVIEW missing: %v", err)
@@ -55,7 +55,7 @@ func TestDefaultWorkflow_ProviderSuppliesStatuses(t *testing.T) {
 }
 
 // TestDefaultWorkflow_NilProviderUsesBuiltins keeps library consumers and
-// unit tests on the built-in four-status workflow.
+// unit tests on the built-in seven-status workflow.
 func TestDefaultWorkflow_NilProviderUsesBuiltins(t *testing.T) {
 	withTaskConfigProvider(t, nil)
 

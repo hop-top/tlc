@@ -277,11 +277,11 @@ func transitionJiraIssue(client *jira.Client, issueID string, status string) err
 
 	targetStatus := ""
 	switch status {
-	case "TODO":
+	case "todo":
 		targetStatus = "To Do"
-	case "IN_PROGRESS":
+	case "in_progress":
 		targetStatus = "In Progress"
-	case "DONE":
+	case "done":
 		targetStatus = "Done"
 	default:
 		return nil // No mapping for other statuses

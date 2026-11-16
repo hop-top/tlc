@@ -25,7 +25,7 @@ func RouteNounToDomain(tokens PromptTokens) (NounDomain, float64) {
 //
 // Task domain:
 //   - "status:active" → ["--status", "active"]
-//   - "status:done"   → ["--status", "DONE"]
+//   - "status:done"   → ["--status", "done"]
 //   - "blocked"       → ["--blocked"]
 //   - "stale"         → ["--stale"]
 //   - "mine"          → ["--mine"]
@@ -47,9 +47,9 @@ func buildModifierArgs(modifiers []string, domain NounDomain) []string {
 			case "status:active":
 				out = append(out, "--status", "active")
 			case "status:pending":
-				out = append(out, "--status", "TODO")
+				out = append(out, "--status", "todo")
 			case "status:done":
-				out = append(out, "--status", "DONE")
+				out = append(out, "--status", "done")
 			case "blocked":
 				out = append(out, "--blocked")
 			case "stale":
