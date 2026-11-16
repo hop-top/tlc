@@ -98,7 +98,7 @@ var TaskRejectCmd = &cobra.Command{
 	Short: "Reject a task in review (or a human task)",
 	Long: `Reject a task. On a task in the review status, send it back to the
 active status; --reason is required. On a human-kind task (recipe
-decision), behaviour is as described below.
+decision), behavior is as described below.
 
 Human-kind tasks: record a human decision against the task. The task stays in
 its current status and is marked blocked with the reason, so 'tlc track
