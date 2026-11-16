@@ -103,7 +103,7 @@ Track issue lifecycle. This axis is deliberately small, because an issue's open/
 
 | Label | Color | Description |
 |-------|-------|-------------|
-| `status:backlog` | `#6A737D` | Parked, not yet ready to start |
+| `status:backlog` | `#3B3F44` | Parked, not yet ready to start |
 | `status:in-progress` | `#1D76DB` | Actively being worked on |
 | `status:in-review` | `#B5289E` | Submitted, awaiting review |
 | `status:blocked` | `#5C1A00` | Cannot proceed; the task carries a block reason |
@@ -183,7 +183,7 @@ There is no `domain:controllers`: Django calls that tier views, so the pair woul
 | Label | Color | Description |
 |-------|-------|-------------|
 | `domain:api` | `#0052CC` | Public API surface |
-| `domain:internal` | `#6A737D` | Internal implementation |
+| `domain:internal` | `#3B3F44` | Internal implementation |
 | `domain:docs` | `#0075CA` | Docs and examples |
 
 `domain:api` here means the exported surface consumers compile against, and `domain:internal` is its complement — "is this visible to consumers?" is the first question asked of any change in this shape.

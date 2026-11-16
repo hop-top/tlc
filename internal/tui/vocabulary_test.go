@@ -260,6 +260,30 @@ func TestKanbanStatusOrder_ExcludesOnlyTerminalSkip(t *testing.T) {
 	}
 }
 
+// TestKanbanStatusOrder_DefaultVocabulary pins the default board: every
+// status except the backlog and the skip target earns a column.
+func TestKanbanStatusOrder_DefaultVocabulary(t *testing.T) {
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{Statuses: config.GetDefaultStatuses()}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+
+	got := kanbanStatusOrder()
+	want := []core.TaskStatus{"todo", "in_progress", "in_review", "blocked", "done"}
+	if len(got) != len(want) {
+		t.Fatalf("kanbanStatusOrder() = %v; want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("kanbanStatusOrder() = %v; want %v", got, want)
+		}
+	}
+}
+
 // TestFormatStatus_RendersConfiguredMarker covers the glyph table. It
 // switched on the built-in four and fell through to the raw status
 // string, so a custom vocabulary rendered bare uppercase names with no
