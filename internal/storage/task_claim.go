@@ -34,7 +34,7 @@ func (s *SQLiteStorage) ClaimTask(
 		ctx, `
 		UPDATE tasks
 		SET status = ?, assigned_to = ?, claimed_at = ?, updated_at = ?
-		WHERE id = ? AND project_id = ? AND `+statusColumn("status")+` IN (`+placeholderList(len(fromNames))+`)
+		WHERE id = ? AND project_id = ? AND `+statusColumn()+` IN (`+placeholderList(len(fromNames))+`)
 		  AND (assigned_to IS NULL OR assigned_to = '' OR assigned_to = ?)`,
 		claimArgs(string(to), actor, stamp, id, projectID, fromNames)...,
 	)

@@ -30,7 +30,7 @@ func withVocab(t *testing.T, names []string, terminal map[string]bool) {
 // withDefaultVocab declares the seven default statuses.
 func withDefaultVocab(t *testing.T) {
 	t.Helper()
-	withVocab(t, core.TaskStatusStrings(), map[string]bool{"done": true, "cancelled": true})
+	withVocab(t, core.TaskStatusStrings(), map[string]bool{"done": true, string(core.StatusCancelled): true})
 }
 
 // withLegacyVocab declares a custom vocabulary that spells its names the
@@ -56,7 +56,7 @@ var legacyWant = map[string]string{
 	"T-1": "todo",
 	"T-2": "in_progress",
 	"T-3": "done",
-	"T-4": "cancelled",
+	"T-4": string(core.StatusCancelled),
 	"T-5": "backlog",
 	"T-6": "todo",
 	"T-7": "todo",
@@ -65,7 +65,7 @@ var legacyWant = map[string]string{
 
 // openSeededLegacy builds a file DB holding legacy rows, closes it and
 // reopens it, as a user's existing DB would be met by a new binary.
-func openSeededLegacy(t *testing.T) (*SQLiteStorage, string) {
+func openSeededLegacy(t *testing.T) *SQLiteStorage {
 	t.Helper()
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "tlc.db")
@@ -92,13 +92,13 @@ func openSeededLegacy(t *testing.T) (*SQLiteStorage, string) {
 		t.Fatalf("re-open: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	return s, dbPath
+	return s
 }
 
 func rawStatus(t *testing.T, s *SQLiteStorage, id string) string {
 	t.Helper()
 	var got string
-	if err := s.db.QueryRow(`SELECT status FROM tasks WHERE id = ?`, id).Scan(&got); err != nil {
+	if err := s.db.QueryRowContext(context.Background(), `SELECT status FROM tasks WHERE id = ?`, id).Scan(&got); err != nil {
 		t.Fatalf("raw status %s: %v", id, err)
 	}
 	return got
@@ -106,7 +106,7 @@ func rawStatus(t *testing.T, s *SQLiteStorage, id string) string {
 
 func TestRead_LegacyLabelsNormaliseUnderDefault(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	ctx := context.Background()
 
 	for id, want := range legacyWant {
@@ -138,7 +138,7 @@ func TestRead_LegacyLabelsNormaliseUnderDefault(t *testing.T) {
 
 func TestRead_CustomVocabularyUntouched(t *testing.T) {
 	withLegacyVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	ctx := context.Background()
 	for _, id := range []string{"T-1", "T-2", "T-3", "T-4"} {
 		got, err := s.GetTaskInProject(ctx, id, "")
@@ -158,7 +158,7 @@ func queryIDs(t *testing.T, s *SQLiteStorage, q core.Query) []string {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	var ids []string
+	ids := make([]string, 0, len(tasks))
 	for _, task := range tasks {
 		ids = append(ids, task.ID)
 	}
@@ -183,7 +183,7 @@ func sameSet(got []string, want ...string) bool {
 
 func TestQuery_StatusFilterMatchesLegacyRows(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 
 	cases := []struct {
 		name string
@@ -192,7 +192,7 @@ func TestQuery_StatusFilterMatchesLegacyRows(t *testing.T) {
 	}{
 		{"eq todo", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: "todo"}, []string{"T-1", "T-6", "T-7"}},
 		{"eq legacy spelling", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: "TODO"}, []string{"T-1", "T-6", "T-7"}},
-		{"eq cancelled", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: "cancelled"}, []string{"T-4"}},
+		{"eq cancelled", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: core.StatusCancelled}, []string{"T-4"}},
 		{"in", core.FieldFilter{Field: "status", Operator: core.OpIn, Value: "done,backlog"}, []string{"T-3", "T-5"}},
 		{"noteq todo", core.FieldFilter{Field: "status", Operator: core.OpNotEq, Value: "todo"}, []string{"T-2", "T-3", "T-4", "T-5", "T-8"}},
 	}
@@ -207,7 +207,7 @@ func TestQuery_StatusFilterMatchesLegacyRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("counts: %v", err)
 	}
-	if counts["todo"] != 3 || counts["cancelled"] != 1 || counts["TODO"] != 0 || counts["SKIPPED"] != 0 {
+	if counts["todo"] != 3 || counts[string(core.StatusCancelled)] != 1 || counts["TODO"] != 0 || counts["SKIPPED"] != 0 {
 		t.Errorf("counts not normalised: %v", counts)
 	}
 	byProj, err := s.CountTasksByProjectAndStatus(context.Background(), core.Query{AllProjects: true})
@@ -221,9 +221,9 @@ func TestQuery_StatusFilterMatchesLegacyRows(t *testing.T) {
 
 func TestQuery_OverdueExcludesLegacyTerminalRows(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	past := "2026-01-01T00:00:00Z"
-	if _, err := s.db.Exec(`UPDATE tasks SET due_at = ?`, past); err != nil {
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE tasks SET due_at = ?`, past); err != nil {
 		t.Fatalf("set due: %v", err)
 	}
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -235,7 +235,7 @@ func TestQuery_OverdueExcludesLegacyTerminalRows(t *testing.T) {
 
 func TestArchive_LegacyTerminalRows(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	n, err := s.ArchiveTasks(context.Background(), time.Hour)
 	if err != nil {
 		t.Fatalf("archive: %v", err)
@@ -247,7 +247,7 @@ func TestArchive_LegacyTerminalRows(t *testing.T) {
 
 func TestClaim_LegacyFromStatus(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	ok, err := s.ClaimTask(context.Background(), "T-1", "", "todo", "in_progress", "me", time.Now())
 	if err != nil || !ok {
 		t.Fatalf("claim legacy TODO row: ok=%v err=%v", ok, err)
@@ -259,7 +259,7 @@ func TestClaim_LegacyFromStatus(t *testing.T) {
 
 func TestWrite_RejectsUndeclaredStatus(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	ctx := context.Background()
 
 	for _, bad := range []string{"TODO", "IN_PROGRESS", "SKIPPED", "Done", "shipped"} {
@@ -290,7 +290,7 @@ func TestWrite_RejectsUndeclaredStatus(t *testing.T) {
 
 func TestWrite_DeclaredStatusAcceptedAndNormalisesRow(t *testing.T) {
 	withDefaultVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	ctx := context.Background()
 	task, err := s.GetTaskInProject(ctx, "T-1", "")
 	if err != nil || task == nil {
@@ -307,7 +307,7 @@ func TestWrite_DeclaredStatusAcceptedAndNormalisesRow(t *testing.T) {
 
 func TestWrite_CustomVocabularyDeclaredNamesAccepted(t *testing.T) {
 	withLegacyVocab(t)
-	s, _ := openSeededLegacy(t)
+	s := openSeededLegacy(t)
 	ctx := context.Background()
 	task, err := s.GetTaskInProject(ctx, "T-1", "")
 	if err != nil || task == nil {

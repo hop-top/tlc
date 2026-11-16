@@ -150,7 +150,7 @@ func buildTaskTimeClauses(query core.Query) (clauses []string, args []any) {
 		statusExclusion := ""
 		if len(closed) > 0 {
 			statusExclusion = fmt.Sprintf(" AND %s NOT IN (%s)",
-				statusColumn("status"), strings.Join(placeholders, ","))
+				statusColumn(), strings.Join(placeholders, ","))
 		}
 		clauses = append(clauses,
 			"due_at IS NOT NULL AND due_at < ?"+statusExclusion)

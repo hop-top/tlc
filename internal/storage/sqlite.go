@@ -491,7 +491,7 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 	if query.StatusPriority != "" {
 		prio := expandStatusNames([]string{query.StatusPriority})
 		orderParts = append(orderParts,
-			"CASE WHEN "+statusColumn("status")+" IN ("+placeholderList(len(prio))+") THEN 0 ELSE 1 END")
+			"CASE WHEN "+statusColumn()+" IN ("+placeholderList(len(prio))+") THEN 0 ELSE 1 END")
 		for _, p := range prio {
 			args = append(args, p)
 		}
@@ -679,7 +679,7 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 	// (legacy rows included under the default vocabulary).
 	names := []string{"DONE", "SKIPPED"}
 	if usesDefaultVocabulary() {
-		names = expandStatusNames([]string{"done", "cancelled"})
+		names = expandStatusNames([]string{string(core.StatusDone), string(core.StatusCancelled)})
 	}
 	done := make([]any, len(names))
 	for i, n := range names {
@@ -693,7 +693,7 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 			UPDATE tasks 
 			SET archived = 1 
 			WHERE archived = 0 
-			AND `+statusColumn("status")+` IN (`+placeholderList(len(done))+`)
+			AND `+statusColumn()+` IN (`+placeholderList(len(done))+`)
 			AND updated_at < ?`,
 			append(append([]any{}, done...), cutoff)...,
 		)
