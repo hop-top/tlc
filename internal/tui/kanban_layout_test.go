@@ -130,6 +130,16 @@ func TestKanbanHint(t *testing.T) {
 	if got != want {
 		t.Errorf("hint = %q, want %q", got, want)
 	}
+
+	// Empty hidden columns are not named; all-empty means no hint.
+	counts["blocked"] = 0
+	got = kanbanHint([]core.TaskStatus{"done", "blocked", "todo"}, counts)
+	if got != want {
+		t.Errorf("hint with an empty hidden column = %q, want %q", got, want)
+	}
+	if got := kanbanHint([]core.TaskStatus{"blocked", "in_review"}, map[core.TaskStatus]int{}); got != "" {
+		t.Errorf("hint with only empty hidden columns = %q, want none", got)
+	}
 }
 
 // populatedBoard is a board with work in every default column.

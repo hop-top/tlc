@@ -132,14 +132,18 @@ func kanbanLayout(
 	return shown, hidden
 }
 
-// kanbanHint is the one line naming hidden columns, or "" when none are.
+// kanbanHint is the one line naming hidden columns that hold tasks, or ""
+// when there are none. Empty columns hidden to make room are not worth
+// naming.
 func kanbanHint(hidden []core.TaskStatus, counts map[core.TaskStatus]int) string {
-	if len(hidden) == 0 {
-		return ""
+	var parts []string
+	for _, s := range hidden {
+		if counts[s] > 0 {
+			parts = append(parts, fmt.Sprintf("%s (%d)", s, counts[s]))
+		}
 	}
-	parts := make([]string, len(hidden))
-	for i, s := range hidden {
-		parts[i] = fmt.Sprintf("%s (%d)", s, counts[s])
+	if len(parts) == 0 {
+		return ""
 	}
 	return "hidden: " + strings.Join(parts, ", ") + "; widen terminal to show"
 }
