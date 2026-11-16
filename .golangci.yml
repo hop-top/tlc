@@ -73,6 +73,7 @@ linters:
         - errors.New(
         - errors.Wrap(
         - errors.Wrapf(
+        - output.UsageError(  # kit constructor: builds a typed usage error (exit 2)
     nakedret:
       max-func-lines: 30
     nestif:
