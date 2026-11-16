@@ -163,7 +163,7 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 
 // trackTableRow is the table-only schema (no Project column).
 type trackTableRow struct {
-	ID       string `table:"ID"`
+	ID       string `table:"ID,id"`
 	Slug     string `table:"Slug,priority=2"`
 	Title    string `table:"Title"`
 	Type     string `table:"Type"`
@@ -176,7 +176,7 @@ type trackTableRow struct {
 // trackTableRowWithProject mirrors trackTableRow with a Project column,
 // rendered when --all-projects is set.
 type trackTableRowWithProject struct {
-	ID       string `table:"ID"`
+	ID       string `table:"ID,id"`
 	Slug     string `table:"Slug,priority=2"`
 	Project  string `table:"Project"`
 	Title    string `table:"Title"`

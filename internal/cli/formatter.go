@@ -695,7 +695,7 @@ type taskTableRow struct {
 	// sequence: two projects hand out the same T-NNNN, so the scope has to
 	// be adjacent to the identifier it scopes.
 	Project  string `table:"Project"`
-	ID       string `table:"ID"`
+	ID       string `table:"ID,id"`
 	Title    string `table:"Title"`
 	Status   string `table:"Status"`
 	Priority string `table:"Priority"`
@@ -749,7 +749,7 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	}
 
 	type narrowRow struct {
-		ID       string `table:"ID"`
+		ID       string `table:"ID,id"`
 		Title    string `table:"Title"`
 		Status   string `table:"Status"`
 		Assigned string `table:"Assigned"`

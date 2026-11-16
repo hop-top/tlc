@@ -106,7 +106,7 @@ func TrackTypeList(configTypes ...[]string) string {
 
 // Track represents a grouping of related tasks toward a deliverable.
 type Track struct {
-	ID string `json:"id" yaml:"id" table:"ID"`
+	ID string `json:"id" yaml:"id" table:"ID,id"`
 	// Seq is the per-project monotonic sequence backing the "L-NNNN"
 	// display alias. Allocated at insert; zero means unassigned.
 	Seq         int64          `json:"seq,omitempty" yaml:"seq,omitempty"`

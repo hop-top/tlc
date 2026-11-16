@@ -93,7 +93,7 @@ type recipeVarRow struct {
 // recipeStepRow is the table view of an expanded step.
 type recipeStepRow struct {
 	Ordinal   int    `table:"#"`
-	ID        string `table:"ID"`
+	ID        string `table:"ID,id"`
 	Kind      string `table:"KIND"`
 	Title     string `table:"TITLE"`
 	DependsOn string `table:"DEPENDS ON"`

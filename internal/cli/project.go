@@ -221,7 +221,7 @@ var ProjectListCmd = &cobra.Command{
 // kit/output reads `table:""` tags to derive headers; json tags are
 // reused for JSON/YAML output upstream.
 type projectRow struct {
-	ID       string `table:"ID"        json:"project_id"`
+	ID       string `table:"ID,id"        json:"project_id"`
 	Label    string `table:"Label"     json:"label,omitempty"`
 	DBPath   string `table:"DB Path"   json:"db_path"`
 	SpaceURI string `table:"Space URI" json:"space_uri,omitempty"`

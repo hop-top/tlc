@@ -54,7 +54,7 @@ Examples:
 
 // agentRunRow is the row schema for `tlc agent list` table output.
 type agentRunRow struct {
-	ID       string `table:"ID"`
+	ID       string `table:"ID,id"`
 	Agent    string `table:"Agent"`
 	Target   string `table:"Target"`
 	Status   string `table:"Status"`
