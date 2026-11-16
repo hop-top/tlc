@@ -152,6 +152,18 @@ func TestGuards_BlockersMessageNamesTask(t *testing.T) {
 	}
 }
 
+func TestGuards_BlockerLabelShownInMessage(t *testing.T) {
+	wm := defaultWM(t)
+	err := wm.ValidateTransitionContext(TransitionContext{
+		From: StatusInProgress, To: StatusDone, BlockedBy: []string{"task_01abc"},
+		Blockers:      map[string]TaskStatus{"task_01abc": StatusInProgress},
+		BlockerLabels: map[string]string{"task_01abc": "T-0012"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "T-0012 is still open") || strings.Contains(err.Error(), "task_01abc") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestGuards_RulesBeforeGuards(t *testing.T) {
 	wm := defaultWM(t)
 	err := wm.ValidateTransitionContext(guardCtx(StatusBacklog, StatusDone))

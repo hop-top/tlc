@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -13,6 +14,11 @@ import (
 // returns it relative to the working directory for recipe.dir.
 func recipeDirFixture(t *testing.T) string {
 	t.Helper()
+	// Hermetic config: a user config on the host would be loaded as the
+	// project config, anchoring the relative recipe.dir at the wrong root.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
 	dir := t.TempDir()
 	writeRecipeFixture(t, dir, "review.yaml", `recipe: code-review
 version: 1.1.0

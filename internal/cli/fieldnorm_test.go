@@ -11,33 +11,43 @@ func TestNormalizeStatus(t *testing.T) {
 		wantOK bool
 	}{
 		// exact canonical
-		{"TODO", "TODO", true},
-		{"IN_PROGRESS", "IN_PROGRESS", true},
-		{"DONE", "DONE", true},
-		{"SKIPPED", "SKIPPED", true},
+		{"todo", "todo", true},
+		{"in_progress", "in_progress", true},
+		{"done", "done", true},
+		{"cancelled", "cancelled", true},
+		{"backlog", "backlog", true},
+		{"in_review", "in_review", true},
+		{"blocked", "blocked", true},
+		// legacy upper-case spellings
+		{"TODO", "todo", true},
+		{"IN_PROGRESS", "in_progress", true},
+		{"DONE", "done", true},
+		{"SKIPPED", "cancelled", true},
+		{"review", "in_review", true},
+		{"canceled", "cancelled", true},
 		// case-insensitive
-		{"todo", "TODO", true},
-		{"Todo", "TODO", true},
-		{"done", "DONE", true},
-		{"Done", "DONE", true},
-		{"in_progress", "IN_PROGRESS", true},
-		{"In_Progress", "IN_PROGRESS", true},
-		{"skipped", "SKIPPED", true},
+		{"todo", "todo", true},
+		{"Todo", "todo", true},
+		{"done", "done", true},
+		{"Done", "done", true},
+		{"in_progress", "in_progress", true},
+		{"In_Progress", "in_progress", true},
+		{"skipped", "cancelled", true},
 		// aliases
-		{"complete", "DONE", true},
-		{"completed", "DONE", true},
-		{"finish", "DONE", true},
-		{"finished", "DONE", true},
-		{"open", "TODO", true},
-		{"to-do", "TODO", true},
-		{"wip", "IN_PROGRESS", true},
-		{"inprogress", "IN_PROGRESS", true},
-		{"in-progress", "IN_PROGRESS", true},
-		{"skip", "SKIPPED", true},
+		{"complete", "done", true},
+		{"completed", "done", true},
+		{"finish", "done", true},
+		{"finished", "done", true},
+		{"open", "todo", true},
+		{"to-do", "todo", true},
+		{"wip", "in_progress", true},
+		{"inprogress", "in_progress", true},
+		{"in-progress", "in_progress", true},
+		{"skip", "cancelled", true},
 		// fuzzy
-		{"comp", "DONE", true}, // comp → complete (alias) not matched, fuzzy hits skipped or done via lower
-		{"tod", "TODO", true},  // fuzzy prefix of "todo"
-		{"done", "DONE", true}, // exact via alias
+		{"comp", "done", true}, // comp → complete (alias) not matched, fuzzy hits skipped or done via lower
+		{"tod", "todo", true},  // fuzzy prefix of "todo"
+		{"done", "done", true}, // exact via alias
 		// no match
 		{"xyz", "", false},
 		{"", "", false},

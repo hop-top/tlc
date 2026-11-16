@@ -63,23 +63,26 @@ func transitionContext(ctx context.Context, repo core.Repository, task *core.Tas
 	tc.Note = o.Note
 	tc.Reason = o.Reason
 	tc.Force = o.Force
-	tc.Blockers = resolveBlockers(ctx, repo, task)
+	tc.Blockers, tc.BlockerLabels = resolveBlockers(ctx, repo, task)
 	return tc
 }
 
 // resolveBlockers maps each blocked_by ref of task to its current
 // status. A ref that cannot be resolved (deleted, other project) is left
-// out, which the guard reads as still open.
-func resolveBlockers(ctx context.Context, repo core.Repository, task *core.Task) map[string]core.TaskStatus {
+// out, which the guard reads as still open. The second result maps each
+// resolved ref to its display ID, so a refusal names the blocker the way
+// the human view does.
+func resolveBlockers(ctx context.Context, repo core.Repository, task *core.Task) (map[string]core.TaskStatus, map[string]string) {
 	refs := task.BlockedBy()
 	if len(refs) == 0 || repo == nil {
-		return nil
+		return nil, nil
 	}
 	sq, ok := repo.(*storage.SQLiteStorage)
 	if !ok {
 		sq = nil
 	}
 	out := make(map[string]core.TaskStatus, len(refs))
+	labels := make(map[string]string, len(refs))
 	for _, ref := range refs {
 		lookup := ref
 		if sq != nil {
@@ -89,9 +92,12 @@ func resolveBlockers(ctx context.Context, repo core.Repository, task *core.Task)
 		}
 		if b, err := repo.GetTask(ctx, lookup); err == nil && b != nil {
 			out[ref] = b.Status
+			if alias := formatTaskAlias(b); alias != "" {
+				labels[ref] = alias
+			}
 		}
 	}
-	return out
+	return out, labels
 }
 
 // canTransition reports whether task may move to `to` without force,
