@@ -982,15 +982,21 @@ func (t *TaskConfig) ValidateWorkflow() error {
 		return err
 	}
 
-	// Validate default_status exists and is non-terminal
+	// default_status, when set, must name a declared non-terminal status.
+	// Omitted, new tasks land on the initial-role status.
 	if t.DefaultStatus != "" {
 		if !statusSet[t.DefaultStatus] {
-			return fmt.Errorf("default_status %q does not match any defined status", t.DefaultStatus)
-		}
-		for _, s := range t.Statuses {
-			if s.Name == t.DefaultStatus && s.IsTerminal {
-				return fmt.Errorf("default_status %q must not be a terminal status", t.DefaultStatus)
+			names := make([]string, len(t.Statuses))
+			for i, s := range t.Statuses {
+				names[i] = s.Name
 			}
+			return fmt.Errorf(
+				"task.default_status %q is not a declared status; valid statuses: %s",
+				t.DefaultStatus, strings.Join(names, ", "),
+			)
+		}
+		if terminalSet[t.DefaultStatus] {
+			return fmt.Errorf("task.default_status %q must not be a terminal status", t.DefaultStatus)
 		}
 	}
 

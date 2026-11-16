@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
 	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 )
@@ -21,4 +25,26 @@ func loadTaskConfig() *config.TaskConfig {
 		return nil
 	}
 	return &cfg
+}
+
+// workflowConfigError validates the merged task workflow config for the
+// command about to run. It returns nil for init and the config commands,
+// which must keep working so a bad value can be repaired.
+func workflowConfigError(c *cobra.Command) error {
+	if c.Name() == "init" {
+		return nil
+	}
+	for p := c; p != nil; p = p.Parent() {
+		if p.Name() == "config" {
+			return nil
+		}
+	}
+	cfg := loadTaskConfig()
+	if cfg == nil {
+		return nil
+	}
+	if err := cfg.ValidateWorkflow(); err != nil {
+		return fmt.Errorf("invalid task config: %w", err)
+	}
+	return nil
 }
