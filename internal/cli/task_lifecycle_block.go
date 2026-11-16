@@ -128,7 +128,7 @@ Examples:
 				continue
 			}
 			details := fmt.Sprintf("(%s → %s)", prevStatus, skippedStatus)
-			appendAuditLog(task, user, "SKIPPED", details, taskSkipNote, task.UpdatedAt)
+			appendAuditLog(task, user, "CANCELLED", details, taskSkipNote, task.UpdatedAt)
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
