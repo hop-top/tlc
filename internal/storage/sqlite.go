@@ -150,6 +150,10 @@ func (s *SQLiteStorage) CreateTask(ctx context.Context, task *core.Task) error {
 	// database/sql one frame deeper.
 	ctx = ctxOrBackground(ctx)
 
+	if err := validateStatusWrite(task.Status); err != nil {
+		return err
+	}
+
 	if err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		// encodeTask coalesces a nil ProjectID to "" for consistent scoping.
 		row := encodeTask(task)
@@ -313,6 +317,13 @@ func buildFilterClauses(filters []core.FieldFilter) ([]string, []any) {
 	for field, group := range fieldGroups {
 		var groupClauses []string
 		for _, f := range group {
+			if field == "status" {
+				if clause, cargs, ok := statusFilterClause(f.Operator, f.Value); ok {
+					groupClauses = append(groupClauses, clause)
+					args = append(args, cargs...)
+					continue
+				}
+			}
 			if field == "tags" && f.Operator == core.OpContains {
 				groupClauses = append(groupClauses,
 					"EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
@@ -478,9 +489,12 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 	// Sorting
 	var orderParts []string
 	if query.StatusPriority != "" {
+		prio := expandStatusNames([]string{query.StatusPriority})
 		orderParts = append(orderParts,
-			"CASE WHEN status = ? THEN 0 ELSE 1 END")
-		args = append(args, query.StatusPriority)
+			"CASE WHEN "+statusColumn("status")+" IN ("+placeholderList(len(prio))+") THEN 0 ELSE 1 END")
+		for _, p := range prio {
+			args = append(args, p)
+		}
 	}
 	if query.SortBy != "" {
 		order := sqlOrderASC
@@ -661,6 +675,17 @@ func (s *SQLiteStorage) FindTaskByOrigin(ctx context.Context, system, originID s
 func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-threshold).Format(time.RFC3339)
 
+	// The statuses that archive: built-in terminals, spelled as stored
+	// (legacy rows included under the default vocabulary).
+	names := []string{"DONE", "SKIPPED"}
+	if usesDefaultVocabulary() {
+		names = expandStatusNames([]string{"done", "cancelled"})
+	}
+	done := make([]any, len(names))
+	for i, n := range names {
+		done[i] = n
+	}
+
 	var count int64
 	err := s.withWriteTransaction(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(
@@ -668,9 +693,9 @@ func (s *SQLiteStorage) ArchiveTasks(ctx context.Context, threshold time.Duratio
 			UPDATE tasks 
 			SET archived = 1 
 			WHERE archived = 0 
-			AND (status = 'DONE' OR status = 'SKIPPED')
+			AND `+statusColumn("status")+` IN (`+placeholderList(len(done))+`)
 			AND updated_at < ?`,
-			cutoff,
+			append(append([]any{}, done...), cutoff)...,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to archive tasks: %w", err)

@@ -138,7 +138,7 @@ func buildTaskTimeClauses(query core.Query) (clauses []string, args []any) {
 		// The terminal set is config-derived, so its length varies:
 		// the placeholder count and the args appended below are both
 		// driven off this one slice, never off a remembered count.
-		closed := closedStatuses()
+		closed := expandStatusNames(closedStatuses())
 		placeholders := make([]string, len(closed))
 		for i := range closed {
 			placeholders[i] = "?"
@@ -149,8 +149,8 @@ func buildTaskTimeClauses(query core.Query) (clauses []string, args []any) {
 		// nothing is finished, so nothing leaves the overdue set.
 		statusExclusion := ""
 		if len(closed) > 0 {
-			statusExclusion = fmt.Sprintf(" AND status NOT IN (%s)",
-				strings.Join(placeholders, ","))
+			statusExclusion = fmt.Sprintf(" AND %s NOT IN (%s)",
+				statusColumn("status"), strings.Join(placeholders, ","))
 		}
 		clauses = append(clauses,
 			"due_at IS NOT NULL AND due_at < ?"+statusExclusion)
@@ -219,7 +219,7 @@ func (s *SQLiteStorage) CountTasksByStatus(ctx context.Context, query core.Query
 		if err := rows.Scan(&status, &n); err != nil {
 			return nil, fmt.Errorf("failed to scan task count row: %w", err)
 		}
-		counts[status] = n
+		counts[string(normalizeStatus(core.TaskStatus(status)))] += n
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate task count rows: %w", err)
@@ -261,7 +261,7 @@ func (s *SQLiteStorage) CountTasksByProjectAndStatus(
 		if counts[project] == nil {
 			counts[project] = make(map[string]int)
 		}
-		counts[project][status] = n
+		counts[project][string(normalizeStatus(core.TaskStatus(status)))] += n
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate task count rows: %w", err)
