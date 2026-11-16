@@ -146,7 +146,7 @@ func TestCancelAndSkipAlias(t *testing.T) {
 
 func TestReleaseAlias(t *testing.T) {
 	bin, home, env := verbTask(t, sevenStatusConfig, []string{"task", "claim", "T-0001"})
-	runTLCOK(t, bin, home, env, "task", "release", "T-0001")
+	runTLCOK(t, bin, home, env, "task", "release", "T-0001", "--no-prompt")
 	showHas(t, bin, home, env, "To Do")
 }
 
@@ -196,8 +196,8 @@ func TestCompleteWithOpenBlockerRefusedByGuard(t *testing.T) {
 	runTLCOK(t, bin, home, env, "task", "update", "T-0002", "--add-blocked-by", "T-0001")
 	runTLCOK(t, bin, home, env, "task", "claim", "T-0002")
 	out, code := runTLC(t, bin, home, env, "task", "complete", "T-0002")
-	if code == 0 || !strings.Contains(out, "T-0001") {
-		t.Fatalf("complete with an open blocker should be refused naming it (exit %d):\n%s", code, out)
+	if code == 0 || !strings.Contains(out, "blockers_clear") {
+		t.Fatalf("complete with an open blocker should be refused by blockers_clear (exit %d):\n%s", code, out)
 	}
 	runTLCOK(t, bin, home, env, "task", "claim", "T-0001")
 	runTLCOK(t, bin, home, env, "task", "complete", "T-0001")
