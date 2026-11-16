@@ -139,7 +139,7 @@ func populatedBoard(t *testing.T, width int) Model {
 	mk := func(seq int, title string, st core.TaskStatus) *core.Task {
 		return &core.Task{
 			ID:     fmt.Sprintf("task_01h455vb4pex5vsknk084sn%03d", 100+seq),
-			Seq:    seq,
+			Seq:    int64(seq),
 			Title:  title,
 			Status: st,
 		}
