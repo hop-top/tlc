@@ -860,11 +860,11 @@ func GetDefaultEfforts() []EffortDefinition {
 func GetDefaultStateMachine() *WorkflowDefinition {
 	return &WorkflowDefinition{
 		Rules: map[string][]string{
-			StatusNameBacklog:     {StatusNameTodo, StatusNameCancelled},
-			StatusNameTodo:        {StatusNameBacklog, StatusNameInProgress, StatusNameBlocked, StatusNameCancelled},
+			StatusNameBacklog:    {StatusNameTodo, StatusNameCancelled},
+			StatusNameTodo:       {StatusNameBacklog, StatusNameInProgress, StatusNameBlocked, StatusNameCancelled},
 			StatusNameInProgress: {StatusNameTodo, StatusNameInReview, StatusNameBlocked, StatusNameDone, StatusNameCancelled},
 			StatusNameInReview:   {StatusNameInProgress, StatusNameDone, StatusNameBlocked, StatusNameCancelled},
-			StatusNameBlocked:     {StatusNameTodo, StatusNameInProgress, StatusNameInReview, StatusNameCancelled},
+			StatusNameBlocked:    {StatusNameTodo, StatusNameInProgress, StatusNameInReview, StatusNameCancelled},
 		},
 		Guards: GetDefaultGuards(),
 	}
