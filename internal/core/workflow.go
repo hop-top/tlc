@@ -337,6 +337,10 @@ const (
 	SkippedUnresolved
 )
 
+// legacySkippedStatus is the status name configs written before the
+// "skipped" role used for the skip target.
+const legacySkippedStatus = "SKIPPED"
+
 // SkippedStatus resolves the status that `tlc task skip` targets, and
 // reports which rule produced it.
 //
@@ -359,8 +363,12 @@ func (wm *WorkflowManager) SkippedStatus() (TaskStatus, SkippedResolution) {
 	if name, ok := wm.roleIndex[config.RoleSkipped]; ok {
 		return TaskStatus(name), SkippedByRole
 	}
-	if _, ok := wm.statuses[string(StatusCancelled)]; ok {
-		return StatusCancelled, SkippedByName
+	// Role-less configs predate the role and name the status SKIPPED;
+	// the built-in name is tried too.
+	for _, name := range []string{legacySkippedStatus, string(StatusCancelled)} {
+		if _, ok := wm.statuses[name]; ok {
+			return TaskStatus(name), SkippedByName
+		}
 	}
 	return "", SkippedUnresolved
 }

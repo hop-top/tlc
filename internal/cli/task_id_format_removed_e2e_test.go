@@ -41,7 +41,7 @@ func writeIDFormatConfig(t *testing.T, dir, dbPath, idFormat string) {
 	body := `storage:
   db_path: ` + dbPath + `
 task:
-  default_status: TODO
+  default_status: todo
   require_reference: false
 `
 	if idFormat != "" {
