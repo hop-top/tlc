@@ -17,7 +17,7 @@ func TestTLS_DefaultMarkersRoundTrip(t *testing.T) {
 		"in_review":   "[?]",
 		"blocked":     "[!]",
 		"done":        "[x]",
-		"cancelled":   "[~]", //nolint:misspell // status name
+		"cancelled":   "[~]",
 	}
 	for status, marker := range markers {
 		t.Run(string(status), func(t *testing.T) {
