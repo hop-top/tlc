@@ -18,8 +18,10 @@ rules, so that my team's process is enforced by the tool.
 
 ## Acceptance Scenarios
 
-1. **Given** no custom config, **When** I use TLC, **Then** default
-   4-status workflow works unchanged
+1. **Given** no custom config, **When** I use TLC, **Then** the default
+   7-status workflow applies (`backlog`, `todo`, `in_progress`,
+   `in_review`, `blocked`, `done`, `cancelled`); see
+   [093 - Default Status Workflow](093-task-state-rework.md)
 2. **Given** custom statuses in config, **When** I run
    `tlc workflow statuses`, **Then** I see all configured statuses
 3. **Given** state machine rules, **When** I attempt an invalid
