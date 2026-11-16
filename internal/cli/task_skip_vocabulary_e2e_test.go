@@ -267,7 +267,7 @@ func TestSkipDefaultVocabulary(t *testing.T) {
 
 	runTLCOK(t, bin, home, env, "task", "create", "default shape")
 
-	out, code := runTLC(t, bin, home, env, "task", "skip", "T-0001")
+	out, code := runTLC(t, bin, home, env, "task", "skip", "T-0001", "--note", "obsolete")
 	if code != 0 {
 		t.Fatalf("skip failed on the built-in vocabulary (exit %d):\n%s", code, out)
 	}
@@ -276,8 +276,8 @@ func TestSkipDefaultVocabulary(t *testing.T) {
 	}
 
 	shown := runTLCOK(t, bin, home, env, "task", "show", "T-0001")
-	if !strings.Contains(shown, "SKIPPED") && !strings.Contains(shown, "Skipped") {
-		t.Errorf("task did not land in SKIPPED:\n%s", shown)
+	if !strings.Contains(shown, "Cancelled") {
+		t.Errorf("task did not land in cancelled:\n%s", shown)
 	}
 }
 
@@ -349,7 +349,7 @@ func TestUpdateBlockedFlagsStillWork(t *testing.T) {
 		t.Fatalf("task update --status skipped failed (exit %d):\n%s", code, out)
 	}
 	skipped := runTLCOK(t, bin, home, env, "task", "show", "T-0002")
-	if !strings.Contains(skipped, "SKIPPED") && !strings.Contains(skipped, "Skipped") {
+	if !strings.Contains(skipped, "Cancelled") {
 		t.Errorf("--status skipped should still work:\n%s", skipped)
 	}
 }
