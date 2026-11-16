@@ -29,6 +29,11 @@ func TestUndeclaredDefaultStatusFailsWithClearError(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("task create should fail on an undeclared default_status:\n%s", out)
 	}
+	// Reported through the normal config-error path, not the process-
+	// terminating DefaultWorkflow backstop.
+	if strings.Contains(out, "invalid task workflow configuration") {
+		t.Errorf("error came from the DefaultWorkflow backstop:\n%s", out)
+	}
 	for _, want := range []string{
 		"task.default_status", `"TODO"`,
 		"backlog, todo, in_progress, in_review, blocked, done, cancelled",
