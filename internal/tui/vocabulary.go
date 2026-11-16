@@ -57,7 +57,7 @@ func statusRanks() map[core.TaskStatus]int {
 // not a stage of that. That is the one exclusion the built-in three-column
 // board encoded (todo/in_progress/done, with the skip target left out), and it
 // is expressed here as the role rather than the name so a vocabulary
-// spelling it DROPPED or CANCELLED is excluded for the same reason.
+// spelling it DROPPED or CANCELED is excluded for the same reason.
 //
 // The backlog role is left out too: parked work is not yet moving through
 // the board, and the default list view hides it for the same reason.

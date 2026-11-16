@@ -227,7 +227,7 @@ func classifyLabels(labels []*github.Label, task *Task, vocab *Vocabulary) (acti
 func mapStatusFromIssue(issue *github.Issue, state string, hasInProgress, hasBlocked bool, task *Task) {
 	active := ""
 	if hasInProgress {
-		active = builtinActiveStatus
+		active = "in_progress"
 	}
 	mapStatusFromIssueWith(issue, state, active, hasBlocked, task, nil)
 }
@@ -243,7 +243,7 @@ func mapStatusFromIssueWith(issue *github.Issue, state, activeStatus string, has
 	if state == githubStateClosed {
 		reason := issue.GetStateReason()
 		if reason == "not_planned" {
-			task.Status = "cancelled"
+			task.Status = "cancelled" //nolint:misspell // status name
 		} else {
 			task.Status = "done"
 		}
@@ -365,7 +365,7 @@ func mapTaskStatusToGitHubWith(task *Task, vocab *Vocabulary) (state, stateReaso
 	switch task.Status {
 	case "done":
 		return githubStateClosed, "completed"
-	case "cancelled":
+	case "cancelled": //nolint:misspell // status name
 		return githubStateClosed, "not_planned"
 	default:
 		return githubStateOpen, ""

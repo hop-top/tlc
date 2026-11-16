@@ -41,7 +41,7 @@ type Vocabulary struct {
 	InitialStatus string `json:"initial_status,omitempty"`
 
 	// TerminalStatuses maps a terminal status NAME to the reason a closed
-	// issue carries for it. Empty means the built-in done/cancelled pair.
+	// issue carries for it. Empty means the built-in default terminal pair.
 	TerminalStatuses map[string]string `json:"terminal_statuses,omitempty"`
 }
 
@@ -54,7 +54,7 @@ func (v *Vocabulary) activeStatusFor(label string) (string, bool) {
 	return invertLookup(builtinActiveStatuses, label)
 }
 
-// builtinActiveStatuses are the labelled statuses of the built-in
+// builtinActiveStatuses are the labeled statuses of the built-in
 // vocabulary: the open statuses that are not the initial one. blocked is
 // absent on purpose; without a host vocabulary it stays the blocked flag.
 var builtinActiveStatuses = map[string]string{
@@ -68,10 +68,6 @@ const (
 	// blockedLabel is the label for the blocked flag. Not part of the
 	// vocabulary for the reason given on ActiveStatuses.
 	blockedLabel = "status:blocked"
-
-	// builtinActiveStatus is the status the single-flag pull path lands
-	// an in-progress label on.
-	builtinActiveStatus = "in_progress"
 
 	// builtinInitialStatus is the built-in vocabulary's initial status.
 	builtinInitialStatus = "todo"

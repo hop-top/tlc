@@ -87,7 +87,7 @@ func TestTaskToCore_AllStatuses(t *testing.T) {
 		{"todo", core.StatusTodo},
 		{"in_progress", core.StatusInProgress},
 		{"done", core.StatusDone},
-		{"cancelled", core.StatusCancelled},
+		{"cancelled", core.StatusCancelled}, //nolint:misspell // status name
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

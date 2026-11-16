@@ -109,7 +109,7 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 		{
 			name:       "closed not_planned → SKIPPED",
 			issue:      makeIssue(withState("closed"), withStateReason("not_planned")),
-			wantStatus: "cancelled",
+			wantStatus: "cancelled", //nolint:misspell // status name
 		},
 		{
 			name:         "priority:critical → P0",
@@ -290,7 +290,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 		},
 		{
 			name:            "SKIPPED → closed + not_planned",
-			task:            &Task{Title: "t", Status: "cancelled"},
+			task:            &Task{Title: "t", Status: "cancelled"}, //nolint:misspell // status name
 			wantState:       "closed",
 			wantStateReason: "not_planned",
 		},
