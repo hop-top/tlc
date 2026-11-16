@@ -42,8 +42,8 @@ func runRecordCmd(t *testing.T, args ...string) string {
 	return buf.String()
 }
 
-// TestTaskJSONDisplayIDRoundTrips: a legacy row stored as "T-0734" with a
-// different seq prints T-0734 in the human view; `--json display_id`
+// TestTaskJSONDisplayIDRoundTrips: a legacy row stored as "T-0042" with a
+// different seq prints T-0042 in the human view; `--json display_id`
 // returns the same string, and `task show <display_id>` resolves back.
 func TestTaskJSONDisplayIDRoundTrips(t *testing.T) {
 	ctx, cleanup := setupTestDir(t)
@@ -54,7 +54,7 @@ func TestTaskJSONDisplayIDRoundTrips(t *testing.T) {
 	}
 	defer s.Close()
 	if err := s.CreateTask(ctx, &core.Task{
-		ID: "T-0734", Title: "legacy", Status: core.StatusTodo, Priority: "P1",
+		ID: "T-0042", Title: "legacy", Status: core.StatusTodo, Priority: "P1",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestTaskJSONDisplayIDRoundTrips(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &rows); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if len(rows) != 1 || rows[0]["display_id"] != "T-0734" || rows[0]["priority"] != "P1" {
+	if len(rows) != 1 || rows[0]["display_id"] != "T-0042" || rows[0]["priority"] != "P1" {
 		t.Fatalf("rows = %v", rows)
 	}
 	if v, ok := rows[0]["track_id"]; !ok || v != nil {
@@ -78,16 +78,16 @@ func TestTaskJSONDisplayIDRoundTrips(t *testing.T) {
 	resetRecordFlags(TaskListCmd, TaskShowCmd)
 	viper.Set("output.format", formatTable)
 
-	human := runRecordCmd(t, "task", "show", "T-0734")
-	if !contains(human, "Task: T-0734") {
-		t.Fatalf("human view does not show T-0734:\n%s", human)
+	human := runRecordCmd(t, "task", "show", "T-0042")
+	if !contains(human, "Task: T-0042") {
+		t.Fatalf("human view does not show T-0042:\n%s", human)
 	}
-	one := runRecordCmd(t, "task", "show", "T-0734", "--json", "display_id,priority")
+	one := runRecordCmd(t, "task", "show", "T-0042", "--json", "display_id,priority")
 	var rec map[string]any
 	if err := json.Unmarshal([]byte(one), &rec); err != nil {
 		t.Fatalf("%v\n%s", err, one)
 	}
-	if rec["display_id"] != "T-0734" {
+	if rec["display_id"] != "T-0042" {
 		t.Errorf("show display_id = %v", rec["display_id"])
 	}
 }

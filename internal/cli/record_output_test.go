@@ -251,10 +251,10 @@ func TestYAMLMatchesJSON(t *testing.T) {
 // alias differing from its seq shows that alias in the table; the JSON
 // display_id must be the same string so scripts can round-trip it.
 func TestDisplayIDMatchesHumanView(t *testing.T) {
-	task := &core.Task{ID: "T-0734", Seq: 983, Title: "legacy", Status: core.StatusTodo}
+	task := &core.Task{ID: "T-0042", Seq: 291, Title: "legacy", Status: core.StatusTodo}
 	rec := newTaskRecord(task, nil)
-	if rec.DisplayID != "T-0734" || rec.Seq != 983 {
-		t.Fatalf("display_id=%q seq=%d, want T-0734/983", rec.DisplayID, rec.Seq)
+	if rec.DisplayID != "T-0042" || rec.Seq != 291 {
+		t.Fatalf("display_id=%q seq=%d, want T-0042/291", rec.DisplayID, rec.Seq)
 	}
 	if rec.DisplayID != formatTaskAlias(task) {
 		t.Errorf("display_id %q != table ID %q", rec.DisplayID, formatTaskAlias(task))
