@@ -55,9 +55,9 @@ func statusRanks() map[core.TaskStatus]int {
 // Every configured status gets one EXCEPT the skip target: a kanban
 // board tracks work moving toward completion, and the abandoned pile is
 // not a stage of that. That is the one exclusion the built-in three-column
-// board encoded (TODO/IN_PROGRESS/DONE, with SKIPPED left out), and it
+// board encoded (todo/in_progress/done, with the skip target left out), and it
 // is expressed here as the role rather than the name so a vocabulary
-// spelling it DROPPED or CANCELED is excluded for the same reason.
+// spelling it DROPPED or CANCELLED is excluded for the same reason.
 //
 // The skip target is resolved by role only — never by the name-based
 // fallback core.SkippedStatus also accepts. A board is a display
@@ -216,6 +216,12 @@ func statusRoleStyle(role string, s *styles.Styles) lipgloss.Style {
 		return s.Done
 	case config.RoleSkipped:
 		return s.Skipped
+	case config.RoleBacklog:
+		return s.Backlog
+	case config.RoleReview:
+		return s.Review
+	case config.RoleBlocked:
+		return s.Blocked
 	default:
 		return s.Todo
 	}

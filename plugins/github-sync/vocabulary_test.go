@@ -84,7 +84,7 @@ func TestCustomEffortRoundTrip(t *testing.T) {
 }
 
 // TestCustomActiveStatusPushed proves a renamed active status still
-// gets a status label, which a name-matched IN_PROGRESS check cannot do.
+// gets a status label, which a name-matched in_progress check cannot do.
 func TestCustomActiveStatusPushed(t *testing.T) {
 	v := customVocab()
 
@@ -150,5 +150,37 @@ func TestBuiltinPullUnchangedUnderNilVocabulary(t *testing.T) {
 	}
 	if len(task.Tags) != 1 || task.Tags[0] != "domain:cli" {
 		t.Errorf("Tags = %v, want [domain:cli]", task.Tags)
+	}
+}
+
+// TestBlockedStatusLabelResolvesThroughVocabulary pins that a vocabulary
+// declaring a blocked status turns the status:blocked label into that
+// status on pull, and writes the same label on push, instead of the
+// blocked-flag fallback.
+func TestBlockedStatusLabelResolvesThroughVocabulary(t *testing.T) {
+	v := &Vocabulary{
+		ActiveStatuses: map[string]string{
+			"in_progress": "status:in-progress",
+			"blocked":     "status:blocked",
+		},
+		InitialStatus: "todo",
+	}
+
+	name := "status:blocked"
+	task := &Task{}
+	active, hasBlocked := classifyLabels([]*github.Label{{Name: &name}}, task, v)
+	if active != "blocked" || hasBlocked {
+		t.Errorf("classifyLabels = (%q, %v), want (blocked, false)", active, hasBlocked)
+	}
+
+	pushed := buildPushLabelsWith(&Task{Status: "blocked"}, v)
+	if len(pushed) != 1 || pushed[0] != "status:blocked" {
+		t.Errorf("push labels = %v, want [status:blocked]", pushed)
+	}
+
+	// No blocked status in the vocabulary: the flag fallback holds.
+	active, hasBlocked = classifyLabels([]*github.Label{{Name: &name}}, &Task{}, customVocab())
+	if active != "" || !hasBlocked {
+		t.Errorf("fallback classifyLabels = (%q, %v), want (\"\", true)", active, hasBlocked)
 	}
 }

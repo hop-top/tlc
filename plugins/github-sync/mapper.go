@@ -191,13 +191,16 @@ func classifyLabels(labels []*github.Label, task *Task, vocab *Vocabulary) (acti
 			continue
 		}
 
-		// Status labels — capture flags, don't add to tags
-		if nameLower == blockedLabel {
-			hasBlocked = true
-			continue
-		}
+		// Status labels — capture flags, don't add to tags. The host's
+		// vocabulary wins: when it declares a blocked status, its label
+		// resolves to that status like any other open status. Only a
+		// vocabulary without one falls back to the blocked flag.
 		if s, ok := vocab.activeStatusFor(nameLower); ok {
 			activeStatus = s
+			continue
+		}
+		if nameLower == blockedLabel {
+			hasBlocked = true
 			continue
 		}
 		if strings.HasPrefix(nameLower, "status:") {
@@ -234,7 +237,7 @@ func mapStatusFromIssue(issue *github.Issue, state string, hasInProgress, hasBlo
 //
 // The name matters: an open issue labeled status:doing under a DOING
 // vocabulary must pull back as DOING. Collapsing that to a boolean and
-// then hardcoding IN_PROGRESS would round-trip the label correctly and
+// then hardcoding in_progress would round-trip the label correctly and
 // still write the wrong status into the store.
 func mapStatusFromIssueWith(issue *github.Issue, state, activeStatus string, hasBlocked bool, task *Task, vocab *Vocabulary) {
 	if state == githubStateClosed {
@@ -381,12 +384,13 @@ func buildPushLabels(task *Task) []string {
 func buildPushLabelsWith(task *Task, vocab *Vocabulary) []string {
 	var labels []string
 
-	// Status label. Blocked wins over the status axis because it is an
-	// orthogonal flag, not a member of the vocabulary.
-	if task.BlockedReason != nil && *task.BlockedReason != "" {
-		labels = append(labels, blockedLabel)
-	} else if l, ok := vocab.statusLabel(task.Status); ok {
+	// Status label. A status the vocabulary labels (including a blocked
+	// status) wears its own label. Otherwise a block reason on a task in
+	// some other status wears the fixed blocked label.
+	if l, ok := vocab.statusLabel(task.Status); ok {
 		labels = append(labels, l)
+	} else if task.BlockedReason != nil && *task.BlockedReason != "" {
+		labels = append(labels, blockedLabel)
 	}
 	// Terminal and initial statuses get no status:* label: open/closed
 	// already says it.

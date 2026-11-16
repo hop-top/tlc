@@ -89,7 +89,7 @@ func (v *Vocabulary) effortFor(label string) (string, bool) {
 //
 // The NAME matters, not a boolean: an open issue labeled status:doing
 // under a DOING vocabulary must pull back as DOING. Collapsing that to a
-// flag and hardcoding IN_PROGRESS would round-trip the label correctly
+// flag and hardcoding in_progress would round-trip the label correctly
 // and still write the wrong status into the store.
 func (v *Vocabulary) activeStatusFor(label string) (string, bool) {
 	if v != nil && len(v.ActiveStatuses) > 0 {
@@ -127,7 +127,7 @@ func (v *Vocabulary) isTerminal(name string) (string, bool) {
 
 // terminalFor returns the vocabulary's status name for a close reason,
 // so a closed issue pulls back into a declared terminal status rather
-// than the built-in DONE/SKIPPED pair.
+// than the built-in done/cancelled pair.
 func (v *Vocabulary) terminalFor(reason string) string {
 	if v != nil && len(v.TerminalStatuses) > 0 {
 		// Sorted so two terminal statuses sharing a reason resolve the

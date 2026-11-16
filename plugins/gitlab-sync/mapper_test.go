@@ -35,7 +35,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 			wantStatus: "todo",
 		},
 		{
-			name: "opened with status:in-progress maps to IN_PROGRESS",
+			name: "opened with status:in-progress maps to in_progress",
 			issue: &gitlab.Issue{
 				IID:       2,
 				Title:     "wip issue",
@@ -214,7 +214,7 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 			wantLabels: nil,
 		},
 		{
-			name: "IN_PROGRESS maps to reopen with status:in-progress",
+			name: "in_progress maps to reopen with status:in-progress",
 			task: &Task{
 				Title:  "in progress task",
 				Status: "in_progress",

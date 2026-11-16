@@ -323,18 +323,7 @@ func renderDOT(w io.Writer, tasks []*core.Task) {
 
 // dotColor maps a task status to a GraphViz fill color.
 func dotColor(status core.TaskStatus) string {
-	switch status {
-	case core.StatusTodo:
-		return "#ffffff"
-	case core.StatusInProgress:
-		return "#aee4f8"
-	case core.StatusDone:
-		return "#a8e6a3"
-	case core.StatusCancelled:
-		return "#f5dfa5"
-	default:
-		return "#eeeeee"
-	}
+	return dotColorForRole(statusRole(status))
 }
 
 // dotEscape handles basic label quoting for DOT output.

@@ -41,7 +41,7 @@ type Vocabulary struct {
 	InitialStatus string `json:"initial_status,omitempty"`
 
 	// TerminalStatuses maps a terminal status NAME to the reason a closed
-	// issue carries for it. Empty means the built-in DONE/SKIPPED pair.
+	// issue carries for it. Empty means the built-in done/cancelled pair.
 	TerminalStatuses map[string]string `json:"terminal_statuses,omitempty"`
 }
 
@@ -94,7 +94,7 @@ func (v *Vocabulary) effortLabel(name string) (string, bool) {
 }
 
 // statusLabel returns the label for an active status name. With no
-// vocabulary only IN_PROGRESS earns one, which is what the plugin did
+// vocabulary only in_progress earns one, which is what the plugin did
 // before this change.
 func (v *Vocabulary) statusLabel(name string) (string, bool) {
 	if v != nil && len(v.ActiveStatuses) > 0 {

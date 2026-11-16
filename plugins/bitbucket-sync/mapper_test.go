@@ -29,7 +29,7 @@ func TestMapBitbucketIssueToTask(t *testing.T) {
 			wantStatus: "todo",
 		},
 		{
-			name:       "open + status:in-progress maps to IN_PROGRESS",
+			name:       "open + status:in-progress maps to in_progress",
 			issue:      &BitbucketIssue{ID: 3, Title: "t", State: "open"},
 			components: []string{"status:in-progress"},
 			wantStatus: "in_progress",

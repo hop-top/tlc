@@ -38,7 +38,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 			wantStatus: "todo", wantPriority: "P2",
 		},
 		{
-			name:       "Active state maps to IN_PROGRESS",
+			name:       "Active state maps to in_progress",
 			wi:         &WorkItem{ID: 2, Fields: baseFields("Active", 2)},
 			wantStatus: "in_progress", wantPriority: "P1",
 		},
@@ -226,7 +226,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			},
 		},
 		{
-			name: "Status IN_PROGRESS maps to state Active",
+			name: "Status in_progress maps to state Active",
 			task: &Task{
 				Title:  "T2",
 				Status: "in_progress",

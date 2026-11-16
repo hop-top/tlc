@@ -103,8 +103,8 @@ func labelValue(name string) string {
 // vocabulary.
 //
 // WHICH statuses get a label is decided from role and terminality, never
-// from the name. github-sync's buildPushLabels labels only IN_PROGRESS
-// and blocked, and that is not an arbitrary shortlist: a GitHub issue is
+// from the name. The sync plugins label only the open, in-flight statuses
+// and that is not an arbitrary shortlist: a GitHub issue is
 // open or closed, and that bit ALREADY encodes the rest of the axis. A
 // terminal status is a closed issue, and the initial status is an open
 // issue nobody has touched — labeling either would restate in a label
@@ -114,8 +114,8 @@ func labelValue(name string) string {
 // What open/closed cannot express is the difference between "open,
 // untouched" and "open, someone is on it". That is exactly the set this
 // selects: non-terminal, non-initial. With the built-in vocabulary it
-// yields IN_PROGRESS alone, matching the plugins. With a vocabulary that
-// adds IN_REVIEW it yields both, which is the behavior a custom
+// yields backlog, in-progress, in-review and blocked. A vocabulary that
+// adds another open status yields it too, which is the behavior a custom
 // vocabulary should get and a name-matched shortlist could not give.
 //
 // Deriving from role also means a user who renames IN_PROGRESS to
@@ -123,34 +123,47 @@ func labelValue(name string) string {
 // rename.
 func statusAxis(defs []config.StatusDefinition) []Label {
 	out := make([]Label, 0, len(defs)+1)
+	hasBlockedRole := false
 	for _, s := range defs {
 		if s.IsTerminal || s.Role == config.RoleInitial {
 			continue
 		}
+		color := resolveColor(s.Color)
+		if s.Role == config.RoleBlocked {
+			hasBlockedRole = true
+			// A named color for the blocked role would land on
+			// priority:critical's swatch ("red"), so the dedicated
+			// blocked swatch stands in. An explicit hex is the user's
+			// choice and wins.
+			if !hexRe.MatchString(strings.TrimPrefix(s.Color, "#")) {
+				color = blockedLabelColor
+			}
+		}
 		out = append(out, Label{
 			Name:        "status:" + labelValue(s.Name),
-			Color:       resolveColor(s.Color),
+			Color:       color,
 			Description: statusDescription(s),
 		})
 	}
 
-	// `status:blocked` is NOT a status. tlc models blocked as
-	// Task.BlockedReason, an orthogonal field a task carries WHILE it
-	// sits in some status — which is why it cannot be derived from the
-	// vocabulary above, and why deriving it would be wrong even if a
-	// user happened to declare a status named BLOCKED.
+	// A vocabulary with a blocked-role status already produced
+	// `status:blocked` above, from the vocabulary.
 	//
-	// It is still on the status axis because that is where the wire
-	// format already puts it: all four sync plugins push and pull
-	// `status:blocked`, and the label has to exist with a defined color
-	// or `sync push` creates it with a forge default. Appended as a
-	// fixed entry, after the generated ones, so its independence from
-	// the vocabulary is visible rather than implied.
-	out = append(out, Label{
-		Name:        "status:blocked",
-		Color:       blockedLabelColor,
-		Description: "Blocked — task carries a blocked reason",
-	})
+	// Without one, `status:blocked` is not a status: blocked is then
+	// Task.BlockedReason, an orthogonal field a task carries WHILE it
+	// sits in some status, so it cannot be derived from the vocabulary.
+	// It is still on the status axis because all four sync plugins push
+	// and pull `status:blocked`, and the label has to exist with a
+	// defined color or `sync push` creates it with a forge default.
+	// Appended as a fixed entry, after the generated ones, so its
+	// independence from the vocabulary is visible rather than implied.
+	if !hasBlockedRole {
+		out = append(out, Label{
+			Name:        "status:blocked",
+			Color:       blockedLabelColor,
+			Description: "Blocked — task carries a blocked reason",
+		})
+	}
 	return out
 }
 
