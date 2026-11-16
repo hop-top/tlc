@@ -777,16 +777,29 @@ func (t *TaskConfig) TodoFilePath() string {
 	return "todo.txt"
 }
 
+// Names of the built-in statuses. Distinct from the Role* constants: a
+// role says what a status means, a name is what the status is called,
+// and a config may rename one without touching the other.
+const (
+	StatusNameBacklog    = "backlog"
+	StatusNameTodo       = "todo"
+	StatusNameInProgress = "in_progress"
+	StatusNameInReview   = "in_review"
+	StatusNameBlocked    = "blocked"
+	StatusNameDone       = "done"
+	StatusNameCancelled  = "cancelled"
+)
+
 // GetDefaultStatuses returns the seven default task statuses.
 func GetDefaultStatuses() []StatusDefinition {
 	return []StatusDefinition{
-		{Name: "backlog", Label: "Backlog", Color: "gray", Role: RoleBacklog, TLSMarker: "-"},
-		{Name: "todo", Label: "To Do", Color: "yellow", Role: RoleInitial, TLSMarker: " "},
-		{Name: "in_progress", Label: "In Progress", Color: "blue", Role: RoleActive, TLSMarker: ">"},
-		{Name: "in_review", Label: "In Review", Color: "magenta", Role: RoleReview, TLSMarker: "?"},
-		{Name: "blocked", Label: "Blocked", Color: "red", Role: RoleBlocked, TLSMarker: "!"},
-		{Name: "done", Label: "Done", IsTerminal: true, Color: "green", Role: RoleCompleted, TLSMarker: "x"},
-		{Name: "cancelled", Label: "Cancelled", IsTerminal: true, Color: "gray", Role: RoleSkipped, TLSMarker: "~"},
+		{Name: StatusNameBacklog, Label: "Backlog", Color: "gray", Role: RoleBacklog, TLSMarker: "-"},
+		{Name: StatusNameTodo, Label: "To Do", Color: "yellow", Role: RoleInitial, TLSMarker: " "},
+		{Name: StatusNameInProgress, Label: "In Progress", Color: "blue", Role: RoleActive, TLSMarker: ">"},
+		{Name: StatusNameInReview, Label: "In Review", Color: "magenta", Role: RoleReview, TLSMarker: "?"},
+		{Name: StatusNameBlocked, Label: "Blocked", Color: "red", Role: RoleBlocked, TLSMarker: "!"},
+		{Name: StatusNameDone, Label: "Done", IsTerminal: true, Color: "green", Role: RoleCompleted, TLSMarker: "x"},
+		{Name: StatusNameCancelled, Label: "Cancelled", IsTerminal: true, Color: "gray", Role: RoleSkipped, TLSMarker: "~"},
 	}
 }
 
@@ -847,11 +860,11 @@ func GetDefaultEfforts() []EffortDefinition {
 func GetDefaultStateMachine() *WorkflowDefinition {
 	return &WorkflowDefinition{
 		Rules: map[string][]string{
-			"backlog":     {"todo", "cancelled"},
-			"todo":        {"backlog", "in_progress", "blocked", "cancelled"},
-			"in_progress": {"todo", "in_review", "blocked", "done", "cancelled"},
-			"in_review":   {"in_progress", "done", "blocked", "cancelled"},
-			"blocked":     {"todo", "in_progress", "in_review", "cancelled"},
+			StatusNameBacklog:     {StatusNameTodo, StatusNameCancelled},
+			StatusNameTodo:        {StatusNameBacklog, StatusNameInProgress, StatusNameBlocked, StatusNameCancelled},
+			StatusNameInProgress: {StatusNameTodo, StatusNameInReview, StatusNameBlocked, StatusNameDone, StatusNameCancelled},
+			StatusNameInReview:   {StatusNameInProgress, StatusNameDone, StatusNameBlocked, StatusNameCancelled},
+			StatusNameBlocked:     {StatusNameTodo, StatusNameInProgress, StatusNameInReview, StatusNameCancelled},
 		},
 		Guards: GetDefaultGuards(),
 	}
@@ -860,10 +873,10 @@ func GetDefaultStateMachine() *WorkflowDefinition {
 // GetDefaultGuards returns the default transition guards.
 func GetDefaultGuards() []GuardDefinition {
 	return []GuardDefinition{
-		{To: "blocked", Require: []string{CheckReason}},
-		{To: "cancelled", Require: []string{CheckNote}},
-		{To: "done", Require: []string{CheckBlockersClear}},
-		{From: "in_progress", To: "in_review", Require: []string{CheckAssignee}},
+		{To: StatusNameBlocked, Require: []string{CheckReason}},
+		{To: StatusNameCancelled, Require: []string{CheckNote}},
+		{To: StatusNameDone, Require: []string{CheckBlockersClear}},
+		{From: StatusNameInProgress, To: StatusNameInReview, Require: []string{CheckAssignee}},
 	}
 }
 

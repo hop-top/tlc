@@ -96,8 +96,10 @@ func (wm *WorkflowManager) CheckTransition(tc TransitionContext) (forced bool, b
 
 // ValidateTransitionContext is CheckTransition without the forced result.
 func (wm *WorkflowManager) ValidateTransitionContext(tc TransitionContext) error {
-	_, _, err := wm.CheckTransition(tc)
-	return err
+	if tc.Force {
+		return nil
+	}
+	return wm.checkRulesAndGuards(tc)
 }
 
 func (wm *WorkflowManager) checkRulesAndGuards(tc TransitionContext) error {
@@ -148,22 +150,31 @@ func runGuardCheck(check string, tc TransitionContext, wm *WorkflowManager) stri
 			return "task has no assignee"
 		}
 	case config.CheckBlockersClear:
-		var open []string
-		for _, id := range tc.BlockedBy {
-			st, ok := tc.Blockers[id]
-			if !ok || !wm.IsTerminal(st) {
-				if label := tc.BlockerLabels[id]; label != "" {
-					id = label
-				}
-				open = append(open, id)
-			}
-		}
-		if len(open) == 1 {
-			return open[0] + " is still open"
-		}
-		if len(open) > 1 {
-			return strings.Join(open, ", ") + " are still open"
-		}
+		return openBlockersDetail(tc, wm)
 	}
 	return ""
+}
+
+// openBlockersDetail returns "" when every blocked_by task is terminal,
+// else names the open ones by display ID where known.
+func openBlockersDetail(tc TransitionContext, wm *WorkflowManager) string {
+	var open []string
+	for _, id := range tc.BlockedBy {
+		st, ok := tc.Blockers[id]
+		if ok && wm.IsTerminal(st) {
+			continue
+		}
+		if label := tc.BlockerLabels[id]; label != "" {
+			id = label
+		}
+		open = append(open, id)
+	}
+	switch len(open) {
+	case 0:
+		return ""
+	case 1:
+		return open[0] + " is still open"
+	default:
+		return strings.Join(open, ", ") + " are still open"
+	}
 }
