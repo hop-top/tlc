@@ -120,13 +120,19 @@ converges (assignee + status already set), so the operation is idempotent.`,
 }
 
 var TaskUnclaimCmd = &cobra.Command{
-	Use:   "unclaim <task-id|pattern>...",
-	Short: "Release a claimed task",
+	Use:     "unclaim <task-id|pattern>...",
+	Aliases: []string{"release"},
+	Short:   "Release a claimed task (alias: release)",
 	Long: `Release one or more tasks the caller previously claimed.
 
 Clears the assignee and transitions each task back to the workflow's
 initial status. Local-only side effect; re-running on already-released
-tasks converges.`,
+tasks converges. 'release' is an alias of 'unclaim'.
+
+Examples:
+  tlc task unclaim T-0042
+  tlc task release T-0042 --note "handing back to the pool"
+  tlc task release T-0042 --dry-run`,
 	Annotations: map[string]string{
 		"kit/side-effect": "destructive-local",
 		"kit/idempotent":  "yes",

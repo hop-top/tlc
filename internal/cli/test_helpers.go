@@ -443,6 +443,12 @@ func resetTaskFlags() {
 	taskSkipNote = ""
 	taskSkipNoVerify = false
 	taskBlockNote = ""
+	taskBlockNoVerify = false
+	taskUnblockNoVerify = false
+	taskSubmitNote = ""
+	taskSubmitNoVerify = false
+	taskApproveNoVerify = false
+	taskRejectNoVerify = false
 	taskUnblockNote = ""
 	taskUpdateForce = false
 	taskNoPrompt = false
