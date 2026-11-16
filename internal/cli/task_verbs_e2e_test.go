@@ -149,3 +149,57 @@ func TestReleaseAlias(t *testing.T) {
 	runTLCOK(t, bin, home, env, "task", "release", "T-0001")
 	showHas(t, bin, home, env, "To Do")
 }
+
+// Guard refusals under the built-in vocabulary and guards.
+
+func TestCancelWithoutNoteRefusedByGuard(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, defaultStatusConfig)
+	runTLCOK(t, bin, home, env, "task", "create", "guarded")
+	out, code := runTLC(t, bin, home, env, "task", "cancel", "T-0001")
+	if code == 0 || !strings.Contains(out, "note") {
+		t.Fatalf("cancel without note should be refused naming the note check (exit %d):\n%s", code, out)
+	}
+	showHas(t, bin, home, env, "To Do")
+	runTLCOK(t, bin, home, env, "task", "skip", "T-0001", "--note", "obsolete")
+	showHas(t, bin, home, env, "Cancelled")
+}
+
+func TestBlockWithoutReasonRefused(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, defaultStatusConfig)
+	runTLCOK(t, bin, home, env, "task", "create", "guarded")
+	if out, code := runTLC(t, bin, home, env, "task", "block", "T-0001"); code == 0 {
+		t.Fatalf("block without reason should be refused:\n%s", out)
+	}
+	showHas(t, bin, home, env, "To Do")
+	runTLCOK(t, bin, home, env, "task", "block", "T-0001", "--reason", "vendor")
+	showHas(t, bin, home, env, "Blocked")
+	runTLCOK(t, bin, home, env, "task", "unblock", "T-0001")
+	showHas(t, bin, home, env, "To Do")
+}
+
+func TestSubmitWithoutAssigneeRefusedByGuard(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, defaultStatusConfig)
+	runTLCOK(t, bin, home, env, "task", "create", "guarded")
+	runTLCOK(t, bin, home, env, "task", "claim", "T-0001")
+	runTLCOK(t, bin, home, env, "task", "update", "T-0001", "--assigned-to", "-")
+	out, code := runTLC(t, bin, home, env, "task", "submit", "T-0001")
+	if code == 0 || !strings.Contains(out, "assignee") {
+		t.Fatalf("submit without assignee should be refused naming it (exit %d):\n%s", code, out)
+	}
+	showHas(t, bin, home, env, "In Progress")
+}
+
+func TestCompleteWithOpenBlockerRefusedByGuard(t *testing.T) {
+	bin, home, env := statusVocabFixture(t, defaultStatusConfig)
+	runTLCOK(t, bin, home, env, "task", "create", "blocker")
+	runTLCOK(t, bin, home, env, "task", "create", "blocked one")
+	runTLCOK(t, bin, home, env, "task", "update", "T-0002", "--add-blocked-by", "T-0001")
+	runTLCOK(t, bin, home, env, "task", "claim", "T-0002")
+	out, code := runTLC(t, bin, home, env, "task", "complete", "T-0002")
+	if code == 0 || !strings.Contains(out, "T-0001") {
+		t.Fatalf("complete with an open blocker should be refused naming it (exit %d):\n%s", code, out)
+	}
+	runTLCOK(t, bin, home, env, "task", "claim", "T-0001")
+	runTLCOK(t, bin, home, env, "task", "complete", "T-0001")
+	runTLCOK(t, bin, home, env, "task", "complete", "T-0002")
+}
