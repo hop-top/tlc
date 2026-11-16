@@ -192,7 +192,7 @@ func TestQuery_StatusFilterMatchesLegacyRows(t *testing.T) {
 	}{
 		{"eq todo", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: "todo"}, []string{"T-1", "T-6", "T-7"}},
 		{"eq legacy spelling", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: "TODO"}, []string{"T-1", "T-6", "T-7"}},
-		{"eq cancelled", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: core.StatusCancelled}, []string{"T-4"}},
+		{"eq skipped alias", core.FieldFilter{Field: "status", Operator: core.OpEq, Value: core.StatusCancelled}, []string{"T-4"}},
 		{"in", core.FieldFilter{Field: "status", Operator: core.OpIn, Value: "done,backlog"}, []string{"T-3", "T-5"}},
 		{"noteq todo", core.FieldFilter{Field: "status", Operator: core.OpNotEq, Value: "todo"}, []string{"T-2", "T-3", "T-4", "T-5", "T-8"}},
 	}

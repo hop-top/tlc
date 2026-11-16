@@ -81,7 +81,7 @@ func statusColumn() string {
 	if usesDefaultVocabulary() {
 		return "status COLLATE NOCASE"
 	}
-	return "status"
+	return "status" //nolint:goconst // column name
 }
 
 // expandStatusNames flattens statusSQLNames over names, dropping repeats.
