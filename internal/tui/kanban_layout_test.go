@@ -185,3 +185,23 @@ func TestMoveTask_TargetsVisibleColumns(t *testing.T) {
 		}
 	}
 }
+
+// TestMoveTask_DoesNotStepOntoHiddenColumn pins the behaviour, not just
+// the column list: at 80 columns blocked is the last visible column, so
+// moving right from it has nowhere to go and must do nothing, rather than
+// transitioning the task to the hidden done column.
+func TestMoveTask_DoesNotStepOntoHiddenColumn(t *testing.T) {
+	m := populatedBoard(t, 80)
+	var blocked *core.Task
+	for _, task := range m.tasks {
+		if task.Status == "blocked" {
+			blocked = task
+		}
+	}
+	if blocked == nil {
+		t.Fatal("fixture has no blocked task")
+	}
+	if msg := m.moveTask(blocked, 1)(); msg != nil {
+		t.Errorf("moveTask past the last visible column returned %v, want nil", msg)
+	}
+}
