@@ -42,6 +42,9 @@ var hexRe = regexp.MustCompile(`^[0-9A-Fa-f]{6}$`)
 // priority:critical's B60205.
 const (
 	blockedLabelColor = "5C1A00"
+	// backlogLabelColor stands in for the backlog role's named gray,
+	// which sits within the effort greens and needs:repro's brown.
+	backlogLabelColor = "3B3F44"
 	fallbackColor     = "EDEDED"
 )
 
@@ -138,6 +141,9 @@ func statusAxis(defs []config.StatusDefinition) []Label {
 			if !hexRe.MatchString(strings.TrimPrefix(s.Color, "#")) {
 				color = blockedLabelColor
 			}
+		}
+		if s.Role == config.RoleBacklog && !hexRe.MatchString(strings.TrimPrefix(s.Color, "#")) {
+			color = backlogLabelColor
 		}
 		out = append(out, Label{
 			Name:        "status:" + labelValue(s.Name),

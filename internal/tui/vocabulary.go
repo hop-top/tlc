@@ -59,6 +59,9 @@ func statusRanks() map[core.TaskStatus]int {
 // is expressed here as the role rather than the name so a vocabulary
 // spelling it DROPPED or CANCELLED is excluded for the same reason.
 //
+// The backlog role is left out too: parked work is not yet moving through
+// the board, and the default list view hides it for the same reason.
+//
 // The skip target is resolved by role only — never by the name-based
 // fallback core.SkippedStatus also accepts. A board is a display
 // choice, and silently dropping a column because a status happened to
@@ -72,6 +75,9 @@ func kanbanStatusOrder() []core.TaskStatus {
 	cols := make([]core.TaskStatus, 0, len(order))
 	for _, status := range order {
 		if hasSkipped && status == skipped {
+			continue
+		}
+		if def, err := wm.GetStatusDef(status); err == nil && def.Role == config.RoleBacklog {
 			continue
 		}
 		cols = append(cols, status)
