@@ -119,7 +119,6 @@ func TestConcept_JournalSubTypes(t *testing.T) {
 		// Task.TransitionWithWorkflow writes, matched case-insensitively.
 		string(core.StatusInProgress): vtodo.ConceptStatus,
 		string(core.StatusTodo):       vtodo.ConceptStatus,
-		"in_progress":                 vtodo.ConceptStatus,
 		"claimed":                     vtodo.ConceptStatus,
 		// action: something a player did other than move the status.
 		core.ActionCreated:    vtodo.ConceptAction,
