@@ -121,9 +121,8 @@ Examples:
 
 			user := core.GetCurrentUser()
 			prevStatus := task.Status
-			logEntry, transErr := task.TransitionWithWorkflow(
-				skippedStatus, user, taskSkipNote, wm, taskSkipNoVerify,
-			)
+			logEntry, transErr := transitionTask(ctx, res.Storage, task, skippedStatus, wm,
+				transitionOpts{By: user, Note: taskSkipNote, Force: taskSkipNoVerify})
 			if transErr != nil {
 				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), transErr))
 				continue
@@ -140,7 +139,7 @@ Examples:
 					fmt.Sprintf("%s → %s", prevStatus, skippedStatus))
 				continue
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped task %s\n", taskDisplayID(task))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cancelled task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -244,7 +243,7 @@ Examples:
 			// the move, and let unblock return there. A task already in
 			// the blocked status only has its reason replaced.
 			if blockedStatus, bErr := wm.StatusForRole(roleBlocked); bErr == nil && task.Status != blockedStatus {
-				entry, terr := transitionTask(task, blockedStatus, wm,
+				entry, terr := transitionTask(ctx, res.Storage, task, blockedStatus, wm,
 					transitionOpts{By: user, Reason: reason, Force: taskBlockNoVerify})
 				if terr != nil {
 					errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), terr))
@@ -356,12 +355,12 @@ Examples:
 			// came from; when that move is no longer allowed it falls
 			// back to the initial status.
 			if blockedStatus, bErr := wm.StatusForRole(roleBlocked); bErr == nil && task.Status == blockedStatus {
-				back, terr := unblockTarget(task, wm)
+				back, terr := unblockTarget(ctx, res.Storage, task, wm)
 				if terr != nil {
 					errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), terr))
 					continue
 				}
-				entry, terr := transitionTask(task, back, wm,
+				entry, terr := transitionTask(ctx, res.Storage, task, back, wm,
 					transitionOpts{By: user, Note: taskUnblockNote, Force: taskUnblockNoVerify})
 				if terr != nil {
 					errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), terr))
@@ -398,9 +397,9 @@ Examples:
 // unblockTarget picks where an unblocked task goes: the recorded
 // pre-block status when the workflow still allows the move, else the
 // initial status.
-func unblockTarget(task *core.Task, wm *core.WorkflowManager) (core.TaskStatus, error) {
+func unblockTarget(ctx context.Context, repo core.Repository, task *core.Task, wm *core.WorkflowManager) (core.TaskStatus, error) {
 	if rec, ok := task.Meta[metaBlockedFrom].(string); ok && rec != "" {
-		if canTransition(task, core.TaskStatus(rec), wm) {
+		if canTransition(ctx, repo, task, core.TaskStatus(rec), wm) {
 			return core.TaskStatus(rec), nil
 		}
 	}

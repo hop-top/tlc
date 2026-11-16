@@ -9,6 +9,7 @@ package cli
 // workflow's validation is the single gate.
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -43,23 +44,57 @@ type transitionOpts struct {
 	Force  bool
 }
 
-// transitionTask is the one place verbs change status. It validates
-// through the task's workflow, then applies the move.
-func transitionTask(task *core.Task, to core.TaskStatus, wm *core.WorkflowManager, o transitionOpts) (*core.LogEntry, error) {
-	note := o.Note
-	if note == "" {
-		note = o.Reason
-	}
-	return task.TransitionWithWorkflow(to, o.By, note, wm, o.Force)
+// transitionTask is the one place verbs change status. It builds the
+// full transition context (note, reason, assignee after the move, and
+// the resolved status of every blocker), then validates rules and
+// guards through the task's workflow and applies the move.
+func transitionTask(ctx context.Context, repo core.Repository, task *core.Task, to core.TaskStatus, wm *core.WorkflowManager, o transitionOpts) (*core.LogEntry, error) {
+	tc := transitionContext(ctx, repo, task, to, o)
+	return task.TransitionWithContext(tc, o.By, wm)
 }
 
-// canTransition reports whether task may move to `to` without force.
-func canTransition(task *core.Task, to core.TaskStatus, wm *core.WorkflowManager) bool {
+// transitionContext fills a core.TransitionContext for moving task to `to`.
+func transitionContext(ctx context.Context, repo core.Repository, task *core.Task, to core.TaskStatus, o transitionOpts) core.TransitionContext {
+	tc := core.NewTransitionContext(task, to)
+	tc.Note = o.Note
+	tc.Reason = o.Reason
+	tc.Force = o.Force
+	tc.Blockers = resolveBlockers(ctx, repo, task)
+	return tc
+}
+
+// resolveBlockers maps each blocked_by ref of task to its current
+// status. A ref that cannot be resolved (deleted, other project) is left
+// out, which the guard reads as still open.
+func resolveBlockers(ctx context.Context, repo core.Repository, task *core.Task) map[string]core.TaskStatus {
+	refs := task.BlockedBy()
+	if len(refs) == 0 || repo == nil {
+		return nil
+	}
+	sq, _ := repo.(*storage.SQLiteStorage)
+	out := make(map[string]core.TaskStatus, len(refs))
+	for _, ref := range refs {
+		lookup := ref
+		if sq != nil {
+			if translated, err := parseTaskRefForCLI(ctx, sq, ref); err == nil && translated != "" {
+				lookup = translated
+			}
+		}
+		if b, err := repo.GetTask(ctx, lookup); err == nil && b != nil {
+			out[ref] = b.Status
+		}
+	}
+	return out
+}
+
+// canTransition reports whether task may move to `to` without force,
+// rules and guards included.
+func canTransition(ctx context.Context, repo core.Repository, task *core.Task, to core.TaskStatus, wm *core.WorkflowManager) bool {
 	twm, err := wm.WorkflowForTask(task)
 	if err != nil {
 		return false
 	}
-	return twm.ValidateTransition(task.Status, to, false) == nil
+	return twm.ValidateTransitionContext(transitionContext(ctx, repo, task, to, transitionOpts{})) == nil
 }
 
 // move describes one role-targeted verb run over a set of tasks.
@@ -123,7 +158,11 @@ func runMove(cmd *cobra.Command, args []string, s *storage.SQLiteStorage, mv mov
 				alias, mv.verb, task.Status, from, strings.ToLower(mv.past)))
 			continue
 		}
-		entry, terr := transitionTask(task, to, wm, transitionOpts{By: by, Note: mv.note, Reason: mv.reason, Force: mv.force})
+		logNote := mv.note
+		if logNote == "" {
+			logNote = mv.reason
+		}
+		entry, terr := transitionTask(ctx, res.Storage, task, to, wm, transitionOpts{By: by, Note: logNote, Reason: mv.reason, Force: mv.force})
 		if terr != nil {
 			errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", alias, terr))
 			continue
