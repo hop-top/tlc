@@ -1,49 +1,84 @@
+# Org Dependabot policy (hop-top/.github templates/dependabot.yml).
+#
+# Version updates: 14-day cooldown after release, matching the dependency age
+# gate. Security updates arrive immediately (cooldown never applies to them)
+# and need the repo setting "Dependabot security updates".
+# Grouping: one PR per dependency across directories; a separate security
+# group so one advisory is one PR.
+# Plugins with their own go.mod are nested modules and need their own
+# directory entries; plugins without one are covered by "/".
+# Labels follow docs/github-label-convention-0.1.md (type:chore + domain:deps).
 version: 2
 updates:
   - package-ecosystem: gomod
-    directory: /
+    directories:
+      - "/"
+      - "/plugins/azuredevops-sync"
+      - "/plugins/bitbucket-sync"
+      - "/plugins/gitea-sync"
+      - "/plugins/gitlab-sync"
     schedule:
       interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: America/New_York
+    cooldown:
+      default-days: 14
     labels:
-      - "chore:deps"
-    commit-message:
-      prefix: "chore"
+      - dependencies
+      - "type:chore"
+      - "domain:deps"
     groups:
-      all:
+      go-modules:
         patterns:
           - "*"
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: America/New_York
-    labels:
-      - "chore:deps"
-    commit-message:
-      prefix: "chore"
-    groups:
-      all:
+        group-by: dependency-name
+      go-security:
+        applies-to: security-updates
         patterns:
           - "*"
+    commit-message:
+      prefix: "build(deps):"
 
   - package-ecosystem: docker
-    directory: /
+    directories:
+      - "/"
     schedule:
       interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: America/New_York
+    cooldown:
+      default-days: 14
     labels:
-      - "chore:deps"
-    commit-message:
-      prefix: "chore"
+      - dependencies
+      - "type:chore"
+      - "domain:deps"
     groups:
-      all:
+      docker-images:
         patterns:
           - "*"
+        group-by: dependency-name
+      docker-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "build(deps):"
+
+  - package-ecosystem: github-actions
+    directories:
+      - "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    labels:
+      - dependencies
+      - "type:chore"
+      - "domain:deps"
+    groups:
+      actions:
+        patterns:
+          - "*"
+        group-by: dependency-name
+      actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci(deps):"
