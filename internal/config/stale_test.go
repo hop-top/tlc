@@ -85,7 +85,7 @@ task:
 func TestStaleConfig_LoadFromYAML_DefaultApplied(t *testing.T) {
 	cfg := decodeConfigYAML(t, `
 task:
-  default_status: TODO
+  default_status: todo
 `)
 
 	if cfg.Task.Stale.DefaultTimeout != 6*time.Hour {

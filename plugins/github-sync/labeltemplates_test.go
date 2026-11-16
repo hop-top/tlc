@@ -133,9 +133,9 @@ func TestPushedLabelsAreSeeded(t *testing.T) {
 
 	blocked := "blocked by #1"
 	cases := []*Task{
-		{Status: "IN_PROGRESS", Priority: "P0", Effort: "XS"},
-		{Status: "TODO", Priority: "P3", Effort: "XL"},
-		{Status: "TODO", BlockedReason: &blocked},
+		{Status: "in_progress", Priority: "P0", Effort: "XS"},
+		{Status: "todo", Priority: "P3", Effort: "XL"},
+		{Status: "todo", BlockedReason: &blocked},
 	}
 	for _, task := range cases {
 		for _, l := range buildPushLabels(task) {

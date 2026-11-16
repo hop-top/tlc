@@ -173,8 +173,11 @@ func TestStatusForTLSMarker(t *testing.T) {
 		{" ", StatusTodo, true},
 		{">", StatusInProgress, true},
 		{"x", StatusDone, true},
-		{"-", StatusCancelled, true},
-		{"?", "", false},
+		{"-", StatusBacklog, true},
+		{"?", StatusInReview, true},
+		{"!", StatusBlocked, true},
+		{"~", StatusCancelled, true},
+		{"z", "", false},
 	}
 
 	for _, tt := range tests {
@@ -197,7 +200,7 @@ func TestGetAllStatuses_PreservesOrder(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := []string{"todo", "in_progress", "done", "cancelled"}
+	expected := []string{"backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"}
 	got := wm.GetAllStatuses()
 
 	if len(got) != len(expected) {

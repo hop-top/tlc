@@ -33,7 +33,7 @@ func customVocab() *Vocabulary {
 func TestCustomPriorityRoundTrip(t *testing.T) {
 	v := customVocab()
 
-	task := &Task{Status: "TODO", Priority: "DROP_EVERYTHING"}
+	task := &Task{Status: "todo", Priority: "DROP_EVERYTHING"}
 	pushed := buildPushLabelsWith(task, v)
 
 	var found bool
@@ -68,7 +68,7 @@ func TestCustomPriorityRoundTrip(t *testing.T) {
 func TestCustomEffortRoundTrip(t *testing.T) {
 	v := customVocab()
 
-	task := &Task{Status: "TODO", Effort: "HUGE"}
+	task := &Task{Status: "todo", Effort: "HUGE"}
 	pushed := buildPushLabelsWith(task, v)
 
 	got := &Task{}
@@ -106,10 +106,10 @@ func TestCustomActiveStatusPushed(t *testing.T) {
 func TestNilVocabularyMatchesBuiltin(t *testing.T) {
 	blocked := "blocked by #1"
 	cases := []*Task{
-		{Status: "IN_PROGRESS", Priority: "P0", Effort: "XS"},
-		{Status: "TODO", Priority: "P3", Effort: "XL"},
-		{Status: "TODO", BlockedReason: &blocked},
-		{Status: "DONE", Priority: "P2", Effort: "M", Tags: []string{"domain:cli"}},
+		{Status: "in_progress", Priority: "P0", Effort: "XS"},
+		{Status: "todo", Priority: "P3", Effort: "XL"},
+		{Status: "todo", BlockedReason: &blocked},
+		{Status: "done", Priority: "P2", Effort: "M", Tags: []string{"domain:cli"}},
 	}
 	for _, task := range cases {
 		want := buildPushLabels(task)

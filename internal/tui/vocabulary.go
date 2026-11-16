@@ -149,7 +149,10 @@ func nextRotationStatus(task *core.Task) (core.TaskStatus, bool) {
 		if cand == task.Status {
 			continue
 		}
-		if err := wm.ValidateTransition(task.Status, cand, false); err == nil {
+		// Context-aware: a guarded target the task cannot satisfy right
+		// now (no assignee, open blockers, note or reason required) is
+		// skipped, so the ring never offers a move the service refuses.
+		if err := wm.ValidateTransitionContext(core.NewTransitionContext(task, cand)); err == nil {
 			return cand, true
 		}
 	}

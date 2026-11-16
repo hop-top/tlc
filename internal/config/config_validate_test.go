@@ -403,8 +403,8 @@ func TestTaskConfig_EmptyStatusesPopulatedWithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(cfg.Task.Statuses) != 4 {
-		t.Errorf("expected 4 default statuses, got %d", len(cfg.Task.Statuses))
+	if len(cfg.Task.Statuses) != 7 {
+		t.Errorf("expected 7 default statuses, got %d", len(cfg.Task.Statuses))
 	}
 	if cfg.Task.StateMachine == nil {
 		t.Error("expected state machine to be populated with defaults")

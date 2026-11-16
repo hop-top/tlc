@@ -14,7 +14,7 @@ version: "0.1"
 task:
   list:
     columns: [id, title]
-    status: [TODO]
+    status: [todo]
 tracks:
   list:
     columns: [id, progress]

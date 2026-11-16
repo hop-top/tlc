@@ -1010,7 +1010,7 @@ func (t *TaskConfig) ValidateWorkflow() error {
 	if err := validateRules(t.StateMachine, statusSet, terminalSet, ""); err != nil {
 		return err
 	}
-	if err := validateGuards(t.StateMachine, statusSet, ""); err != nil {
+	if err := validateGuards(t.StateMachine, statusSet, terminalSet, ""); err != nil {
 		return err
 	}
 
@@ -1022,7 +1022,7 @@ func (t *TaskConfig) ValidateWorkflow() error {
 		if err := validateRules(t.Workflows[tag].StateMachine, statusSet, terminalSet, tag); err != nil {
 			return err
 		}
-		if err := validateGuards(t.Workflows[tag].StateMachine, statusSet, tag); err != nil {
+		if err := validateGuards(t.Workflows[tag].StateMachine, statusSet, terminalSet, tag); err != nil {
 			return err
 		}
 	}
@@ -1334,7 +1334,7 @@ func validateRules(def *WorkflowDefinition, statusSet, terminalSet map[string]bo
 
 // validateGuards checks one guard list: known checks only, declared
 // statuses only, and at least one of from/to per guard.
-func validateGuards(def *WorkflowDefinition, statusSet map[string]bool, tag string) error {
+func validateGuards(def *WorkflowDefinition, statusSet, terminalSet map[string]bool, tag string) error {
 	if def == nil {
 		return nil
 	}
@@ -1351,6 +1351,14 @@ func validateGuards(def *WorkflowDefinition, statusSet map[string]bool, tag stri
 		}
 		if g.To != "" && !statusSet[g.To] {
 			return fmt.Errorf("%s guard #%d references unknown status: %s", where, i+1, g.To)
+		}
+		if g.From != "" && terminalSet[g.From] {
+			return fmt.Errorf(
+				"%s guard #%d is keyed on terminal status %s, "+
+					"which can never apply: terminal states are immutable and "+
+					"'tlc task reopen <id> --note \"<reason>\"' is the way out",
+				where, i+1, g.From,
+			)
 		}
 		for _, c := range g.Require {
 			if !slices.Contains(GuardChecks(), c) {

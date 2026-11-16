@@ -101,7 +101,7 @@ func (v *Vocabulary) statusLabel(name string) (string, bool) {
 		l, ok := v.ActiveStatuses[name]
 		return l, ok
 	}
-	if name == "IN_PROGRESS" {
+	if name == "in_progress" {
 		return "status:in-progress", true
 	}
 	return "", false
@@ -137,7 +137,7 @@ func (v *Vocabulary) activeStatusFor(label string) (string, bool) {
 		return invertLookup(v.ActiveStatuses, label)
 	}
 	if strings.EqualFold(label, "status:in-progress") {
-		return "IN_PROGRESS", true
+		return "in_progress", true
 	}
 	return "", false
 }
@@ -147,7 +147,7 @@ func (v *Vocabulary) initialStatus() string {
 	if v != nil && v.InitialStatus != "" {
 		return v.InitialStatus
 	}
-	return "TODO"
+	return "todo"
 }
 
 // isTerminal reports whether a status ends the task, and the reason the
@@ -158,9 +158,9 @@ func (v *Vocabulary) isTerminal(name string) (string, bool) {
 		return reason, ok
 	}
 	switch name {
-	case "DONE":
+	case "done":
 		return "completed", true
-	case "SKIPPED":
+	case "cancelled":
 		return "not_planned", true
 	}
 	return "", false
@@ -186,9 +186,9 @@ func (v *Vocabulary) terminalFor(reason string) string {
 		}
 	}
 	if reason == "not_planned" {
-		return "SKIPPED"
+		return "cancelled"
 	}
-	return "DONE"
+	return "done"
 }
 
 // invertLookup finds the key whose value equals label, case-insensitively

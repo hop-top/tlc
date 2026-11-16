@@ -211,7 +211,7 @@ func createAndCompleteTask(t *testing.T, title, description string) {
 	t.Helper()
 
 	// Create task
-	args := []string{"task", "create", title, "--status", "IN_PROGRESS"}
+	args := []string{"task", "create", title, "--status", "in_progress"}
 	if description != "" {
 		args = append(args, "--description", description)
 	}

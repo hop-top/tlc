@@ -240,9 +240,9 @@ func mapStatusFromIssueWith(issue *github.Issue, state, activeStatus string, has
 	if state == githubStateClosed {
 		reason := issue.GetStateReason()
 		if reason == "not_planned" {
-			task.Status = "SKIPPED"
+			task.Status = "cancelled"
 		} else {
-			task.Status = "DONE"
+			task.Status = "done"
 		}
 		return
 	}
@@ -360,9 +360,9 @@ func mapTaskStatusToGitHubWith(task *Task, vocab *Vocabulary) (state, stateReaso
 	}
 
 	switch task.Status {
-	case "DONE":
+	case "done":
 		return githubStateClosed, "completed"
-	case "SKIPPED":
+	case "cancelled":
 		return githubStateClosed, "not_planned"
 	default:
 		return githubStateOpen, ""
