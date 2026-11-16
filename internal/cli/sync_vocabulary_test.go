@@ -37,21 +37,21 @@ func TestBuiltinVocabularyKeepsAliases(t *testing.T) {
 		}
 	}
 
-	if got := v.ActiveStatuses["IN_PROGRESS"]; got != "status:in-progress" {
-		t.Errorf("IN_PROGRESS -> %q, want status:in-progress", got)
+	if got := v.ActiveStatuses["in_progress"]; got != "status:in-progress" {
+		t.Errorf("in_progress -> %q, want status:in-progress", got)
 	}
-	if v.InitialStatus != "TODO" {
-		t.Errorf("InitialStatus = %q, want TODO", v.InitialStatus)
+	if v.InitialStatus != "todo" {
+		t.Errorf("InitialStatus = %q, want todo", v.InitialStatus)
 	}
-	if got := v.TerminalStatuses["DONE"]; got != "completed" {
-		t.Errorf("DONE -> %q, want completed", got)
+	if got := v.TerminalStatuses["done"]; got != "completed" {
+		t.Errorf("done -> %q, want completed", got)
 	}
-	if got := v.TerminalStatuses["SKIPPED"]; got != "not_planned" {
-		t.Errorf("SKIPPED -> %q, want not_planned", got)
+	if got := v.TerminalStatuses["cancelled"]; got != "not_planned" {
+		t.Errorf("cancelled -> %q, want not_planned", got)
 	}
 
 	// A terminal or initial status must never earn a status label.
-	for _, name := range []string{"TODO", "DONE", "SKIPPED"} {
+	for _, name := range []string{"todo", "done", "cancelled"} {
 		if _, ok := v.ActiveStatuses[name]; ok {
 			t.Errorf("%s must not carry a status label", name)
 		}
@@ -86,7 +86,7 @@ func TestCustomPriorityVocabularyDropsAlias(t *testing.T) {
 // lowercase-hyphen rule the forge labels rely on.
 func TestLabelValueConvention(t *testing.T) {
 	cases := map[string]string{
-		"IN_PROGRESS": "in-progress",
+		"in_progress": "in-progress",
 		"IN_REVIEW":   "in-review",
 		"DOING":       "doing",
 		"XS":          "xs",

@@ -163,8 +163,8 @@ func TestTLSIngestClassifiesFullVocabulary(t *testing.T) {
 	}
 	// The bracket marker is the only status source; the status: token is
 	// a tag, not a second way to set the field.
-	if got.Status != "TODO" {
-		t.Errorf("status = %q, want TODO (from the bracket, not status:in-progress)", got.Status)
+	if got.Status != "todo" {
+		t.Errorf("status = %q, want todo (from the bracket, not status:in-progress)", got.Status)
 	}
 	for _, want := range []string{"type:feat", "status:in-progress", "plain"} {
 		if !hasTag(got.Tags, want) {
