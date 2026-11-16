@@ -289,7 +289,7 @@ func TestQueryOverdue_IsOneSQLPredicate(t *testing.T) {
 		{"T-0001", core.StatusTodo, &past},       // overdue
 		{"T-0002", core.StatusInProgress, &past}, // overdue
 		{"T-0003", core.StatusDone, &past},       // finished, so not late
-		{"T-0004", core.StatusCancelled, &past},    // skipped, so not late
+		{"T-0004", core.StatusCancelled, &past},  // skipped, so not late
 		{"T-0005", core.StatusTodo, &future},     // not due yet
 		{"T-0006", core.StatusTodo, nil},         // no due date at all
 	}
