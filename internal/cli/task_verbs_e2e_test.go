@@ -199,6 +199,9 @@ func TestCompleteWithOpenBlockerRefusedByGuard(t *testing.T) {
 	if code == 0 || !strings.Contains(out, "blockers_clear") {
 		t.Fatalf("complete with an open blocker should be refused by blockers_clear (exit %d):\n%s", code, out)
 	}
+	if !strings.Contains(out, "T-0001 is still open") || strings.Contains(out, "task_") {
+		t.Fatalf("refusal should name the blocker by display id, not internal id:\n%s", out)
+	}
 	runTLCOK(t, bin, home, env, "task", "claim", "T-0001")
 	runTLCOK(t, bin, home, env, "task", "complete", "T-0001")
 	runTLCOK(t, bin, home, env, "task", "complete", "T-0002")

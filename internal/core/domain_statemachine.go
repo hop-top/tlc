@@ -95,10 +95,7 @@ func buildStateMachine(
 	opts []domain.SMOption,
 ) *domain.StateMachine {
 	if configRules == nil {
-		configRules = map[string][]string{
-			"todo":        {"in_progress", "cancelled"},
-			"in_progress": {"done", "todo", "cancelled"},
-		}
+		configRules = config.GetDefaultStateMachine().Rules
 	}
 
 	rules := make(map[domain.State][]domain.State, len(configRules))

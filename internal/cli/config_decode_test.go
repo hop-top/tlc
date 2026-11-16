@@ -355,8 +355,8 @@ func TestUnmarshalConfigNormalizesAgainstDefaultStatuses(t *testing.T) {
 task:
   state_machine:
     rules:
-      TODO: [IN_PROGRESS]
-      IN_PROGRESS: [DONE]
+      todo: [in_progress]
+      in_progress: [done]
 `)
 
 	var cfg config.Config
@@ -364,7 +364,7 @@ task:
 		t.Fatalf("unmarshalConfig: %v", err)
 	}
 
-	assertRuleKeys(t, cfg.Task.StateMachine, []string{"TODO", "IN_PROGRESS"})
+	assertRuleKeys(t, cfg.Task.StateMachine, []string{"todo", "in_progress"})
 	if err := cfg.Task.Validate(); err != nil {
 		t.Errorf("Validate() = %v, want nil", err)
 	}

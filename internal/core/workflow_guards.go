@@ -25,6 +25,10 @@ type TransitionContext struct {
 	// Blockers maps blocked_by ID to its current status. An ID missing
 	// from the map (cross-project, deleted) counts as still open.
 	Blockers map[string]TaskStatus
+	// BlockerLabels maps a blocked_by ID to the display ID shown to the
+	// user (e.g. T-0012). Optional; an ID without a label is named as
+	// stored.
+	BlockerLabels map[string]string
 	// Force bypasses rules and guards; the bypass is reported through
 	// WorkflowManager.CheckTransition's forced result.
 	Force bool
@@ -148,6 +152,9 @@ func runGuardCheck(check string, tc TransitionContext, wm *WorkflowManager) stri
 		for _, id := range tc.BlockedBy {
 			st, ok := tc.Blockers[id]
 			if !ok || !wm.IsTerminal(st) {
+				if label := tc.BlockerLabels[id]; label != "" {
+					id = label
+				}
 				open = append(open, id)
 			}
 		}
