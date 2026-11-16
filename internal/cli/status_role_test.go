@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"fmt"
 	"testing"
+
+	lipgloss "charm.land/lipgloss/v2"
 
 	"hop.top/tlc/internal/config"
 )
@@ -30,11 +33,11 @@ func TestDotColorForRole(t *testing.T) {
 // ANSI codes rather than passing through as unusable bare names.
 func TestStatusColor_NamesResolve(t *testing.T) {
 	for _, name := range []string{"gray", "yellow", "blue", "magenta", "red", "green"} {
-		if got := string(statusColor(name)); got == name {
+		if got := fmt.Sprint(statusColor(name)); got == name {
 			t.Errorf("statusColor(%q) passed the name through", name)
 		}
 	}
-	if got := string(statusColor("#00ff00")); got != "#00ff00" {
+	if got := fmt.Sprint(statusColor("#00ff00")); got != fmt.Sprint(lipgloss.Color("#00ff00")) {
 		t.Errorf("hex color altered: %s", got)
 	}
 }

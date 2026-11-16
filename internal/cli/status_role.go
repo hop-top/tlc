@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"image/color"
 	"strings"
 
 	lipgloss "charm.land/lipgloss/v2"
@@ -87,7 +88,7 @@ var statusColorNames = map[string]string{
 }
 
 // statusColor resolves a status definition's color to a lipgloss color.
-func statusColor(declared string) lipgloss.Color {
+func statusColor(declared string) color.Color {
 	if code, ok := statusColorNames[strings.ToLower(strings.TrimSpace(declared))]; ok {
 		return lipgloss.Color(code)
 	}
