@@ -263,8 +263,7 @@ func kitRoot() *kitcli.Root {
 		if pendingConfigErr != nil && c.Name() != "init" {
 			return pendingConfigErr
 		}
-		// An invalid task workflow (an undeclared default_status, a rule
-		// naming an unknown status) is a config error like any other:
+		// An undeclared default_status is a config error like any other:
 		// refuse here, with the key and value named, instead of letting
 		// the first DefaultWorkflow call terminate the process. init and
 		// the config commands stay usable so the value can be fixed.

@@ -966,6 +966,35 @@ func (t *TaskConfig) scanStatuses() (statusSet, terminalSet map[string]bool, err
 	return statusSet, terminalSet, nil
 }
 
+// ValidateDefaultStatus checks `task.default_status`: when set, it must
+// name a declared non-terminal status. Omitted, new tasks land on the
+// initial-role status. The error names the key, the value and the
+// declared statuses.
+func (t *TaskConfig) ValidateDefaultStatus() error {
+	if t.DefaultStatus == "" {
+		return nil
+	}
+	statuses := t.Statuses
+	if len(statuses) == 0 {
+		statuses = GetDefaultStatuses()
+	}
+	names := make([]string, len(statuses))
+	for i, s := range statuses {
+		names[i] = s.Name
+		if s.Name != t.DefaultStatus {
+			continue
+		}
+		if s.IsTerminal {
+			return fmt.Errorf("task.default_status %q must not be a terminal status", t.DefaultStatus)
+		}
+		return nil
+	}
+	return fmt.Errorf(
+		"task.default_status %q is not a declared status; valid statuses: %s",
+		t.DefaultStatus, strings.Join(names, ", "),
+	)
+}
+
 // ValidateWorkflow validates the parts of the task configuration the
 // workflow engine and the CLI vocabularies are built from: the statuses,
 // their roles and markers, the declared priorities, and the transition
@@ -982,22 +1011,8 @@ func (t *TaskConfig) ValidateWorkflow() error {
 		return err
 	}
 
-	// default_status, when set, must name a declared non-terminal status.
-	// Omitted, new tasks land on the initial-role status.
-	if t.DefaultStatus != "" {
-		if !statusSet[t.DefaultStatus] {
-			names := make([]string, len(t.Statuses))
-			for i, s := range t.Statuses {
-				names[i] = s.Name
-			}
-			return fmt.Errorf(
-				"task.default_status %q is not a declared status; valid statuses: %s",
-				t.DefaultStatus, strings.Join(names, ", "),
-			)
-		}
-		if terminalSet[t.DefaultStatus] {
-			return fmt.Errorf("task.default_status %q must not be a terminal status", t.DefaultStatus)
-		}
+	if err := t.ValidateDefaultStatus(); err != nil {
+		return err
 	}
 
 	if err := t.ValidatePriorities(); err != nil {
