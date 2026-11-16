@@ -31,7 +31,7 @@ func TestDefaultVocabularyStatusLabels(t *testing.T) {
 			t.Errorf("missing %s; have %v", name, got)
 		}
 	}
-	for _, name := range []string{"status:todo", "status:done", "status:cancelled"} {
+	for _, name := range []string{"status:todo", "status:done", "status:cancelled"} { //nolint:misspell // status name
 		if _, ok := got[name]; ok {
 			t.Errorf("%s generated; initial and terminal statuses get no label", name)
 		}
