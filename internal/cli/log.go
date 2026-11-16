@@ -17,6 +17,7 @@ import (
 const (
 	formatJSON     = "json"
 	formatYAML     = "yaml"
+	formatCSV      = "csv"
 	formatTable    = "table"
 	formatSummary  = "summary"
 	formatCounters = "counters"

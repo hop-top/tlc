@@ -46,14 +46,6 @@ type blockerJSON struct {
 	Missing bool `json:"missing,omitempty"`
 }
 
-// taskShowJSON wraps a task so the JSON/YAML view can carry derived
-// fields alongside every original key. Embedding keeps the existing
-// payload shape byte-for-byte and only adds keys.
-type taskShowJSON struct {
-	*core.Task
-	BlockedBy []blockerJSON `json:"blocked_by,omitempty"`
-}
-
 // blockerSummariesToJSON converts resolved blocker summaries into the
 // JSON view, marking each as met/unmet.
 func blockerSummariesToJSON(refs []string, summaries []relatedTaskSummary) []blockerJSON {
@@ -93,6 +85,11 @@ the full log history sorted by configured direction.`,
 	},
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		applyRecordFormat(cmd)
+		ro, roErr := resolveRecordOpts(cmd, taskRecordFields)
+		if roErr != nil {
+			return roErr
+		}
 		s, err := getStorage()
 		if err != nil {
 			return err
@@ -119,7 +116,8 @@ the full log history sorted by configured direction.`,
 			}
 
 			var logs []*core.LogEntry
-			if taskShowLogs || viper.GetString("output.format") != formatTable {
+			bareRecord := len(ro.sel) > 0 || ro.jq != "" || ro.tmpl != "" || ro.format == formatCSV
+			if !bareRecord && (taskShowLogs || viper.GetString("output.format") != formatTable) {
 				direction := taskShowLogSortDirection
 				if direction == "" {
 					direction = viper.GetString("ui.log_sort_direction")
@@ -138,6 +136,17 @@ the full log history sorted by configured direction.`,
 				_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			}
 
+			if bareRecord {
+				// Selected / filtered / templated / csv output is the bare
+				// record, the same object `list` emits per row.
+				refs := task.BlockedBy()
+				rec := newTaskRecord(task, blockerSummariesToJSON(refs,
+					resolveBlockedBySummaries(ctx, s, res.Storage, refs)))
+				if err := writeRecords(cmd.OutOrStdout(), ro, taskRecordFields, rec, true); err != nil {
+					errs = append(errs, fmt.Errorf("%s: %w", id, err))
+				}
+				continue
+			}
 			format := viper.GetString("output.format")
 			if format == formatJSON || format == formatYAML {
 				// Resolve blockers so the structured view carries
@@ -444,6 +453,7 @@ func shortenTaskRef(ref, currentProjectID string) string {
 }
 
 func init() {
+	registerRecordFlags(TaskShowCmd, taskRecordFields)
 	TaskShowCmd.Flags().BoolVar(&taskShowLogs, "logs", false, "Include audit logs")
 	TaskShowCmd.Flags().StringVar(&taskShowLogSortDirection, "log-sort-direction", "", "Log sort direction (asc, desc)")
 	TaskShowCmd.Flags().StringVar(&taskShowOutput, "output", "", "Write output to a file instead of stdout")

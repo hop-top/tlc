@@ -31,6 +31,7 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 		"kit/side-effect": "read",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		applyRecordFormat(cmd)
 		ctx := context.Background()
 
 		fromConfig, err := applyConfigDefaults(cmd)
@@ -478,6 +479,7 @@ func formatWorkspaceTasks(
 }
 
 func init() {
+	registerRecordFlags(TaskListCmd, taskRecordFields)
 	TaskListCmd.Flags().StringSliceVarP(&taskListStatus, "status", "s", []string{}, "Filter by status")
 	TaskListCmd.Flags().StringVarP(&taskListAssignedTo, "assigned-to", "a", "", "Filter by assignee")
 	TaskListCmd.Flags().StringSliceVar(&taskListTag, "tag", []string{}, "Filter by tag")

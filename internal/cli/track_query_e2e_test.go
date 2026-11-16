@@ -311,7 +311,7 @@ func TestTrackList_E2E_JSONOutput(t *testing.T) {
 		out := buf.String()
 
 		// Validate JSON structure.
-		var items []trackListOutput
+		var items []trackRecord
 		if err := json.Unmarshal([]byte(out), &items); err != nil {
 			t.Fatalf("invalid JSON output: %v\n%s", err, out)
 		}
@@ -332,8 +332,8 @@ func TestTrackList_E2E_JSONOutput(t *testing.T) {
 		if item.Status != "active" {
 			t.Errorf("expected status active, got %s", item.Status)
 		}
-		if item.Assignee != "@dev-1" {
-			t.Errorf("expected assignee @dev-1, got %s", item.Assignee)
+		if item.AssignedTo == nil || *item.AssignedTo != "dev-1" {
+			t.Errorf("expected assigned_to dev-1, got %v", item.AssignedTo)
 		}
 	})
 }

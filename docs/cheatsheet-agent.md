@@ -315,6 +315,9 @@ tlc sync pull                            # pull updates
 ```bash
 tlc task list --format json              # structured, machine-readable
 tlc task list --format yaml
+tlc task list --format csv               # header = JSON field names
+tlc task list --json display_id,priority,track_id   # field selection (bare --json lists fields)
+tlc task list --json display_id --jq '.[].display_id'
 tlc task list --format table             # human table (default)
 tlc task list --format tls               # compact TLS style
 tlc task list --format summary           # status counts

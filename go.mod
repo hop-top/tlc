@@ -15,6 +15,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/go-github/v69 v69.2.0
 	github.com/google/uuid v1.6.0
+	github.com/itchyny/gojq v0.12.20
 	github.com/machinebox/graphql v0.2.2
 	github.com/mattn/go-isatty v0.0.24
 	github.com/sahilm/fuzzy v0.1.3
@@ -106,6 +107,7 @@ require (
 	github.com/hop-top/fang/v2 v2.0.2-hop.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
+	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/matryer/is v1.4.1 // indirect

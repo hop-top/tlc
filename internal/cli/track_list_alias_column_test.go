@@ -201,7 +201,7 @@ func TestTrackList_JSONSlugIsNeverTruncated(t *testing.T) {
 
 		out := runTrackListCmd(t)
 
-		var got []trackListOutput
+		var got []trackRecord
 		if err := json.Unmarshal([]byte(out), &got); err != nil {
 			t.Fatalf("unmarshal %q: %v", out, err)
 		}
@@ -335,7 +335,7 @@ func TestTrackShow_JSONCarriesFullSlug(t *testing.T) {
 			t.Fatalf("track show -f json: %v", err)
 		}
 
-		var got trackShowOutput
+		var got trackShowRecord
 		if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 			t.Fatalf("unmarshal %q: %v", buf.String(), err)
 		}

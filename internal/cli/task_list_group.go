@@ -287,3 +287,35 @@ func noteGroupLimitIgnored(w io.Writer, format string) {
 		"note: --group-limit ignored with --format %s; structured output carries every task, "+
 			"so a consumer never reads a silently truncated list\n", format)
 }
+
+// writeGroupedRecords renders grouped tasks as task records nested under
+// their group names, honoring --json/--jq/--template like the flat path.
+func writeGroupedRecords(w io.Writer, o recordOpts, groups []TaskGroup) error {
+	var all []*core.Task
+	for _, g := range groups {
+		all = append(all, g.Tasks...)
+	}
+	recs := taskRecords(all)
+	byTask := make(map[*core.Task]taskRecord, len(all))
+	for i, t := range all {
+		byTask[t] = recs[i]
+	}
+	out := make([]map[string]any, 0, len(groups))
+	var items []orderedRecord
+	for _, g := range groups {
+		rows := make([]taskRecord, 0, len(g.Tasks))
+		for _, t := range g.Tasks {
+			rows = append(rows, byTask[t])
+		}
+		sel, err := toRecords(rows, taskRecordFields, o.sel)
+		if err != nil {
+			return err
+		}
+		if sel == nil {
+			sel = []orderedRecord{}
+		}
+		items = append(items, sel...)
+		out = append(out, map[string]any{"name": g.Name, "tasks": sel})
+	}
+	return writeDoc(w, o, map[string]any{"groups": out}, items)
+}
