@@ -17,7 +17,7 @@ import (
 // legacyStatusAliases maps a lowercased stored label to the default name
 // it now reads as, where it is not simply the same word.
 var legacyStatusAliases = map[string]string{
-	"skipped": "cancelled",
+	"skipped": string(core.StatusCancelled),
 }
 
 // usesDefaultVocabulary reports whether the effective vocabulary is the
@@ -77,11 +77,11 @@ func statusSQLNames(name string) []string {
 
 // statusColumn returns the status column expression for predicates built
 // from statusSQLNames: case-insensitive under the default vocabulary.
-func statusColumn(col string) string {
+func statusColumn() string {
 	if usesDefaultVocabulary() {
-		return col + " COLLATE NOCASE"
+		return "status COLLATE NOCASE"
 	}
-	return col
+	return "status"
 }
 
 // expandStatusNames flattens statusSQLNames over names, dropping repeats.
@@ -143,7 +143,7 @@ func statusFilterClause(op core.Operator, value any) (clause string, args []any,
 	if op == core.OpNotEq {
 		kw = "NOT IN"
 	}
-	return fmt.Sprintf("%s %s (%s)", statusColumn("status"), kw, strings.Join(ph, ",")), args, true
+	return fmt.Sprintf("%s %s (%s)", statusColumn(), kw, strings.Join(ph, ",")), args, true
 }
 
 // placeholderList renders n comma-separated SQL placeholders.
