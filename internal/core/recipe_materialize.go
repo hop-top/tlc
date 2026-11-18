@@ -101,14 +101,14 @@ type materializePlan struct {
 }
 
 // Materialize creates one task per step not present in in.Existing,
-// wires blocked_by from depends_on, and records the pass as a run. The
+// wires blocked_by from depends_on plus the steps whose results a step reads, and records the pass as a run. The
 // run row is written first, then the tasks, then the step→task rows.
 func (m *Materializer) Materialize(ctx context.Context, in MaterializeInput) (*MaterializeResult, error) {
 	if in.Recipe == nil {
 		return nil, errors.New("materialize: no recipe given")
 	}
 	plan := materializePlan{existing: in.Existing, dropped: in.DroppedDeps}
-	for _, step := range in.Steps {
+	for _, step := range FoldImplicitDeps(in.Steps, in.Existing) {
 		if taskID, ok := in.Existing[step.ID]; ok {
 			plan.skipped = append(plan.skipped, StepTask{StepID: step.ID, TaskID: taskID, Ordinal: step.Ordinal})
 			continue
@@ -300,7 +300,7 @@ func stepSpec(step RecipeStep, recipeAgent string) *TaskSpec {
 	if agent == "" {
 		agent = recipeAgent
 	}
-	spec := TaskSpec{Agent: agent, When: step.When, Exec: step.Exec, Human: step.Human, Retry: step.Retry, Gate: step.Gate}
+	spec := TaskSpec{Agent: agent, When: step.When, Exec: step.Exec, Human: step.Human, Retry: step.Retry, Gate: step.Check}
 	if spec == (TaskSpec{}) {
 		return nil
 	}

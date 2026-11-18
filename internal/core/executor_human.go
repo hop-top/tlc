@@ -3,9 +3,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // applyHumanTimeout enforces a human task's on_timeout policy once its
@@ -53,31 +50,4 @@ func (e *Executor) applyHumanTimeout(ctx context.Context, task *Task, roles exec
 		return true, nil
 	}
 	return false, nil
-}
-
-// ParseRecipeDuration parses a Go duration extended with day (d) and
-// week (w) units, the forms recipes use for timeouts, backoffs and due
-// offsets: "30s", "48h", "5d", "2w".
-func ParseRecipeDuration(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, fmt.Errorf("empty duration")
-	}
-	unit := s[len(s)-1]
-	if unit == 'd' || unit == 'w' {
-		n, err := strconv.ParseFloat(s[:len(s)-1], 64)
-		if err != nil {
-			return 0, fmt.Errorf("invalid duration %q", s)
-		}
-		day := 24 * time.Hour
-		if unit == 'w' {
-			day *= 7
-		}
-		return time.Duration(n * float64(day)), nil
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
-	}
-	return d, nil
 }

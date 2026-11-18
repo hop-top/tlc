@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 )
 
 // Reconcile brings a track up to date with a recipe: steps the ledger
@@ -32,6 +33,10 @@ func (m *Materializer) Reconcile(ctx context.Context, in MaterializeInput) (*Mat
 	for id, taskID := range in.Existing {
 		plan.existing[id] = taskID
 	}
+	known := map[string]string{}
+	maps.Copy(known, ledger.byStep)
+	maps.Copy(known, in.Existing)
+	in.Steps = FoldImplicitDeps(in.Steps, known)
 	if ledger.latest != nil {
 		in.ParentRun = ledger.latest.ID
 		plan.warnings = append(plan.warnings, driftWarnings(in.Recipe, ledger.latest)...)

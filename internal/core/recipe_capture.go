@@ -265,7 +265,7 @@ func (c *capture) stepFromTask(t *Task) RecipeStep {
 	}
 	if t.Spec != nil {
 		step.Agent, step.When = t.Spec.Agent, t.Spec.When
-		step.Exec, step.Human, step.Retry, step.Gate = t.Spec.Exec, t.Spec.Human, t.Spec.Retry, t.Spec.Gate
+		step.Exec, step.Human, step.Retry, step.Check = t.Spec.Exec, t.Spec.Human, t.Spec.Retry, t.Spec.Gate
 	}
 	if c.external[t.ID] {
 		c.warnf("step %s: captured from a task outside the track", id)

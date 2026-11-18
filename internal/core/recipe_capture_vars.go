@@ -134,9 +134,14 @@ func MarshalRecipe(r *Recipe) ([]byte, error) {
 		return nil, fmt.Errorf("marshal recipe: nil recipe")
 	}
 	var buf bytes.Buffer
+	var doc yaml.Node
+	if err := doc.Encode(r); err != nil {
+		return nil, fmt.Errorf("marshal recipe %s: %w", r.Name, err)
+	}
+	unshimRecipeNode(&doc)
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
-	if err := enc.Encode(r); err != nil {
+	if err := enc.Encode(&doc); err != nil {
 		return nil, fmt.Errorf("marshal recipe %s: %w", r.Name, err)
 	}
 	if err := enc.Close(); err != nil {

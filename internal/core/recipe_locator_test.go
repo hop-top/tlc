@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +84,7 @@ func TestDirLocator_PathAndNotFound(t *testing.T) {
 	// Unknown name: a typed error that names the ref and the search path.
 	_, err = loc.Locate("nope")
 	var nf *RecipeNotFoundError
-	if !asRecipeNotFound(err, &nf) || nf.Ref != "nope" || !strings.Contains(err.Error(), project) {
+	if !errors.As(err, &nf) || nf.Ref != "nope" || !strings.Contains(err.Error(), project) {
 		t.Errorf("missing recipe: err = %v", err)
 	}
 	if !IsRecipeNotFound(err) {

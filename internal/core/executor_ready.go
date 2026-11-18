@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 )
@@ -161,7 +162,7 @@ func (e *Executor) evaluateWhen(ctx context.Context, t *Task, roles execRoles, r
 	ok, evalErr := EvalConditionEnv(t.Spec.When, env)
 	switch {
 	case evalErr != nil:
-		if err := e.block(ctx, t, "when: "+evalErr.Error(), report); err != nil {
+		if err := e.block(ctx, t, whenBlockReason(t.Spec.When, evalErr), report); err != nil {
 			return whenRun, err
 		}
 		return whenBlocked, nil
@@ -169,6 +170,18 @@ func (e *Executor) evaluateWhen(ctx context.Context, t *Task, roles execRoles, r
 		return whenRun, nil
 	}
 	return whenSkipped, e.skip(ctx, t, roles, "when false: "+t.Spec.When, report)
+}
+
+// whenBlockReason words a `when:` evaluation failure. An expression that is
+// not a single comparison needs a CEL engine tlc does not have: say so and
+// name the supported form rather than quoting the bare sentinel.
+func whenBlockReason(expr string, err error) string {
+	if errors.Is(err, ErrNeedsCEL) {
+		return fmt.Sprintf(
+			"when: %q is a CEL expression and this tlc cannot evaluate CEL; "+
+				"use a single comparison such as results.<step>.<field> == <value>", expr)
+	}
+	return "when: " + err.Error()
 }
 
 // resultsEnv builds the `when:` environment: results of every task in

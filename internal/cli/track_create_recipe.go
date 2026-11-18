@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 	kitcli "hop.top/kit/go/console/cli"
@@ -130,7 +131,7 @@ func recipeTrackTitle(r *core.Recipe, vars map[string]any, subj *recipeSubject) 
 	if r.Track == nil || r.Track.Title == "" {
 		return "", nil
 	}
-	scope := core.Scope{Vars: vars, Run: map[string]any{"recipe": r.Name, "version": r.Version}}
+	scope := core.Scope{Vars: vars, Run: core.RecipeRunScope("", r.Name, r.Version, time.Now())}
 	if subj != nil {
 		scope.Subject = subj.Fields
 	}

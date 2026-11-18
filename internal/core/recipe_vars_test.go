@@ -84,10 +84,10 @@ func TestRenderStep_WalksTemplatableFields(t *testing.T) {
 	step := RecipeStep{
 		ID: "lint", Title: "Lint {{pr}}", Description: "{{subject.description}}",
 		Assignee: "@{{pr}}", Due: DueSpec{Raw: "{{pr}}"},
-		When: "results.build.exit_code == 0",
-		Exec: &ExecSpec{Argv: []string{"lint", "--pr={{pr}}"}, Cwd: "{{dir}}", Env: map[string]string{"PR": "{{pr}}"}},
-		Gate: &StepGate{Contract: "c-{{pr}}"},
-		With: map[string]any{"target": "{{pr}}", "n": 1},
+		When:  "results.build.exit_code == 0",
+		Exec:  &ExecSpec{Argv: []string{"lint", "--pr={{pr}}"}, Cwd: "{{dir}}", Env: map[string]string{"PR": "{{pr}}"}},
+		Check: &StepGate{Contract: "c-{{pr}}"},
+		With:  map[string]any{"target": "{{pr}}", "n": 1},
 	}
 	got, err := RenderStep(step, scope)
 	if err != nil {
@@ -96,8 +96,8 @@ func TestRenderStep_WalksTemplatableFields(t *testing.T) {
 	if got.Title != "Lint 42" || got.Description != "desc" || got.Assignee != "@42" || got.Due.Raw != "42" {
 		t.Errorf("scalars: %+v", got)
 	}
-	if got.Exec.Argv[1] != "--pr=42" || got.Exec.Cwd != "svc" || got.Exec.Env["PR"] != "42" || got.Gate.Contract != "c-42" {
-		t.Errorf("nested: %+v %+v", got.Exec, got.Gate)
+	if got.Exec.Argv[1] != "--pr=42" || got.Exec.Cwd != "svc" || got.Exec.Env["PR"] != "42" || got.Check.Contract != "c-42" {
+		t.Errorf("nested: %+v %+v", got.Exec, got.Check)
 	}
 	if got.With["target"] != "42" || got.With["n"] != 1 {
 		t.Errorf("with: %v", got.With)

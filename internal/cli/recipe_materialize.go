@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -21,6 +22,7 @@ type recipePlan struct {
 	Vars      map[string]any
 	Subject   *recipeSubject
 	RunID     string
+	Started   time.Time
 	Selection string
 	Dropped   map[string][]string
 	Warnings  []string
@@ -29,7 +31,7 @@ type recipePlan struct {
 // scope is the create-time template environment: vars, the subject when
 // one is bound, and the run being recorded.
 func (p *recipePlan) scope() core.Scope {
-	sc := core.Scope{Vars: p.Vars, Run: map[string]any{"id": p.RunID, "recipe": p.Recipe.Name, "version": p.Recipe.Version}}
+	sc := core.Scope{Vars: p.Vars, Run: core.RecipeRunScope(p.RunID, p.Recipe.Name, p.Recipe.Version, p.Started)}
 	if p.Subject != nil {
 		sc.Subject = p.Subject.Fields
 	}
@@ -47,12 +49,12 @@ func renderRecipePlan(
 	if err != nil {
 		return nil, err
 	}
-	plan := &recipePlan{Recipe: r, Vars: vars, Subject: subj, RunID: core.NewRecipeRunID(), Selection: strings.Join(opts.Tasks, ",")}
+	plan := &recipePlan{Recipe: r, Vars: vars, Subject: subj, RunID: core.NewRecipeRunID(), Started: time.Now().UTC(), Selection: strings.Join(opts.Tasks, ",")}
 	sel, err := core.ParseTaskSelector(opts.Tasks)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // names the offending --task piece and the accepted forms
 	}
-	selected, dropped, err := core.Select(expanded, sel, opts.WithDeps)
+	selected, dropped, err := core.Select(core.FoldImplicitDeps(expanded, nil), sel, opts.WithDeps)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // names the unknown ordinal or id
 	}

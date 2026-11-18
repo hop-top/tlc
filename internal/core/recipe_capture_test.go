@@ -28,7 +28,7 @@ func capSteps() []RecipeStep {
 		{
 			ID: "sign-off", Title: "Sign off", Description: "Approve.", Ordinal: 3, DependsOn: []string{"plan", "build"},
 			Kind: TaskKindHuman, Assignee: "@lead", Human: &HumanSpec{Timeout: "48h", OnTimeout: "reject"},
-			Gate: &StepGate{Contract: "release-ok"}, Due: DueSpec{Raw: "+2d"},
+			Check: &StepGate{Contract: "release-ok"}, Due: DueSpec{Raw: "+2d"},
 		},
 	}
 }
@@ -173,8 +173,8 @@ func assertCapturedSignOff(t *testing.T, signOff *RecipeStep) {
 	if signOff.Kind != TaskKindHuman || signOff.Assignee != "@lead" || signOff.Human == nil || signOff.Human.OnTimeout != "reject" {
 		t.Errorf("sign-off = %+v; want kind human, @lead and the human block", signOff)
 	}
-	if signOff.Gate == nil || signOff.Gate.Contract != "release-ok" || signOff.Due.Raw != "2026-09-16" {
-		t.Errorf("sign-off gate/due = %+v %q; want release-ok and the resolved due date", signOff.Gate, signOff.Due.Raw)
+	if signOff.Check == nil || signOff.Check.Contract != "release-ok" || signOff.Due.Raw != "2026-09-16" {
+		t.Errorf("sign-off gate/due = %+v %q; want release-ok and the resolved due date", signOff.Check, signOff.Due.Raw)
 	}
 	if !reflect.DeepEqual(signOff.DependsOn, []string{"plan", "build"}) {
 		t.Errorf("sign-off depends_on = %v", signOff.DependsOn)

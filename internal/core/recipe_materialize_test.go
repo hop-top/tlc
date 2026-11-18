@@ -57,7 +57,7 @@ func matSteps() []RecipeStep {
 			ID: "sign-off", Ordinal: 3, DependsOn: []string{"plan", "build"}, Kind: TaskKindHuman,
 			Assignee: "@lead",
 			Human:    &HumanSpec{Timeout: "48h", OnTimeout: "reject"},
-			Gate:     &StepGate{Contract: "release-ok"},
+			Check:    &StepGate{Contract: "release-ok"},
 			Due:      DueSpec{Raw: "+2d"},
 		},
 	}
