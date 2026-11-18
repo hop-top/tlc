@@ -311,6 +311,28 @@ func TestExecutor_WhenSkipsOrBlocks(t *testing.T) {
 	}
 }
 
+// TestExecutor_WhenCELBlocksWithClearReason: a when that is not a single
+// comparison needs CEL; the task is blocked (not skipped, not dispatched)
+// and the reason says why.
+func TestExecutor_WhenCELBlocksWithClearReason(t *testing.T) {
+	f := newExecFixture(t, ExecutorOpts{})
+	task := f.task("task_cel", 1)
+	task.Spec = &TaskSpec{When: "results.a.exit_code == 0 && results.a.ok"}
+	f.add(t, task)
+
+	report := f.run(t)
+
+	got := f.repo.Tasks["task_cel"]
+	if got.Status != StatusTodo || got.BlockedReason == nil ||
+		!strings.Contains(*got.BlockedReason, "CEL") || !strings.Contains(*got.BlockedReason, "single comparison") {
+		t.Errorf("task_cel = %q / %v; want TODO blocked with a CEL reason", got.Status, got.BlockedReason)
+	}
+	if f.disp.callsFor("task_cel") != 0 || len(report.Blocked) != 1 || len(report.Skipped) != 0 {
+		t.Errorf("dispatched %d, blocked %v, skipped %v; want 0, 1 blocked, 0 skipped",
+			f.disp.callsFor("task_cel"), report.Blocked, report.Skipped)
+	}
+}
+
 func TestExecutor_RetryThenBlockOnExhaustion(t *testing.T) {
 	f := newExecFixture(t, ExecutorOpts{})
 	f.disp.fn = func(*Task) (*DispatchResult, error) {
