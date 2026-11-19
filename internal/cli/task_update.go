@@ -422,7 +422,7 @@ func init() {
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdateEffort, "effort", "e", "", "Effort estimate")
 	TaskUpdateCmd.Flags().StringVarP(&taskUpdatePriority, "priority", "p", "", "Priority")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddBlockedBy, "add-blocked-by", []string{}, "Add blocking task IDs")
-	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveBlockedBy, "remove-blocked-by", []string{}, "Remove blocking task IDs")
+	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveBlockedBy, "remove-blocked-by", []string{}, "Remove blocking task refs (any form --add-blocked-by accepts); errors if a ref matches no blocker")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateClearBlockedBy, "clear-blocked-by", false, "Clear all blocking task IDs")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddEva, "add-eva", []string{}, "Add eva annotations")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveEva, "remove-eva", []string{}, "Remove eva annotations")
