@@ -1392,8 +1392,43 @@ func preParseConfigTokens(args []string) []string {
 	fs.Usage = func() {}
 	fs.BoolP("help", "h", false, "")
 	tokens := fs.StringArrayP("config", "c", nil, "")
+	registerSinkFlags(fs, args[1:])
 	_ = fs.Parse(args[1:]) //nolint:errcheck // malformed argv is cobra's to report on the real parse; see the doc comment above
 	return *tokens
+}
+
+// sinkValue is a pflag.Value that accepts and discards anything. It stands
+// in for every non-config flag of the invoked command so the pre-parse
+// knows which flags take a value.
+type sinkValue struct{ typ string }
+
+func (sinkValue) String() string   { return "" }
+func (sinkValue) Set(string) error { return nil }
+func (v sinkValue) Type() string   { return v.typ }
+
+// registerSinkFlags teaches fs the arity of every flag of the command args
+// resolve to. Without it an unknown flag's value is judged by its shape
+// alone: a value that starts with "-" (a markdown list in --description)
+// is re-read as a shorthand cluster, and a 'c' inside it makes the rest of
+// the text a -c config token. Declared flags consume their value
+// regardless of its shape, exactly as cobra's own parse does.
+func registerSinkFlags(fs *pflag.FlagSet, args []string) {
+	cmd, _, _ := RootCmd.Find(args) //nolint:errcheck // an unknown command is cobra's to report; flags known so far still apply
+	if cmd == nil {
+		return
+	}
+	add := func(f *pflag.Flag) {
+		if fs.Lookup(f.Name) != nil {
+			return
+		}
+		if f.Shorthand != "" && fs.ShorthandLookup(f.Shorthand) != nil {
+			return
+		}
+		nf := fs.VarPF(sinkValue{typ: f.Value.Type()}, f.Name, f.Shorthand, "")
+		nf.NoOptDefVal = f.NoOptDefVal
+	}
+	cmd.LocalFlags().VisitAll(add)
+	cmd.InheritedFlags().VisitAll(add)
 }
 
 // mergeConfigTokens returns base followed by the tokens of extra that
