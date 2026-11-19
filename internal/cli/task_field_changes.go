@@ -277,28 +277,14 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 	}
 
 	if len(changes.RemoveBlockedBy) > 0 {
-		// Translate display aliases and bare seq into typeid form before
-		// set-diff so callers can remove blockers by the same ID they
-		// see in `task show`. parseTaskRefForCLI returns the input
-		// unchanged for cross-project refs and on resolution failure, so
-		// the translation is safe; empty/whitespace inputs are skipped
-		// to keep intent explicit.
-		translated := make([]string, 0, len(changes.RemoveBlockedBy))
-		for _, raw := range changes.RemoveBlockedBy {
-			if strings.TrimSpace(raw) == "" {
-				continue
-			}
-			ref, refErr := parseTaskRefForCLI(ctx, taskStorage, raw)
-			if refErr != nil {
-				// parseTaskRefForCLI returns the input unchanged on
-				// resolution failure (see comment above), so fall back
-				// to the raw value rather than dropping it.
-				ref = raw
-			}
-			translated = append(translated, ref)
+		toRemove, err := resolveBlockedByRemovals(ctx, registryStorage, taskStorage, task, changes.RemoveBlockedBy)
+		if err != nil {
+			return changed, fmt.Errorf("%w: %v", domain.ErrValidation, err)
 		}
-		task.RemoveBlockedBy(translated)
-		changed = true
+		if len(toRemove) > 0 {
+			task.RemoveBlockedBy(toRemove)
+			changed = true
+		}
 	}
 
 	if len(changes.AddTags) > 0 || len(changes.RemoveTags) > 0 {
@@ -525,4 +511,42 @@ func addUpdateNoteLog(
 	if err := taskStorage.AddLog(ctx, entry); err != nil {
 		fmt.Printf("Warning: failed to write note for %s: %v\n", formatTaskAlias(task), err)
 	}
+}
+
+// resolveBlockedByRemovals maps each --remove-blocked-by ref onto the
+// stored edge it names. Refs go through validateBlockedByRefs, the same
+// parser --add-blocked-by uses (tlc:// URI, slash form, label form, bare
+// seq, display alias), so every form add accepts removes the edge it
+// created. A ref that no longer resolves (deleted or unreachable target)
+// still matches an edge stored under its literal or scheme-less spelling,
+// so stale edges stay removable. A ref matching no edge is an error;
+// blank refs are skipped.
+func resolveBlockedByRemovals(ctx context.Context, registryStorage, taskStorage *storage.SQLiteStorage, task *core.Task, refs []string) ([]string, error) {
+	current := make(map[string]struct{})
+	for _, id := range task.BlockedBy() {
+		current[id] = struct{}{}
+	}
+
+	var out []string
+	for _, raw := range refs {
+		ref := strings.TrimSpace(raw)
+		if ref == "" {
+			continue
+		}
+		candidates := []string{ref, strings.TrimPrefix(ref, "tlc://")}
+		if canonical, err := validateBlockedByRefs(ctx, registryStorage, taskStorage, []string{ref}); err == nil {
+			candidates = append(candidates, canonical...)
+		}
+		matched := false
+		for _, c := range candidates {
+			if _, ok := current[c]; ok {
+				out = append(out, c)
+				matched = true
+			}
+		}
+		if !matched {
+			return nil, fmt.Errorf("no blocked_by edge matches %q; run 'tlc task show' to see current blockers", ref)
+		}
+	}
+	return out, nil
 }
