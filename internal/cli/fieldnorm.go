@@ -10,32 +10,41 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
-// builtinStatusAliases maps lowercase alias/variant → canonical uppercase
-// value for the BUILT-IN statuses. These are hand-written conveniences
+// builtinStatusAliases maps lowercase alias/variant → canonical status
+// name for the BUILT-IN statuses. These are hand-written conveniences
 // ("wip", "complete") that no rule could derive, so they stay declared.
 //
 // They apply only to the status they name: an entry survives into the
 // effective alias table only when its target is in the effective
-// vocabulary. A config that keeps the built-in four therefore keeps every
+// vocabulary. A config that keeps the built-in seven therefore keeps every
 // alias exactly as before, while a config that drops DONE does not leave
 // "complete" resolving to a status the user no longer has.
 var builtinStatusAliases = map[string]string{
 	// canonical (lowercased)
-	"todo":        "TODO",
-	"in_progress": "IN_PROGRESS",
-	"done":        "DONE",
-	"skipped":     "SKIPPED",
+	"backlog":     "backlog",
+	"todo":        "todo",
+	"in_progress": "in_progress",
+	"in_review":   "in_review",
+	"blocked":     "blocked",
+	"done":        "done",
+	"cancelled":   "cancelled",
 	// friendly aliases
-	"complete":    "DONE",
-	"completed":   "DONE",
-	"finish":      "DONE",
-	"finished":    "DONE",
-	"open":        "TODO",
-	"to-do":       "TODO",
-	"wip":         "IN_PROGRESS",
-	"inprogress":  "IN_PROGRESS",
-	"in-progress": "IN_PROGRESS",
-	"skip":        "SKIPPED",
+	"complete":    "done",
+	"completed":   "done",
+	"finish":      "done",
+	"finished":    "done",
+	"open":        "todo",
+	"to-do":       "todo",
+	"wip":         "in_progress",
+	"inprogress":  "in_progress",
+	"in-progress": "in_progress",
+	"review":      "in_review",
+	"in-review":   "in_review",
+	"inreview":    "in_review",
+	"canceled":    "cancelled",
+	"cancel":      "cancelled",
+	"skip":        "cancelled",
+	"skipped":     "cancelled",
 }
 
 // statusCanonical returns the effective status vocabulary: the user's

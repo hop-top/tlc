@@ -44,7 +44,16 @@ func unmarshalConfig(cfg *config.Config) error {
 // keys, so every decode path — whole config or `task` subtree — yields
 // keys carrying the case the user wrote.
 func unmarshalConfigKey(key string, out any) error {
-	if err := viper.UnmarshalKey(key, out, useYAMLTag); err != nil {
+	// Decode from a merged snapshot, not viper.UnmarshalKey directly:
+	// viper.Get on a parent key returns the override layer's partial map
+	// alone when any `-c key=value` override lives under that key, so a
+	// lone `-c task.default_status=x` hid every status the config files
+	// declared.
+	merged := viper.New()
+	if err := merged.MergeConfigMap(viper.AllSettings()); err != nil {
+		return err //nolint:wrapcheck // thin passthrough; callers add context
+	}
+	if err := merged.UnmarshalKey(key, out, useYAMLTag); err != nil {
 		return err //nolint:wrapcheck // thin passthrough; callers add context
 	}
 	if taskCfg, ok := out.(*config.TaskConfig); ok {

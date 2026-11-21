@@ -486,11 +486,11 @@ func TestTaskListSummary(t *testing.T) {
 		if !contains(output, "Project:") {
 			t.Errorf("expected 'Project:' header in summary output, got: %s", output)
 		}
-		if !contains(output, "TODO") {
-			t.Errorf("expected 'TODO' status in summary output, got: %s", output)
+		if !contains(output, "todo") {
+			t.Errorf("expected 'todo' status in summary output, got: %s", output)
 		}
-		if !contains(output, "IN_PROGRESS") {
-			t.Errorf("expected 'IN_PROGRESS' status in summary output, got: %s", output)
+		if !contains(output, "in_progress") {
+			t.Errorf("expected 'in_progress' status in summary output, got: %s", output)
 		}
 		if !contains(output, "Total") {
 			t.Errorf("expected 'Total' in summary output, got: %s", output)
@@ -526,11 +526,11 @@ func TestTaskListFormat(t *testing.T) {
 		if !contains(output, "Project: fmt-project") {
 			t.Errorf("expected 'Project: fmt-project' in output, got: %s", output)
 		}
-		if !contains(output, "TODO") {
-			t.Errorf("expected 'TODO' in output, got: %s", output)
+		if !contains(output, "todo") {
+			t.Errorf("expected 'todo' in output, got: %s", output)
 		}
-		if !contains(output, "IN_PROGRESS") {
-			t.Errorf("expected 'IN_PROGRESS' in output, got: %s", output)
+		if !contains(output, "in_progress") {
+			t.Errorf("expected 'in_progress' in output, got: %s", output)
 		}
 		if !contains(output, "Total") {
 			t.Errorf("expected 'Total' in output, got: %s", output)

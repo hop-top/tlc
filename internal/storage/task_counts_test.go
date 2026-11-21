@@ -289,7 +289,7 @@ func TestQueryOverdue_IsOneSQLPredicate(t *testing.T) {
 		{"T-0001", core.StatusTodo, &past},       // overdue
 		{"T-0002", core.StatusInProgress, &past}, // overdue
 		{"T-0003", core.StatusDone, &past},       // finished, so not late
-		{"T-0004", core.StatusSkipped, &past},    // skipped, so not late
+		{"T-0004", core.StatusCancelled, &past},  // skipped, so not late
 		{"T-0005", core.StatusTodo, &future},     // not due yet
 		{"T-0006", core.StatusTodo, nil},         // no due date at all
 	}
@@ -321,7 +321,7 @@ func TestQueryOverdue_IsOneSQLPredicate(t *testing.T) {
 		t.Errorf("ListTasks returned %d rows but CountTasks said %d", len(tasks), count)
 	}
 	for _, task := range tasks {
-		if task.Status == core.StatusDone || task.Status == core.StatusSkipped {
+		if task.Status == core.StatusDone || task.Status == core.StatusCancelled {
 			t.Errorf("%s is %s and must not be overdue", task.ID, task.Status)
 		}
 	}
@@ -331,7 +331,7 @@ func TestQueryOverdue_IsOneSQLPredicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CountTasksByStatus: %v", err)
 	}
-	for _, closed := range []core.TaskStatus{core.StatusDone, core.StatusSkipped} {
+	for _, closed := range []core.TaskStatus{core.StatusDone, core.StatusCancelled} {
 		if n, ok := counts[string(closed)]; ok {
 			t.Errorf("%s present (%d) in overdue counts", closed, n)
 		}

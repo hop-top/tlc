@@ -114,7 +114,7 @@ func TestBuildVCalendar_StatusMapping(t *testing.T) {
 		{core.StatusTodo, "STATUS:NEEDS-ACTION"},
 		{core.StatusInProgress, "STATUS:IN-PROCESS"},
 		{core.StatusDone, "STATUS:COMPLETED"},
-		{core.StatusSkipped, "STATUS:CANCELLED"},
+		{core.StatusCancelled, "STATUS:CANCELLED"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.status), func(t *testing.T) {
@@ -448,7 +448,7 @@ func TestBuildVCalendar_CompletedRoleEmitsDoneTriple(t *testing.T) {
 	require.Contains(t, out, "\r\nSTATUS:COMPLETED\r\n")
 	require.Contains(t, out, "\r\nCOMPLETED:20260503T090000Z\r\n")
 	require.Contains(t, out, "\r\nPERCENT-COMPLETE:100\r\n")
-	require.Contains(t, out, "X-TLC-STATUS:DONE")
+	require.Contains(t, out, "X-TLC-STATUS:done")
 }
 
 // TestBuildVCalendar_CompletedAtFromLog proves COMPLETED is the LATEST

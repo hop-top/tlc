@@ -40,7 +40,7 @@ func TestTrack_PercentCompleteFromMembers(t *testing.T) {
 
 	got, ok := percent([]*core.Task{
 		memberOf(track, "task_01h455vb4pex5vsknk084sn0aw", core.StatusDone),
-		memberOf(track, "task_01h455vb4pex5vsknk084sn0ax", core.StatusSkipped),
+		memberOf(track, "task_01h455vb4pex5vsknk084sn0ax", core.StatusCancelled),
 		memberOf(track, "task_01h455vb4pex5vsknk084sn0az", core.StatusTodo),
 		memberOf(track, "task_01h455vb4pex5vsknk084sn0aa", core.StatusInProgress),
 	})

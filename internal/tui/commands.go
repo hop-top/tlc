@@ -123,8 +123,8 @@ func (m Model) moveTask(task *core.Task, dir int) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		// The board's own columns, so a left/right move lands on a
-		// column the user can actually see.
-		columns := kanbanStatusOrder()
+		// column the user can actually see (hidden columns are not targets).
+		columns, _ := m.kanbanColumns()
 
 		currentIdx := -1
 		for i, s := range columns {

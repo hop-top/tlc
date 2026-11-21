@@ -138,7 +138,7 @@ func TestValidateGate_EveryBuilderPath(t *testing.T) {
 			name: "task: undated, skipped role",
 			tasks: []*core.Task{task(func(tk *core.Task) {
 				tk.DueAt = nil
-				tk.Status = core.StatusSkipped
+				tk.Status = core.StatusCancelled
 			})},
 			wantAllowed: vs040,
 		},

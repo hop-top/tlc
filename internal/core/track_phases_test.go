@@ -69,7 +69,7 @@ func TestComputeTrackProgress_WithPhases(t *testing.T) {
 
 func TestComputeTrackProgress_SkippedCountsAsCompleted(t *testing.T) {
 	tasks := []*core.Task{
-		{ID: "T-1", Status: core.StatusSkipped, Tags: []string{"phase:1"}, UpdatedAt: time.Now().UTC()},
+		{ID: "T-1", Status: core.StatusCancelled, Tags: []string{"phase:1"}, UpdatedAt: time.Now().UTC()},
 		{ID: "T-2", Status: core.StatusDone, Tags: []string{"phase:1"}, UpdatedAt: time.Now().UTC()},
 	}
 	p := core.ComputeTrackProgress(tasks)

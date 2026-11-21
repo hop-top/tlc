@@ -38,11 +38,11 @@ func TestTaskSkip(t *testing.T) {
 			t.Fatalf("seed: %v", err)
 		}
 
-		out, err := runTaskCmd(t, "skip", "T-0001")
+		out, err := runTaskCmd(t, "skip", "T-0001", "--note", "obsolete")
 		if err != nil {
 			t.Fatalf("task skip failed: %v\n%s", err, out)
 		}
-		if !contains(out, "Skipped task T-0001") {
+		if !contains(out, "Cancelled task T-0001") {
 			t.Errorf("unexpected output: %s", out)
 		}
 
@@ -50,8 +50,32 @@ func TestTaskSkip(t *testing.T) {
 		if task == nil {
 			t.Fatal("task not found after skip")
 		}
-		if task.Status != core.StatusSkipped {
-			t.Errorf("expected SKIPPED, got %s", task.Status)
+		if task.Status != core.StatusCancelled {
+			t.Errorf("expected cancelled, got %s", task.Status)
+		}
+	})
+
+	t.Run("RefusesWithoutNote", func(t *testing.T) {
+		ctx, cleanup := setupTestDir(t)
+		defer cleanup()
+		s, _ := getStorageRaw()
+		defer s.Close()
+
+		if err := s.CreateTask(ctx, &core.Task{
+			ID: "T-0001", Title: "Needs a note", Status: core.StatusTodo,
+		}); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		out, err := runTaskCmd(t, "cancel", "T-0001")
+		if err == nil {
+			t.Fatalf("cancel without a note should be refused by the note guard, got:\n%s", out)
+		}
+		if !contains(err.Error(), "note") {
+			t.Errorf("refusal should name the note check, got: %v", err)
+		}
+		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusTodo {
+			t.Errorf("refused cancel must not move the task, got %s", task.Status)
 		}
 	})
 
@@ -72,13 +96,13 @@ func TestTaskSkip(t *testing.T) {
 		}
 
 		task := getTaskByAlias(t, ctx, "T-0001")
-		if !contains(task.Description, "SKIPPED") {
-			t.Errorf("audit entry should record SKIPPED, got description:\n%s", task.Description)
+		if !contains(task.Description, "CANCELLED") {
+			t.Errorf("audit entry should record CANCELLED, got description:\n%s", task.Description)
 		}
 		if !contains(task.Description, "superseded upstream") {
 			t.Errorf("audit entry should carry the note, got description:\n%s", task.Description)
 		}
-		if !contains(task.Description, "TODO → SKIPPED") {
+		if !contains(task.Description, "todo → cancelled") {
 			t.Errorf("audit entry should record the transition, got description:\n%s", task.Description)
 		}
 	})
@@ -97,7 +121,7 @@ func TestTaskSkip(t *testing.T) {
 			t.Fatalf("seed: %v", err)
 		}
 
-		out, err := runTaskCmd(t, "skip", "T-0001")
+		out, err := runTaskCmd(t, "skip", "T-0001", "--note", "obsolete")
 		if err == nil {
 			t.Fatalf("skipping a DONE task should be rejected, got:\n%s", out)
 		}
@@ -121,8 +145,8 @@ func TestTaskSkip(t *testing.T) {
 		if out, err := runTaskCmd(t, "skip", "T-0001", "--no-verify"); err != nil {
 			t.Fatalf("task skip --no-verify failed: %v\n%s", err, out)
 		}
-		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusSkipped {
-			t.Errorf("expected SKIPPED after --no-verify, got %s", task.Status)
+		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusCancelled {
+			t.Errorf("expected cancelled after --no-verify, got %s", task.Status)
 		}
 	})
 
@@ -138,16 +162,16 @@ func TestTaskSkip(t *testing.T) {
 			t.Fatalf("seed: %v", err)
 		}
 
-		if out, err := runTaskCmd(t, "skip", "T-0001"); err != nil {
+		if out, err := runTaskCmd(t, "skip", "T-0001", "--note", "obsolete"); err != nil {
 			t.Fatalf("first skip failed: %v\n%s", err, out)
 		}
 		// Same-status transitions are always valid, so a re-run converges
 		// rather than tripping the terminal-immutability rule.
-		if out, err := runTaskCmd(t, "skip", "T-0001"); err != nil {
+		if out, err := runTaskCmd(t, "skip", "T-0001", "--note", "obsolete"); err != nil {
 			t.Fatalf("second skip should converge, got: %v\n%s", err, out)
 		}
-		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusSkipped {
-			t.Errorf("expected SKIPPED, got %s", task.Status)
+		if task := getTaskByAlias(t, ctx, "T-0001"); task.Status != core.StatusCancelled {
+			t.Errorf("expected cancelled, got %s", task.Status)
 		}
 	})
 
@@ -165,13 +189,13 @@ func TestTaskSkip(t *testing.T) {
 			}
 		}
 
-		out, err := runTaskCmd(t, "skip", `T-000[12]`, "--no-prompt")
+		out, err := runTaskCmd(t, "skip", `T-000[12]`, "--note", "obsolete", "--no-prompt")
 		if err != nil {
 			t.Fatalf("batch skip failed: %v\n%s", err, out)
 		}
 		for _, id := range []string{"T-0001", "T-0002"} {
-			if task := getTaskByAlias(t, ctx, id); task.Status != core.StatusSkipped {
-				t.Errorf("%s should be SKIPPED, got %s", id, task.Status)
+			if task := getTaskByAlias(t, ctx, id); task.Status != core.StatusCancelled {
+				t.Errorf("%s should be cancelled, got %s", id, task.Status)
 			}
 		}
 		// The pattern must not reach beyond what it matched.
@@ -206,7 +230,7 @@ func TestTaskBlockUnblock(t *testing.T) {
 		}
 	})
 
-	t.Run("BlockSetsReasonAndLeavesStatus", func(t *testing.T) {
+	t.Run("BlockMovesToBlockedAndRecordsOrigin", func(t *testing.T) {
 		ctx, cleanup := setupTestDir(t)
 		defer cleanup()
 		s, _ := getStorageRaw()
@@ -230,9 +254,13 @@ func TestTaskBlockUnblock(t *testing.T) {
 		if task.BlockedReason == nil || *task.BlockedReason != "waiting on vendor SLA" {
 			t.Errorf("blocked reason not set, got %v", task.BlockedReason)
 		}
-		// Blocking is orthogonal to status: IN_PROGRESS must survive.
-		if task.Status != core.StatusInProgress {
-			t.Errorf("block must not change status, got %s", task.Status)
+		// Under the default vocabulary blocking is a status move, and
+		// the origin is remembered for unblock.
+		if task.Status != core.StatusBlocked {
+			t.Errorf("block should move the task to blocked, got %s", task.Status)
+		}
+		if from, _ := task.Meta[metaBlockedFrom].(string); from != string(core.StatusInProgress) {
+			t.Errorf("origin status not recorded, got %q", from)
 		}
 	})
 

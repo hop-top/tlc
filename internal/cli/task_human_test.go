@@ -111,8 +111,8 @@ func TestTaskApprove_RefusesNonHumanTask(t *testing.T) {
 		if err == nil {
 			t.Fatalf("approve on an agent task succeeded; want error\n%s", out)
 		}
-		if !strings.Contains(err.Error(), "agent") || !strings.Contains(err.Error(), "task_a1") {
-			t.Errorf("error = %v; want it to name the task and its kind", err)
+		if !strings.Contains(err.Error(), "in_review") || !strings.Contains(err.Error(), "task_a1") {
+			t.Errorf("error = %v; want it to name the task and the required status", err)
 		}
 		if got := mustGetTask(t, ctx, s, "task_a1"); got.Status != core.StatusTodo {
 			t.Errorf("status changed to %q", got.Status)

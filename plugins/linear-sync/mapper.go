@@ -42,12 +42,12 @@ func MapLinearIssueToTask(issue map[string]interface{}) *Task {
 	state := issue["state"].(map[string]interface{}) //nolint:errcheck // required field from API
 	stateName := state["name"].(string)              //nolint:errcheck // required field from API
 
-	status := "TODO"
+	status := "todo"
 	switch stateName {
 	case "Done", "Canceled":
-		status = "DONE"
+		status = "done"
 	case "In Progress":
-		status = "IN_PROGRESS"
+		status = "in_progress"
 	}
 
 	task := &Task{

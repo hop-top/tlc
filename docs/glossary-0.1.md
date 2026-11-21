@@ -55,7 +55,7 @@ This glossary defines canonical terms used across all TLC specs.
   - What a finished task reports for downstream `when` conditions, read as `results.<step>.<path>`. An exec task's result is `exit_code`, `stdout`, `stderr`, `duration_ms` and `truncated`; an agent task's result is the `outputs` object its results file reports.
 
 - **Gate**
-  - An eva contract evaluated on a task's output before it may reach DONE, declared per step as `gate.contract` with an optional `gate.eva_url`.
+  - An eva contract evaluated on a task's output before it may reach `done`, declared per step as `gate.contract` with an optional `gate.eva_url`.
 
 - **Ledger**
   - The run ledger: `recipe_runs` plus `recipe_run_tasks`. It, not the task table, is the record of which steps a track already has, and what `tlc recipe runs` and `tlc recipe diff` read.
@@ -82,7 +82,7 @@ This glossary defines canonical terms used across all TLC specs.
   - A secondary task state that hides tasks from default listings. Archiving is used to clean up the active workspace without deleting durable work records.
 
 - **Auto-archiving**
-  - A system process that automatically archives tasks that have been in a terminal status (DONE, SKIPPED) for longer than a configured threshold.
+  - A system process that automatically archives tasks that have been in a terminal status (`done`, `cancelled`) for longer than a configured threshold.
 
 - **Dependency**
   - A relationship where a task must not start until another reaches a terminal status. Declared per step as `depends_on` and stored on the created task as `blocked_by`.
@@ -121,12 +121,33 @@ This glossary defines canonical terms used across all TLC specs.
 
 ### Task Status (CRUD-level)
 
-Durable task state stored in task persistence (UPPERCASE):
+Durable task state stored in task persistence (lowercase). The default
+vocabulary has seven statuses; each declares a role that code resolves
+instead of the name:
 
-- **TODO** - Task exists and is available to be claimed
-- **IN_PROGRESS** - Task is actively being worked on by an assigned owner
-- **DONE** - Task completed successfully (terminal, immutable)
-- **SKIPPED** - Task intentionally abandoned (terminal, immutable)
+- **backlog** (role `backlog`) - Parked work, not yet ready to start
+- **todo** (role `initial`) - Task exists and is available to be claimed; where new tasks land
+- **in_progress** (role `active`) - Task is actively being worked on by an assigned owner
+- **in_review** (role `review`) - Work submitted and awaiting review
+- **blocked** (role `blocked`) - Work cannot proceed; carries a block reason and remembers the status it came from
+- **done** (role `completed`) - Task completed successfully (terminal)
+- **cancelled** (role `skipped`) - Task intentionally abandoned (terminal)
+
+Terminal statuses are left only through `tlc task reopen`.
+
+### Role
+
+The semantic label a status declares (`backlog`, `initial`, `active`,
+`review`, `blocked`, `completed`, `skipped`). Verbs, VTODO `STATUS`,
+colors and board columns follow the role, so a renamed or custom status
+keeps its behaviour.
+
+### Guard
+
+A condition a permitted transition must meet, declared under
+`task.state_machine.guards` as `from`/`to` plus a `require` list of named
+checks (`note`, `reason`, `assignee`, `blockers_clear`). A failed guard
+refuses the move and names the check; `--force` bypasses it.
 
 A recipe step has no status of its own. The task it materialized into carries
 the state, and the run ledger says which step that task came from — so a run's
@@ -135,11 +156,12 @@ machine.
 
 ### Blocked
 
-Orthogonal to status: a task carries a `blocked_reason` when the executor
-could not take it further — a `when` that would not evaluate, a gate that
-failed, retries exhausted, or a `tlc task reject`. The status stays where it
-was; a blocked task is never dispatched, and everything behind it waits until
-someone unblocks or skips it.
+`blocked` is a status. A task enters it when the executor could not take it
+further (a `when` that would not evaluate, a gate that failed, retries
+exhausted) or when someone runs `tlc task block`, and it carries a block
+reason. Entering it records the status the task came from; `tlc task
+unblock` returns it there. A blocked task is never dispatched, and
+everything behind it waits until someone unblocks or cancels it.
 
 ---
 
@@ -150,11 +172,11 @@ Complete list of valid log action keywords across TLC system (34 actions total):
 ### Task CRUD Actions
 - **CREATED** - Task created
 - **UPDATED** - Task metadata modified
-- **DELETED** - Task removed (rare, prefer SKIPPED)
+- **DELETED** - Task removed (rare, prefer cancelling)
 
 ### Task Status Actions
-- **CLAIMED** - Task ownership acquired (TODO → IN_PROGRESS)
-- **RELEASED** - Task ownership released (IN_PROGRESS → TODO)
+- **CLAIMED** - Task ownership acquired (`todo` → `in_progress`)
+- **RELEASED** - Task ownership released (`in_progress` → `todo`)
 - **REASSIGNED** - Task ownership transferred to another agent
 - **DONE** - Task completed successfully
 - **SKIPPED** - Task intentionally abandoned

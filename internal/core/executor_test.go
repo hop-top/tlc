@@ -296,7 +296,7 @@ func TestExecutor_WhenSkipsOrBlocks(t *testing.T) {
 
 	report := f.run(t)
 
-	if f.status("task_fix") != StatusSkipped || !hasAction(f.actions("task_fix"), ActionSkipped) {
+	if f.status("task_fix") != StatusCancelled || !hasAction(f.actions("task_fix"), ActionSkipped) {
 		t.Errorf("task_fix = %q, actions %v; want SKIPPED", f.status("task_fix"), f.actions("task_fix"))
 	}
 	if f.status("task_retest") != StatusDone {

@@ -99,10 +99,10 @@ func TestCustomTerminalStatusClosesIssue(t *testing.T) {
 // TestNilVocabularyMatchesBuiltin is the behavior-identical guarantee.
 func TestNilVocabularyMatchesBuiltin(t *testing.T) {
 	cases := []*Task{
-		{Status: "IN_PROGRESS", Priority: "P0", Effort: "XS"},
-		{Status: "TODO", Priority: "P3", Effort: "XL", BlockedReason: "waiting"},
-		{Status: "SKIPPED", Priority: "P2"},
-		{Status: "DONE"},
+		{Status: "in_progress", Priority: "P0", Effort: "XS"},
+		{Status: "todo", Priority: "P3", Effort: "XL", BlockedReason: "waiting"},
+		{Status: "cancelled", Priority: "P2"},
+		{Status: "done"},
 	}
 	for _, task := range cases {
 		want := MapTaskToBitbucketIssue(task)
