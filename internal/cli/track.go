@@ -17,6 +17,7 @@ var (
 	trackCreateID         string
 	trackCreateAssignedTo string
 	trackCreateDue        string
+	trackCreateMeta       map[string]string
 
 	trackUpdateTitle      string
 	trackUpdateStatus     string
@@ -24,6 +25,8 @@ var (
 	trackUpdateType       string
 	trackUpdateAddPlan    string
 	trackUpdateDue        string
+	trackUpdateMeta       map[string]string
+	trackUpdateUnsetMeta  []string
 
 	trackShowOutputPath  string
 	trackShowIncludeLogs bool
@@ -53,8 +56,12 @@ vars, --task keeps a subset of the steps, --for names the task or track
 the recipe applies to, --assign picks assignees for steps that name
 none. --dry-run prints what would be created without writing.
 
+--meta key=value (repeatable) stores user meta on the new track; it cannot
+be combined with --recipe.
+
 Examples:
   tlc track create "Browser rendering" --type feature
+  tlc track create "Review 42" --meta owner=ana --meta env=prod
   tlc track create --recipe release --var version=1.4.0
   tlc track create "Review 42" --recipe code-review --var pr=42 --task 1-3 --with-deps`,
 	Annotations: map[string]string{
@@ -67,6 +74,9 @@ Examples:
 
 func runTrackCreate(cmd *cobra.Command, args []string) error {
 	if recipeFlagRecipe != "" {
+		if len(trackCreateMeta) > 0 {
+			return fmt.Errorf("--meta cannot be combined with --recipe")
+		}
 		return runTrackCreateRecipe(cmd, args)
 	}
 	if len(args) == 0 {
@@ -147,6 +157,11 @@ func newTrackFromFlags(title, trackType string) (*core.Track, error) {
 		}
 		track.DueAt = &t
 	}
+	meta, err := core.MergeTrackMeta(nil, metaFromFlags(trackCreateMeta), nil)
+	if err != nil {
+		return nil, metaWriteError(err)
+	}
+	track.Meta = meta
 	return track, nil
 }
 
@@ -199,6 +214,10 @@ func init() {
 		&trackCreateDue, "due", "",
 		"Due date (tomorrow, in 3d, 2025-05-01, RFC3339)",
 	)
+	trackCreateCmd.Flags().StringToStringVar(
+		&trackCreateMeta, "meta", nil,
+		"Set user meta key=value (repeatable; string values)",
+	)
 	registerRecipeFlags(trackCreateCmd)
 
 	TrackCmd.AddCommand(trackCreateCmd)
@@ -215,12 +234,15 @@ func resetTrackFlags() {
 	trackCreateID = ""
 	trackCreateAssignedTo = ""
 	trackCreateDue = ""
+	trackCreateMeta = nil
 	trackUpdateTitle = ""
 	trackUpdateStatus = ""
 	trackUpdateAssignedTo = ""
 	trackUpdateType = ""
 	trackUpdateAddPlan = ""
 	trackUpdateDue = ""
+	trackUpdateMeta = nil
+	trackUpdateUnsetMeta = nil
 	trackShowOutputPath = ""
 	trackShowIncludeLogs = false
 	trackAbandonNoPrompt = false

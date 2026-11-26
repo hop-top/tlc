@@ -231,6 +231,8 @@ tlc track list --all-projects                    # adds Project column
 tlc track show browser-rendering                 # detail + phase breakdown
 tlc track update browser-rendering --title "Browser Engine"
 tlc track update browser-rendering --status completed   # validated
+tlc track update browser-rendering --meta owner=ana --unset-meta stale   # merge user meta
+tlc track list --meta owner=ana --meta env=prod  # user meta equals, all must match
 tlc track archive browser-rendering              # completed/abandoned → archived
 tlc track abandon browser-rendering              # active → abandoned
 tlc track delete browser-rendering               # fails if linked tasks
