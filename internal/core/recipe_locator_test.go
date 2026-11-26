@@ -130,3 +130,37 @@ func TestCompareRecipeVersions(t *testing.T) {
 		}
 	}
 }
+
+// TestDirLocator_LocateNamed: names and pinned names resolve through the
+// search path; anything path-shaped is refused, and a file that merely
+// shares a name with the working directory is never opened.
+func TestDirLocator_LocateNamed(t *testing.T) {
+	loc, root, project, user := locatorFixture(t)
+	r, err := loc.LocateNamed("code-review@1.2.0")
+	if err != nil || r.Version != "1.2.0" || r.Source != user {
+		t.Fatalf("pinned = %v (%v); want 1.2.0 from the user dir", r, err)
+	}
+	if r, err = loc.LocateNamed("code-review"); err != nil || r.Source != project {
+		t.Fatalf("unpinned = %v (%v); want the project dir", r, err)
+	}
+
+	for _, ref := range []string{
+		filepath.Join(project, "review.yaml"), "../review.yaml", `a\b`, "review.yaml", "review.YML", "x.json",
+	} {
+		if _, err := loc.LocateNamed(ref); err == nil || !strings.Contains(err.Error(), "not a path") {
+			t.Errorf("LocateNamed(%q) err = %v; want a name-not-path refusal", ref, err)
+		}
+	}
+
+	// A file in the working directory called like an unknown recipe is not read.
+	t.Chdir(root)
+	if err := os.WriteFile("stray", []byte("recipe: stray\nversion: 1.0.0\nsteps:\n  - id: a\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := loc.Locate("stray"); err != nil {
+		t.Fatalf("Locate(stray) err = %v; the path-capable locator should open it", err)
+	}
+	if _, err := loc.LocateNamed("stray"); !IsRecipeNotFound(err) {
+		t.Errorf("LocateNamed(stray) err = %v; want not found", err)
+	}
+}

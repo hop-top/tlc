@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -122,11 +123,14 @@ func enforceRecipeSubject(r *core.Recipe, subj *recipeSubject, fix string) error
 // bindRecipeVars resolves the recipe's vars: carried values (an earlier
 // run's) under --var, then the --infer stub, then the missing required
 // ones — prompted for on a terminal, otherwise reported together with
-// the --var fix.
+// the --var fix. A nil cmd never prompts.
 func bindRecipeVars(cmd *cobra.Command, r *core.Recipe, opts recipeCreateOpts, carried map[string]string) (map[string]any, error) {
-	provided, err := core.ParseVarFlags(opts.Vars)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // the parser names the flag and the expected form
+	provided := maps.Clone(opts.ProvidedVars)
+	if provided == nil {
+		var err error
+		if provided, err = core.ParseVarFlags(opts.Vars); err != nil {
+			return nil, err //nolint:wrapcheck // the parser names the flag and the expected form
+		}
 	}
 	for k, v := range carried {
 		if _, declared := r.Vars[k]; declared && !hasVar(provided, k) {
@@ -136,7 +140,7 @@ func bindRecipeVars(cmd *cobra.Command, r *core.Recipe, opts recipeCreateOpts, c
 	if opts.Infer {
 		return nil, fmt.Errorf("--infer is not implemented yet; pass the values with --var key=value")
 	}
-	if missing := missingRecipeVars(r, provided); len(missing) > 0 && interactiveAvailable(cmd) {
+	if missing := missingRecipeVars(r, provided); len(missing) > 0 && cmd != nil && interactiveAvailable(cmd) {
 		if err := promptRecipeVars(cmd, r, missing, provided); err != nil {
 			return nil, err
 		}

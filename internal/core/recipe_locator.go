@@ -1,10 +1,12 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"hop.top/flo/spec"
@@ -137,4 +139,59 @@ func loadRecipeFile(path, source string) (*Recipe, error) {
 	}
 	rec.Source = source
 	return rec, nil
+}
+
+var recipeRefName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// LocateNamed resolves ref as a name or name@version through the search
+// path only: no file path is accepted, and the working directory is never
+// consulted (Locate and spec's own locator both treat a bare name that
+// exists as a file as a path). It is the lookup for callers that take the
+// reference from an untrusted request.
+func (l *DirLocator) LocateNamed(ref string) (*Recipe, error) {
+	name, version, _ := strings.Cut(ref, "@")
+	if !recipeRefName.MatchString(name) {
+		return nil, fmt.Errorf("invalid recipe reference %q: want a recipe name or name@version, not a path", ref)
+	}
+	for _, dir := range l.Dirs {
+		infos, err := (&spec.DirLocator{Builtin: shimFS{os.DirFS(dir)}}).List()
+		if err != nil {
+			return nil, recipeWording(repointLayerError(err, dir))
+		}
+		if info, ok := pickRecipeInfo(infos, name, version); ok {
+			return loadRecipeFile(filepath.Join(dir, info.Path), dir)
+		}
+	}
+	dirs := append([]string(nil), l.Dirs...)
+	if l.Builtin != nil {
+		infos, err := (&spec.DirLocator{Builtin: shimFS{l.Builtin}}).List()
+		if err != nil {
+			return nil, recipeWording(err)
+		}
+		if info, ok := pickRecipeInfo(infos, name, version); ok {
+			data, err := fs.ReadFile(l.Builtin, info.Path)
+			if err != nil {
+				return nil, fmt.Errorf("read builtin recipe: %w", err)
+			}
+			rec, err := ParseRecipe(bytes.NewReader(data), builtinPrefix+info.Path)
+			if err != nil {
+				return nil, err
+			}
+			rec.Source = spec.BuiltinSource
+			return rec, nil
+		}
+		dirs = append(dirs, spec.BuiltinSource)
+	}
+	return nil, recipeWording(&RecipeNotFoundError{Ref: ref, Dirs: dirs})
+}
+
+// pickRecipeInfo takes the first header named name: the one at version
+// when pinned, else the highest (List orders versions descending).
+func pickRecipeInfo(infos []RecipeInfo, name, version string) (RecipeInfo, bool) {
+	for _, info := range infos {
+		if info.Name == name && (version == "" || info.Version == version) {
+			return info, true
+		}
+	}
+	return RecipeInfo{}, false
 }

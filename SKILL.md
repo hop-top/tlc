@@ -317,6 +317,18 @@ description (audit block stripped), recent activity log.
 | `--remove-blocked-by` | Remove blocking task ID (repeatable) |
 | `--clear-blocked-by` | Clear all blockers |
 
+### task create / update — meta flags
+
+| Flag | Command | Description |
+|------|---------|-------------|
+| `--meta key=value` | create, update | Set a user meta key (repeatable; string values; merges, other keys untouched) |
+| `--unset-meta key` | update | Remove a user meta key (repeatable) |
+
+Keys tlc manages itself (`blocked_by*`, `eva`, `origin_*`, `priority_source`,
+`priority_rule`, `last_sync_hash`, `needs_push`, `blocked_from`,
+`external_uid`, `x_tlc`, `recipe`, `recipe_version`, `recipe_hash`,
+`subject`) are rejected.
+
 ### task list — flags reference
 
 | Flag | Short | Description |
@@ -338,6 +350,7 @@ description (audit block stripped), recent activity log.
 | `--type` | Track type: feature, bug, refactor (required) |
 | `--id` | Custom ID slug (derived from title if omitted) |
 | `--assigned-to` | Assignee |
+| `--meta key=value` | Set a user meta key (repeatable; string values; not with `--recipe`) |
 
 ### track update — flags reference
 
@@ -348,6 +361,12 @@ description (audit block stripped), recent activity log.
 | `--type` | Update type |
 | `--assigned-to` | Update assignee |
 | `--add-plan` | Link plan file + extract tasks |
+| `--due` | Due date (`-` clears) |
+| `--meta key=value` | Set a user meta key (repeatable; string values; merges, other keys untouched) |
+| `--unset-meta key` | Remove a user meta key (repeatable) |
+
+Keys tlc manages itself on a track (`plans`, `external_uid`, `x_tlc`,
+`due_date_only`) are rejected.
 
 ### track list — flags reference
 
@@ -357,6 +376,7 @@ description (audit block stripped), recent activity log.
 | `--state` | Filter: stale, unlinked, blocked, healthy |
 | `--type` | Filter by type |
 | `--all-projects` | Cross-project query |
+| `--meta key=value` | Filter by user meta, string equality (repeatable; all must match) |
 
 ---
 

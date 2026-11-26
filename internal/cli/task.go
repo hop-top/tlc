@@ -125,6 +125,10 @@ var (
 	taskUpdateAddEva    []string
 	taskUpdateRemoveEva []string
 	taskUpdateClearEva  bool
+
+	taskMeta            map[string]string
+	taskUpdateMeta      map[string]string
+	taskUpdateUnsetMeta []string
 )
 
 // appendNote appends a note to the task's description, separated by a newline.

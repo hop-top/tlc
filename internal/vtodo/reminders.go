@@ -28,7 +28,7 @@ import (
 // the flag is a fact about the wire form, not about scheduling.
 //
 // Derived (see derivedMetaKeys): the VALUE=DATE parameter carries it.
-const MetaDueDateOnly = "due_date_only"
+const MetaDueDateOnly = core.MetaDueDateOnly
 
 // MetaReminders is the Meta key holding a task's reminders beyond the
 // one in Task.RemindAt, as a list of RFC 3339 UTC instants, sorted.

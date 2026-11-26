@@ -112,7 +112,7 @@ who does the work:
 |------|-------------|-----------|
 | `agent` (default) | the `agent` named on the step, else the recipe's `agent`, else `track execute --agent` | `agent` |
 | `exec` | the executor itself, as a literal command | `exec.argv` (required), `exec.cwd`, `exec.env`, `exec.timeout`, `exec.stdout_max` |
-| `human` | a person, through `tlc task approve` / `tlc task reject` | `human.assignee`, `human.timeout`, `human.on_timeout` (`approve` or `reject`) |
+| `human` | a person, through `tlc task approve` / `tlc task reject` | `human.assignee` (used when the step has no `assignee`), `human.timeout`, `human.on_timeout` (`approve` or `reject`) |
 
 Any task step may carry `title`, `description`, `depends_on`, `when`,
 `assignee`, `due`, `retry` (`max_attempts`, `backoff`) and `gate`
@@ -162,6 +162,17 @@ upstream result (`results.<step>.<path>`) or a var (`vars.<name>`). The
 step named must be a dependency, directly or transitively. When the
 condition is false the task is skipped; when it cannot be evaluated the
 task is blocked with the error as its reason.
+
+A condition the recipe vars alone decide is evaluated when the recipe is
+materialized: a step whose `when` is false then is not created at all, and
+a step that depends on it simply has no edge to it (a skipped task is
+terminal, so its dependents run either way). A true condition still
+travels with the task and is checked again at dispatch. A condition that
+reads `results.*`, is not a single comparison, or fails to evaluate (for
+example an undefined var) is left to the executor; the last case is
+reported as a warning. `--dry-run` and `recipe diff` follow the same rule:
+the dry run lists only the steps that would be created, and `recipe diff`
+reports a step left out this way as `dropped`, not `missing`.
 
 An exec task's result is `exit_code`, `stdout`, `stderr`, `duration_ms`
 and `truncated`; an agent task's result is the `outputs` object its
@@ -324,6 +335,28 @@ tlc task create --recipe code-review --var pr=42
 Both commands honour `--dry-run`, which prints what would be created
 without writing. Every materialization is recorded as a **run** (see
 [Runs ledger](#runs-ledger)).
+
+### Create a track from a recipe over HTTP
+
+`tlc serve` exposes the same operation as `POST /tracks`:
+
+```json
+{"recipe": "code-review", "vars": {"pr": 42}, "title": "Review 42", "slug": "review-42", "type": "feature"}
+```
+
+`recipe` is a name or `name@version` resolved through the search path;
+file paths are refused. `vars` binds the recipe's vars by name (numbers and
+booleans are taken in their plain spelling, lists and maps as JSON text).
+`title`, `slug` and `type` are optional: they default to the recipe's
+`track` block and the configured defaults, as on the CLI. `meta` cannot be
+combined with `recipe`, and a recipe that requires a task subject cannot be
+created this way. Nothing prompts: a missing required var is an error.
+
+The `201` body is the created track, as for a plain create, plus
+`recipe_run` with the run id, the created and skipped steps and the
+warnings. A bad reference, var, title, slug or recipe is a `422` in the
+usual error shape (`code` is `recipe_not_found`, `invalid_recipe`,
+`invalid_vars` or `validation_error`).
 
 ### Apply a recipe to a task or track (subjects)
 

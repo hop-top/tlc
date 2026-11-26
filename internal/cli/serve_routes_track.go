@@ -12,16 +12,17 @@ import (
 	"hop.top/tlc/internal/events"
 )
 
-// registerTrackRoutes wires a minimal track REST surface onto router
-// under /tracks: list, show, create. Update/lifecycle transitions
-// (activate, complete, abandon) are deferred — see the final report —
-// to keep this first pass focused on a clean, well-tested subset.
+// registerTrackRoutes wires the track REST surface onto router under
+// /tracks: list, show, create and a partial update (PATCH). Lifecycle
+// verbs beyond a status change (archive, abandon with cleanup) stay on
+// the CLI.
 func registerTrackRoutes(router *api.Router, deps *serveDeps) {
 	tracks := router.Group("/tracks")
 
 	tracks.Handle("GET", "", handleTrackList(deps))
 	tracks.Handle("POST", "", handleTrackCreate(deps))
 	tracks.Handle("GET", "/{id}", handleTrackShow(deps))
+	tracks.Handle("PATCH", "/{id}", handleTrackUpdate(deps))
 }
 
 type trackListResponse struct {
@@ -54,6 +55,14 @@ func handleTrackList(deps *serveDeps) http.HandlerFunc {
 		if query.Get("all_projects") == "true" {
 			q.AllProjects = true
 		}
+		// meta.<key>=<value>, repeatable, ANDed: string equality on the
+		// member's scalar form. Keys are whitelisted; see core.ValidateMetaFilterKey.
+		meta, err := metaFiltersFromQuery(query)
+		if err != nil {
+			writeTrackUpdateError(w, err)
+			return
+		}
+		q.Meta = meta
 
 		tracksList, err := deps.storage.ListTracks(ctx, q)
 		if err != nil {
@@ -106,6 +115,16 @@ type trackCreateRequest struct {
 	Slug  string `json:"slug"`
 	Title string `json:"title"`
 	Type  string `json:"type"`
+	// Meta is user meta to store on the new track. Reserved keys (see
+	// core.IsReservedTrackMetaKey) are refused with 422.
+	Meta map[string]any `json:"meta,omitempty"`
+	// Recipe builds the track from a recipe, named as name or name@version
+	// (never a path), and materializes its steps into it: the REST form of
+	// `track create --recipe`. Vars binds the recipe's vars by name. Title,
+	// Slug and Type are optional with a recipe (the recipe's track block and
+	// config fill them) and may not be combined with Meta.
+	Recipe string         `json:"recipe,omitempty"`
+	Vars   map[string]any `json:"vars,omitempty"`
 }
 
 func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
@@ -114,6 +133,14 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 		var req trackCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeAPIErrorf(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
+			return
+		}
+		if req.Recipe != "" {
+			createTrackFromRecipeRequest(w, r, deps, &req)
+			return
+		}
+		if len(req.Vars) > 0 {
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "vars requires recipe")
 			return
 		}
 		if req.Slug == "" {
@@ -126,12 +153,19 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 			return
 		}
 
+		meta, err := core.MergeTrackMeta(nil, req.Meta, nil)
+		if err != nil {
+			writeTrackUpdateError(w, metaWriteError(err))
+			return
+		}
+
 		now := time.Now().UTC()
 		track := &core.Track{
 			Slug:      req.Slug,
 			Title:     req.Title,
 			Type:      req.Type,
 			Status:    core.TrackStatusPending,
+			Meta:      meta,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -155,5 +189,66 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 		})
 
 		api.JSON(w, http.StatusCreated, track)
+	}
+}
+
+// trackUpdateRequest is the JSON body accepted by PATCH /tracks/{id}.
+// Only fields present are applied, so an omitted field never clobbers
+// stored data; they go through the same TrackFieldChanges path as
+// `track update`, so status transitions are validated exactly as the CLI
+// validates them.
+type trackUpdateRequest struct {
+	Status     *string `json:"status,omitempty"`
+	AssignedTo *string `json:"assigned_to,omitempty"`
+	Due        *string `json:"due,omitempty"`
+	// Meta is a JSON Merge Patch (RFC 7396) over the track's user meta:
+	// a key sets, null removes, an object merges recursively, absent
+	// keys are left alone. Absent, null or {} changes nothing. Reserved
+	// keys (see core.IsReservedTrackMetaKey) are refused with 422.
+	Meta map[string]any `json:"meta,omitempty"`
+}
+
+func handleTrackUpdate(deps *serveDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		id := api.PathParam(r, "id")
+
+		resolvedID, err := resolveTrackID(ctx, deps.storage, id)
+		if err != nil {
+			writeTrackResolveError(w, id, err)
+			return
+		}
+
+		var req trackUpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeAPIErrorf(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
+			return
+		}
+		if req.Status != nil && (*req.Status == "" || !core.ValidTrackStatus(core.TrackStatus(*req.Status))) {
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "invalid_status",
+				"track status %q invalid; valid: pending, active, completed, abandoned, archived", *req.Status)
+			return
+		}
+
+		apply, err := TrackFieldChanges{
+			Status: req.Status, AssignedTo: req.AssignedTo, Due: req.Due, Meta: req.Meta,
+		}.mutation()
+		if err != nil {
+			writeTrackUpdateError(w, err)
+			return
+		}
+
+		svc := core.NewTrackService(deps.storage, deps.storage, core.WithSlugMaxLen(getConfigSlugMaxLen()))
+		if err := svc.UpdateTrack(ctx, resolvedID, apply); err != nil {
+			writeTrackUpdateError(w, err)
+			return
+		}
+
+		track, err := deps.storage.GetTrack(ctx, resolvedID)
+		if err != nil {
+			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "failed to get track: %v", err)
+			return
+		}
+		api.JSON(w, http.StatusOK, track)
 	}
 }
