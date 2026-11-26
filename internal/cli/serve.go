@@ -66,6 +66,10 @@ machine logic the CLI commands use, so the HTTP surface enforces the
 same rules (workflow transitions, blocked-by validation, config-driven
 field validation) as 'tlc task ...' / 'tlc track ...'.
 
+POST /tracks also accepts {"recipe": "<name>[@<version>]", "vars": {...}}
+to build a track from a recipe and materialize its steps, like
+'tlc track create --recipe'; it cannot be combined with "meta".
+
 --port 0 (default) lets the kernel pick a free port; the chosen port
 is printed as JSON on startup along with the minted bearer token.
 Non-GET/HEAD requests require "Authorization: Bearer <token>" unless

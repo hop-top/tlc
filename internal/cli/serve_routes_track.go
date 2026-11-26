@@ -118,6 +118,13 @@ type trackCreateRequest struct {
 	// Meta is user meta to store on the new track. Reserved keys (see
 	// core.IsReservedTrackMetaKey) are refused with 422.
 	Meta map[string]any `json:"meta,omitempty"`
+	// Recipe builds the track from a recipe, named as name or name@version
+	// (never a path), and materializes its steps into it: the REST form of
+	// `track create --recipe`. Vars binds the recipe's vars by name. Title,
+	// Slug and Type are optional with a recipe (the recipe's track block and
+	// config fill them) and may not be combined with Meta.
+	Recipe string         `json:"recipe,omitempty"`
+	Vars   map[string]any `json:"vars,omitempty"`
 }
 
 func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
@@ -126,6 +133,14 @@ func handleTrackCreate(deps *serveDeps) http.HandlerFunc {
 		var req trackCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeAPIErrorf(w, http.StatusBadRequest, "invalid_json", "invalid request body: %v", err)
+			return
+		}
+		if req.Recipe != "" {
+			createTrackFromRecipeRequest(w, r, deps, &req)
+			return
+		}
+		if len(req.Vars) > 0 {
+			writeAPIErrorf(w, http.StatusUnprocessableEntity, "validation_error", "vars requires recipe")
 			return
 		}
 		if req.Slug == "" {
