@@ -292,6 +292,15 @@ func (s *SQLiteStorage) ListTracks(
 		}
 	}
 
+	metaClauses, metaArgs, err := MetaFilterClauses("tracks.meta", query.Meta)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range metaClauses {
+		whereClauses = append(whereClauses, "("+c+")")
+	}
+	args = append(args, metaArgs...)
+
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
 	}

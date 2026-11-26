@@ -739,7 +739,7 @@ func extractPlansFromMeta(meta map[string]any) []string {
 	if meta == nil {
 		return nil
 	}
-	raw, ok := meta["plans"]
+	raw, ok := meta[MetaTrackPlans]
 	if !ok {
 		return nil
 	}

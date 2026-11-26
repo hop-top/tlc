@@ -350,6 +350,7 @@ Keys tlc manages itself (`blocked_by*`, `eva`, `origin_*`, `priority_source`,
 | `--type` | Track type: feature, bug, refactor (required) |
 | `--id` | Custom ID slug (derived from title if omitted) |
 | `--assigned-to` | Assignee |
+| `--meta key=value` | Set a user meta key (repeatable; string values; not with `--recipe`) |
 
 ### track update — flags reference
 
@@ -360,6 +361,12 @@ Keys tlc manages itself (`blocked_by*`, `eva`, `origin_*`, `priority_source`,
 | `--type` | Update type |
 | `--assigned-to` | Update assignee |
 | `--add-plan` | Link plan file + extract tasks |
+| `--due` | Due date (`-` clears) |
+| `--meta key=value` | Set a user meta key (repeatable; string values; merges, other keys untouched) |
+| `--unset-meta key` | Remove a user meta key (repeatable) |
+
+Keys tlc manages itself on a track (`plans`, `external_uid`, `x_tlc`,
+`due_date_only`) are rejected.
 
 ### track list — flags reference
 
@@ -369,6 +376,7 @@ Keys tlc manages itself (`blocked_by*`, `eva`, `origin_*`, `priority_source`,
 | `--state` | Filter: stale, unlinked, blocked, healthy |
 | `--type` | Filter by type |
 | `--all-projects` | Cross-project query |
+| `--meta key=value` | Filter by user meta, string equality (repeatable; all must match) |
 
 ---
 
