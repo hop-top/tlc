@@ -122,12 +122,18 @@ var workflowValidateCmd = &cobra.Command{
 		"kit/idempotent":  "yes",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		from := core.TaskStatus(strings.ToUpper(args[0]))
-		to := core.TaskStatus(strings.ToUpper(args[1]))
 		wm := core.DefaultWorkflow()
+		from := resolveStatusName(wm, args[0])
+		to := resolveStatusName(wm, args[1])
 		out := cmd.OutOrStdout()
 
-		err := wm.ValidateTransition(from, to, false)
+		err := wm.ValidateTransitionContext(core.TransitionContext{
+			From:     from,
+			To:       to,
+			Note:     workflowValidateNote,
+			Reason:   workflowValidateReason,
+			Assignee: workflowValidateAssignee,
+		})
 		if err == nil {
 			_, _ = fmt.Fprintf(
 				out,
@@ -144,7 +150,28 @@ var workflowValidateCmd = &cobra.Command{
 	},
 }
 
+// resolveStatusName maps user input to a declared status name,
+// ignoring case; input matching nothing is returned as typed so the
+// workflow reports it as unknown.
+func resolveStatusName(wm *core.WorkflowManager, in string) core.TaskStatus {
+	for _, name := range wm.GetAllStatuses() {
+		if strings.EqualFold(name, in) {
+			return core.TaskStatus(name)
+		}
+	}
+	return core.TaskStatus(in)
+}
+
+var (
+	workflowValidateNote     string
+	workflowValidateReason   string
+	workflowValidateAssignee string
+)
+
 func init() {
+	workflowValidateCmd.Flags().StringVar(&workflowValidateNote, "note", "", "Transition note (satisfies a note guard)")
+	workflowValidateCmd.Flags().StringVar(&workflowValidateReason, "reason", "", "Transition reason (satisfies a reason guard)")
+	workflowValidateCmd.Flags().StringVar(&workflowValidateAssignee, "assignee", "", "Assignee after the move (satisfies an assignee guard)")
 	workflowCmd.AddCommand(workflowStatusesCmd)
 	workflowCmd.AddCommand(workflowRulesCmd)
 	workflowCmd.AddCommand(workflowValidateCmd)

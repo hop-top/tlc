@@ -36,6 +36,21 @@ import (
 func TestMain(m *testing.M) {
 	os.Setenv("COLORTERM", "truecolor")
 
+	// Hermetic user dirs: no test may read or write the developer's real
+	// config, data or state. HOME stays as is, so the Go toolchain keeps
+	// its caches for tests that build the binary; every tlc path resolves
+	// through the XDG variables.
+	root, err := os.MkdirTemp("", "tlc-cli-xdg")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: xdg tempdir: %v\n", err)
+		os.Exit(1)
+	}
+	hermeticRoot = root
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	os.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	os.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
+	os.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
 	// Capture before the chdir below: the helpers that locate repo
 	// fixtures walk up from here, and the post-run check must target the
 	// package directory itself rather than wherever the suite ended up.
@@ -81,6 +96,7 @@ func TestMain(m *testing.M) {
 	if err := os.Chdir(pkgDir); err == nil {
 		os.RemoveAll(runDir)
 	}
+	os.RemoveAll(hermeticRoot)
 
 	os.Exit(code)
 }
@@ -93,6 +109,9 @@ func TestMain(m *testing.M) {
 // individual tests chdir freely on top of that, so the working
 // directory says nothing about where the checkout is.
 var testPkgDir string
+
+// hermeticRoot is the temp dir the suite's XDG variables point into.
+var hermeticRoot string
 
 // testRepoRoot returns the repo root — the nearest ancestor of the
 // package source directory holding go.mod.

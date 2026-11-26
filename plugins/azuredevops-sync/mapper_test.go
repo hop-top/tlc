@@ -35,12 +35,12 @@ func TestMapWorkItemToTask(t *testing.T) {
 		{
 			name:       "New state maps to TODO",
 			wi:         &WorkItem{ID: 1, Fields: baseFields("New", 3)},
-			wantStatus: "TODO", wantPriority: "P2",
+			wantStatus: "todo", wantPriority: "P2",
 		},
 		{
-			name:       "Active state maps to IN_PROGRESS",
+			name:       "Active state maps to in_progress",
 			wi:         &WorkItem{ID: 2, Fields: baseFields("Active", 2)},
-			wantStatus: "IN_PROGRESS", wantPriority: "P1",
+			wantStatus: "in_progress", wantPriority: "P1",
 		},
 		{
 			name: "Active with status:blocked tag maps to TODO + BlockedReason",
@@ -49,47 +49,47 @@ func TestMapWorkItemToTask(t *testing.T) {
 				f["System.Tags"] = "status:blocked"
 				return f
 			}()},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantBlocked:  "blocked via ADO tag",
 			wantPriority: "P1",
 		},
 		{
 			name:       "Resolved maps to DONE",
 			wi:         &WorkItem{ID: 4, Fields: baseFields("Resolved", 1)},
-			wantStatus: "DONE", wantPriority: "P0",
+			wantStatus: "done", wantPriority: "P0",
 		},
 		{
 			name:       "Closed maps to DONE",
 			wi:         &WorkItem{ID: 5, Fields: baseFields("Closed", 1)},
-			wantStatus: "DONE", wantPriority: "P0",
+			wantStatus: "done", wantPriority: "P0",
 		},
 		{
 			name:       "Removed maps to SKIPPED",
 			wi:         &WorkItem{ID: 6, Fields: baseFields("Removed", 4)},
-			wantStatus: "SKIPPED", wantPriority: "P3",
+			wantStatus: "cancelled", wantPriority: "P3",
 		},
 		{
 			name:         "ADO priority 1 maps to P0",
 			wi:           &WorkItem{ID: 10, Fields: baseFields("New", 1)},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P0",
 		},
 		{
 			name:         "ADO priority 2 maps to P1",
 			wi:           &WorkItem{ID: 11, Fields: baseFields("New", 2)},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P1",
 		},
 		{
 			name:         "ADO priority 3 maps to P2",
 			wi:           &WorkItem{ID: 12, Fields: baseFields("New", 3)},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P2",
 		},
 		{
 			name:         "ADO priority 4 maps to P3",
 			wi:           &WorkItem{ID: 13, Fields: baseFields("New", 4)},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P3",
 		},
 		{
@@ -99,7 +99,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 				f["System.Tags"] = "priority:high"
 				return f
 			}()},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "HIGH",
 		},
 		{
@@ -109,7 +109,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 				f["System.Tags"] = "effort:m"
 				return f
 			}()},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P2",
 			wantEffort:   "M",
 		},
@@ -120,7 +120,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 				f["System.Tags"] = "my-flat-tag; another-tag"
 				return f
 			}()},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P2",
 			wantTags:     nil,
 		},
@@ -131,7 +131,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 				f["System.Tags"] = "dimension:scope:backend"
 				return f
 			}()},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P2",
 			wantTags:     []string{"dimension:scope:backend"},
 		},
@@ -147,7 +147,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 					},
 				},
 			},
-			wantStatus:    "TODO",
+			wantStatus:    "todo",
 			wantPriority:  "P2",
 			wantBlockedBy: []string{"AZ-99"},
 		},
@@ -163,7 +163,7 @@ func TestMapWorkItemToTask(t *testing.T) {
 					},
 				},
 			},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P2",
 			wantBlocks:   []string{"AZ-55"},
 		},
@@ -219,17 +219,17 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Status TODO maps to state New",
 			task: &Task{
 				Title:  "T1",
-				Status: "TODO",
+				Status: "todo",
 			},
 			wantOps: map[string]interface{}{
 				"/fields/System.State": "New",
 			},
 		},
 		{
-			name: "Status IN_PROGRESS maps to state Active",
+			name: "Status in_progress maps to state Active",
 			task: &Task{
 				Title:  "T2",
-				Status: "IN_PROGRESS",
+				Status: "in_progress",
 			},
 			wantOps: map[string]interface{}{
 				"/fields/System.State": "Active",
@@ -240,7 +240,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Status DONE maps to state Closed",
 			task: &Task{
 				Title:  "T3",
-				Status: "DONE",
+				Status: "done",
 			},
 			wantOps: map[string]interface{}{
 				"/fields/System.State": "Closed",
@@ -250,7 +250,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Status SKIPPED maps to state Removed",
 			task: &Task{
 				Title:  "T4",
-				Status: "SKIPPED",
+				Status: "cancelled",
 			},
 			wantOps: map[string]interface{}{
 				"/fields/System.State": "Removed",
@@ -260,7 +260,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Priority P0 sets ADO priority 1 and tag",
 			task: &Task{
 				Title:    "T5",
-				Status:   "TODO",
+				Status:   "todo",
 				Priority: "P0",
 			},
 			wantOps: map[string]interface{}{
@@ -272,7 +272,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Priority P2 sets ADO priority 3",
 			task: &Task{
 				Title:    "T6",
-				Status:   "TODO",
+				Status:   "todo",
 				Priority: "P2",
 			},
 			wantOps: map[string]interface{}{
@@ -284,7 +284,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Effort populates effort tag",
 			task: &Task{
 				Title:  "T7",
-				Status: "TODO",
+				Status: "todo",
 				Effort: "M",
 			},
 			wantTag: "effort:m",
@@ -293,7 +293,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "Tags passed through to System.Tags",
 			task: &Task{
 				Title:  "T8",
-				Status: "TODO",
+				Status: "todo",
 				Tags:   []string{"dimension:scope:backend"},
 			},
 			wantTag: "dimension:scope:backend",
@@ -302,7 +302,7 @@ func TestMapTaskToWorkItem(t *testing.T) {
 			name: "BlockedReason adds status:blocked tag",
 			task: &Task{
 				Title:         "T9",
-				Status:        "TODO",
+				Status:        "todo",
 				BlockedReason: "dependency stall",
 			},
 			wantTag: "status:blocked",
@@ -351,7 +351,7 @@ func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
 	original := &Task{
 		ID:          taskID,
 		Title:       "round-trip",
-		Status:      "TODO",
+		Status:      "todo",
 		Description: "body text",
 	}
 

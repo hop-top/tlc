@@ -213,7 +213,7 @@ func TestLoadTaskConfig_DecodesSnakeCaseKeys(t *testing.T) {
 }
 
 // TestDefaultWorkflow_NoConfigUsesBuiltins guards the fallback: an empty
-// task section must still produce the built-in four-status workflow.
+// task section must still produce the built-in seven-status workflow.
 func TestDefaultWorkflow_NoConfigUsesBuiltins(t *testing.T) {
 	loadWorkflowConfigFile(t, "output:\n  format: table\n")
 
@@ -221,11 +221,11 @@ func TestDefaultWorkflow_NoConfigUsesBuiltins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultWorkflowE: %v", err)
 	}
-	if got := len(wm.GetAllStatuses()); got != 4 {
-		t.Errorf("expected 4 built-in statuses, got %d: %v", got, wm.GetAllStatuses())
+	if got := len(wm.GetAllStatuses()); got != 7 {
+		t.Errorf("expected 7 built-in statuses, got %d: %v", got, wm.GetAllStatuses())
 	}
 	if err := wm.ValidateTransition(core.StatusTodo, core.StatusInProgress, false); err != nil {
-		t.Errorf("built-in TODO -> IN_PROGRESS should be allowed: %v", err)
+		t.Errorf("built-in todo -> in_progress should be allowed: %v", err)
 	}
 }
 

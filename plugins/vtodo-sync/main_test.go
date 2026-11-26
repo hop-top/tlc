@@ -26,7 +26,7 @@ func TestHandlePush_FileMode_RoundTrip(t *testing.T) {
 		Tasks: []Task{{
 			ID:        taskID,
 			Title:     "Replace JWT signer",
-			Status:    "IN_PROGRESS",
+			Status:    "in_progress",
 			Tags:      []string{"security"},
 			Priority:  "P1",
 			Effort:    "M",
@@ -128,14 +128,14 @@ func TestHandleDelete_RemovesMatchingTasks(t *testing.T) {
 	keep := Task{
 		ID:        "task_01h455vb4pex5vsknk084sn02a",
 		Title:     "Keeper",
-		Status:    "TODO",
+		Status:    "todo",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	drop := Task{
 		ID:        "task_01h455vb4pex5vsknk084sn02b",
 		Title:     "Doomed",
-		Status:    "TODO",
+		Status:    "todo",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -178,14 +178,14 @@ func TestHandlePush_PreservesUnmentionedTasks(t *testing.T) {
 	keep := Task{
 		ID:        "task_01h455vb4pex5vsknk084sn02a",
 		Title:     "Existing — must survive",
-		Status:    "TODO",
+		Status:    "todo",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	incoming := Task{
 		ID:        "task_01h455vb4pex5vsknk084sn02b",
 		Title:     "Newly synced",
-		Status:    "TODO",
+		Status:    "todo",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -264,7 +264,7 @@ func TestRPCWireContract_AcceptsRepoField(t *testing.T) {
 		"tasks": []Task{{
 			ID:        "task_01h455vb4pex5vsknk084sn02q",
 			Title:     "Wire-format check",
-			Status:    "TODO",
+			Status:    "todo",
 			CreatedAt: now,
 			UpdatedAt: now,
 		}},

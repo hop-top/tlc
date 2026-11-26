@@ -89,7 +89,7 @@ func TestOmittedStateMachineMatchesEmptyRules(t *testing.T) {
 // still gets the built-in state machine, TODO -> DONE still refused.
 func TestEmptyRulesKeepBuiltinWorkflowIntact(t *testing.T) {
 	cfg := &config.TaskConfig{
-		DefaultStatus: "TODO",
+		DefaultStatus: "todo",
 		Statuses:      config.GetDefaultStatuses(),
 		StateMachine:  &config.WorkflowDefinition{},
 	}
@@ -151,7 +151,7 @@ func TestOverrideWithEmptyRulesInheritsBase(t *testing.T) {
 		t.Fatal("empty override must inherit the base's refusals too")
 	}
 	// And no built-in status may surface in the rejection.
-	for _, builtin := range []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"} {
+	for _, builtin := range []string{"todo", "in_progress", "done", "cancelled"} {
 		if strings.Contains(err.Error(), builtin) {
 			t.Errorf("rejection names undeclared built-in status %q: %v", builtin, err)
 		}
@@ -178,10 +178,10 @@ func TestOverrideWithEmptyRulesInheritsBase(t *testing.T) {
 // same way, not re-widen to the built-in TODO -> IN_PROGRESS.
 func TestOverrideWithEmptyRulesInheritsBaseOnBuiltinVocabulary(t *testing.T) {
 	cfg := &config.TaskConfig{
-		DefaultStatus: "TODO",
+		DefaultStatus: "todo",
 		Statuses:      config.GetDefaultStatuses(),
 		StateMachine: &config.WorkflowDefinition{
-			Rules: map[string][]string{"TODO": {"SKIPPED"}},
+			Rules: map[string][]string{"todo": {"cancelled"}},
 		},
 		Workflows: map[string]config.WorkflowOverride{
 			"urgent": {StateMachine: &config.WorkflowDefinition{}},
@@ -199,7 +199,7 @@ func TestOverrideWithEmptyRulesInheritsBaseOnBuiltinVocabulary(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if err := tagWM.ValidateTransition(StatusTodo, StatusSkipped, false); err != nil {
+	if err := tagWM.ValidateTransition(StatusTodo, StatusCancelled, false); err != nil {
 		t.Errorf("empty override must inherit base TODO -> SKIPPED: %v", err)
 	}
 	if err := tagWM.ValidateTransition(StatusTodo, StatusInProgress, false); err == nil {

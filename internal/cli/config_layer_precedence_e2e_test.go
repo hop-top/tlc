@@ -694,7 +694,7 @@ func TestLayerUserAndSystemAreAlternatives(t *testing.T) {
 		"storage:\n  db_path: "+dbPath+"\n")
 
 	got := vocabularyOf(t, bin, work, env)
-	for _, want := range []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"} {
+	for _, want := range []string{"backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("vocabulary %q should fall through to the built-in %q", got, want)
 		}

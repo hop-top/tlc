@@ -30,7 +30,7 @@ tlc task create "Fix auth bug"
 tlc task create "Title" --tag feat --priority P1 --assigned-to alice
 tlc task create "Title" --blocked-by T-0041 --blocked-by other-project/T-0007
 tlc task create "Title" --effort M --description "Details here"
-tlc task create "Title" --status IN_PROGRESS   # non-default initial status
+tlc task create "Title" --status backlog       # non-default initial status
 tlc task create -i                             # interactive prompt mode
 ```
 
@@ -61,9 +61,9 @@ tlc task remind --check                  # exit 1 if overdue (scripting)
 ## List & Filter
 
 ```bash
-tlc task list                            # IN_PROGRESS first, then TODO
-tlc task list --status TODO              # single status filter
-tlc task list --status IN_PROGRESS --status TODO   # multiple statuses
+tlc task list                            # in_progress first, then todo
+tlc task list --status todo              # single status filter
+tlc task list --status in_progress --status todo   # multiple statuses
 tlc task list --priority P0 --priority P1          # multiple priorities
 tlc task list --blocked                  # only tasks with a blocker set
 tlc task list --blocked-by T-0041        # tasks blocked by specific task
@@ -96,9 +96,16 @@ tlc log --all --by alice                 # filter by actor
 ## Claim / Unclaim
 
 ```bash
-tlc task claim T-0046                    # claim → IN_PROGRESS
+tlc task claim T-0046                    # claim → in_progress
 tlc task claim T-0046 --note "picking this up"
-tlc task unclaim T-0046                  # release → TODO
+tlc task unclaim T-0046                  # release → todo
+
+tlc task submit  T-0046                  # in_progress → in_review
+tlc task approve T-0046                  # in_review → done
+tlc task reject  T-0046 --reason "why"   # in_review → in_progress
+tlc task block   T-0046 --reason "why"   # → blocked
+tlc task unblock T-0046                  # blocked → status it came from
+tlc task cancel  T-0046 --note "why"     # → cancelled
 ```
 
 ---
@@ -119,7 +126,7 @@ tlc task update T-0046 --remove-blocked-by T-0041
 tlc task update T-0046 --clear-blocked-by
 tlc task update T-0046 --blocked "waiting on deploy"   # set blocker reason
 tlc task update T-0046 --unblock                       # clear blocker reason
-tlc task update T-0046 --status IN_PROGRESS --force    # bypass state machine
+tlc task update T-0046 --status in_progress --force    # bypass state machine and guards
 tlc task update T-0046 --timeout 4h                    # per-task stale timeout
 ```
 
@@ -175,7 +182,7 @@ tlc tag T-0046 feat refactor             # add tags to task
 tlc tag feat                             # filter: tasks tagged feat
 tlc tag feat bug                         # AND: tagged feat AND bug
 tlc tag feat,bug                         # OR:  tagged feat OR bug
-tlc tag feat --all-statuses              # include DONE/SKIPPED too
+tlc tag feat --all-statuses              # include done/cancelled too
 ```
 
 ---
@@ -302,7 +309,8 @@ tlc uri snippet                          # print OS-specific config snippet
 
 | Symptom | Fix |
 |---------|-----|
-| `cannot transition from TODO to DONE` | use `claim` first; or `--force` to bypass |
+| `cannot transition from todo to done` | use `claim` first; or `--force` to bypass |
+| `<from> → <to> refused: <check>: ...` | a guard failed; meet the named check or `--force` |
 | `--note is required` | add `--note "<reason>"` to reopen/unassign |
 | `task delete requires confirmation` | add `--yes` |
 | Wrong project targeted | check `tlc config list`; use `-c <config>` |
@@ -310,4 +318,4 @@ tlc uri snippet                          # print OS-specific config snippet
 | `-d` wiped description | read with `tlc task show` first; `-d` replaces |
 | Batch command stalled on prompt | add `--no-prompt` to skip confirmations |
 | Track delete fails | Unlink tasks first: `tlc task update <id> --track -` |
-| Can't complete track | All linked tasks must be DONE or SKIPPED |
+| Can't complete track | All linked tasks must be done or cancelled |

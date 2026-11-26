@@ -143,7 +143,7 @@ func TestInboxProcessE2E_Transition(t *testing.T) {
 
 	payload, _ := json.Marshal(map[string]string{
 		"id":     id,
-		"status": "IN_PROGRESS",
+		"status": "in_progress",
 		"by":     "e2e",
 		"note":   "auto claim",
 	})
@@ -166,7 +166,7 @@ func TestInboxProcessE2E_Transition(t *testing.T) {
 	tasks, _ := s.ListTasks(ctx, core.Query{Limit: 100})
 	for _, tk := range tasks {
 		if tk.ID == id && tk.Status != core.StatusInProgress {
-			t.Errorf("status = %s, want IN_PROGRESS", tk.Status)
+			t.Errorf("status = %s, want in_progress", tk.Status)
 		}
 	}
 }
@@ -244,7 +244,7 @@ func TestInboxProcessE2E_FullLifecycle(t *testing.T) {
 	// Step 3: Transition via inbox.
 	tr, _ := json.Marshal(map[string]string{
 		"id":     taskID,
-		"status": "IN_PROGRESS",
+		"status": "in_progress",
 		"by":     "lifecycle-test",
 	})
 	writeInboxFile(
@@ -270,7 +270,7 @@ func TestInboxProcessE2E_FullLifecycle(t *testing.T) {
 	)
 	if tasks[0].Status != core.StatusInProgress {
 		t.Errorf(
-			"final status = %s, want IN_PROGRESS",
+			"final status = %s, want in_progress",
 			tasks[0].Status,
 		)
 	}

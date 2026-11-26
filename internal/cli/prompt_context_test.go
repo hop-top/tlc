@@ -94,7 +94,7 @@ func TestTaskPrompt_MarkdownAllFields(t *testing.T) {
 	}
 
 	// Status line.
-	if !contains(output, "Status: IN_PROGRESS") {
+	if !contains(output, "Status: in_progress") {
 		t.Errorf("expected status, got: %s", output)
 	}
 	if !contains(output, "Assigned: @jadb") {
@@ -177,7 +177,7 @@ func TestTaskPrompt_MarkdownMinimalFields(t *testing.T) {
 	if !contains(output, "# T-0001: Bare task") {
 		t.Errorf("expected header, got: %s", output)
 	}
-	if !contains(output, "Status: TODO") {
+	if !contains(output, "Status: todo") {
 		t.Errorf("expected status, got: %s", output)
 	}
 
@@ -244,8 +244,8 @@ func TestTaskPrompt_JSONOutput(t *testing.T) {
 	if parsed.Title != "JSON test task" {
 		t.Errorf("expected title, got %s", parsed.Title)
 	}
-	if parsed.Status != "IN_PROGRESS" {
-		t.Errorf("expected IN_PROGRESS, got %s", parsed.Status)
+	if parsed.Status != "in_progress" {
+		t.Errorf("expected in_progress, got %s", parsed.Status)
 	}
 	if parsed.AssignedTo != "alice" {
 		t.Errorf("expected assignee alice, got %s", parsed.AssignedTo)

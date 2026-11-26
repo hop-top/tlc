@@ -96,7 +96,7 @@ func TestRecipeDiff_E2E_States(t *testing.T) {
 				t.Errorf("output lacks %q:\n%s", want, out)
 			}
 		}
-		if row := diffRow(t, out, "plan"); !contains(row, "materialized") || !contains(row, "T-0001") || !contains(row, "TODO") {
+		if row := diffRow(t, out, "plan"); !contains(row, "materialized") || !contains(row, "T-0001") || !contains(row, "todo") {
 			t.Errorf("plan row = %q; want materialized with alias and status", row)
 		}
 		if row := diffRow(t, out, "build"); !contains(row, "deleted") || !contains(row, "exec") {

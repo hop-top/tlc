@@ -61,6 +61,9 @@ linters:
       min-occurrences: 3
     misspell:
       locale: US
+      # "cancelled" is the built-in terminal status name.
+      ignore-rules:
+        - cancelled
     lll:
       line-length: 120
       tab-width: 1

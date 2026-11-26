@@ -76,7 +76,7 @@ output:
 
 # Task defaults
 task:
-  default_status: TODO
+  default_status: todo
 
 # Git integration
 git:
@@ -159,8 +159,8 @@ project:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `default_status` | enum | `TODO` | Initial status for new tasks |
-| `archive_threshold` | duration | `168h` (7d) | Auto-archive DONE/SKIPPED tasks after this duration |
+| `default_status` | enum | `todo` | Initial status for new tasks (the `initial`-role status) |
+| `archive_threshold` | duration | `168h` (7d) | Auto-archive `done`/`cancelled` tasks after this duration |
 
 **Task identity is not configurable**. A task's durable identity is a
 TypeID (`task_01h455vbqkfsn02nk084ksn02q`) assigned at creation. The
@@ -179,34 +179,59 @@ task:
 
 #### `task.statuses` — Custom Status Definitions
 
-Define custom statuses replacing the 4 defaults. Each entry is a
+Define custom statuses replacing the 7 defaults (see
+[Default statuses](#default-statuses)). Each entry is a
 `StatusDefinition` with the following fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | yes | Unique status identifier (e.g. `TODO`) |
+| `name` | string | yes | Unique status identifier (e.g. `todo`) |
 | `label` | string | no | Human-readable display label |
 | `description` | string | no | Short explanation of purpose |
 | `is_terminal` | bool | no | Terminal state; no outbound transitions |
 | `color` | string | no | ANSI/hex color for TUI/CLI output |
-| `role` | enum | no | Semantic role: `initial`, `active`, `completed`, `skipped` |
+| `role` | enum | no | Semantic role: `backlog`, `initial`, `active`, `review`, `blocked`, `completed`, `skipped` |
 | `tls_marker` | string | no | TLS bracket marker (e.g. `x`, `~`, `-`) |
 
 Semantic roles drive shortcut commands:
 
-- `initial` — target of `tlc task unclaim` and `tlc task reopen`
+- `backlog` — parked work not yet ready to start
+- `initial` — landing status for new tasks; target of `tlc task unclaim`
+  and `tlc task reopen`
 - `active` — target of `tlc task claim`
+- `review` — target of `tlc task submit`
+- `blocked` — target of `tlc task block`
 - `completed` — target of `tlc task complete`
-- `skipped` — target of `tlc task skip`
+- `skipped` — target of `tlc task cancel`
 
 A role is resolved to the FIRST status declaring it, so declare each
 role once. `completed` and `skipped` are separate roles because both
 are terminal and `is_terminal` cannot tell "done" from "abandoned"
 apart; without a distinct role the skip target is unreachable.
 
-If no status declares `skipped`, `tlc task skip` falls back to a status
-literally named `SKIPPED` and warns. If neither exists it refuses rather
+Code resolves statuses by role, never by name, so a custom vocabulary
+that declares the roles it uses gets the same behaviour: VTODO `STATUS`,
+colors, board columns and counters all follow the role.
+
+If no status declares `skipped`, `tlc task cancel` falls back to a status
+literally named `cancelled` and warns. If neither exists it refuses rather
 than electing an arbitrary terminal status.
+
+##### Default statuses
+
+When no custom statuses are configured, TLC uses 7 defaults:
+
+| Name | Label | Role | Terminal | TLS Marker | Color |
+|------|-------|------|----------|------------|-------|
+| `backlog` | Backlog | `backlog` | no | `-` | gray |
+| `todo` | To Do | `initial` | no | ` ` (space) | yellow |
+| `in_progress` | In Progress | `active` | no | `>` | blue |
+| `in_review` | In Review | `review` | no | `?` | magenta |
+| `blocked` | Blocked | `blocked` | no | `!` | red |
+| `done` | Done | `completed` | yes | `x` | green |
+| `cancelled` | Cancelled | `skipped` | yes | `~` | gray |
+
+Status names are stored lowercase. New tasks land in `todo`.
 
 #### `task.tags` — Tag Policy and Vocabulary
 
@@ -260,11 +285,85 @@ task:
       - domain:*
 ```
 
-#### `task.state_machine` — Transition Rules
+#### `task.state_machine` — Transition Rules and Guards
 
-The `task.state_machine.rules` list defines allowed transitions.
-Each rule has `from` and `to` (status names). Unlisted transitions
-are rejected unless `--force` is passed.
+`task.state_machine.rules` maps each status to the statuses it may move
+to. Unlisted transitions are rejected unless `--force` is passed. The
+only exit from a terminal status is `tlc task reopen`, which requires a
+note, writes an audit entry and lands on the `initial` status.
+
+Default rules:
+
+```yaml
+task:
+  state_machine:
+    rules:
+      backlog:     [todo, cancelled]
+      todo:        [backlog, in_progress, blocked, cancelled]
+      in_progress: [todo, in_review, blocked, done, cancelled]
+      in_review:   [in_progress, done, blocked, cancelled]
+      blocked:     [todo, in_progress, in_review, cancelled]
+```
+
+##### `task.state_machine.guards` — Transition Guards
+
+A guard adds conditions a permitted move must meet. It applies to every
+transition matching its `from` and `to`; at least one of the two is set.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `from` | string | no | Source status name; omitted matches any source |
+| `to` | string | no | Target status name; omitted matches any target |
+| `require` | list | yes | Named checks; all must pass |
+
+Checks (a fixed, named set; unknown names are rejected):
+
+| Check | Passes when |
+|-------|-------------|
+| `note` | the transition carries a non-empty note |
+| `reason` | the transition carries a non-empty reason (block reason) |
+| `assignee` | the task has an assignee after the transition |
+| `blockers_clear` | every `blocked_by` task is terminal |
+
+Default guards:
+
+```yaml
+task:
+  state_machine:
+    guards:
+      - to: blocked
+        require: [reason]
+      - to: cancelled
+        require: [note]
+      - to: done
+        require: [blockers_clear]
+      - from: in_progress
+        to: in_review
+        require: [assignee]
+```
+
+A failed guard refuses the move with an error naming the transition, the
+guard and the failed check:
+
+```
+in_progress → done refused: blockers_clear: T-0012 is still open
+```
+
+`--force` bypasses rules and guards; the audit entry records that the
+move was forced. Config validation rejects unknown checks, guards that
+name undeclared statuses, and guards with neither `from` nor `to`.
+
+Guards are also valid in a per-tag
+`task.workflows.<tag>.state_machine.guards`. A per-tag guard list
+replaces the default list for tasks carrying that tag; it does not
+merge with it.
+
+##### Blocked
+
+`blocked` is a status. Entering it records the status the task came
+from, with the block reason. `tlc task unblock` returns the task to that
+status, falling back to the `initial` status when the recorded one is no
+longer allowed.
 
 #### `task.workflows` — Per-Tag Workflow Overrides
 
@@ -290,6 +389,7 @@ task:
       color: "#00AAFF"
     - name: REVIEW
       label: In Review
+      role: review
       tls_marker: "r"
       color: "#FFAA00"
     - name: MERGED
@@ -307,16 +407,12 @@ task:
 
   state_machine:
     rules:
-      - from: OPEN
-        to: ACTIVE
-      - from: ACTIVE
-        to: REVIEW
-      - from: REVIEW
-        to: MERGED
-      - from: REVIEW
-        to: ACTIVE
-      - from: OPEN
-        to: WONTFIX
+      OPEN: [ACTIVE, WONTFIX]
+      ACTIVE: [REVIEW]
+      REVIEW: [MERGED, ACTIVE]
+    guards:
+      - to: WONTFIX
+        require: [note]
 
   workflows:
     hotfix:
@@ -333,20 +429,9 @@ task:
           tls_marker: "x"
       state_machine:
         rules:
-          - from: OPEN
-            to: ACTIVE
-          - from: ACTIVE
-            to: MERGED
+          OPEN: [ACTIVE]
+          ACTIVE: [MERGED]
 ```
-
-When no custom statuses are configured, TLC uses 4 defaults:
-
-| Name | Role | Terminal | TLS Marker |
-|------|------|----------|------------|
-| `TODO` | initial | no | ` ` (space) |
-| `IN_PROGRESS` | active | no | `~` |
-| `DONE` | completed | yes | `x` |
-| `SKIPPED` | — | yes | `-` |
 
 #### `task.stale` — Staleness Detection
 

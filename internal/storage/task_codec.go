@@ -163,6 +163,9 @@ func optString(s string) *string {
 // exists; an unchanged row is not an error. Shared by UpdateTask and
 // UpdateTaskWithLog so the two write paths cannot drift.
 func updateTaskInTx(ctx context.Context, tx *sql.Tx, task *core.Task) error {
+	if err := validateStatusWrite(task.Status); err != nil {
+		return err
+	}
 	row := encodeTask(task)
 	res, err := tx.ExecContext(
 		ctx, "UPDATE tasks SET "+taskUpdateSet+" WHERE id = ? AND project_id = ?",
@@ -269,6 +272,7 @@ func (c *taskScanCols) applyScalars(task *core.Task) {
 	task.RRule = c.rrule.String
 	task.NoAutoRemind = c.noAutoRemind.Int64 != 0
 
+	task.Status = normalizeStatus(task.Status)
 	task.Kind = core.TaskKind(c.kind)
 	task.Attempts = int(c.attempts)
 	task.ClaimedAt = nullTime(c.claimedAt)

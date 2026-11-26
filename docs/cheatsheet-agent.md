@@ -21,10 +21,10 @@ tlc -c /path/to/.tlc/config.yaml task list
 ## Agent Loop Contract
 
 ```
-1. Claim      →  tlc task claim <id>              (transitions TODO → IN_PROGRESS)
+1. Claim      →  tlc task claim <id>              (transitions todo → in_progress)
 2. Work       →  implement, commit, test
 3. Log        →  tlc task update <id> -d "<prev>\n\nSessions:\n- <session-id> (<agent>)"
-4. Complete   →  tlc task complete <id>           (transitions IN_PROGRESS → DONE)
+4. Complete   →  tlc task complete <id>           (transitions in_progress → done)
 ```
 
 **DO:** claim before starting. **DON'T:** make plan/code/doc changes without a claimed task.
@@ -70,9 +70,9 @@ tlc task remind --check                  # exit 1 if overdue
 ## List / Query — Deterministic First
 
 ```bash
-tlc task list                            # IN_PROGRESS first, then TODO
-tlc task list --status TODO
-tlc task list --status IN_PROGRESS --status TODO
+tlc task list                            # in_progress first, then todo
+tlc task list --status todo
+tlc task list --status in_progress --status todo
 tlc task list --priority P0 --priority P1
 tlc task list --assigned-to exo
 tlc task list --mine                     # current user
@@ -106,21 +106,30 @@ tlc log --all --action CLAIMED --by exo  # filtered log
 ## State Transitions
 
 ```
-TODO → IN_PROGRESS → DONE
-     ↘              ↗
-       SKIPPED ←────
+backlog → todo → in_progress → in_review → done
+   ↘       ↕         ↕            ↕
+     cancelled ←──  blocked ──────┘
 ```
 
+Defaults: `backlog`, `todo`, `in_progress`, `in_review`, `blocked`, `done`,
+`cancelled`. `done` and `cancelled` are terminal; only `reopen` leaves them.
+
 ```bash
-tlc task claim   T-0046                              # TODO → IN_PROGRESS
-tlc task unclaim T-0046                              # IN_PROGRESS → TODO
-tlc task complete T-0046                             # IN_PROGRESS → DONE
+tlc task claim   T-0046                              # todo → in_progress
+tlc task unclaim T-0046                              # in_progress → todo
+tlc task complete T-0046                             # in_progress → done
 tlc task complete T-0046 --no-verify                 # bypass state machine (NOT --force)
-tlc task update   T-0046 --status IN_PROGRESS --note "reason"  # records on STATUS_CHANGED
+tlc task update   T-0046 --status in_progress --note "reason"  # records on STATUS_CHANGED
 tlc task update   T-0046 --priority P0 --note "reason"         # records on UPDATED
 tlc task update   T-0046 --note "<sha> linkage"                # note alone; records on UPDATED
-tlc task update   T-0046 --status IN_PROGRESS --force          # force any transition
-tlc task reopen   T-0046 --note "reason"             # DONE/SKIPPED → TODO (--note required)
+tlc task update   T-0046 --status in_progress --force          # force any transition
+tlc task reopen   T-0046 --note "reason"             # done/cancelled → todo (--note required)
+tlc task submit   T-0046                             # in_progress → in_review (needs assignee)
+tlc task approve  T-0046                             # in_review → done
+tlc task reject   T-0046 --reason "why"              # in_review → in_progress
+tlc task block    T-0046 --reason "why"              # any open status → blocked
+tlc task unblock  T-0046                             # blocked → status it came from
+tlc task cancel   T-0046 --note "why"                # → cancelled (skip is an alias)
 tlc task delete   T-0046 --yes --note "reason"       # --note required by default policy
 ```
 
@@ -346,13 +355,14 @@ tlc task complete T-0046 --no-verify
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `cannot transition from TODO to DONE` | skipped claim | `tlc task claim <id>` first |
+| `cannot transition from todo to done` | skipped claim | `tlc task claim <id>` first |
+| `<from> → <to> refused: <check>: ...` | a `state_machine.guards` check failed | satisfy the named check (`--note`, `--reason`, assignee, close blockers) or `--force` |
 | `--note is required` | reopen/unassign without note | add `--note "<reason>"` |
 | `policy "delete-requires-note" denied: ...` (exit 4) | `tlc task delete` without `--note` | add `--note "<reason>"`; see [policies.md](policies.md) |
 | `task delete requires confirmation` | missing --yes | add `--yes` |
 | `task T-XXXX not found` | wrong ID or project | `tlc task list` to verify |
 | `project not found in registry` | not initialised | `tlc init` in project root |
-| DONE/SKIPPED immutable | terminal state | use `--force` or `reopen` first |
+| done/cancelled immutable | terminal state | use `--force` or `reopen` first |
 | `cannot delete track with linked tasks` | tasks reference this track | unlink first: `tlc task update <id> --track -` |
 | `track type "X" invalid` | wrong --type value | use: feature, bug, refactor |
 
@@ -364,7 +374,7 @@ tlc task complete T-0046 --no-verify
 |-------|--------|-------|
 | `id` | `T-XXXX` | stable; auto-assigned |
 | `title` | string | required |
-| `status` | `TODO` `IN_PROGRESS` `DONE` `SKIPPED` | canonical uppercase; case-insensitive on input, accepts aliases (see below) |
+| `status` | `backlog` `todo` `in_progress` `in_review` `blocked` `done` `cancelled` | canonical lowercase; case-insensitive on input, accepts aliases (see below) |
 | `priority` | `P0` `P1` `P2` `P3` | P0 = highest; case-insensitive on input, accepts aliases (see below) |
 | `effort` | `XS` `S` `M` `L` `XL` | size estimate; case-insensitive on input, accepts aliases (see below) |
 | `assigned_to` | profile/username | optional |
@@ -386,10 +396,11 @@ story 082 / PR #114). Source of truth: `internal/cli/fieldnorm.go`.
 
 | Field | Canonical | Accepts (case-insensitive) |
 |-------|-----------|----------------------------|
-| `status` | `TODO` | `todo`, `open`, `to-do` |
-| `status` | `IN_PROGRESS` | `in_progress`, `wip`, `inprogress`, `in-progress` |
-| `status` | `DONE` | `done`, `complete`, `completed`, `finish`, `finished` |
-| `status` | `SKIPPED` | `skipped`, `skip` |
+| `status` | `todo` | `open`, `to-do` |
+| `status` | `in_progress` | `wip`, `inprogress`, `in-progress` |
+| `status` | `in_review` | `review`, `in-review`, `inreview` |
+| `status` | `done` | `complete`, `completed`, `finish`, `finished` |
+| `status` | `cancelled` | `canceled`, `skipped`, `skip` |
 | `priority` | `P0` | `p0`, `0`, `critical` |
 | `priority` | `P1` | `p1`, `1`, `high` |
 | `priority` | `P2` | `p2`, `2`, `medium`, `med` |

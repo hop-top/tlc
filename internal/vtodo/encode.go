@@ -323,9 +323,8 @@ func uidFor(typeID, domain string) string {
 // Role, not name, because the status vocabulary is configurable: a
 // project declaring IN_REVIEW (role "active") and SHIPPED (role
 // "completed") has no status this package could recognize by name, and a
-// name switch would export NEEDS-ACTION for both. The four roles line up
-// one-for-one with the four RFC 5545 VTODO STATUS values, so role is
-// exactly the fact the wire format wants.
+// name switch would export NEEDS-ACTION for both. Several roles share one RFC 5545 STATUS
+// value, and role is exactly the fact the wire format wants.
 //
 // Falls back to NEEDS-ACTION for a status the vocabulary does not
 // declare, which is the RFC's own "nothing has happened yet" value and
@@ -347,9 +346,13 @@ func statusRole(s core.TaskStatus, defs []config.StatusDefinition) string {
 }
 
 // roleToWire maps a config role constant to its RFC 5545 STATUS value.
+// The backlog and initial roles both fall through to NEEDS-ACTION.
 func roleToWire(role string) string {
 	switch role {
-	case config.RoleActive:
+	case config.RoleActive, config.RoleReview, config.RoleBlocked:
+		// Work that has started and is not finished: in progress, in
+		// review and blocked all read as IN-PROCESS on the wire. The
+		// X-TLC status property keeps the exact name for a round trip.
 		return string(vstar.TodoInProcess)
 	case config.RoleCompleted:
 		return string(vstar.TodoCompleted)
