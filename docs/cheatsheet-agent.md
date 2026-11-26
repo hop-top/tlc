@@ -164,6 +164,7 @@ tlc task update T-0046 --clear-blocked-by
 tlc task update T-0046 --blocked "waiting on deploy"
 tlc task update T-0046 --unblock
 tlc task update T-0046 --timeout 4h
+tlc task update T-0046 --meta owner=ana --unset-meta stale   # merge user meta
 ```
 
 ---

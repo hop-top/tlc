@@ -317,6 +317,18 @@ description (audit block stripped), recent activity log.
 | `--remove-blocked-by` | Remove blocking task ID (repeatable) |
 | `--clear-blocked-by` | Clear all blockers |
 
+### task create / update — meta flags
+
+| Flag | Command | Description |
+|------|---------|-------------|
+| `--meta key=value` | create, update | Set a user meta key (repeatable; string values; merges, other keys untouched) |
+| `--unset-meta key` | update | Remove a user meta key (repeatable) |
+
+Keys tlc manages itself (`blocked_by*`, `eva`, `origin_*`, `priority_source`,
+`priority_rule`, `last_sync_hash`, `needs_push`, `blocked_from`,
+`external_uid`, `x_tlc`, `recipe`, `recipe_version`, `recipe_hash`,
+`subject`) are rejected.
+
 ### task list — flags reference
 
 | Flag | Short | Description |
