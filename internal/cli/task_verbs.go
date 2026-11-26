@@ -34,7 +34,7 @@ var (
 // when `block` moved it to the blocked status. `unblock` returns there.
 // It lives in meta, next to the block reason's lifetime: set on block,
 // removed on unblock, no schema change.
-const metaBlockedFrom = "blocked_from"
+const metaBlockedFrom = core.MetaBlockedFrom
 
 // transitionOpts carries what a transition's validation may need.
 type transitionOpts struct {

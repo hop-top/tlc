@@ -180,8 +180,10 @@ func TestServe_TaskPatchReservedMetaRejectedAtomically(t *testing.T) {
 		s, _ := getStorageRaw()
 		defer s.Close()
 
-		task := &core.Task{ID: core.NewTaskID(), Title: "orig", Status: core.StatusTodo,
-			Meta: map[string]any{"owner": "ana"}}
+		task := &core.Task{
+			ID: core.NewTaskID(), Title: "orig", Status: core.StatusTodo,
+			Meta: map[string]any{"owner": "ana"},
+		}
 		task.AddEva([]string{"e1"})
 		if err := s.CreateTask(ctx, task); err != nil {
 			t.Fatal(err)

@@ -10,6 +10,10 @@ import (
 // key tlc manages itself.
 var ErrReservedMetaKey = errors.New("reserved meta key")
 
+// MetaBlockedFrom records the status a task was in before `task block`,
+// so `task unblock` can return it there.
+const MetaBlockedFrom = "blocked_from"
+
 // reservedMetaKeys are the task-meta keys tlc itself writes: dependency
 // edges and their plan/recipe bookkeeping, eva annotations, priority
 // provenance, sync state, recipe provenance, and the foreign-UID and
@@ -26,6 +30,7 @@ var reservedMetaKeys = map[string]struct{}{
 	MetaPrioritySource:  {},
 	MetaPriorityRule:    {},
 	MetaLastSyncHash:    {},
+	MetaBlockedFrom:     {},
 	"needs_push":        {},
 	"external_uid":      {},
 	"x_tlc":             {},
