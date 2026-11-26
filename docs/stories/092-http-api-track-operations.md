@@ -78,6 +78,13 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
    meta holds every pair (string equality on the member's scalar form)
    are returned. A key outside letters, digits, `_` and `-` is 422.
 
+10. **Given** a recipe, **When** a client sends `POST /tracks` with
+    `recipe` and optional `vars`, `title`, `slug`, `type`, **Then** the
+    response is 201 with the track and a `recipe_run` naming the created
+    steps, the same result as `tlc track create --recipe`. An unknown
+    recipe, a missing required var, a recipe path instead of a name, or
+    `meta` combined with `recipe` is 422 and creates nothing.
+
 ## Tests
 
 ### E2E
@@ -89,6 +96,9 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
 
 - `internal/cli/track_meta_serve_test.go` (scenarios 7-9)
 - `internal/cli/track_meta_e2e_test.go` (CLI parity for 7 and 9)
+- `internal/cli/track_recipe_serve_test.go::TestServe_TrackCreateFromRecipe`,
+  `TestServe_TrackCreateFromRecipe_TitleSlugAndPin`,
+  `TestServe_TrackCreateFromRecipe_ClientErrors` (scenario 10)
 
 ### Unit
 - `internal/core/track_meta_test.go`, `internal/core/meta_filter_test.go`,
@@ -111,3 +121,4 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
 | 7 | Track meta on POST, merge-patch on PATCH, reserved 422 | `TestServe_TrackCreateWithMeta`, `TestServe_TrackPatchMetaMergePatch`, `TestServe_TrackPatchReservedMetaRejectedAtomically` | COVERED |
 | 8 | PATCH status / assigned_to / due, transitions, 404 | `TestServe_TrackPatchFields`, `TestServe_TrackPatchInvalidInput`, `TestServe_TrackPatchUnknownTrack` | COVERED |
 | 9 | `meta.<key>` list filter, key whitelist | `TestServe_TrackListMetaFilter`, `TestServe_TrackListMetaFilterRejectsBadKeys` | COVERED |
+| 10 | Track from a recipe over POST /tracks | `TestServe_TrackCreateFromRecipe`, `TestServe_TrackCreateFromRecipe_ClientErrors` | COVERED |
