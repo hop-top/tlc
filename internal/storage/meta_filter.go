@@ -29,7 +29,7 @@ func MetaFilterClauses(column string, filters map[string]string) ([]string, []an
 		return nil, nil, nil
 	}
 	if err := core.ValidateMetaFilters(filters); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("meta filter: %w", err)
 	}
 	keys := make([]string, 0, len(filters))
 	for k := range filters {

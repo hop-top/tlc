@@ -202,7 +202,7 @@ func trackSlugsFromList(t *testing.T, out string) []string {
 	if err := json.Unmarshal([]byte(out), &recs); err != nil {
 		t.Fatalf("decode track list json: %v\n%s", err, out)
 	}
-	slugs := []string{}
+	slugs := make([]string, 0, len(recs))
 	for _, r := range recs {
 		slugs = append(slugs, r.Slug)
 	}

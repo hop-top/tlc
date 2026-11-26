@@ -164,25 +164,36 @@ func (l *DirLocator) LocateNamed(ref string) (*Recipe, error) {
 	}
 	dirs := append([]string(nil), l.Dirs...)
 	if l.Builtin != nil {
-		infos, err := (&spec.DirLocator{Builtin: shimFS{l.Builtin}}).List()
-		if err != nil {
-			return nil, recipeWording(err)
-		}
-		if info, ok := pickRecipeInfo(infos, name, version); ok {
-			data, err := fs.ReadFile(l.Builtin, info.Path)
-			if err != nil {
-				return nil, fmt.Errorf("read builtin recipe: %w", err)
-			}
-			rec, err := ParseRecipe(bytes.NewReader(data), builtinPrefix+info.Path)
-			if err != nil {
-				return nil, err
-			}
-			rec.Source = spec.BuiltinSource
-			return rec, nil
+		rec, err := l.locateBuiltin(name, version)
+		if err != nil || rec != nil {
+			return rec, err
 		}
 		dirs = append(dirs, spec.BuiltinSource)
 	}
 	return nil, recipeWording(&RecipeNotFoundError{Ref: ref, Dirs: dirs})
+}
+
+// locateBuiltin looks name up in the embedded recipes; a nil recipe with a
+// nil error means it is not there.
+func (l *DirLocator) locateBuiltin(name, version string) (*Recipe, error) {
+	infos, err := (&spec.DirLocator{Builtin: shimFS{l.Builtin}}).List()
+	if err != nil {
+		return nil, recipeWording(err)
+	}
+	info, ok := pickRecipeInfo(infos, name, version)
+	if !ok {
+		return nil, nil
+	}
+	data, err := fs.ReadFile(l.Builtin, info.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read builtin recipe: %w", err)
+	}
+	rec, err := ParseRecipe(bytes.NewReader(data), builtinPrefix+info.Path)
+	if err != nil {
+		return nil, err
+	}
+	rec.Source = spec.BuiltinSource
+	return rec, nil
 }
 
 // pickRecipeInfo takes the first header named name: the one at version

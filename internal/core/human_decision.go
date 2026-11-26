@@ -59,7 +59,7 @@ func approveHumanTask(ctx context.Context, repo Repository, wm *WorkflowManager,
 	}
 	entry, err := task.TransitionWithWorkflow(completed, in.By, note, wm, true)
 	if err != nil {
-		return err //nolint:wrapcheck // callers name the task and verb
+		return err
 	}
 	entry.Action = ActionApproved
 	task.ClaimedAt = nil
