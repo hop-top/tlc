@@ -1,0 +1,10 @@
+xrr: "1"
+adapter: exec
+fingerprint: cee6fb8c
+recorded_at: "2026-11-15T22:20:35Z"
+payload:
+    stdout: |
+        Usage: claude [options]
+          --model <model>
+    exit_code: 0
+    duration_ms: 295
