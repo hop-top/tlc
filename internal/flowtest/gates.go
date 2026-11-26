@@ -95,7 +95,7 @@ func (d GateDecision) validate() error {
 		}
 	case GateReject:
 		if d.Reason == "" {
-			return errors.New("reject needs a reason: use the mapping form with decision: reject and reason:")
+			return errors.New("reject needs a reason: use the mapping form, decision reject with a reason")
 		}
 		if d.Note != "" {
 			return errors.New("note belongs to approve; a rejection takes reason")

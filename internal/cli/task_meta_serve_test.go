@@ -17,7 +17,7 @@ import (
 )
 
 // doServeRequestRaw sends body verbatim, for requests whose exact JSON
-// matters (an explicit null) and which a marshalled Go value cannot say.
+// matters (an explicit null) and which a marshaled Go value cannot say.
 func doServeRequestRaw(t *testing.T, router http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))

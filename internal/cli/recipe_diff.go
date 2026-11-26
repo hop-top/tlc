@@ -235,8 +235,8 @@ func whenFalseForRun(step core.RecipeStep, run *core.RecipeRun) bool {
 		}
 		when = rendered
 	}
-	verdict, known, _ := core.CreateTimeWhen(core.RecipeStep{ID: step.ID, When: when}, run.Vars)
-	return known && !verdict
+	verdict, known, err := core.CreateTimeWhen(core.RecipeStep{ID: step.ID, When: when}, run.Vars)
+	return err == nil && known && !verdict
 }
 
 func fillDiffTask(row *recipeDiffRow, task *core.Task) {

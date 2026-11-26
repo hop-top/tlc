@@ -68,7 +68,7 @@ func TestManifestGates_Invalid(t *testing.T) {
 	}{
 		{"typo for gates", "expected_exit: 0\ngate:\n  review: approve\n", "gate"},
 		{"unknown top-level key", "expected_exit: 0\nbogus: 1\n", "bogus"},
-		{"unknown key in a gate", "gates:\n  review:\n    decision: approve\n    decison: approve\n", "decison"},
+		{"unknown key in a gate", "gates:\n  review:\n    decision: approve\n    verdict: approve\n", "verdict"},
 		{"shorthand reject has no reason", "gates:\n  review: reject\n", "reason"},
 		{"reject without reason", "gates:\n  review:\n    decision: reject\n", "reason"},
 		{"reject with empty reason", "gates:\n  review:\n    decision: reject\n    reason: \"\"\n", "reason"},
