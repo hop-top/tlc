@@ -47,6 +47,9 @@ Examples:
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if recipeFlagRecipe != "" {
+			if len(taskMeta) > 0 {
+				return fmt.Errorf("--meta cannot be combined with --recipe")
+			}
 			return runTaskCreateRecipe(cmd, args)
 		}
 		var title string
@@ -79,6 +82,12 @@ Examples:
 		}
 		if eva := core.NormalizeStringSliceMeta(taskEva); len(eva) > 0 {
 			meta["eva"] = eva
+		}
+		// User meta merges last-in-code but cannot collide with the
+		// internal keys above: reserved names are refused up front.
+		meta, err := core.MergeUserMeta(meta, metaFromFlags(taskMeta), nil)
+		if err != nil {
+			return metaWriteError(err)
 		}
 
 		var staleTimeout *time.Duration
@@ -658,6 +667,7 @@ func registerCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&taskRRule, "rrule", "", "Recurring reminder RRULE (e.g. FREQ=DAILY, FREQ=WEEKLY;BYDAY=MO,WE,FR)")
 	cmd.Flags().BoolVar(&taskNoAutoRemind, "no-auto-remind", false, "Suppress 12h-before-due reminder")
 	cmd.Flags().StringSliceVar(&taskEva, "eva", []string{}, "Eva annotations (repeatable)")
+	cmd.Flags().StringToStringVar(&taskMeta, "meta", nil, "Set user meta key=value (repeatable; string values)")
 	registerRecipeFlags(cmd)
 }
 
