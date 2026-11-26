@@ -130,6 +130,9 @@ type taskCreateRequest struct {
 	Reference   string   `json:"reference,omitempty"`
 	BlockedBy   []string `json:"blocked_by,omitempty"`
 	TrackID     string   `json:"track_id,omitempty"`
+	// Meta is user meta to store on the new task. Reserved keys (see
+	// core.IsReservedMetaKey) are refused with 422.
+	Meta map[string]any `json:"meta,omitempty"`
 }
 
 func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
@@ -214,6 +217,11 @@ func handleTaskCreate(deps *serveDeps) http.HandlerFunc {
 				return
 			}
 			meta["blocked_by"] = validated
+		}
+		meta, err = core.MergeUserMeta(meta, req.Meta, nil)
+		if err != nil {
+			writeTaskFieldChangeError(w, metaWriteError(err))
+			return
 		}
 
 		now := time.Now().UTC()
@@ -341,6 +349,11 @@ type taskUpdateRequest struct {
 	NoAutoRemind    *bool     `json:"no_auto_remind,omitempty"`
 	Note            string    `json:"note,omitempty"`
 	Force           bool      `json:"force,omitempty"`
+	// Meta is a JSON Merge Patch (RFC 7396) over the task's user meta:
+	// a key sets, null removes, an object merges recursively, absent
+	// keys are left alone. Absent, null or {} changes nothing. Reserved
+	// keys (see core.IsReservedMetaKey) are refused with 422.
+	Meta map[string]any `json:"meta,omitempty"`
 }
 
 func handleTaskUpdate(deps *serveDeps) http.HandlerFunc {
@@ -386,6 +399,7 @@ func handleTaskUpdate(deps *serveDeps) http.HandlerFunc {
 			RemindAt:        req.RemindAt,
 			RRule:           req.RRule,
 			NoAutoRemind:    req.NoAutoRemind,
+			Meta:            req.Meta,
 			// No AutoCreateTrack: the HTTP API treats an unresolvable
 			// --track-equivalent as an error (422) rather than silently
 			// creating a track, since a stray typo in a track_id over
