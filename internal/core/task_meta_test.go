@@ -28,6 +28,7 @@ func TestIsReservedMetaKey(t *testing.T) {
 	}
 }
 
+//nolint:gocognit // one subtest per merge rule; the nesting is the closures
 func TestMergeUserMeta(t *testing.T) {
 	t.Run("sets into nil map", func(t *testing.T) {
 		got, err := MergeUserMeta(nil, map[string]any{"owner": "ana"}, nil)
