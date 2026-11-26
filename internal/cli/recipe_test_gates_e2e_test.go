@@ -168,3 +168,47 @@ func TestRecipeTest_Gates_FixtureErrorsAreSetupFailures(t *testing.T) {
 		})
 	}
 }
+
+// A gate declared on a human step that the run's vars leave out is not an
+// error and needs no decision, the same as a gate the --task subset skips:
+// the step is never materialized, so the run passes with it absent.
+func TestRecipeTest_Gates_DeclaredGateOnVarsDroppedStepNeedsNoDecision(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	inRepoRoot(t)
+	dir := t.TempDir()
+	path := writeRecipeFixture(t, dir, "gate-vars.yaml", `recipe: gate-vars
+version: 1.0.0
+vars:
+  review:
+    description: whether a human reviews
+    required: true
+steps:
+  - id: prep
+    kind: exec
+    title: Prepare
+    exec:
+      argv: [echo, prepared]
+  - id: signoff
+    kind: human
+    title: Sign off the change
+    depends_on: [prep]
+    when: "vars.review == 'yes'"
+  - id: ship
+    kind: exec
+    title: Ship it
+    depends_on: [signoff]
+    exec:
+      argv: [echo, shipped]
+`)
+	writeRunFixture(t, dir, "gate-vars", "run",
+		"expected_exit: 0\nvars:\n  review: 'no'\ngates:\n  signoff: approve\n")
+
+	out, err := runRecipeCmd(t, "test", path, "run")
+	if err != nil {
+		t.Fatalf("expected exit 0; got %v (code %d)\n%s", err, exitCodeOf(err), out)
+	}
+	if strings.Contains(out, "Sign off the change") || !strings.Contains(out, "Ship it") || !strings.Contains(out, "result: PASS") {
+		t.Errorf("want the gate absent, its dependent run, PASS:\n%s", out)
+	}
+}
