@@ -31,7 +31,7 @@ func TestTaskAndTrackReservedSetsAreIndependent(t *testing.T) {
 	}
 }
 
-//nolint:gocognit // one subtest per merge rule; the nesting is the closures
+//nolint:gocognit,gocyclo // one subtest per merge rule; the nesting is the closures
 func TestMergeTrackMeta(t *testing.T) {
 	t.Run("merges and keeps internal keys", func(t *testing.T) {
 		in := map[string]any{"plans": []string{"a.md"}, "owner": "ana", "keep": "k"}
