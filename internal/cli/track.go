@@ -110,15 +110,14 @@ func runTrackCreate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// newTrackFromFlags builds the track `track create` would write: slug
-// from --id or the title, the given type (config default when empty)
-// validated against the configured types, assignee and due from the
-// flags. The stage gate runs here so a dry run reports it too.
-func newTrackFromFlags(title, trackType string) (*core.Track, error) {
-	// User-supplied --id (or auto-derived from title) becomes the
+// newTrackBase builds the track a create would write from its slug (""
+// derives one from the title), title and type (config default when empty),
+// validating the type and running the stage gate, so a dry run reports it
+// too. The flag-driven fields are applied by newTrackFromFlags.
+func newTrackBase(slug, title, trackType string) (*core.Track, error) {
+	// A user-supplied slug (or one derived from the title) becomes the
 	// human-facing Slug. Track.ID itself is the durable TypeID,
 	// minted by TrackService.CreateTrack via core.NewTrackID().
-	slug := trackCreateID
 	if slug == "" {
 		slug = core.SlugFromTitle(title, getConfigSlugMaxLen())
 	}
@@ -144,8 +143,17 @@ func newTrackFromFlags(title, trackType string) (*core.Track, error) {
 			return nil, err //nolint:wrapcheck // the gate names the stage and the fix
 		}
 	}
+	return &core.Track{Slug: slug, Title: title, Type: trackType}, nil
+}
 
-	track := &core.Track{Slug: slug, Title: title, Type: trackType}
+// newTrackFromFlags builds the track `track create` would write: newTrackBase
+// from --id, the title and the given type, then assignee, due and meta
+// from the flags.
+func newTrackFromFlags(title, trackType string) (*core.Track, error) {
+	track, err := newTrackBase(trackCreateID, title, trackType)
+	if err != nil {
+		return nil, err
+	}
 	if trackCreateAssignedTo != "" {
 		assignee := normalizeAssignee(trackCreateAssignedTo)
 		track.AssignedTo = &assignee

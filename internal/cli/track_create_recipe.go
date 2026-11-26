@@ -38,7 +38,11 @@ func runTrackCreateRecipe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	track, err := trackFromRecipe(r, args, vars, subj)
+	title := ""
+	if len(args) > 0 {
+		title = trimMatchingQuotes(args[0])
+	}
+	track, err := trackFromRecipe(r, title, vars, subj, trackCreateType, newTrackFromFlags)
 	if err != nil {
 		return err
 	}
@@ -91,14 +95,15 @@ func runTrackCreateRecipe(cmd *cobra.Command, args []string) error {
 	return writeProjection()
 }
 
-// trackFromRecipe builds the track to create: the title argument, else
+// trackFromRecipe builds the track to create: the given title, else
 // the recipe's track.title rendered with the vars (and the --for
-// subject); the type from --type, else track.type, else config.
-func trackFromRecipe(r *core.Recipe, args []string, vars map[string]any, subj *recipeSubject) (*core.Track, error) {
-	title := ""
-	if len(args) > 0 {
-		title = trimMatchingQuotes(args[0])
-	}
+// subject); the type from trackType, else track.type, else config. mk
+// turns the resolved title and type into the track: newTrackFromFlags
+// for the CLI, which applies the track flags too.
+func trackFromRecipe(
+	r *core.Recipe, title string, vars map[string]any, subj *recipeSubject,
+	trackType string, mk func(title, trackType string) (*core.Track, error),
+) (*core.Track, error) {
 	if title == "" {
 		rendered, err := recipeTrackTitle(r, vars, subj)
 		if err != nil {
@@ -111,11 +116,10 @@ func trackFromRecipe(r *core.Recipe, args []string, vars map[string]any, subj *r
 			"recipe %s names no track title; pass one as the argument or set track.title in the recipe", r.Name,
 		)
 	}
-	trackType := trackCreateType
 	if trackType == "" && r.Track != nil {
 		trackType = r.Track.Type
 	}
-	track, err := newTrackFromFlags(title, trackType)
+	track, err := mk(title, trackType)
 	if err != nil {
 		return nil, err
 	}
