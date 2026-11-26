@@ -167,7 +167,7 @@ a task step with a 1-based `ordinal`.
 |------|------|
 | `agent` | `agent` — agent name; falls back to the recipe's `agent`, then to `track execute --agent`. Templatable. |
 | `exec` | `exec.argv` (required, non-empty; templatable), `exec.cwd` (templatable; relative values resolve against the executor's default cwd), `exec.env` (map; values templatable; an empty value unsets the variable), `exec.timeout` (duration, default 60s), `exec.stdout_max` (bytes per stream, default 1 MiB). |
-| `human` | `human.assignee` (templatable), `human.timeout` (duration), `human.on_timeout` (`approve` or `reject`). |
+| `human` | `human.assignee` (templatable; the task assignee when the step has no `assignee` of its own), `human.timeout` (duration), `human.on_timeout` (`approve` or `reject`). |
 
 Keys every task step may carry:
 
@@ -483,7 +483,7 @@ Contract:
 | `title` | `step.title`, else the step id |
 | `description` | `step.description`, trimmed |
 | `status` | `TODO` |
-| `assigned_to` | `step.assignee` |
+| `assigned_to` | `step.assignee`, else `human.assignee` |
 | `kind` | effective kind (`agent` when unset) |
 | `spec` | `{agent, when, exec, human, retry, gate}` with `agent` = step agent, else recipe agent; omitted when every field is empty |
 | `due_at` | parsed due, relative to the run's `now` |

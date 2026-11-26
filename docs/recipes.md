@@ -112,7 +112,7 @@ who does the work:
 |------|-------------|-----------|
 | `agent` (default) | the `agent` named on the step, else the recipe's `agent`, else `track execute --agent` | `agent` |
 | `exec` | the executor itself, as a literal command | `exec.argv` (required), `exec.cwd`, `exec.env`, `exec.timeout`, `exec.stdout_max` |
-| `human` | a person, through `tlc task approve` / `tlc task reject` | `human.assignee`, `human.timeout`, `human.on_timeout` (`approve` or `reject`) |
+| `human` | a person, through `tlc task approve` / `tlc task reject` | `human.assignee` (used when the step has no `assignee`), `human.timeout`, `human.on_timeout` (`approve` or `reject`) |
 
 Any task step may carry `title`, `description`, `depends_on`, `when`,
 `assignee`, `due`, `retry` (`max_attempts`, `backoff`) and `gate`
