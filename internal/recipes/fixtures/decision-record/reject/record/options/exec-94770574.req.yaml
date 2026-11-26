@@ -1,0 +1,25 @@
+xrr: "1"
+adapter: exec
+fingerprint: "94770574"
+recorded_at: "2026-11-15T22:20:36Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. From decision-record/context.md, list the options worth
+          weighing: at least two, one of them leaving things as they are.
+
+          For each option give what it is, what it costs (effort, risk,
+          reversibility), what it enables and what it rules out, and which
+          affected tasks it changes and how. Back every claim with a fact
+          from decision-record/context.md or a new citation; an unbacked claim
+          is marked as an assumption.
+
+          End with one table: options as rows, the same criteria as
+          columns. Write decision-record/options.md. Do not change anything.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

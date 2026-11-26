@@ -744,8 +744,16 @@ of its own. Replay serves every tool call from a recorded cassette, so a run
 is deterministic and offline; `--record` reaches the real binaries and writes
 the cassettes. Runs live in `fixtures/<recipe>/<run>/` beside the recipe,
 with `record/` cassettes per step id, optional `contracts/` for eva
-assertions, and a `test.yaml` declaring `expected_exit` and `vars`. A missing
-cassette exits 2.
+assertions, and a `test.yaml` declaring `expected_exit`, `vars` and `gates`. A
+missing cassette exits 2. A human step (an approval gate) needs its decision
+declared under `gates:`, keyed by step id: `review: approve`, or a mapping
+with `decision: approve|reject`, `by`, `note` (approve) and `reason` (reject,
+required). The decision is applied as `tlc task approve|reject` would, in
+replay and with `--record`, and the run resumes. A rejected gate stays
+blocked: the run passes when the gate ended as declared and nothing behind it
+ran. A gate reached with no decision fails the run; a gate left out by
+`--task` needs none. Unknown keys in `test.yaml` and gates that are not human
+steps exit 3.
 
 **Creating from a recipe** — four verbs share one pipeline: locate, expand,
 bind vars, select steps, render, materialize. Each pass is recorded as a
