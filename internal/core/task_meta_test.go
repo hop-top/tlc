@@ -12,7 +12,7 @@ func TestIsReservedMetaKey(t *testing.T) {
 		"blocked_by", "blocked_by_plan", "blocked_by_recipe",
 		"blocked_by_unresolved", "blocked_by_cross_project",
 		"eva", "priority_source", "priority_rule", "last_sync_hash",
-		"needs_push", "external_uid", "x_tlc",
+		"needs_push", "blocked_from", "external_uid", "x_tlc",
 		"recipe", "recipe_version", "recipe_hash", "subject",
 		"origin_system", "origin_id", "origin_key", "origin_url", "origin_anything",
 	}
