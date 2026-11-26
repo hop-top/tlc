@@ -30,7 +30,7 @@ Recipes built into tlc (`tlc recipe list --source builtin`) live in
 | `code-review` | — | Review code against the plan and the quality standards |
 | `composition` | `repo` | Build pipeline that includes `composition-child` as one step |
 | `composition-child` | `working_dir` | Reusable lint-then-test pipeline, includable or standalone |
-| `conditional` | `target` | One deploy recipe for staging and production; the other target's steps skip |
+| `conditional` | `target` | One deploy recipe for staging and production; the other target's steps are not created |
 | `executing-plans` | — | Execute a written implementation plan with review checkpoints |
 | `finishing-development-branch` | — | Finish the work and choose the integration path |
 | `gate-checkpoint` | — | Producer, EVA gate, consumer |

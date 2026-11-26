@@ -153,7 +153,7 @@ a task step with a 1-based `ordinal`.
 |-----|---------|
 | `id` | Required. MUST match `^[a-z0-9][a-z0-9-]*$`; `/` is reserved for expansion. Unique within its list. |
 | `depends_on` | Step ids of the same list that must be terminal first. |
-| `when` | Dispatch-time condition (§13). Not allowed on steps inside a block that declares `until`. |
+| `when` | Condition (§13), evaluated at materialization when the vars alone decide it (§9), else at dispatch. Not allowed on steps inside a block that declares `until`. |
 | `title` | Task title; defaults to the step id. Templatable. |
 | `description` | Task description (trimmed). Templatable. |
 | `assignee` | Task assignee. Templatable. |
@@ -462,6 +462,16 @@ materialized); `Recreate`, `DryRun`, `ParentRun`, an optional `RunID`
 
 Contract:
 
+0. Before materialization, a step whose `when` (after rendering) is a
+   single comparison over vars only and is false is removed from the
+   step list; the dependents of a removed step lose that `depends_on`
+   edge and the loss is recorded in `dropped_deps` like a selection
+   drop (§8). The reason is that the executor would skip the task for
+   the same condition, a skipped task is terminal and unblocks its
+   dependents, so the two outcomes coincide. A `when` that is true, that
+   reads `results.`, that is not a single comparison, or that fails to
+   evaluate (unknown var) is kept as is for dispatch; the last case is
+   reported as a warning.
 1. Steps present in `Existing` are skipped and reported; every other
    step is created.
 2. Before anything is allocated or written, every dependency and due is

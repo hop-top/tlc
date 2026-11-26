@@ -163,6 +163,17 @@ step named must be a dependency, directly or transitively. When the
 condition is false the task is skipped; when it cannot be evaluated the
 task is blocked with the error as its reason.
 
+A condition the recipe vars alone decide is evaluated when the recipe is
+materialized: a step whose `when` is false then is not created at all, and
+a step that depends on it simply has no edge to it (a skipped task is
+terminal, so its dependents run either way). A true condition still
+travels with the task and is checked again at dispatch. A condition that
+reads `results.*`, is not a single comparison, or fails to evaluate (for
+example an undefined var) is left to the executor; the last case is
+reported as a warning. `--dry-run` and `recipe diff` follow the same rule:
+the dry run lists only the steps that would be created, and `recipe diff`
+reports a step left out this way as `dropped`, not `missing`.
+
 An exec task's result is `exit_code`, `stdout`, `stderr`, `duration_ms`
 and `truncated`; an agent task's result is the `outputs` object its
 results file reports.

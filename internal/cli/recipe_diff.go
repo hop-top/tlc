@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -18,6 +19,7 @@ var recipeDiffRecipe string
 const (
 	diffStateMaterialized = "materialized" // in the recipe, ledger row, task present
 	diffStateMissing      = "missing"      // in the recipe, no ledger row
+	diffStateDropped      = "dropped"      // in the recipe, when: false for the run's vars; not materialized by design
 	diffStateDeleted      = "deleted"      // ledger row, task gone
 	diffStateExtra        = "extra"        // task or ledger row of the run chain, step not in the recipe
 	diffNoOrdinal         = "-"
@@ -29,7 +31,8 @@ var recipeDiffCmd = &cobra.Command{
 	Short: "Compare a track's tasks with the recipe that materialized them",
 	Long: `Walk the recipe's expanded steps against the run ledger of a track and
 report, per step, whether it is materialized (its task exists), missing
-(never materialized), deleted (materialized, task since removed) or extra
+(never materialized), dropped (its when: is false for the run's vars, so it
+was left out on purpose), deleted (materialized, task since removed) or extra
 (a task of the run chain that the recipe no longer declares).
 
 The recipe is the one behind the track's latest run, resolved through the
@@ -175,6 +178,9 @@ func buildRecipeDiff(
 		if err != nil {
 			return nil, err
 		}
+		if row.State == diffStateMissing && whenFalseForRun(step, latest) {
+			row.State = diffStateDropped
+		}
 		view.Steps = append(view.Steps, row)
 	}
 	for _, stepID := range ledger.order {
@@ -214,6 +220,23 @@ func diffStepRow(
 	row.State = diffStateMaterialized
 	fillDiffTask(&row, task)
 	return row, nil
+}
+
+// whenFalseForRun reports whether the step's `when:` is false for the
+// vars the run recorded, so materialization left it out on purpose. A
+// condition that needs anything beyond those vars is never false here.
+func whenFalseForRun(step core.RecipeStep, run *core.RecipeRun) bool {
+	when := step.When
+	if strings.Contains(when, "{{") {
+		scope := core.Scope{Vars: run.Vars, Run: core.RecipeRunScope(run.ID, run.RecipeID, run.Version, run.CreatedAt)}
+		rendered, err := core.Render(when, scope)
+		if err != nil {
+			return false
+		}
+		when = rendered
+	}
+	verdict, known, _ := core.CreateTimeWhen(core.RecipeStep{ID: step.ID, When: when}, run.Vars)
+	return known && !verdict
 }
 
 func fillDiffTask(row *recipeDiffRow, task *core.Task) {
