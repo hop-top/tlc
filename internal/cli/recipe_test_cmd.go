@@ -48,15 +48,36 @@ reach the real binaries and the cassettes are written for later replays.
 Fixtures live beside the recipe, one directory per run:
 
   fixtures/<recipe>/<run>/
-    test.yaml     run name, expected_exit, vars, passthrough
+    test.yaml     run name, expected_exit, vars, passthrough, gates
     contracts/    <step-id>.yaml, one per gated step
     record/       <step-id>/ cassettes
 
 Naming no run executes every run the recipe has.
 
+A human step (an approval gate) needs a decision, declared per run under
+gates: in test.yaml. When the run stops with a gate waiting, the decision
+is applied, as 'tlc task approve' or 'tlc task reject' would, and the run
+resumes, in replay and with --record alike; nothing prompts:
+
+  gates:
+    review: approve
+    sign-off:
+      decision: reject      # approve or reject, required
+      by: lead              # optional; default: the current user
+      reason: not ready     # reject only, required
+      # note: ...           # approve only
+
+A rejected gate stays blocked, so the steps behind it are never reached:
+the run passes when the gate ended as declared and nothing behind it ran.
+A gate the run reaches with no decision fails the run. A gate left out by
+--task needs none. A gate id that is not a human step of the recipe, a
+reject without a reason, or an unknown key in test.yaml is a setup failure.
+
 Exit codes:
-  0  every task ran or was skipped by a false when:, and every contract passed
-  1  a task failed or a contract was violated
+  0  every task ran or was skipped by a false when: (or is a rejected gate
+     or behind one, as declared), and every contract passed
+  1  a task failed, a gate has no decision or ended otherwise than declared,
+     or a contract was violated
   2  replay found no cassette for a step
   3  the sandbox, the recipe or the fixtures could not be set up`,
 		Annotations: map[string]string{
@@ -142,6 +163,12 @@ func runRecipeTest(cmd *cobra.Command, opts recipeTestOpts) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 			"recipe test: no runs in %s\n", filepath.Join(baseDir, "fixtures", recipe.Name))
 		return nil
+	}
+
+	for _, run := range runs {
+		if err := validateRunGates(expanded, run); err != nil {
+			return &ExitCodeError{Code: recipeTestExitSandbox, Message: fmt.Sprintf("recipe test: %v", err)}
+		}
 	}
 
 	worst := 0
@@ -326,7 +353,7 @@ func executeTestTasks(
 	executor.Register(core.TaskKindAgent, &sandboxAgentDispatcher{exec: agentExec})
 	executor.Register(core.TaskKindExec, flowtest.NewSandboxExecDispatcher(env.sandbox, opts.mode(), fixture))
 
-	report, err := executor.RunTasks(ctx, taskIDs)
+	report, err := runWithGates(ctx, cmd, executor, env.store, fixture, taskIDs)
 	if err != nil {
 		return nil, fmt.Errorf("execute: %w", err)
 	}
@@ -361,16 +388,25 @@ func (d *sandboxAgentDispatcher) Dispatch(ctx context.Context, task *core.Task) 
 var _ core.Dispatcher = (*sandboxAgentDispatcher)(nil)
 
 // gradeRecipeRun turns the executed tasks into an exit code: a cassette
-// miss outranks a plain failure, then the contracts, then the manifest's
-// expected exit.
+// miss outranks a plain failure, then the gate decisions, the contracts and
+// the manifest's expected exit.
 func gradeRecipeRun(
 	ctx context.Context, cmd *cobra.Command, store *storage.SQLiteStorage,
 	fixture flowtest.Run, taskIDs []string, report *core.ExecReport,
 ) (int, error) {
 	out, errOut := cmd.OutOrStdout(), cmd.ErrOrStderr()
 	hook := flowtest.NewHook(fixture.ContractsDir)
-	finished := finishedTasks(taskIDs, report)
+	terminal := terminalTasks(report)
+	finished := countFinished(taskIDs, terminal)
+	verdict, err := gradeGates(ctx, store, fixture, taskIDs, terminal)
+	if err != nil {
+		return recipeTestExitSandbox, err
+	}
+	finished += verdict.accounted
 	miss, failed, contractFailed := false, finished != len(taskIDs), false
+	for _, problem := range verdict.problems {
+		_, _ = fmt.Fprintf(errOut, "  FAIL %s\n", problem)
+	}
 
 	for _, id := range taskIDs {
 		task, err := store.GetTask(ctx, id)
@@ -395,6 +431,9 @@ func gradeRecipeRun(
 		_, _ = fmt.Fprintf(out, "  result: FAIL (%d of %d tasks finished: %d done, %d skipped)\n",
 			finished, len(taskIDs), len(report.Done), len(report.Skipped))
 		return recipeTestExitFailed, nil
+	case len(verdict.problems) > 0:
+		_, _ = fmt.Fprintf(out, "  result: FAIL (gate decisions)\n")
+		return recipeTestExitFailed, nil
 	case contractFailed:
 		_, _ = fmt.Fprintf(out, "  result: FAIL (contract violation)\n")
 		return recipeTestExitFailed, nil
@@ -406,11 +445,11 @@ func gradeRecipeRun(
 	return 0, nil
 }
 
-// finishedTasks counts the run's tasks that reached a terminal state the
-// grade accepts: done, or skipped because a `when:` evaluated false (the
-// only way the executor reports a skip). Failed, blocked and waiting tasks
-// are not finished.
-func finishedTasks(taskIDs []string, report *core.ExecReport) int {
+// terminalTasks collects the tasks a run reached a terminal state the grade
+// accepts for: done, or skipped because a `when:` evaluated false (the only
+// way the executor reports a skip). Failed, blocked and waiting tasks are
+// not among them.
+func terminalTasks(report *core.ExecReport) map[string]struct{} {
 	terminal := make(map[string]struct{}, len(report.Done)+len(report.Skipped))
 	for _, id := range report.Done {
 		terminal[id] = struct{}{}
@@ -418,6 +457,11 @@ func finishedTasks(taskIDs []string, report *core.ExecReport) int {
 	for _, id := range report.Skipped {
 		terminal[id] = struct{}{}
 	}
+	return terminal
+}
+
+// countFinished counts the run's tasks that are in terminal.
+func countFinished(taskIDs []string, terminal map[string]struct{}) int {
 	n := 0
 	for _, id := range taskIDs {
 		if _, ok := terminal[id]; ok {
