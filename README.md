@@ -752,7 +752,7 @@ required). The decision is applied as `tlc task approve|reject` would, in
 replay and with `--record`, and the run resumes. A rejected gate stays
 blocked: the run passes when the gate ended as declared and nothing behind it
 ran. A gate reached with no decision fails the run; a gate left out by
-`--task` needs none. Unknown keys in `test.yaml` and gates that are not human
+`--task`, or by a create-time `when:` the run's vars make false, needs none. Unknown keys in `test.yaml` and gates that are not human
 steps exit 3.
 
 **Creating from a recipe** — four verbs share one pipeline: locate, expand,

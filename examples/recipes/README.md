@@ -82,7 +82,7 @@ gates:
 A rejected gate stays blocked, so the steps behind it never run; declare
 `expected_exit: 0` and the run passes when the gate ended as declared. A
 gate reached with no decision fails the run (exit 1); one left out by
-`--task` needs none. An unknown key in `test.yaml`, a gate that is not a
+`--task`, or by a create-time `when:` the run's vars make false, needs none. An unknown key in `test.yaml`, a gate that is not a
 human step, or a reject without a reason exits 3.
 
 A run directory named `happy-path` is the convention for the case where
