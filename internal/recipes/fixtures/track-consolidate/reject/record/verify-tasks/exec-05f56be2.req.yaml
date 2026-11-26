@@ -1,0 +1,38 @@
+xrr: "1"
+adapter: exec
+fingerprint: 05f56be2
+recorded_at: "2026-10-28T01:44:35Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. For every open task in track-consolidate/inventory.md, check
+          the code under . and the git history, not just the tlc
+          state. Classify it as exactly one of:
+
+          - DONE: the work exists. Cite concrete evidence, a file:line or a
+            commit SHA. No evidence, no DONE.
+          - SUPERSEDED: other work replaced it. Cite the replacement (task,
+            commit or file).
+          - DUPLICATE: another task covers it. Cite the canonical task id.
+          - STILL OPEN: the work is not done. Every uncertain case lands
+            here, with a note saying what is unclear.
+
+          Also:
+
+          - A task that is partly done is NARROWED: keep it open and propose
+            a new title or note covering only what remains, citing what is
+            already done.
+          - A task that belongs to a different domain or language than its
+            track (for example a Python task on a Go track) is flagged
+            MISPLACED with the domain it belongs to, so it can move to that
+            side's track.
+
+          Write track-consolidate/verification.md: one row per task with id,
+          track, verdict, evidence and note. Do not change anything in tlc.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

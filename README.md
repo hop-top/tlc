@@ -199,7 +199,7 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 **Common commands:**
 - Create: `tlc task create "Task title" --assigned-to @me --tag feature`
 - Create blocked task: `tlc task create "Task title" --blocked-by T-0041 --blocked-by other-project/T-0007`
-- List: `tlc task list --mine` (shows IN_PROGRESS first, then TODO by default)
+- List: `tlc task list --mine` (shows in_progress first, then todo by default)
 - List stale: `tlc task list --stale` (only tasks past their stale threshold)
 - Stale subcommand: `tlc task stale` (dedicated stale view; fires hooks with `--run-hooks`)
 - List blocked: `tlc task list --blocked` (only tasks with a blocked reason)
@@ -207,7 +207,7 @@ Use TLC (Task Line CLI) for all task tracking instead of TodoWrite.
 - Group a listing: `tlc task list --group-by track` (one table per track, assignee, tag, status, priority, or project)
 - Cap rows per group: `tlc task list --group-by track --group-limit 5`
 - List blocked by: `tlc task list --blocked-by T-0041` (tasks that depend on T-0041)
-- Update: `tlc task update T-0042 --status IN_PROGRESS`
+- Update: `tlc task update T-0042 --status in_progress`
 - Update blockers: `tlc task update T-0042 --add-blocked-by T-0009 --remove-blocked-by T-0003`
 - Mark blocked: `tlc task update T-0042 --blocked "waiting on T-0009"`
 - Clear blocked: `tlc task update T-0042 --unblock`
@@ -288,7 +288,7 @@ Output includes: task fields, blocked-by/blocking summaries, track
 details with phase, and recent audit log entries.
 
 ### Managing Tasks
-List active tasks (IN_PROGRESS first, then TODO):
+List active tasks (in_progress first, then todo):
 ```bash
 ./bin/tlc task list
 ```
@@ -313,6 +313,39 @@ Complete a task:
 ./bin/tlc task complete T-0042
 ```
 
+Move a task through review, block it, or cancel it:
+```bash
+./bin/tlc task submit T-0042                    # in_progress -> in_review
+./bin/tlc task approve T-0042                   # in_review -> done
+./bin/tlc task reject T-0042 --reason "why"     # in_review -> in_progress
+./bin/tlc task block T-0042 --reason "why"      # -> blocked
+./bin/tlc task unblock T-0042                   # back to where it came from
+./bin/tlc task cancel T-0042 --note "why"       # -> cancelled
+```
+
+#### Default statuses
+
+Seven statuses ship by default. Each declares a role; code resolves
+statuses by role, never by name.
+
+| Status | Role | Terminal | todo.txt marker |
+|--------|------|----------|-----------------|
+| `backlog` | `backlog` | no | `[-]` |
+| `todo` | `initial` | no | `[ ]` |
+| `in_progress` | `active` | no | `[>]` |
+| `in_review` | `review` | no | `[?]` |
+| `blocked` | `blocked` | no | `[!]` |
+| `done` | `completed` | yes | `[x]` |
+| `cancelled` | `skipped` | yes | `[~]` |
+
+New tasks land in `todo`. A default state machine limits the moves, and
+guards add conditions: `blocked` needs a reason, `cancelled` a note,
+`done` needs every `blocked_by` task closed, and `in_progress` to
+`in_review` needs an assignee. A refusal names the guard and the failed
+check; `--force` bypasses rules and guards. Statuses, transitions and
+guards are all configurable; see
+[docs/tlc-config-spec-0.1.md](docs/tlc-config-spec-0.1.md).
+
 Assign or unassign a task:
 ```bash
 ./bin/tlc task assign T-0042 codex
@@ -326,7 +359,7 @@ Create a new task:
 
 Update a task status:
 ```bash
-./bin/tlc task update T-0042 --status DONE
+./bin/tlc task update T-0042 --status done
 ```
 
 ### Stale Task Detection
@@ -406,10 +439,10 @@ task:
         due: 168h
         remind_every: 24h
     age_nudges:
-      - status: IN_PROGRESS
+      - status: in_progress
         threshold: 48h
         action: remind
-      - status: TODO
+      - status: todo
         threshold: 168h
         action: remind
 ```
@@ -475,8 +508,8 @@ section, always last — no track, no assignee, no tags, no priority.
 Named groups lead; the leftovers trail.
 
 **Ordering** is by group name ascending, except `status` and `priority`,
-which follow your configured lifecycle order (so `TODO` precedes
-`IN_PROGRESS` rather than sorting alphabetically). The order is stable
+which follow your configured lifecycle order (so `todo` precedes
+`in_progress` rather than sorting alphabetically). The order is stable
 across runs.
 
 #### Tags duplicate rows
@@ -561,7 +594,7 @@ tlc task list --group-by track -f json
           "id": "task_01m29y23gcfkvvwvn1fypmqwvy",
           "seq": 4,
           "title": "Ship rollout toggle",
-          "status": "TODO",
+          "status": "todo",
           "assigned_to": null,
           "track_id": "track_01m29y22cvecktj19v6edcfpdb"
         }
@@ -711,8 +744,16 @@ of its own. Replay serves every tool call from a recorded cassette, so a run
 is deterministic and offline; `--record` reaches the real binaries and writes
 the cassettes. Runs live in `fixtures/<recipe>/<run>/` beside the recipe,
 with `record/` cassettes per step id, optional `contracts/` for eva
-assertions, and a `test.yaml` declaring `expected_exit` and `vars`. A missing
-cassette exits 2.
+assertions, and a `test.yaml` declaring `expected_exit`, `vars` and `gates`. A
+missing cassette exits 2. A human step (an approval gate) needs its decision
+declared under `gates:`, keyed by step id: `review: approve`, or a mapping
+with `decision: approve|reject`, `by`, `note` (approve) and `reason` (reject,
+required). The decision is applied as `tlc task approve|reject` would, in
+replay and with `--record`, and the run resumes. A rejected gate stays
+blocked: the run passes when the gate ended as declared and nothing behind it
+ran. A gate reached with no decision fails the run; a gate left out by
+`--task`, or by a create-time `when:` the run's vars make false, needs none. Unknown keys in `test.yaml` and gates that are not human
+steps exit 3.
 
 **Creating from a recipe** — four verbs share one pipeline: locate, expand,
 bind vars, select steps, render, materialize. Each pass is recorded as a
@@ -743,6 +784,10 @@ tlc track execute review-42 --recipe code-review --recreate
   without a value is prompted for on a terminal; otherwise the command
   fails naming every missing var and the `--var` fix. `--infer` is
   reserved and errors as not implemented yet.
+- **Create-time `when:`**: a step whose `when:` the vars alone make false
+  is not created, and its dependents lose the edge to it; a true or
+  run-time (`results.*`) condition is kept for the executor. `--dry-run`
+  lists only what would be created.
 - **Selection**: `--task 1-5,7`, `--task lint` (repeatable) keeps a subset
   of the expanded steps; ordinals are the ones `recipe show` prints. A
   dependency on an unselected step is dropped and warned about, or pulled

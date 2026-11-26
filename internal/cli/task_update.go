@@ -26,6 +26,11 @@ var TaskUpdateCmd = &cobra.Command{
 	Long: `Update one or more task fields (title, description, status,
 assignee, effort, priority, tags, blocked-by, scheduling, eva, etc.).
 
+--meta key=value sets a user meta key and --unset-meta key removes one;
+both merge into the task's existing meta and leave every other key alone.
+Values are strings. Keys tlc manages itself (blocked_by, eva, origin_*,
+priority_source, ...) are refused; use their own flags.
+
 Use --amend together with --note to rewrite the most recent log
 entry instead of appending a new one. Status transitions are validated
 against the workflow state machine unless --force is set.`,
@@ -106,6 +111,8 @@ against the workflow state machine unless --force is set.`,
 				AddEva:         taskUpdateAddEva,
 				RemoveEva:      taskUpdateRemoveEva,
 				AddBlockedBy:   taskUpdateAddBlockedBy,
+				Meta:           metaFromFlags(taskUpdateMeta),
+				UnsetMeta:      taskUpdateUnsetMeta,
 				AddTags:        taskUpdateAddTags,
 				RemoveTags:     taskUpdateRemoveTags,
 				Unblock:        cmd.Flags().Changed("unblock") && taskUpdateUnblock,
@@ -427,6 +434,8 @@ func init() {
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddEva, "add-eva", []string{}, "Add eva annotations")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveEva, "remove-eva", []string{}, "Remove eva annotations")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateClearEva, "clear-eva", false, "Clear all eva annotations")
+	TaskUpdateCmd.Flags().StringToStringVar(&taskUpdateMeta, "meta", nil, "Set user meta key=value, merged into existing meta (repeatable; string values)")
+	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateUnsetMeta, "unset-meta", []string{}, "Remove user meta keys (repeatable)")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateAddTags, "add-tag", []string{}, "Add tags")
 	TaskUpdateCmd.Flags().StringSliceVar(&taskUpdateRemoveTags, "remove-tag", []string{}, "Remove tags")
 	TaskUpdateCmd.Flags().BoolVar(&taskUpdateForce, "force", false, "Force status transition (bypass workflow rules)")

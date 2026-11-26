@@ -2,8 +2,9 @@ recipe: conditional
 version: 1.0.0
 description: |
   One recipe for both staging and production deploys. The target var
-  selects which steps run; the steps for the other target are skipped,
-  not failed.
+  selects which steps are created; the steps for the other target are
+  left out when the recipe is materialized, so nothing for them exists
+  to run, skip or fail.
 vars:
   target:
     description: "Deploy target: staging or production"
@@ -54,8 +55,7 @@ steps:
       eva_url: http://localhost:8080
     description: |
       Report the terminal state of every deploy step, one line per step
-      in the form `<step>: <STATE>`. Only the staging steps ran; the
-      production steps are SKIPPED.
+      in the form `<step>: <STATE>`. Only the staging steps exist.
 
   - id: production-only
     title: Collect production deploy results
@@ -66,5 +66,4 @@ steps:
       eva_url: http://localhost:8080
     description: |
       Report the terminal state of every deploy step, one line per step
-      in the form `<step>: <STATE>`. Only the production steps ran; the
-      staging steps are SKIPPED.
+      in the form `<step>: <STATE>`. Only the production steps exist.

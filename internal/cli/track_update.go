@@ -10,18 +10,21 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	kitcli "hop.top/kit/go/console/cli"
-	"hop.top/kit/go/core/util"
 	"hop.top/tlc/internal/core"
 )
 
 var trackUpdateCmd = &cobra.Command{
 	Use:   "update <id>",
 	Short: "Update a track",
-	Long: `Update a track's title, status, assignee, type, due date, or append
-a plan file.
+	Long: `Update a track's title, status, assignee, type, due date, or user meta,
+or append a plan file.
 
 Status transitions follow the TrackService state machine. --add-plan
 attaches an additional planning document to the track's plan directory.
+
+--meta key=value sets a user meta key and --unset-meta key removes one;
+other meta keys, and the ones tlc manages itself (plans, external_uid,
+x_tlc, due_date_only, which are rejected), are left untouched.
 
 --dry-run reports what would change — including the tasks --add-plan
 would create or reconcile — and writes nothing. The preview is refused
@@ -46,17 +49,17 @@ by the same validation and state machine as a real update.`,
 		svc := core.NewTrackService(s, s)
 
 		titleChanged := cmd.Flags().Changed("title")
-		statusChanged := cmd.Flags().Changed("status")
-		assignedChanged := cmd.Flags().Changed("assigned-to")
 		typeChanged := cmd.Flags().Changed("type")
 		addPlanChanged := cmd.Flags().Changed("add-plan")
-		dueChanged := cmd.Flags().Changed("due")
 
-		if !titleChanged && !statusChanged && !assignedChanged &&
-			!typeChanged && !addPlanChanged && !dueChanged {
+		fieldChanges := trackFieldChangesFromFlags(cmd)
+
+		if !titleChanged && !typeChanged && !addPlanChanged &&
+			fieldChanges.Empty() {
 			return fmt.Errorf(
 				"no update flags provided; use --title, --status, " +
-					"--assigned-to, --type, --add-plan, or --due",
+					"--assigned-to, --type, --add-plan, --due, " +
+					"--meta, or --unset-meta",
 			)
 		}
 
@@ -120,25 +123,12 @@ by the same validation and state machine as a real update.`,
 			}
 		}
 
-		// Parse --due ahead of the mutation closure so an invalid value
-		// fails before any write. The "" / "-" sentinels clear the field
-		// (mirrors task update); anything else goes through util.ParseUntil
-		// per the temporal spec (UTC RFC3339 on the wire).
-		var (
-			dueClear  bool
-			parsedDue *time.Time
-		)
-		if dueChanged {
-			raw := trackUpdateDue
-			if raw == "" || raw == "-" {
-				dueClear = true
-			} else {
-				dt, perr := util.ParseUntil(raw)
-				if perr != nil {
-					return fmt.Errorf("invalid --due %q: %w", raw, perr)
-				}
-				parsedDue = &dt
-			}
+		// Validate and parse the shared field changes (status, assignee,
+		// due, meta) ahead of the mutation closure so a bad --due or a
+		// reserved meta key fails before any write.
+		applyFieldChanges, err := fieldChanges.mutation()
+		if err != nil {
+			return err
 		}
 
 		// Named once and shared by the write path and the dry-run
@@ -148,31 +138,14 @@ by the same validation and state machine as a real update.`,
 			if titleChanged {
 				t.Title = trimMatchingQuotes(trackUpdateTitle)
 			}
-			if statusChanged {
-				t.Status = core.TrackStatus(trackUpdateStatus)
-			}
-			if assignedChanged {
-				if trackUpdateAssignedTo == "" ||
-					trackUpdateAssignedTo == "-" ||
-					trackUpdateAssignedTo == "null" {
-					t.AssignedTo = nil
-				} else {
-					a := normalizeAssignee(trackUpdateAssignedTo)
-					t.AssignedTo = &a
-				}
-			}
 			if typeChanged {
 				t.Type = trackUpdateType
 			}
+			if err := applyFieldChanges(t); err != nil {
+				return err
+			}
 			if addPlanChanged && trackUpdateAddPlan != "" {
 				linkPlanToTrack(t, trackUpdateAddPlan)
-			}
-			if dueChanged {
-				if dueClear {
-					t.DueAt = nil
-				} else {
-					t.DueAt = parsedDue
-				}
 			}
 			return nil
 		}
@@ -187,7 +160,7 @@ by the same validation and state machine as a real update.`,
 		// creates or reconciles tasks, which is a far larger write than
 		// the track row itself.
 		if kitcli.IsDryRun(cmd) {
-			return trackUpdateDryRun(ctx, w, svc, id, applyUpdates, planTaskSpecs{
+			return trackUpdateDryRun(ctx, w, svc, id, applyUpdates, fieldChanges, planTaskSpecs{
 				addPlan: addPlanChanged && trackUpdateAddPlan != "",
 				path:    trackUpdateAddPlan,
 				fm:      planFm,
@@ -402,6 +375,7 @@ func trackUpdateDryRun(
 	svc *core.TrackService,
 	id string,
 	apply func(*core.Track) error,
+	changes TrackFieldChanges,
 	plan planTaskSpecs,
 ) error {
 	track, _, progress, err := svc.GetTrackWithState(ctx, id, 0)
@@ -442,6 +416,15 @@ func trackUpdateDryRun(
 	} else if track.AssignedTo == nil || *preview.AssignedTo != *track.AssignedTo {
 		_, _ = fmt.Fprintf(w, "  Assigned: %s\n", *preview.AssignedTo)
 	}
+	switch {
+	case preview.DueAt == nil && track.DueAt != nil:
+		_, _ = fmt.Fprint(w, "  Due:    (cleared)\n")
+	case preview.DueAt != nil && (track.DueAt == nil || !preview.DueAt.Equal(*track.DueAt)):
+		_, _ = fmt.Fprintf(w, "  Due:    %s\n", preview.DueAt.Format(time.RFC3339))
+	}
+	if m := changes.metaSummary(); m != "" {
+		_, _ = fmt.Fprintf(w, "  Meta:   %s\n", m)
+	}
 
 	if !plan.addPlan {
 		return nil
@@ -470,7 +453,7 @@ func trackUpdateDryRun(
 	return nil
 }
 
-// linkPlanToTrack appends planPath to track.Meta["plans"] if not already
+// linkPlanToTrack appends planPath to track.Meta[core.MetaTrackPlans] if not already
 // present.
 func linkPlanToTrack(t *core.Track, planPath string) {
 	if t.Meta == nil {
@@ -478,7 +461,7 @@ func linkPlanToTrack(t *core.Track, planPath string) {
 	}
 
 	var plans []string
-	if existing, ok := t.Meta["plans"]; ok {
+	if existing, ok := t.Meta[core.MetaTrackPlans]; ok {
 		switch v := existing.(type) {
 		case []string:
 			plans = v
@@ -499,7 +482,27 @@ func linkPlanToTrack(t *core.Track, planPath string) {
 	}
 
 	plans = append(plans, planPath)
-	t.Meta["plans"] = plans
+	t.Meta[core.MetaTrackPlans] = plans
+}
+
+// trackFieldChangesFromFlags gathers the shared-field flags that were
+// set, leaving the rest nil so an unset flag never clobbers the track.
+func trackFieldChangesFromFlags(cmd *cobra.Command) TrackFieldChanges {
+	c := TrackFieldChanges{
+		Meta:      metaFromFlags(trackUpdateMeta),
+		UnsetMeta: trackUpdateUnsetMeta,
+		dueLabel:  "--due",
+	}
+	if cmd.Flags().Changed("status") {
+		c.Status = &trackUpdateStatus
+	}
+	if cmd.Flags().Changed("assigned-to") {
+		c.AssignedTo = &trackUpdateAssignedTo
+	}
+	if cmd.Flags().Changed("due") {
+		c.Due = &trackUpdateDue
+	}
+	return c
 }
 
 func init() {
@@ -525,5 +528,13 @@ func init() {
 	trackUpdateCmd.Flags().StringVar(
 		&trackUpdateDue, "due", "",
 		"Due date (tomorrow, in 3d, 2025-05-01, RFC3339; use '-' to clear)",
+	)
+	trackUpdateCmd.Flags().StringToStringVar(
+		&trackUpdateMeta, "meta", nil,
+		"Set user meta key=value, merged into existing meta (repeatable; string values)",
+	)
+	trackUpdateCmd.Flags().StringSliceVar(
+		&trackUpdateUnsetMeta, "unset-meta", []string{},
+		"Remove user meta keys (repeatable)",
 	)
 }

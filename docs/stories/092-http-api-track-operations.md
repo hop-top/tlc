@@ -59,6 +59,32 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
    fields test, which resolves a track by exact ID during a task
    update.
 
+7. **Given** a track, **When** a client sends `POST /tracks` with a
+   `meta` object, or `PATCH /tracks/{id}` with `meta`, **Then** the keys
+   are stored, and on PATCH merged per JSON Merge Patch (RFC 7396): a key
+   sets, `null` removes, an object merges recursively, absent keys are
+   untouched. A reserved key (`plans`, `external_uid`, `x_tlc`,
+   `due_date_only`) yields 422 and nothing is applied.
+
+8. **Given** a track, **When** a client sends `PATCH /tracks/{id}` with
+   `status`, `assigned_to` or `due`, **Then** only the fields present
+   change, through the same validation as `tlc track update`: an illegal
+   status transition is 409 with the CLI's message, an unknown status or
+   bad `due` is 422, and `-` clears `assigned_to` or `due`. An unknown
+   track is 404.
+
+9. **Given** tracks with user meta, **When** a client sends
+   `GET /tracks?meta.owner=ana&meta.env=prod`, **Then** only tracks whose
+   meta holds every pair (string equality on the member's scalar form)
+   are returned. A key outside letters, digits, `_` and `-` is 422.
+
+10. **Given** a recipe, **When** a client sends `POST /tracks` with
+    `recipe` and optional `vars`, `title`, `slug`, `type`, **Then** the
+    response is 201 with the track and a `recipe_run` naming the created
+    steps, the same result as `tlc track create --recipe`. An unknown
+    recipe, a missing required var, a recipe path instead of a name, or
+    `meta` combined with `recipe` is 422 and creates nothing.
+
 ## Tests
 
 ### E2E
@@ -68,7 +94,16 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
 - `internal/cli/serve_e2e_test.go::TestServe_E2E_TrackShowNotFound` (scenario 5)
 - `internal/cli/serve_e2e_test.go::TestServe_E2E_TaskUpdateExtendedFields` (scenario 6, shared-resolver cross-check)
 
+- `internal/cli/track_meta_serve_test.go` (scenarios 7-9)
+- `internal/cli/track_meta_e2e_test.go` (CLI parity for 7 and 9)
+- `internal/cli/track_recipe_serve_test.go::TestServe_TrackCreateFromRecipe`,
+  `TestServe_TrackCreateFromRecipe_TitleSlugAndPin`,
+  `TestServe_TrackCreateFromRecipe_ClientErrors` (scenario 10)
+
 ### Unit
+- `internal/core/track_meta_test.go`, `internal/core/meta_filter_test.go`,
+  `internal/storage/meta_filter_test.go` — reserved set, merge, filter key
+  whitelist and SQL
 - `internal/cli/track_resolve_test.go` — exact/prefix/fuzzy/ambiguous/
   not-found/empty-input coverage of `resolveTrackID` itself (the
   resolution logic the routes' 404-vs-422 mapping is built on)
@@ -83,3 +118,7 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
 | 4 | Ambiguous prefix → 422 | `TestServe_E2E_TrackShowInvalidID` | COVERED |
 | 5 | Well-formed, no match → 404 | `TestServe_E2E_TrackShowNotFound` | COVERED |
 | 6 | Shared resolver used by task-track linking | `TestServe_E2E_TaskUpdateExtendedFields` | COVERED |
+| 7 | Track meta on POST, merge-patch on PATCH, reserved 422 | `TestServe_TrackCreateWithMeta`, `TestServe_TrackPatchMetaMergePatch`, `TestServe_TrackPatchReservedMetaRejectedAtomically` | COVERED |
+| 8 | PATCH status / assigned_to / due, transitions, 404 | `TestServe_TrackPatchFields`, `TestServe_TrackPatchInvalidInput`, `TestServe_TrackPatchUnknownTrack` | COVERED |
+| 9 | `meta.<key>` list filter, key whitelist | `TestServe_TrackListMetaFilter`, `TestServe_TrackListMetaFilterRejectsBadKeys` | COVERED |
+| 10 | Track from a recipe over POST /tracks | `TestServe_TrackCreateFromRecipe`, `TestServe_TrackCreateFromRecipe_ClientErrors` | COVERED |

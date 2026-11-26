@@ -14,7 +14,7 @@ func TestParseCreateJSON_AllFields(t *testing.T) {
 	data := []byte(`{
 		"title": "Wire inbox watcher",
 		"description": "Implement fsnotify loop",
-		"status": "IN_PROGRESS",
+		"status": "in_progress",
 		"assigned_to": "exo",
 		"tags": ["feat", "inbox"],
 		"effort": "M",
@@ -29,7 +29,7 @@ func TestParseCreateJSON_AllFields(t *testing.T) {
 
 	assertEquals(t, "Title", r.Title, "Wire inbox watcher")
 	assertEquals(t, "Description", r.Description, "Implement fsnotify loop")
-	assertEquals(t, "Status", r.Status, "IN_PROGRESS")
+	assertEquals(t, "Status", r.Status, "in_progress")
 	assertEquals(t, "AssignedTo", r.AssignedTo, "exo")
 	assertEquals(t, "Effort", r.Effort, "M")
 	assertEquals(t, "Priority", r.Priority, "P1")
@@ -49,7 +49,7 @@ func TestParseCreateJSON_TitleOnly(t *testing.T) {
 	}
 
 	assertEquals(t, "Title", r.Title, "Quick task")
-	assertEquals(t, "Status", r.Status, "TODO")
+	assertEquals(t, "Status", r.Status, "todo")
 	assertEquals(t, "Description", r.Description, "")
 	assertEquals(t, "AssignedTo", r.AssignedTo, "")
 	assertEquals(t, "Effort", r.Effort, "")
@@ -96,7 +96,7 @@ func TestParseCreateJSON_InvalidJSON(t *testing.T) {
 // --- ParseCreateMarkdown tests ---
 
 func TestParseCreateMarkdown_FrontmatterAndBody(t *testing.T) {
-	data := []byte("---\ntitle: Build parser\nstatus: TODO\n" +
+	data := []byte("---\ntitle: Build parser\nstatus: todo\n" +
 		"tags: [feat]\neffort: M\npriority: P1\n---\n" +
 		"Description body here.\n\nWith multiple paragraphs.\n")
 
@@ -106,7 +106,7 @@ func TestParseCreateMarkdown_FrontmatterAndBody(t *testing.T) {
 	}
 
 	assertEquals(t, "Title", r.Title, "Build parser")
-	assertEquals(t, "Status", r.Status, "TODO")
+	assertEquals(t, "Status", r.Status, "todo")
 	assertEquals(t, "Effort", r.Effort, "M")
 	assertEquals(t, "Priority", r.Priority, "P1")
 	assertEquals(
@@ -128,12 +128,12 @@ func TestParseCreateMarkdown_TitleOnlyFrontmatter(t *testing.T) {
 	}
 
 	assertEquals(t, "Title", r.Title, "Minimal task")
-	assertEquals(t, "Status", r.Status, "TODO")
+	assertEquals(t, "Status", r.Status, "todo")
 	assertEquals(t, "Description", r.Description, "")
 }
 
 func TestParseCreateMarkdown_MissingTitle(t *testing.T) {
-	data := []byte("---\nstatus: TODO\n---\nSome body.\n")
+	data := []byte("---\nstatus: todo\n---\nSome body.\n")
 
 	_, err := ParseCreateMarkdown(data)
 	if err == nil {
@@ -158,7 +158,7 @@ func TestParseCreateMarkdown_NoFrontmatter(t *testing.T) {
 func TestParseTransitionJSON_Valid(t *testing.T) {
 	data := []byte(`{
 		"id": "T-0042",
-		"status": "IN_PROGRESS",
+		"status": "in_progress",
 		"note": "claiming",
 		"by": "agent-x"
 	}`)
@@ -169,13 +169,13 @@ func TestParseTransitionJSON_Valid(t *testing.T) {
 	}
 
 	assertEquals(t, "ID", tr.ID, "T-0042")
-	assertEquals(t, "Status", tr.Status, "IN_PROGRESS")
+	assertEquals(t, "Status", tr.Status, "in_progress")
 	assertEquals(t, "Note", tr.Note, "claiming")
 	assertEquals(t, "By", tr.By, "agent-x")
 }
 
 func TestParseTransitionJSON_DefaultBy(t *testing.T) {
-	data := []byte(`{"id": "T-0001", "status": "DONE"}`)
+	data := []byte(`{"id": "T-0001", "status": "done"}`)
 
 	tr, err := ParseTransitionJSON(data)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestParseTransitionJSON_DefaultBy(t *testing.T) {
 }
 
 func TestParseTransitionJSON_MissingID(t *testing.T) {
-	data := []byte(`{"status": "DONE"}`)
+	data := []byte(`{"status": "done"}`)
 
 	_, err := ParseTransitionJSON(data)
 	if err == nil {
@@ -368,9 +368,9 @@ func TestParseTransitionJSON_UnknownStatusNamesConfiguredSet(t *testing.T) {
 // statuses is indistinguishable from before this became config-driven:
 // the built-in four accepted, and named verbatim in both rejections.
 func TestStatusErrorsUnderDefaultConfig(t *testing.T) {
-	const builtins = "TODO, IN_PROGRESS, DONE, SKIPPED"
+	const builtins = "backlog, todo, in_progress, in_review, blocked, done, cancelled"
 
-	for _, s := range []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"} {
+	for _, s := range []string{"backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"} {
 		if _, err := ParseCreateJSON(
 			[]byte(`{"title": "x", "status": "` + s + `"}`),
 		); err != nil {

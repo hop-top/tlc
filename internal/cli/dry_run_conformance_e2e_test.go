@@ -154,10 +154,37 @@ var dryRunExercises = []dryRunExercise{
 		},
 		args: []string{"task", "reopen", "T-0001", "--note", "more work found"},
 	},
+	// cancel requires a note under the default guards.
 	{
-		command: "task skip",
-		setup:   [][]string{{"task", "create", "skippable"}},
-		args:    []string{"task", "skip", "T-0001"},
+		command: "task cancel",
+		setup:   [][]string{{"task", "create", "cancellable"}},
+		args:    []string{"task", "cancel", "T-0001", "--note", "obsolete"},
+	},
+	{
+		command: "task submit",
+		setup: [][]string{
+			{"task", "create", "submittable"},
+			{"task", "claim", "T-0001"},
+		},
+		args: []string{"task", "submit", "T-0001"},
+	},
+	{
+		command: "task approve",
+		setup: [][]string{
+			{"task", "create", "approvable"},
+			{"task", "claim", "T-0001"},
+			{"task", "submit", "T-0001"},
+		},
+		args: []string{"task", "approve", "T-0001"},
+	},
+	{
+		command: "task reject",
+		setup: [][]string{
+			{"task", "create", "rejectable"},
+			{"task", "claim", "T-0001"},
+			{"task", "submit", "T-0001"},
+		},
+		args: []string{"task", "reject", "T-0001", "--reason", "tests missing"},
 	},
 
 	// block writes blocked_reason AND a task_logs row. It is the case that
@@ -282,8 +309,6 @@ var dryRunExemptions = map[string]string{
 	"tasks sync":           "deprecated alias with its own local --dry-run flag shadowing kit's global",
 
 	// --- needs a task shape the fixture cannot make ---
-	"task approve": "only applies to human-decision tasks; task create makes agent tasks, so the run dies before the guard",
-	"task reject":  "only applies to human-decision tasks; same unreachable-guard problem as approve",
 
 	// --- inbox ---
 	"inbox process": "consumes an inbox directory fixture; the write path needs queued items that no store seed creates",

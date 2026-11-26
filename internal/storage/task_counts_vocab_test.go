@@ -265,7 +265,7 @@ func TestQueryOverdue_BuiltinVocabularyUnchanged(t *testing.T) {
 		{"T-0001", core.StatusTodo},
 		{"T-0002", core.StatusInProgress},
 		{"T-0003", core.StatusDone},
-		{"T-0004", core.StatusSkipped},
+		{"T-0004", core.StatusCancelled},
 	} {
 		due := past
 		if err := s.CreateTask(ctx, &core.Task{

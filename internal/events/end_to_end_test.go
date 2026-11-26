@@ -39,8 +39,8 @@ func TestStateMachine_FiresPrefixedTopics(t *testing.T) {
 			} {
 				return core.NewTaskStateMachine(&config.TaskConfig{}, pub)
 			},
-			from:     domain.State("TODO"),
-			to:       domain.State("IN_PROGRESS"),
+			from:     domain.State("todo"),
+			to:       domain.State("in_progress"),
 			wantPre:  "tlc.task.status.pre_transitioned",
 			wantPost: "tlc.task.status.post_transitioned",
 		},
@@ -92,7 +92,7 @@ func TestStateMachine_BusE2E_TaskTransition(t *testing.T) {
 	pub := events.NewBusPublisher(b)
 	sm := core.NewTaskStateMachine(&config.TaskConfig{}, pub)
 
-	if err := sm.Transition(context.Background(), domain.State("TODO"), domain.State("IN_PROGRESS"), false); err != nil {
+	if err := sm.Transition(context.Background(), domain.State("todo"), domain.State("in_progress"), false); err != nil {
 		t.Fatalf("Transition: %v", err)
 	}
 

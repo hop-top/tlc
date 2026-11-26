@@ -10,10 +10,11 @@ import (
 )
 
 // TestOpen_LegacyStatusLabels_Untouched verifies opening a file DB that
-// holds SCREAMING_CASE status rows leaves them as-is: the default config
-// vocabulary is still TODO/IN_PROGRESS/DONE/SKIPPED, so rows must stay
+// holds SCREAMING_CASE status rows leaves them as-is: a custom
+// vocabulary spelling TODO/IN_PROGRESS/DONE/SKIPPED leaves rows as stored,
 // readable and updatable.
 func TestOpen_LegacyStatusLabels_Untouched(t *testing.T) {
+	withLegacyVocab(t)
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "tlc.db")
 	seed := seedLegacyDB(t, dbPath)

@@ -43,12 +43,18 @@ Use `tlc` exclusively for all task operations.
 
 | Command | Effect |
 |---------|--------|
-| `tlc task create "title"` | New task, status=TODO |
-| `tlc task claim <id> [<id>...]` | Assign to self + status→IN_PROGRESS |
+| `tlc task create "title"` | New task, status=todo |
+| `tlc task claim <id> [<id>...]` | Assign to self + status→in_progress |
 | `tlc task show <id>` | Read details |
 | `tlc task update <id> [<id>...] [flags]` | Mutate fields (batch) |
-| `tlc task complete <id> [<id>...]` | status→DONE |
-| `tlc task unclaim <id> [<id>...]` | Release + status→TODO |
+| `tlc task submit <id> [<id>...]` | in_progress→in_review |
+| `tlc task approve <id> [<id>...]` | in_review→done |
+| `tlc task reject <id> [<id>...] --reason "why"` | in_review→in_progress |
+| `tlc task block <id> [<id>...] --reason "why"` | open status→blocked |
+| `tlc task unblock <id> [<id>...]` | blocked→status it came from |
+| `tlc task cancel <id> [<id>...] --note "why"` | status→cancelled (`skip` is an alias) |
+| `tlc task complete <id> [<id>...]` | status→done |
+| `tlc task unclaim <id> [<id>...]` | Release + status→todo |
 | `tlc task reopen <id> [<id>...] --note "reason"` | Reopen terminal task |
 | `tlc task assign <assignee> <id> [<id>...]` | Assign to someone (assignee first) |
 | `tlc task unassign <id> [<id>...] --note "reason"` | Remove assignee |
@@ -83,12 +89,14 @@ Auto-transition: pending → active on first linked task claim.
 ### State machine
 
 ```
-TODO → IN_PROGRESS → DONE
-                   → SKIPPED
-TODO → SKIPPED
+backlog → todo → in_progress → in_review → done
+blocked ⇄ todo / in_progress / in_review
+any open status → cancelled
 ```
 
-Terminal states (`DONE`, `SKIPPED`) are immutable unless `--force`.
+Terminal states (`done`, `cancelled`) are left only through `reopen`.
+Guards (`task.state_machine.guards`) can refuse a permitted move; the
+error names the check. `--force` bypasses rules and guards.
 
 ### ID formats (all equivalent)
 
@@ -127,7 +135,7 @@ tlc task complete T-0046                     # 3. mark done
 ### 4 · Force a status transition
 
 ```bash
-tlc task update T-0046 --status IN_PROGRESS --force   # bypass state machine
+tlc task update T-0046 --status in_progress --force   # bypass state machine
 tlc task complete T-0046 --no-verify                  # skip state machine on complete
 ```
 
@@ -139,8 +147,8 @@ Bypass flags are NOT interchangeable:
 ### 5 · Query tasks
 
 ```bash
-tlc task list                                # IN_PROGRESS first, then TODO
-tlc task list --status TODO --limit 20
+tlc task list                                # in_progress first, then todo
+tlc task list --status todo --limit 20
 tlc task list --assigned-to eng-1
 tlc task list --mine
 tlc task list --tag feat --format json
@@ -292,7 +300,7 @@ description (audit block stripped), recent activity log.
 | `--description` | `-d` | Task description |
 | `--priority` | `-p` | P0–P3 |
 | `--effort` | `-e` | XS, S, M, L, XL |
-| `--status` | `-s` | Initial status (default: TODO) |
+| `--status` | `-s` | Initial status (default: todo) |
 | `--blocked-by` | | Blocking task ID (repeatable; local ID or cross-project `project/task`) |
 | `--reference` | `-r` | Reference pointer (URL or path) |
 | `--track` | | Link task to a track |
@@ -309,11 +317,23 @@ description (audit block stripped), recent activity log.
 | `--remove-blocked-by` | Remove blocking task ID (repeatable) |
 | `--clear-blocked-by` | Clear all blockers |
 
+### task create / update — meta flags
+
+| Flag | Command | Description |
+|------|---------|-------------|
+| `--meta key=value` | create, update | Set a user meta key (repeatable; string values; merges, other keys untouched) |
+| `--unset-meta key` | update | Remove a user meta key (repeatable) |
+
+Keys tlc manages itself (`blocked_by*`, `eva`, `origin_*`, `priority_source`,
+`priority_rule`, `last_sync_hash`, `needs_push`, `blocked_from`,
+`external_uid`, `x_tlc`, `recipe`, `recipe_version`, `recipe_hash`,
+`subject`) are rejected.
+
 ### task list — flags reference
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--status` | `-s` | Filter: TODO, IN_PROGRESS, DONE, SKIPPED |
+| `--status` | `-s` | Filter: backlog, todo, in_progress, in_review, blocked, done, cancelled |
 | `--assigned-to` | `-a` | Filter by assignee |
 | `--mine` | | Filter to current user |
 | `--tag` | | Filter by tag |
@@ -330,6 +350,7 @@ description (audit block stripped), recent activity log.
 | `--type` | Track type: feature, bug, refactor (required) |
 | `--id` | Custom ID slug (derived from title if omitted) |
 | `--assigned-to` | Assignee |
+| `--meta key=value` | Set a user meta key (repeatable; string values; not with `--recipe`) |
 
 ### track update — flags reference
 
@@ -340,6 +361,12 @@ description (audit block stripped), recent activity log.
 | `--type` | Update type |
 | `--assigned-to` | Update assignee |
 | `--add-plan` | Link plan file + extract tasks |
+| `--due` | Due date (`-` clears) |
+| `--meta key=value` | Set a user meta key (repeatable; string values; merges, other keys untouched) |
+| `--unset-meta key` | Remove a user meta key (repeatable) |
+
+Keys tlc manages itself on a track (`plans`, `external_uid`, `x_tlc`,
+`due_date_only`) are rejected.
 
 ### track list — flags reference
 
@@ -349,6 +376,7 @@ description (audit block stripped), recent activity log.
 | `--state` | Filter: stale, unlinked, blocked, healthy |
 | `--type` | Filter by type |
 | `--all-projects` | Cross-project query |
+| `--meta key=value` | Filter by user meta, string equality (repeatable; all must match) |
 
 ---
 
@@ -398,11 +426,11 @@ tlc -c /path/to/.tlc/config.yaml task list
 
 ## Advanced
 
-### Statuses (uppercase only)
+### Statuses (lowercase)
 
-`TODO` · `IN_PROGRESS` · `DONE` · `SKIPPED`
+`backlog` · `todo` · `in_progress` · `in_review` · `blocked` · `done` · `cancelled`
 
-`claim` → IN_PROGRESS; `unclaim` → TODO
+`claim` → in_progress; `unclaim` → todo; `submit` → in_review; `block` → blocked; `complete` → done; `cancel` → cancelled
 
 ### Tag operations
 

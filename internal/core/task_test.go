@@ -14,12 +14,12 @@ func TestValidateTransition(t *testing.T) {
 		wantErr bool
 	}{
 		{"TODO to IN_PROGRESS", StatusTodo, StatusInProgress, false},
-		{"TODO to SKIPPED", StatusTodo, StatusSkipped, false},
+		{"TODO to SKIPPED", StatusTodo, StatusCancelled, false},
 		{"TODO to DONE", StatusTodo, StatusDone, true}, // Must go through IN_PROGRESS
 		{"IN_PROGRESS to DONE", StatusInProgress, StatusDone, false},
 		{"IN_PROGRESS to TODO", StatusInProgress, StatusTodo, false},
 		{"DONE to TODO", StatusDone, StatusTodo, true},
-		{"SKIPPED to IN_PROGRESS", StatusSkipped, StatusInProgress, true},
+		{"SKIPPED to IN_PROGRESS", StatusCancelled, StatusInProgress, true},
 	}
 
 	for _, tt := range tests {

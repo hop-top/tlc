@@ -1,0 +1,33 @@
+xrr: "1"
+adapter: exec
+fingerprint: b9dca4d8
+recorded_at: "2026-10-28T01:44:35Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. From track-consolidate/inventory.md and
+          track-consolidate/verification.md, propose the smallest set of tracks
+          that keeps every STILL OPEN and NARROWED task:
+
+          - tracks to complete (no open work left), abandon (nothing worth
+            keeping) or merge into another track;
+          - the landing track of every task that stays open, MISPLACED
+            tasks included;
+          - renames of the tracks that survive;
+          - blocked-by edges that point at tasks about to be skipped, and
+            what each one is rewired to (the canonical or replacement task,
+            or dropped);
+          - the track count before and after.
+
+          Pinned tracks (L-0001) are never completed, abandoned or merged
+          away; they may only gain tasks. Close with a list of open
+          questions for the operator.
+
+          Write track-consolidate/proposal.md. Do not change anything in tlc.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

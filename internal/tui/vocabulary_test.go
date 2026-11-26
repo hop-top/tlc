@@ -3,7 +3,7 @@ package tui
 // The TUI under a RENAMED status vocabulary.
 //
 // Every literal the TUI spelled as core.StatusTodo / StatusInProgress /
-// StatusDone / StatusSkipped was a WHOLE-VOCABULARY assumption, not one
+// StatusDone / StatusCancelled was a WHOLE-VOCABULARY assumption, not one
 // constant standing in for a role: the rotate ring, the create default,
 // the kanban columns, the sort rank and the glyph table each enumerated
 // the built-in four and had no answer for anything else. A config
@@ -250,6 +250,30 @@ func TestKanbanStatusOrder_ExcludesOnlyTerminalSkip(t *testing.T) {
 	got := kanbanStatusOrder()
 	want := []core.TaskStatus{"BACKLOG", "DOING", "SHIPPED"}
 
+	if len(got) != len(want) {
+		t.Fatalf("kanbanStatusOrder() = %v; want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("kanbanStatusOrder() = %v; want %v", got, want)
+		}
+	}
+}
+
+// TestKanbanStatusOrder_DefaultVocabulary pins the default board: every
+// status except the backlog and the skip target earns a column.
+func TestKanbanStatusOrder_DefaultVocabulary(t *testing.T) {
+	core.SetTaskConfigProvider(func() *config.TaskConfig {
+		return &config.TaskConfig{Statuses: config.GetDefaultStatuses()}
+	})
+	core.ResetDefaultWorkflow()
+	t.Cleanup(func() {
+		core.SetTaskConfigProvider(nil)
+		core.ResetDefaultWorkflow()
+	})
+
+	got := kanbanStatusOrder()
+	want := []core.TaskStatus{"todo", "in_progress", "in_review", "blocked", "done"}
 	if len(got) != len(want) {
 		t.Fatalf("kanbanStatusOrder() = %v; want %v", got, want)
 	}

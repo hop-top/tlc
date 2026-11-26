@@ -191,7 +191,7 @@ func TestTransitionFlow(t *testing.T) {
 
 	payload, _ := json.Marshal(map[string]string{
 		"id":     "T-0099",
-		"status": "IN_PROGRESS",
+		"status": "in_progress",
 		"by":     "bot",
 		"note":   "auto transition",
 	})
@@ -219,7 +219,7 @@ func TestTransitionFlow(t *testing.T) {
 		if tk.ID == "T-0099" {
 			found = true
 			if tk.Status != core.StatusInProgress {
-				t.Errorf("status = %s, want IN_PROGRESS",
+				t.Errorf("status = %s, want in_progress",
 					tk.Status)
 			}
 		}
@@ -255,7 +255,7 @@ func TestTransitionFailure_InvalidStatus(t *testing.T) {
 	// machine).
 	payload, _ := json.Marshal(map[string]string{
 		"id":     "T-0050",
-		"status": "TODO",
+		"status": "todo",
 		"by":     "bot",
 	})
 	writeFile(
@@ -317,7 +317,7 @@ func TestOrdering_CreatesBeforeTransitions(t *testing.T) {
 	// The create must run before the transition for this to work.
 	tr, _ := json.Marshal(map[string]string{
 		"id":     "T-0001",
-		"status": "IN_PROGRESS",
+		"status": "in_progress",
 		"by":     "bot",
 	})
 	writeFile(

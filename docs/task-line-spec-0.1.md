@@ -45,10 +45,17 @@ Where:
 
 Default status tokens:
 
-- `[ ]`  -> TODO
-- `[~]`  -> IN_PROGRESS
-- `[x]`  -> DONE
-- `[-]`  -> SKIPPED
+- `[-]`  -> `backlog`
+- `[ ]`  -> `todo`
+- `[>]`  -> `in_progress`
+- `[?]`  -> `in_review`
+- `[!]`  -> `blocked`
+- `[x]`  -> `done`
+- `[~]`  -> `cancelled`
+
+Markers resolve through the configured status vocabulary, so a custom
+vocabulary brings its own `tls_marker` values. Writing a task emits the
+marker of its status; reading a marker yields the status that declares it.
 
 Custom markers may be defined via `task.statuses[].tls_marker`
 in config. Unknown markers fall back to legacy parsing
@@ -129,18 +136,18 @@ A TLS parser MUST reject lines where:
 
 ## Canonical Examples
 
-### Minimal TODO
+### Minimal to-do
 
 - `[ ] T-0001 Add login endpoint`
 
 ### In progress with assignee + tags + reference
 
-- `[~] T-0002 Fix token refresh race @codex #auth #bug ref:docs/rfc/012.md`
+- `[>] T-0002 Fix token refresh race @codex #auth #bug ref:docs/rfc/012.md`
 
 ### Done with metadata
 
 - `[x] T-0003 Add CLI help output prio:P2 area:cli`
 
-### Skipped with explanation in title
+### Cancelled with explanation in title
 
-- `[-] T-0004 Replace DB engine (postponed) area:db prio:P3`
+- `[~] T-0004 Replace DB engine (postponed) area:db prio:P3`

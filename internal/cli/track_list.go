@@ -21,6 +21,7 @@ var (
 	trackListLimit       int
 	trackListOffset      int
 	trackListAllProjects bool
+	trackListMeta        map[string]string
 )
 
 var trackListCmd = &cobra.Command{
@@ -30,7 +31,10 @@ var trackListCmd = &cobra.Command{
 --all-projects), filtered by status, lifecycle state, or type.
 
 Supports --status (repeatable, validated against TrackStatus values)
-and --state (single state flag); both can be combined.`,
+and --state (single state flag); both can be combined.
+
+--meta key=value keeps tracks whose user meta holds that key with that
+string value (repeatable; every pair must match).`,
 	Annotations: map[string]string{
 		"kit/side-effect": "read",
 	},
@@ -56,6 +60,10 @@ func runTrackList(cmd *cobra.Command, _ []string) error {
 		Limit:       trackListLimit,
 		Offset:      trackListOffset,
 		AllProjects: trackListAllProjects,
+		Meta:        trackListMeta,
+	}
+	if err := core.ValidateMetaFilters(query.Meta); err != nil {
+		return metaFilterError(err)
 	}
 
 	if trackListType != "" {
@@ -300,6 +308,7 @@ func resetTrackListFlags() {
 	trackListLimit = 100
 	trackListOffset = 0
 	trackListAllProjects = false
+	trackListMeta = nil
 }
 
 func init() {
@@ -324,5 +333,9 @@ func init() {
 	trackListCmd.Flags().BoolVar(
 		&trackListAllProjects, "all-projects", false,
 		"Show tracks from all projects",
+	)
+	trackListCmd.Flags().StringToStringVar(
+		&trackListMeta, "meta", nil,
+		"Filter by user meta key=value (repeatable; all must match)",
 	)
 }

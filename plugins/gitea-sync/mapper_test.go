@@ -26,16 +26,16 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Index: 1, Title: "task", State: "open",
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 		},
 		{
-			name: "open with status:in-progress maps to IN_PROGRESS",
+			name: "open with status:in-progress maps to in_progress",
 			issue: &GiteaIssue{
 				Index: 2, Title: "wip", State: "open",
 				Labels:    []GiteaLabel{{Name: "status:in-progress"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "IN_PROGRESS",
+			wantStatus: "in_progress",
 		},
 		{
 			name: "open with status:blocked maps to TODO with BlockedReason",
@@ -44,7 +44,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "status:blocked"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus:  "TODO",
+			wantStatus:  "todo",
 			wantBlocked: "blocked",
 		},
 		{
@@ -53,7 +53,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Index: 4, Title: "finished", State: "closed",
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "DONE",
+			wantStatus: "done",
 		},
 		{
 			name: "closed with wontfix maps to SKIPPED",
@@ -62,7 +62,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "wontfix"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "SKIPPED",
+			wantStatus: "cancelled",
 		},
 		{
 			name: "priority:critical maps to P0",
@@ -71,7 +71,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "priority:critical"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P0",
 		},
 		{
@@ -81,7 +81,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "effort:xl"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantEffort: "XL",
 		},
 		{
@@ -91,7 +91,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "bug"}, {Name: "enhancement"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 		},
 		{
 			name: "dimension:foo maps to Tags",
@@ -100,7 +100,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "dimension:foo"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantTags:   []string{"foo"},
 		},
 		{
@@ -110,7 +110,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Body:      "This is blocked by #7",
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus:    "TODO",
+			wantStatus:    "todo",
 			wantBlockedBy: []string{"#7"},
 		},
 		{
@@ -120,7 +120,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Labels:    []GiteaLabel{{Name: "Status:In-Progress"}},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus: "IN_PROGRESS",
+			wantStatus: "in_progress",
 		},
 		{
 			name: "assignee is mapped",
@@ -129,7 +129,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				Assignee:  &GiteaUser{Login: "alice"},
 				CreatedAt: now, UpdatedAt: now,
 			},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantAssignee: "alice",
 		},
 		{
@@ -140,7 +140,7 @@ func TestMapGiteaIssueToTask(t *testing.T) {
 				CreatedAt: now, UpdatedAt: now,
 			},
 			deps:          []GiteaDependency{{Index: 1}, {Index: 2}},
-			wantStatus:    "TODO",
+			wantStatus:    "todo",
 			wantBlockedBy: []string{"#1", "#2"},
 		},
 	}
@@ -193,44 +193,44 @@ func TestMapTaskToGiteaIssue(t *testing.T) {
 	}{
 		{
 			name:       "TODO maps to open",
-			task:       &Task{Title: "t", Status: "TODO"},
+			task:       &Task{Title: "t", Status: "todo"},
 			wantState:  "open",
 			wantLabels: nil,
 		},
 		{
 			name:       "IN_PROGRESS maps to open with label",
-			task:       &Task{Title: "t", Status: "IN_PROGRESS"},
+			task:       &Task{Title: "t", Status: "in_progress"},
 			wantState:  "open",
 			wantLabels: []string{"status:in-progress"},
 		},
 		{
 			name:       "DONE maps to closed",
-			task:       &Task{Title: "t", Status: "DONE"},
+			task:       &Task{Title: "t", Status: "done"},
 			wantState:  "closed",
 			wantLabels: nil,
 		},
 		{
 			name:       "SKIPPED maps to closed with wontfix",
-			task:       &Task{Title: "t", Status: "SKIPPED"},
+			task:       &Task{Title: "t", Status: "cancelled"},
 			wantState:  "closed",
 			wantLabels: []string{"wontfix"},
 		},
 		{
 			name:       "Priority P1 maps to priority:high label",
-			task:       &Task{Title: "t", Status: "TODO", Priority: "P1"},
+			task:       &Task{Title: "t", Status: "todo", Priority: "P1"},
 			wantState:  "open",
 			wantLabels: []string{"priority:high"},
 		},
 		{
 			name:       "Effort M maps to effort:m label",
-			task:       &Task{Title: "t", Status: "TODO", Effort: "M"},
+			task:       &Task{Title: "t", Status: "todo", Effort: "M"},
 			wantState:  "open",
 			wantLabels: []string{"effort:m"},
 		},
 		{
 			name: "Tags passed through as dimension labels",
 			task: &Task{
-				Title: "t", Status: "TODO",
+				Title: "t", Status: "todo",
 				Tags: []string{"backend", "api"},
 			},
 			wantState:  "open",
@@ -239,7 +239,7 @@ func TestMapTaskToGiteaIssue(t *testing.T) {
 		{
 			name: "AssignedTo passed through",
 			task: &Task{
-				Title: "t", Status: "TODO", AssignedTo: "bob",
+				Title: "t", Status: "todo", AssignedTo: "bob",
 			},
 			wantState:  "open",
 			wantAssign: "bob",
@@ -247,7 +247,7 @@ func TestMapTaskToGiteaIssue(t *testing.T) {
 		{
 			name: "blocked_by refs appended to body",
 			task: &Task{
-				Title: "t", Status: "TODO",
+				Title: "t", Status: "todo",
 				Description: "desc",
 				Meta: map[string]interface{}{
 					"blocked_by": []interface{}{"#3", "#5"},
@@ -259,7 +259,7 @@ func TestMapTaskToGiteaIssue(t *testing.T) {
 		{
 			name: "TODO with BlockedReason gets status:blocked label",
 			task: &Task{
-				Title: "t", Status: "TODO",
+				Title: "t", Status: "todo",
 				BlockedReason: "waiting",
 			},
 			wantState:  "open",
@@ -363,7 +363,7 @@ func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
 	original := &Task{
 		ID:          taskID,
 		Title:       "round-trip",
-		Status:      "TODO",
+		Status:      "todo",
 		Description: "body text",
 	}
 

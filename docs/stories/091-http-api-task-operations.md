@@ -52,6 +52,13 @@ bearer token so a shared server isn't open to arbitrary mutation.
    and a follow-up PATCH with the CLI's `"-"` clear-sentinel on each of
    those fields unsets them identically to the CLI's behavior.
 
+6a. **Given** a task, **When** a client sends `POST /tasks` with a
+   `meta` object, or `PATCH /tasks/{id}` with `meta`, **Then** the keys
+   are stored, and on PATCH merged per JSON Merge Patch (RFC 7396): a key
+   sets, `null` removes, an object merges recursively, absent keys are
+   untouched. A reserved key (`eva`, `blocked_by*`, `origin_*`, ...)
+   yields 422 and nothing is applied.
+
 7. **Given** a task, **When** a client sends `PATCH /tasks/{id}` with
    a `track_id` that does not resolve to an existing track, **Then**
    the response is 422 — unlike the CLI's `task update`, the HTTP route

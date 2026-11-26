@@ -2,10 +2,12 @@ name: happy-path
 description: >
   Track consolidation over two tracks, one of them pinned. Replays the
   read-only audit (inventory, verify-tasks, propose-regroup,
-  generate-script); the approval gate and everything after it need a
-  human decision, so run this with --task 1-4. The cassettes were
-  recorded against a stand-in agent with canned answers: they pin the
-  prompts and the step wiring, not the quality of an audit.
+  generate-script); the steps behind the approval gate are not recorded
+  (the apply script is written by a live agent, and verify needs one
+  too), so run this with --task 1-4. The reject run covers the gate. The
+  cassettes were recorded against a stand-in agent with canned
+  answers: they pin the prompts and the step wiring, not the quality of
+  an audit.
 expected_exit: 0
 vars:
   scope: L-0001 L-0002

@@ -86,7 +86,7 @@ func TestCheckAgeNudges_BuiltinVocabularyUnchanged(t *testing.T) {
 		StatusTodo:       true,
 		StatusInProgress: true,
 		StatusDone:       false,
-		StatusSkipped:    false,
+		StatusCancelled:  false,
 	} {
 		task := &Task{ID: "T-0002", Status: status, UpdatedAt: stale}
 		got := CheckAgeNudges(task, rules)

@@ -55,9 +55,12 @@ func statusRanks() map[core.TaskStatus]int {
 // Every configured status gets one EXCEPT the skip target: a kanban
 // board tracks work moving toward completion, and the abandoned pile is
 // not a stage of that. That is the one exclusion the built-in three-column
-// board encoded (TODO/IN_PROGRESS/DONE, with SKIPPED left out), and it
+// board encoded (todo/in_progress/done, with the skip target left out), and it
 // is expressed here as the role rather than the name so a vocabulary
 // spelling it DROPPED or CANCELED is excluded for the same reason.
+//
+// The backlog role is left out too: parked work is not yet moving through
+// the board, and the default list view hides it for the same reason.
 //
 // The skip target is resolved by role only — never by the name-based
 // fallback core.SkippedStatus also accepts. A board is a display
@@ -72,6 +75,9 @@ func kanbanStatusOrder() []core.TaskStatus {
 	cols := make([]core.TaskStatus, 0, len(order))
 	for _, status := range order {
 		if hasSkipped && status == skipped {
+			continue
+		}
+		if def, err := wm.GetStatusDef(status); err == nil && def.Role == config.RoleBacklog {
 			continue
 		}
 		cols = append(cols, status)
@@ -149,7 +155,10 @@ func nextRotationStatus(task *core.Task) (core.TaskStatus, bool) {
 		if cand == task.Status {
 			continue
 		}
-		if err := wm.ValidateTransition(task.Status, cand, false); err == nil {
+		// Context-aware: a guarded target the task cannot satisfy right
+		// now (no assignee, open blockers, note or reason required) is
+		// skipped, so the ring never offers a move the service refuses.
+		if err := wm.ValidateTransitionContext(core.NewTransitionContext(task, cand)); err == nil {
 			return cand, true
 		}
 	}
@@ -213,6 +222,12 @@ func statusRoleStyle(role string, s *styles.Styles) lipgloss.Style {
 		return s.Done
 	case config.RoleSkipped:
 		return s.Skipped
+	case config.RoleBacklog:
+		return s.Backlog
+	case config.RoleReview:
+		return s.Review
+	case config.RoleBlocked:
+		return s.Blocked
 	default:
 		return s.Todo
 	}

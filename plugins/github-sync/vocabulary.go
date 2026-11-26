@@ -41,7 +41,7 @@ type Vocabulary struct {
 	InitialStatus string `json:"initial_status,omitempty"`
 
 	// TerminalStatuses maps a terminal status NAME to the reason a closed
-	// issue carries for it. Empty means the built-in DONE/SKIPPED pair.
+	// issue carries for it. Empty means the built-in default terminal pair.
 	TerminalStatuses map[string]string `json:"terminal_statuses,omitempty"`
 }
 
@@ -51,10 +51,16 @@ func (v *Vocabulary) activeStatusFor(label string) (string, bool) {
 	if v != nil && len(v.ActiveStatuses) > 0 {
 		return invertLookup(v.ActiveStatuses, label)
 	}
-	if strings.EqualFold(label, builtinActiveLabel) {
-		return builtinActiveStatus, true
-	}
-	return "", false
+	return invertLookup(builtinActiveStatuses, label)
+}
+
+// builtinActiveStatuses are the labeled statuses of the built-in
+// vocabulary: the open statuses that are not the initial one. blocked is
+// absent on purpose; without a host vocabulary it stays the blocked flag.
+var builtinActiveStatuses = map[string]string{
+	"backlog":     "status:backlog",
+	"in_progress": "status:in-progress",
+	"in_review":   "status:in-review",
 }
 
 // Fixed label and vocabulary names used when the host sends nothing.
@@ -63,13 +69,8 @@ const (
 	// vocabulary for the reason given on ActiveStatuses.
 	blockedLabel = "status:blocked"
 
-	// builtinActiveStatus and builtinActiveLabel are the single active
-	// status of the built-in vocabulary and its label.
-	builtinActiveStatus = "IN_PROGRESS"
-	builtinActiveLabel  = "status:in-progress"
-
 	// builtinInitialStatus is the built-in vocabulary's initial status.
-	builtinInitialStatus = "TODO"
+	builtinInitialStatus = "todo"
 )
 
 // priorityLabel returns the label for a priority name, and whether one
@@ -94,17 +95,15 @@ func (v *Vocabulary) effortLabel(name string) (string, bool) {
 }
 
 // statusLabel returns the label for an active status name. With no
-// vocabulary only IN_PROGRESS earns one, which is what the plugin did
+// vocabulary only the built-in open statuses earn one, which is what the plugin did
 // before this change.
 func (v *Vocabulary) statusLabel(name string) (string, bool) {
 	if v != nil && len(v.ActiveStatuses) > 0 {
 		l, ok := v.ActiveStatuses[name]
 		return l, ok
 	}
-	if name == builtinActiveStatus {
-		return builtinActiveLabel, true
-	}
-	return "", false
+	l, ok := builtinActiveStatuses[name]
+	return l, ok
 }
 
 // priorityFor resolves a forge label back to a priority NAME. The

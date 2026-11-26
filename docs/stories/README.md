@@ -64,7 +64,10 @@ Authoring convention: see [Story → e2e test linkage](../conventions/stories.md
 - [091 - HTTP API Task Operations](091-http-api-task-operations.md)
   — List/create/show/update/claim/complete over HTTP
 - [092 - HTTP API Track Operations](092-http-api-track-operations.md)
-  — List/create/show over HTTP, 404-vs-422 resolve distinction
+  — List/create/show/patch over HTTP, track meta, create from a recipe,
+  404-vs-422 resolve distinction
+- [094 - Recipe Test Gates](094-recipe-test-gates.md)
+  — Scripted human decisions in `tlc recipe test`; create-time `when:`
 
 #### Specialized Topics
 - [user-stories-taskflow-0.1.md](user-stories-taskflow-0.1.md)
@@ -101,6 +104,7 @@ Authoring convention: see [Story → e2e test linkage](../conventions/stories.md
 - [090 - HTTP API Server Lifecycle](090-http-api-server-lifecycle.md)
 - [091 - HTTP API Task Operations](091-http-api-task-operations.md)
 - [092 - HTTP API Track Operations](092-http-api-track-operations.md)
+- [094 - Recipe Test Gates](094-recipe-test-gates.md)
 
 #### [Team Lead](../personas/team-lead.md)
 - [002 - Task Listing](002-task-listing.md) (filtering and reporting)

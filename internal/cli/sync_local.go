@@ -397,26 +397,7 @@ func parseTLSWith(vocab tlsVocabulary, line string) (*core.Task, error) {
 		Meta:      make(map[string]interface{}),
 	}
 
-	// Status mapping via WorkflowManager
-	wm := core.DefaultWorkflow()
-	switch statusContent {
-	case "":
-		task.Status = core.StatusTodo // default
-	default:
-		if s, ok := wm.StatusForTLSMarker(statusContent); ok {
-			task.Status = s
-		} else {
-			// Legacy fallback
-			sc := strings.ToLower(statusContent)
-			if strings.Contains(sc, "x") || strings.Contains(sc, "done") {
-				task.Status = core.StatusDone
-			} else if strings.Contains(sc, "~") || strings.Contains(sc, "progress") {
-				task.Status = core.StatusInProgress
-			} else {
-				task.Status = core.StatusTodo
-			}
-		}
-	}
+	task.Status = tlsStatusFor(core.DefaultWorkflow(), statusContent)
 
 	// Extract title and metadata tokens.
 	// After the ID, the title may be quoted (e.g. "Set HOP_ENTRY=1 ...").
@@ -695,4 +676,39 @@ func (v tlsVocabulary) isMetaToken(token string) bool {
 		}
 	}
 	return strings.Contains(token, "=")
+}
+
+// tlsStatusFor resolves the text between a TLS line's brackets to a
+// status. An exact marker match wins, an empty bracket is the initial
+// status, and anything else falls back to loose heuristics that resolve
+// by ROLE, so the result is always a status the vocabulary declares.
+func tlsStatusFor(wm *core.WorkflowManager, content string) core.TaskStatus {
+	initial := func() core.TaskStatus {
+		if st, err := wm.InitialStatus(); err == nil {
+			return st
+		}
+		return core.StatusTodo
+	}
+	if content == "" {
+		return initial()
+	}
+	if st, ok := wm.StatusForTLSMarker(content); ok {
+		return st
+	}
+	byRole := func(role string) (core.TaskStatus, bool) {
+		st, err := wm.StatusForRole(role)
+		return st, err == nil
+	}
+	lc := strings.ToLower(content)
+	switch {
+	case strings.Contains(lc, "x") || strings.Contains(lc, "done"):
+		if st, ok := byRole(config.RoleCompleted); ok {
+			return st
+		}
+	case strings.Contains(lc, "progress"):
+		if st, ok := byRole(config.RoleActive); ok {
+			return st
+		}
+	}
+	return initial()
 }

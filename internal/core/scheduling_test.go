@@ -56,7 +56,7 @@ func TestCheckAgeNudges(t *testing.T) {
 			UpdatedAt: now.Add(-72 * time.Hour),
 		}
 		rules := []core.AgeNudgeConfig{
-			{Status: "IN_PROGRESS", Threshold: 48 * time.Hour, Action: "remind"},
+			{Status: "in_progress", Threshold: 48 * time.Hour, Action: "remind"},
 		}
 		n := core.CheckAgeNudges(task, rules)
 		assert.NotNil(t, n)
@@ -72,7 +72,7 @@ func TestCheckAgeNudges(t *testing.T) {
 			DueAt:     &due,
 		}
 		rules := []core.AgeNudgeConfig{
-			{Status: "IN_PROGRESS", Threshold: 48 * time.Hour, Action: "remind"},
+			{Status: "in_progress", Threshold: 48 * time.Hour, Action: "remind"},
 		}
 		assert.Nil(t, core.CheckAgeNudges(task, rules))
 	})
@@ -96,7 +96,7 @@ func TestCheckAgeNudges(t *testing.T) {
 			UpdatedAt: now.Add(-72 * time.Hour),
 		}
 		rules := []core.AgeNudgeConfig{
-			{Status: "IN_PROGRESS", Threshold: 48 * time.Hour, Action: "remind"},
+			{Status: "in_progress", Threshold: 48 * time.Hour, Action: "remind"},
 		}
 		assert.Nil(t, core.CheckAgeNudges(task, rules))
 	})

@@ -1,0 +1,32 @@
+xrr: "1"
+adapter: exec
+fingerprint: 93c13b77
+recorded_at: "2026-11-15T22:20:36Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. From decision-record/options.md, pick one option and say
+          why it beats the others on the criteria that matter most here.
+          Name what would make you change your mind, and the open questions
+          for the owner.
+
+          Draft the record in decision-record/record.md, in this shape:
+
+          - title: the decision, stated as done ("Use X for Y");
+          - status: Proposed;
+          - context: the question and the facts that force it;
+          - options: one line each, with the deciding trade-off;
+          - decision: the recommended option;
+          - consequences: what gets easier, what gets harder, what follows;
+          - supersedes: the earlier record it replaces, if any.
+
+          The record names no task ids: tasks point at it, not the other
+          way round. Write decision-record/recommendation.md with the pick, the
+          reasoning and the open questions. Do not change anything.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

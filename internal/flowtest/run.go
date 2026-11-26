@@ -4,7 +4,10 @@
 package flowtest
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -18,6 +21,7 @@ type RunManifest struct {
 	ExpectedExit int               `yaml:"expected_exit"`
 	Passthrough  []string          `yaml:"passthrough,omitempty"`
 	Vars         map[string]string `yaml:"vars,omitempty"`
+	Gates        gateSet           `yaml:"gates,omitempty"`
 }
 
 // Run describes one named test run for a recipe.
@@ -28,7 +32,8 @@ type Run struct {
 	ContractsDir string // path to contracts/ subdir
 	ExpectedExit int
 	Passthrough  []string
-	Vars         map[string]string // recipe vars the run binds
+	Vars         map[string]string       // recipe vars the run binds
+	Gates        map[string]GateDecision // scripted decisions, by human step id
 }
 
 // options holds optional parameters for DiscoverRuns.
@@ -105,8 +110,8 @@ func loadRun(runDir, dirName string) (Run, error) {
 	manifestPath := filepath.Join(runDir, "test.yaml")
 	data, err := os.ReadFile(manifestPath)
 	if err == nil {
-		var m RunManifest
-		if err := yaml.Unmarshal(data, &m); err != nil {
+		m, err := parseManifest(data)
+		if err != nil {
 			return Run{}, fmt.Errorf("flowtest: parse manifest %s: %w", manifestPath, err)
 		}
 		if m.Name != "" {
@@ -115,11 +120,25 @@ func loadRun(runDir, dirName string) (Run, error) {
 		run.ExpectedExit = m.ExpectedExit
 		run.Passthrough = m.Passthrough
 		run.Vars = m.Vars
+		run.Gates = m.Gates
 	} else if !os.IsNotExist(err) {
 		return Run{}, fmt.Errorf("flowtest: read manifest %s: %w", manifestPath, err)
 	}
 
 	return run, nil
+}
+
+// parseManifest decodes test.yaml strictly: a key the manifest does not
+// know is an error, so a typo (gate: for gates:) cannot pass as a no-op.
+// An empty document is an empty manifest.
+func parseManifest(data []byte) (RunManifest, error) {
+	var m RunManifest
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&m); err != nil && !errors.Is(err, io.EOF) {
+		return RunManifest{}, err //nolint:wrapcheck // the caller names the file
+	}
+	return m, nil
 }
 
 // MergePassthrough merges CLI passthrough list with manifest passthrough list.

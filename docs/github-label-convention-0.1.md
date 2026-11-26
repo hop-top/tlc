@@ -103,12 +103,16 @@ Track issue lifecycle. This axis is deliberately small, because an issue's open/
 
 | Label | Color | Description |
 |-------|-------|-------------|
+| `status:backlog` | `#3B3F44` | Parked, not yet ready to start |
 | `status:in-progress` | `#1D76DB` | Actively being worked on |
-| `status:blocked` | `#5C1A00` | Blocked — task carries a blocked reason |
+| `status:in-review` | `#B5289E` | Submitted, awaiting review |
+| `status:blocked` | `#5C1A00` | Cannot proceed; the task carries a block reason |
 
-A status label is generated only for a workflow status that is neither terminal nor initial. A terminal status is a closed issue and the initial status is an open issue nobody has touched, so labelling either would restate what the issue state already says — and the two could then disagree after an edit on the forge. With the built-in vocabulary that leaves `IN_PROGRESS` alone; a vocabulary that adds `IN_REVIEW` yields `status:in-review` as well.
+The built-in vocabulary is the seven default statuses: `backlog`, `todo`, `in_progress`, `in_review`, `blocked`, `done`, `cancelled`. A status label is generated only for a workflow status that is neither terminal nor initial. A terminal status (`done`, `cancelled`) is a closed issue and the initial status (`todo`) is an open issue nobody has touched, so labelling either would restate what the issue state already says, and the two could then disagree after an edit on the forge. That leaves `backlog`, `in_progress`, `in_review` and `blocked`; a vocabulary that adds another open status yields its label as well.
 
-`status:blocked` is not a workflow status. It mirrors the task's blocked reason, an orthogonal field a task carries WHILE it sits in some status, which is why it is fixed rather than generated.
+`blocked` is a workflow status like the others: its label is generated from the vocabulary, and a pulled `status:blocked` label puts the task in the status that declares the `blocked` role. A vocabulary with no blocked status still gets a `status:blocked` label that mirrors the task's block reason.
+
+Closing maps by role: a status with the `skipped` role closes as `not_planned`; any other terminal status closes as `completed`.
 
 **Usage**:
 - MAY apply one or more status labels
@@ -125,7 +129,7 @@ What the issue is waiting on from a PERSON, as opposed to from another task:
 | `needs:repro` | `#8E6A3F` | Cannot reproduce — needs steps or a case |
 | `needs:decision` | `#5319E7` | Blocked on a human decision, not on a task |
 
-`status:blocked` means blocked-by-task. Nothing on that axis can say "this is open because a human has not answered yet", which is the gap these three fill.
+`status:blocked` means blocked by a task or an external cause the block reason names. Nothing on that axis can say "this is open because a human has not answered yet", which is the gap these three fill.
 
 ### Domain Labels (Project-Specific)
 
@@ -179,7 +183,7 @@ There is no `domain:controllers`: Django calls that tier views, so the pair woul
 | Label | Color | Description |
 |-------|-------|-------------|
 | `domain:api` | `#0052CC` | Public API surface |
-| `domain:internal` | `#6A737D` | Internal implementation |
+| `domain:internal` | `#3B3F44` | Internal implementation |
 | `domain:docs` | `#0075CA` | Docs and examples |
 
 `domain:api` here means the exported surface consumers compile against, and `domain:internal` is its complement — "is this visible to consumers?" is the first question asked of any change in this shape.

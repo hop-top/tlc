@@ -263,17 +263,17 @@ func TestE2EGroupByEachKeyRendersExpectedGroups(t *testing.T) {
 		key:  "tag",
 		want: []string{"api", "docs", "urgent", noneGroupName},
 	}, {
-		// Headings carry the CANONICAL vocabulary value ("TODO"), not
+		// Headings carry the CANONICAL vocabulary value ("todo"), not
 		// the table column's display label ("To Do"). That is the
 		// spelling `--status` accepts, so a reader can retype a heading
 		// as a filter; the column is free to prettify because nothing
 		// consumes it.
 		//
-		// Order is LIFECYCLE, not alphabetical: TODO precedes
-		// IN_PROGRESS in the declared vocabulary while "I" precedes "T"
+		// Order is LIFECYCLE, not alphabetical: todo precedes
+		// in_progress in the declared vocabulary while "I" precedes "T"
 		// in ASCII, so an alphabetical implementation fails here.
 		key:  "status",
-		want: []string{"TODO", "IN_PROGRESS"},
+		want: []string{"todo", "in_progress"},
 	}}
 
 	for _, tc := range cases {

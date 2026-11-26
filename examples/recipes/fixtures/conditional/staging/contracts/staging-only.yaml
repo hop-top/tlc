@@ -7,9 +7,3 @@ evaluators:
   - name: contains
     substring: "verify-staging: SUCCEEDED"
     mode: binary
-  - name: contains
-    substring: "deploy-production: SKIPPED"
-    mode: binary
-  - name: contains
-    substring: "verify-production: SKIPPED"
-    mode: binary

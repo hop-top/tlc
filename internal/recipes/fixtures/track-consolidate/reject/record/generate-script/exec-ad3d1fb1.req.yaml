@@ -1,0 +1,47 @@
+xrr: "1"
+adapter: exec
+fingerprint: ad3d1fb1
+recorded_at: "2026-10-28T01:44:35Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only in tlc. Turn track-consolidate/proposal.md into
+          track-consolidate/apply.sh: a POSIX sh script of exact tlc commands, in
+          this order:
+
+          1. DONE tasks: `tlc task complete <id> --note "<evidence>"`.
+          2. SUPERSEDED and DUPLICATE tasks:
+             `tlc task skip <id> --note "superseded by <ref>"` or
+             `--note "duplicate of <id>"`.
+          3. Moves: `tlc task update <id> --track <track-id>`.
+          4. Rescopes of NARROWED tasks: `tlc task update <id> --title "..."`.
+             A note is recorded only on a status transition, so put the
+             rescope note on one (for example claiming the task with
+             `--status IN_PROGRESS --note "..."`), or into the description.
+          5. Edge rewiring: `tlc task update <id> --remove-blocked-by <old>`
+             then `--add-blocked-by <new>`. Same-project edges take the bare
+             task id.
+          6. Track transitions, last: `tlc track update <id> --title "..."`
+             for renames, then status changes. Tracks have no bypass:
+             pending goes to active before completed or abandoned. An empty
+             track cannot be activated; abandon it straight from pending
+             with `tlc track abandon <id>`. Abandoning skips every task still
+             open on the track, so a track is abandoned only after its open
+             tasks have moved.
+
+          Never touch a pinned track (L-0001) except to move tasks onto it.
+
+          The script runs every command even when one fails: no `set -e`.
+          Wrap each command in a `run` helper that echoes it, appends any
+          failure (exit code and command) to track-consolidate/apply-failures.log,
+          and carries on. The script ends by printing how many commands ran
+          and how many failed, and exits 0 so the verify step always runs.
+
+          Do not run the script.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

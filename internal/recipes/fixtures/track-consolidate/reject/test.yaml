@@ -1,0 +1,16 @@
+name: reject
+description: >
+  The owner rejects the consolidation apply script. Replays the read-only
+  audit and the approval task, which stays blocked: the apply and verify
+  steps behind it are never reached and nothing is written. The cassettes
+  are those of happy-path, recorded against a stand-in agent with canned
+  answers: they pin the prompts and the step wiring, not the quality of an
+  audit.
+expected_exit: 0
+vars:
+  scope: L-0001 L-0002
+  keep: L-0001
+gates:
+  approve:
+    decision: reject
+    reason: the proposal merges a pinned track

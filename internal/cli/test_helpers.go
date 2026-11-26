@@ -211,7 +211,7 @@ func createAndCompleteTask(t *testing.T, title, description string) {
 	t.Helper()
 
 	// Create task
-	args := []string{"task", "create", title, "--status", "IN_PROGRESS"}
+	args := []string{"task", "create", title, "--status", "in_progress"}
 	if description != "" {
 		args = append(args, "--description", description)
 	}
@@ -423,6 +423,9 @@ func resetTaskFlags() {
 	taskUpdateRemoveEva = []string{}
 	taskUpdateClearEva = false
 	taskEva = []string{}
+	taskMeta = nil
+	taskUpdateMeta = nil
+	taskUpdateUnsetMeta = []string{}
 	taskUpdateAddTags = []string{}
 	taskUpdateRemoveTags = []string{}
 	taskUpdateNote = ""
@@ -443,6 +446,12 @@ func resetTaskFlags() {
 	taskSkipNote = ""
 	taskSkipNoVerify = false
 	taskBlockNote = ""
+	taskBlockNoVerify = false
+	taskUnblockNoVerify = false
+	taskSubmitNote = ""
+	taskSubmitNoVerify = false
+	taskApproveNoVerify = false
+	taskRejectNoVerify = false
 	taskUnblockNote = ""
 	taskUpdateForce = false
 	taskNoPrompt = false
@@ -677,6 +686,7 @@ func resetRecipeFlags() {
 	recipeImportInstall, recipeImportForce, recipeImportExternal = false, false, false
 	recipeRunsAllProjects, recipeRunsTrack = false, ""
 	recipeDiffRecipe = ""
+	resetRecipeTestFlags()
 	for _, cmd := range []*cobra.Command{
 		recipeListCmd, recipeShowCmd, recipeValidateCmd, recipeImportCmd, recipeRunsCmd, recipeDiffCmd,
 	} {
@@ -687,6 +697,25 @@ func resetRecipeFlags() {
 			if f.Name == "dry-run" {
 				_ = f.Value.Set(f.DefValue) //nolint:errcheck // bool default always parses
 			}
+		})
+	}
+}
+
+// resetRecipeTestFlags puts `recipe test`'s flags back to their defaults:
+// its repeatable flags accumulate across Execute calls on the shared
+// command, so a --task from one test would otherwise narrow every later run.
+func resetRecipeTestFlags() {
+	for _, cmd := range RecipeCmd.Commands() {
+		if cmd.Name() != "test" {
+			continue
+		}
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+			if sv, ok := f.Value.(pflag.SliceValue); ok {
+				_ = sv.Replace(nil) //nolint:errcheck // a nil replacement cannot fail
+				return
+			}
+			_ = f.Value.Set(f.DefValue) //nolint:errcheck // a flag's own default always parses
 		})
 	}
 }
