@@ -55,7 +55,7 @@ Fixtures live beside the recipe, one directory per run:
 Naming no run executes every run the recipe has.
 
 Exit codes:
-  0  every task ran and every contract passed
+  0  every task ran or was skipped by a false when:, and every contract passed
   1  a task failed or a contract was violated
   2  replay found no cassette for a step
   3  the sandbox, the recipe or the fixtures could not be set up`,
@@ -369,7 +369,8 @@ func gradeRecipeRun(
 ) (int, error) {
 	out, errOut := cmd.OutOrStdout(), cmd.ErrOrStderr()
 	hook := flowtest.NewHook(fixture.ContractsDir)
-	miss, failed, contractFailed := false, len(report.Done) != len(taskIDs), false
+	finished := finishedTasks(taskIDs, report)
+	miss, failed, contractFailed := false, finished != len(taskIDs), false
 
 	for _, id := range taskIDs {
 		task, err := store.GetTask(ctx, id)
@@ -391,7 +392,8 @@ func gradeRecipeRun(
 		_, _ = fmt.Fprintf(out, "  result: FAIL (cassette miss)\n")
 		return recipeTestExitMiss, nil
 	case failed:
-		_, _ = fmt.Fprintf(out, "  result: FAIL (%d of %d tasks done)\n", len(report.Done), len(taskIDs))
+		_, _ = fmt.Fprintf(out, "  result: FAIL (%d of %d tasks finished: %d done, %d skipped)\n",
+			finished, len(taskIDs), len(report.Done), len(report.Skipped))
 		return recipeTestExitFailed, nil
 	case contractFailed:
 		_, _ = fmt.Fprintf(out, "  result: FAIL (contract violation)\n")
@@ -402,6 +404,27 @@ func gradeRecipeRun(
 	}
 	_, _ = fmt.Fprintf(out, "  result: PASS\n")
 	return 0, nil
+}
+
+// finishedTasks counts the run's tasks that reached a terminal state the
+// grade accepts: done, or skipped because a `when:` evaluated false (the
+// only way the executor reports a skip). Failed, blocked and waiting tasks
+// are not finished.
+func finishedTasks(taskIDs []string, report *core.ExecReport) int {
+	terminal := make(map[string]struct{}, len(report.Done)+len(report.Skipped))
+	for _, id := range report.Done {
+		terminal[id] = struct{}{}
+	}
+	for _, id := range report.Skipped {
+		terminal[id] = struct{}{}
+	}
+	n := 0
+	for _, id := range taskIDs {
+		if _, ok := terminal[id]; ok {
+			n++
+		}
+	}
+	return n
 }
 
 // contractPayload is what a step's contract is evaluated against: the
