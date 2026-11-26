@@ -232,6 +232,10 @@ func runInitConfigTest(t *testing.T, args []string, wantFallback, wantDupStrateg
 		t.Fatalf("failed to unmarshal config: %v", err)
 	}
 
+	if strings.Contains(string(data), "default_status") {
+		t.Errorf("init must not write task.default_status:\n%s", data)
+	}
+
 	if projectCfg, ok := config["project"].(map[string]interface{}); ok {
 		if fallbackMode, ok := projectCfg["fallback_mode"].(string); !ok || fallbackMode != wantFallback {
 			t.Errorf("expected fallback_mode %s, got %v", wantFallback, projectCfg["fallback_mode"])

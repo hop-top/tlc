@@ -163,7 +163,7 @@ func TestTaskPromptE2E_ContextDumpMarkdown(t *testing.T) {
 		for _, want := range []string{
 			"T-0001",
 			"Design auth module",
-			"Status: TODO",
+			"Status: todo",
 			"Implement OAuth2 with PKCE",
 			"Priority: P1",
 			"security",
@@ -228,8 +228,8 @@ func TestTaskPromptE2E_ContextDumpJSON(t *testing.T) {
 		if parsed.Title != "Build API gateway" {
 			t.Errorf("expected title 'Build API gateway', got %q", parsed.Title)
 		}
-		if parsed.Status != "TODO" {
-			t.Errorf("expected status TODO, got %q", parsed.Status)
+		if parsed.Status != "todo" {
+			t.Errorf("expected status todo, got %q", parsed.Status)
 		}
 		if parsed.Description != "Route requests to microservices" {
 			t.Errorf("expected description 'Route requests to microservices', got %q", parsed.Description)

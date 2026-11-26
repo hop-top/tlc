@@ -32,10 +32,10 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 		},
 		{
-			name: "opened with status:in-progress maps to IN_PROGRESS",
+			name: "opened with status:in-progress maps to in_progress",
 			issue: &gitlab.Issue{
 				IID:       2,
 				Title:     "wip issue",
@@ -44,7 +44,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "IN_PROGRESS",
+			wantStatus: "in_progress",
 		},
 		{
 			name: "opened with status:blocked maps to TODO with BlockedReason",
@@ -56,7 +56,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus:  "TODO",
+			wantStatus:  "todo",
 			wantBlocked: "blocked (see linked issues)",
 		},
 		{
@@ -68,7 +68,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "DONE",
+			wantStatus: "done",
 		},
 		{
 			name: "closed with wontfix maps to SKIPPED",
@@ -80,7 +80,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "SKIPPED",
+			wantStatus: "cancelled",
 		},
 		{
 			name: "priority:critical maps to P0",
@@ -92,7 +92,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P0",
 		},
 		{
@@ -105,7 +105,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantEffort: "M",
 		},
 		{
@@ -118,7 +118,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantTags:   nil,
 		},
 		{
@@ -131,7 +131,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt: &now,
 				UpdatedAt: &now,
 			},
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantTags:   []string{"team:backend", "area:auth"},
 		},
 		{
@@ -144,7 +144,7 @@ func TestMapGitLabIssueToTask(t *testing.T) {
 				CreatedAt:   &now,
 				UpdatedAt:   &now,
 			},
-			wantStatus:    "TODO",
+			wantStatus:    "todo",
 			wantMetaKey:   "blocked_by",
 			wantMetaValue: "5",
 		},
@@ -207,17 +207,17 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 			name: "TODO maps to reopen",
 			task: &Task{
 				Title:  "todo task",
-				Status: "TODO",
+				Status: "todo",
 				Meta:   map[string]interface{}{},
 			},
 			wantState:  "reopen",
 			wantLabels: nil,
 		},
 		{
-			name: "IN_PROGRESS maps to reopen with status:in-progress",
+			name: "in_progress maps to reopen with status:in-progress",
 			task: &Task{
 				Title:  "in progress task",
-				Status: "IN_PROGRESS",
+				Status: "in_progress",
 				Meta:   map[string]interface{}{},
 			},
 			wantState:  "reopen",
@@ -227,7 +227,7 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 			name: "DONE maps to close",
 			task: &Task{
 				Title:  "done task",
-				Status: "DONE",
+				Status: "done",
 				Meta:   map[string]interface{}{},
 			},
 			wantState:  "close",
@@ -237,7 +237,7 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 			name: "SKIPPED maps to close with wontfix",
 			task: &Task{
 				Title:  "skipped task",
-				Status: "SKIPPED",
+				Status: "cancelled",
 				Meta:   map[string]interface{}{},
 			},
 			wantState:  "close",
@@ -247,7 +247,7 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 			name: "priority and effort become labels",
 			task: &Task{
 				Title:    "prioritized task",
-				Status:   "TODO",
+				Status:   "todo",
 				Priority: "P1",
 				Effort:   "L",
 				Meta:     map[string]interface{}{},
@@ -259,7 +259,7 @@ func TestMapTaskToGitLabIssueData(t *testing.T) {
 			name: "tags passed through as labels",
 			task: &Task{
 				Title:  "tagged task",
-				Status: "TODO",
+				Status: "todo",
 				Tags:   []string{"team:backend", "area:auth"},
 				Meta:   map[string]interface{}{},
 			},
@@ -305,7 +305,7 @@ func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
 	original := &Task{
 		ID:          taskID,
 		Title:       "round-trip",
-		Status:      "TODO",
+		Status:      "todo",
 		Description: "body text",
 	}
 

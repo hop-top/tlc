@@ -35,14 +35,14 @@ func TestRenderSummary(t *testing.T) {
 		if !contains(output, "Project: my-project") {
 			t.Errorf("expected project header, got: %s", output)
 		}
-		if !contains(output, "TODO") {
-			t.Errorf("expected TODO status in output, got: %s", output)
+		if !contains(output, "todo") {
+			t.Errorf("expected todo status in output, got: %s", output)
 		}
-		if !contains(output, "IN_PROGRESS") {
-			t.Errorf("expected IN_PROGRESS status in output, got: %s", output)
+		if !contains(output, "in_progress") {
+			t.Errorf("expected in_progress status in output, got: %s", output)
 		}
-		if !contains(output, "DONE") {
-			t.Errorf("expected DONE status in output, got: %s", output)
+		if !contains(output, "done") {
+			t.Errorf("expected done status in output, got: %s", output)
 		}
 		if !contains(output, "Total") {
 			t.Errorf("expected Total line, got: %s", output)
@@ -131,14 +131,14 @@ func TestRenderCounters(t *testing.T) {
 		if contains(output, "Project:") {
 			t.Errorf("expected no project grouping, got: %s", output)
 		}
-		if !contains(output, "TODO") {
-			t.Errorf("expected TODO in output, got: %s", output)
+		if !contains(output, "todo") {
+			t.Errorf("expected todo in output, got: %s", output)
 		}
-		if !contains(output, "IN_PROGRESS") {
-			t.Errorf("expected IN_PROGRESS in output, got: %s", output)
+		if !contains(output, "in_progress") {
+			t.Errorf("expected in_progress in output, got: %s", output)
 		}
-		if !contains(output, "DONE") {
-			t.Errorf("expected DONE in output, got: %s", output)
+		if !contains(output, "done") {
+			t.Errorf("expected done in output, got: %s", output)
 		}
 	})
 
@@ -155,10 +155,10 @@ func TestRenderCounters(t *testing.T) {
 		output := buf.String()
 
 		if !contains(output, "3") {
-			t.Errorf("expected count of 3 for TODO, got: %s", output)
+			t.Errorf("expected count of 3 for todo, got: %s", output)
 		}
 		if !contains(output, "1") {
-			t.Errorf("expected count of 1 for DONE, got: %s", output)
+			t.Errorf("expected count of 1 for done, got: %s", output)
 		}
 	})
 }
@@ -184,7 +184,7 @@ func TestTaskListCountersFlag(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"task", "list", "--status", "TODO", "--status", "IN_PROGRESS", "--counters"})
+	cmd.SetArgs([]string{"task", "list", "--status", "todo", "--status", "in_progress", "--counters"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("task list --counters failed: %v", err)
@@ -194,11 +194,11 @@ func TestTaskListCountersFlag(t *testing.T) {
 	if !contains(output, "Status counts:") {
 		t.Errorf("expected 'Status counts:' header, got: %s", output)
 	}
-	if !contains(output, "TODO") {
-		t.Errorf("expected TODO in output, got: %s", output)
+	if !contains(output, "todo") {
+		t.Errorf("expected todo in output, got: %s", output)
 	}
-	if !contains(output, "IN_PROGRESS") {
-		t.Errorf("expected IN_PROGRESS in output, got: %s", output)
+	if !contains(output, "in_progress") {
+		t.Errorf("expected in_progress in output, got: %s", output)
 	}
 	// Should not show individual task titles
 	if contains(output, "Todo 1") {
@@ -235,11 +235,11 @@ func TestStatusCounts(t *testing.T) {
 	}
 
 	counts := statusCounts(tasks)
-	if counts["TODO"] != 2 {
-		t.Errorf("expected 2 TODO, got %d", counts["TODO"])
+	if counts["todo"] != 2 {
+		t.Errorf("expected 2 todo, got %d", counts["todo"])
 	}
-	if counts["DONE"] != 1 {
-		t.Errorf("expected 1 DONE, got %d", counts["DONE"])
+	if counts["done"] != 1 {
+		t.Errorf("expected 1 done, got %d", counts["done"])
 	}
 }
 
@@ -251,11 +251,11 @@ func TestSummaryLine(t *testing.T) {
 	}
 
 	line := summaryLine(tasks)
-	if !contains(line, "1 TODO") {
-		t.Errorf("expected '1 TODO' in summary line, got: %s", line)
+	if !contains(line, "1 todo") {
+		t.Errorf("expected '1 todo' in summary line, got: %s", line)
 	}
-	if !contains(line, "2 DONE") {
-		t.Errorf("expected '2 DONE' in summary line, got: %s", line)
+	if !contains(line, "2 done") {
+		t.Errorf("expected '2 done' in summary line, got: %s", line)
 	}
 	if !contains(line, "3 total") {
 		t.Errorf("expected '3 total' in summary line, got: %s", line)
@@ -268,15 +268,15 @@ func TestSummaryLine(t *testing.T) {
 func TestRenderFromCounts(t *testing.T) {
 	t.Run("CountersSumsAndSorts", func(t *testing.T) {
 		var buf bytes.Buffer
-		renderCountersFromCounts(&buf, map[string]int{"TODO": 60, "DONE": 90})
+		renderCountersFromCounts(&buf, map[string]int{"todo": 60, "done": 90})
 		out := buf.String()
 
 		if !contains(out, "Status counts:") {
 			t.Errorf("missing header, got: %s", out)
 		}
-		// Statuses render alphabetically, so DONE precedes TODO.
-		if strings.Index(out, "DONE") > strings.Index(out, "TODO") {
-			t.Errorf("expected DONE before TODO, got: %s", out)
+		// Statuses render alphabetically, so done precedes todo.
+		if strings.Index(out, "done") > strings.Index(out, "todo") {
+			t.Errorf("expected done before todo, got: %s", out)
 		}
 		for _, want := range []string{"90", "60"} {
 			if !contains(out, want) {
@@ -296,7 +296,7 @@ func TestRenderFromCounts(t *testing.T) {
 	t.Run("SummaryTotalIsSumOfCounts", func(t *testing.T) {
 		var buf bytes.Buffer
 		renderSummaryFromCounts(&buf, map[string]map[string]int{
-			"agg-fixture": {"DONE": 90, "TODO": 60},
+			"agg-fixture": {"done": 90, "todo": 60},
 		})
 		out := buf.String()
 
@@ -313,8 +313,8 @@ func TestRenderFromCounts(t *testing.T) {
 	t.Run("SummaryPerProjectTotals", func(t *testing.T) {
 		var buf bytes.Buffer
 		renderSummaryFromCounts(&buf, map[string]map[string]int{
-			"alpha": {"TODO": 2},
-			"beta":  {"DONE": 3},
+			"alpha": {"todo": 2},
+			"beta":  {"done": 3},
 		})
 		out := buf.String()
 
@@ -513,9 +513,9 @@ func TestApplyPostFilters(t *testing.T) {
 // TestRenderAggregateCounts pins how per-project counts reach each renderer.
 func TestRenderAggregateCounts(t *testing.T) {
 	byProject := map[string]map[string]int{
-		"alpha": {"TODO": 2, "DONE": 1},
-		"beta":  {"TODO": 3},
-		"":      {"DONE": 4},
+		"alpha": {"todo": 2, "done": 1},
+		"beta":  {"todo": 3},
+		"":      {"done": 4},
 	}
 
 	t.Run("SummaryKeepsProjectGrouping", func(t *testing.T) {
@@ -549,8 +549,8 @@ func TestRenderAggregateCounts(t *testing.T) {
 		if contains(out, "Project:") {
 			t.Errorf("counters must not group by project\n%s", out)
 		}
-		// TODO sums 2+3, DONE sums 1+4 -- flattened, not per-project.
-		for _, want := range []string{"TODO", "5", "DONE"} {
+		// todo sums 2+3, done sums 1+4 -- flattened, not per-project.
+		for _, want := range []string{"todo", "5", "done"} {
 			if !contains(out, want) {
 				t.Errorf("missing %q\n%s", want, out)
 			}
@@ -571,16 +571,16 @@ func TestRenderAggregateCounts(t *testing.T) {
 // TestFlattenAndLabelProjectCounts pins the two count reshapers.
 func TestFlattenAndLabelProjectCounts(t *testing.T) {
 	byProject := map[string]map[string]int{
-		"alpha": {"TODO": 2},
-		"beta":  {"TODO": 3, "DONE": 1},
+		"alpha": {"todo": 2},
+		"beta":  {"todo": 3, "done": 1},
 	}
 
 	flat := flattenProjectCounts(byProject)
-	if flat["TODO"] != 5 || flat["DONE"] != 1 {
-		t.Errorf("flatten = %v, want TODO=5 DONE=1", flat)
+	if flat["todo"] != 5 || flat["done"] != 1 {
+		t.Errorf("flatten = %v, want todo=5 done=1", flat)
 	}
 
-	labeled := labelProjectCounts(map[string]map[string]int{"": {"TODO": 1}})
+	labeled := labelProjectCounts(map[string]map[string]int{"": {"todo": 1}})
 	if _, ok := labeled[noProject]; !ok {
 		t.Errorf("empty project key not relabelled: %v", labeled)
 	}
@@ -594,7 +594,7 @@ func TestSumCounts(t *testing.T) {
 	if got := sumCounts(nil); got != 0 {
 		t.Errorf("sumCounts(nil) = %d, want 0", got)
 	}
-	if got := sumCounts(map[string]int{"TODO": 60, "DONE": 90}); got != 150 {
+	if got := sumCounts(map[string]int{"todo": 60, "done": 90}); got != 150 {
 		t.Errorf("sumCounts = %d, want 150", got)
 	}
 }

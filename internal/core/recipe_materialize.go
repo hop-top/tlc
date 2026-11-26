@@ -263,7 +263,7 @@ func (r *materializeRun) build(i int, ids []string, seqs []int64) (*Task, error)
 		Title:       title,
 		Description: strings.TrimSpace(step.Description),
 		Status:      StatusTodo,
-		AssignedTo:  assigneeFromSpec(step.Assignee),
+		AssignedTo:  assigneeFromSpec(stepAssignee(step)),
 		Kind:        step.EffectiveKind(),
 		Spec:        stepSpec(step, recipe.Agent),
 		DueAt:       r.prepared[i].due,
@@ -290,6 +290,18 @@ func (r *materializeRun) build(i int, ids []string, seqs []int64) (*Task, error)
 		setStringSliceMeta(task, metaKeyRecipeOwned, edges)
 	}
 	return task, nil
+}
+
+// stepAssignee is the task assignee a step names: its own assignee, else
+// the human block's. The step-level key wins when both are set.
+func stepAssignee(step RecipeStep) string {
+	if step.Assignee != "" {
+		return step.Assignee
+	}
+	if step.Human != nil {
+		return step.Human.Assignee
+	}
+	return ""
 }
 
 // stepSpec maps a step's dispatch fields onto a TaskSpec, falling back to

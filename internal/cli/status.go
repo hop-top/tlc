@@ -73,8 +73,8 @@ func writeStatusSnapshot(
 	}
 
 	writeStatusHeader(w, proj, user)
-	_, _ = fmt.Fprintf(w, "Tasks:    %d in progress, %d todo (yours)\n",
-		snapshot.inProgress, snapshot.todo)
+	_, _ = fmt.Fprintf(w, "Tasks:    %d in progress, %d todo%s (yours)\n",
+		snapshot.inProgress, snapshot.todo, snapshot.extraCounts())
 	if snapshot.overdue > 0 {
 		_, _ = fmt.Fprintf(w, "Overdue:  %d task(s)\n", snapshot.overdue)
 	}
@@ -96,8 +96,24 @@ func writeStatusSnapshot(
 type statusSnapshot struct {
 	inProgress      int
 	todo            int
+	inReview        int
+	blocked         int
 	overdue         int
 	inProgressTasks []*core.Task
+}
+
+// extraCounts renders the review and blocked buckets, each only when it
+// holds work, so a vocabulary without those roles prints the line it
+// always did.
+func (s statusSnapshot) extraCounts() string {
+	out := ""
+	if s.inReview > 0 {
+		out += fmt.Sprintf(", %d in review", s.inReview)
+	}
+	if s.blocked > 0 {
+		out += fmt.Sprintf(", %d blocked", s.blocked)
+	}
+	return out
 }
 
 // statusReader is the read surface `tlc status` needs from the store.
@@ -142,6 +158,10 @@ func collectStatusSnapshot(ctx context.Context, s statusReader, user string) (st
 			snap.inProgress += mineCounts[def.Name]
 		case config.RoleInitial:
 			snap.todo += mineCounts[def.Name]
+		case config.RoleReview:
+			snap.inReview += mineCounts[def.Name]
+		case config.RoleBlocked:
+			snap.blocked += mineCounts[def.Name]
 		}
 	}
 

@@ -81,6 +81,8 @@ var (
 	taskSkipNote         string
 	taskSkipNoVerify     bool
 	taskBlockNote        string
+	taskBlockNoVerify    bool
+	taskUnblockNoVerify  bool
 	taskUnblockNote      string
 	taskUnassignNote     string
 	taskUpdateForce      bool
@@ -123,6 +125,10 @@ var (
 	taskUpdateAddEva    []string
 	taskUpdateRemoveEva []string
 	taskUpdateClearEva  bool
+
+	taskMeta            map[string]string
+	taskUpdateMeta      map[string]string
+	taskUpdateUnsetMeta []string
 )
 
 // appendNote appends a note to the task's description, separated by a newline.
@@ -471,7 +477,8 @@ func init() {
 	TaskCmd.AddCommand(TaskUnassignCmd)
 	TaskCmd.AddCommand(TaskCompleteCmd)
 	TaskCmd.AddCommand(TaskReopenCmd)
-	TaskCmd.AddCommand(TaskSkipCmd)
+	TaskCmd.AddCommand(TaskCancelCmd)
+	TaskCmd.AddCommand(TaskSubmitCmd)
 	TaskCmd.AddCommand(TaskBlockCmd)
 	TaskCmd.AddCommand(TaskUnblockCmd)
 	TaskCmd.AddCommand(TaskReprioritiseCmd)

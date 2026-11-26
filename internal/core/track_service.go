@@ -303,7 +303,7 @@ func (s *TrackService) AbandonTrackWithTasks(
 	wm := DefaultWorkflow()
 	for _, task := range nonTerminal {
 		logEntry, err := task.TransitionWithWorkflow(
-			StatusSkipped, "track-abandon", "track abandoned",
+			StatusCancelled, "track-abandon", "track abandoned",
 			wm, true,
 		)
 		if err != nil {

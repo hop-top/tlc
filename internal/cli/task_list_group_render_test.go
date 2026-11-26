@@ -276,7 +276,7 @@ func TestGroupTasksNoneFoldsUnsetStatusAndPriority(t *testing.T) {
 			{ID: "T-0003", Status: core.StatusTodo},
 		}
 		got := groupNames(groupTasks(tasks, "status"))
-		want := []string{"TODO", "DONE", noneGroupName}
+		want := []string{"todo", "done", noneGroupName}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("status groups = %v, want %v", got, want)
 		}
@@ -305,7 +305,7 @@ func TestGroupTasksNoneFoldsUnsetStatusAndPriority(t *testing.T) {
 			{ID: "T-0003", Status: core.StatusTodo},
 		}
 		got := groupNames(groupTasks(tasks, "status"))
-		want := []string{"TODO", "ZZ_RETIRED", noneGroupName}
+		want := []string{"todo", "ZZ_RETIRED", noneGroupName}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("status groups = %v, want %v", got, want)
 		}

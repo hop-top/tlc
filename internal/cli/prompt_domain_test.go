@@ -264,8 +264,8 @@ func TestBuildCommand_ModifierStatusDone(t *testing.T) {
 	if len(cmds) == 0 {
 		t.Fatal("expected result")
 	}
-	if !containsSequence(cmds[0].Args, "--status", "DONE") {
-		t.Errorf("expected --status DONE in args, got %v", cmds[0].Args)
+	if !containsSequence(cmds[0].Args, "--status", "done") {
+		t.Errorf("expected --status done in args, got %v", cmds[0].Args)
 	}
 }
 

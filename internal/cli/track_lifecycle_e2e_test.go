@@ -208,7 +208,7 @@ func TestTrackLifecycle_E2E_CompleteAllDone(t *testing.T) {
 			TrackID: &trackID,
 		})
 		s.CreateTask(ctx, &core.Task{
-			ID: "T-0002", Title: "Skipped task", Status: core.StatusSkipped,
+			ID: "T-0002", Title: "Skipped task", Status: core.StatusCancelled,
 			TrackID: &trackID,
 		})
 

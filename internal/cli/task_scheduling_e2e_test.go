@@ -279,7 +279,7 @@ func TestTaskRemind_AgeNudge(t *testing.T) {
 
 	viper.Set("task.scheduling.age_nudges", []interface{}{
 		map[string]interface{}{
-			"status":    "IN_PROGRESS",
+			"status":    "in_progress",
 			"threshold": "48h",
 			"action":    "remind",
 		},

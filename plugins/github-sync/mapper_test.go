@@ -88,63 +88,63 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 		{
 			name:       "open issue → TODO",
 			issue:      makeIssue(),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 		},
 		{
-			name:       "open + status:in-progress → IN_PROGRESS",
+			name:       "open + status:in-progress → in_progress",
 			issue:      makeIssue(withLabels("status:in-progress")),
-			wantStatus: "IN_PROGRESS",
+			wantStatus: "in_progress",
 		},
 		{
 			name:        "open + status:blocked → TODO + BlockedReason",
 			issue:       makeIssue(withLabels("status:blocked")),
-			wantStatus:  "TODO",
+			wantStatus:  "todo",
 			wantBlocked: strPtr("blocked"),
 		},
 		{
 			name:       "closed completed → DONE",
 			issue:      makeIssue(withState("closed"), withStateReason("completed")),
-			wantStatus: "DONE",
+			wantStatus: "done",
 		},
 		{
 			name:       "closed not_planned → SKIPPED",
 			issue:      makeIssue(withState("closed"), withStateReason("not_planned")),
-			wantStatus: "SKIPPED",
+			wantStatus: "cancelled",
 		},
 		{
 			name:         "priority:critical → P0",
 			issue:        makeIssue(withLabels("priority:critical")),
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P0",
 		},
 		{
 			name:         "priority:low → P3",
 			issue:        makeIssue(withLabels("priority:low")),
-			wantStatus:   "TODO",
+			wantStatus:   "todo",
 			wantPriority: "P3",
 		},
 		{
 			name:       "effort:xl → XL",
 			issue:      makeIssue(withLabels("effort:xl")),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantEffort: "XL",
 		},
 		{
 			name:       "flat labels (bug, enhancement) ignored",
 			issue:      makeIssue(withLabels("bug", "enhancement")),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantTags:   nil,
 		},
 		{
 			name:       "dimension:scope labels → Tags",
 			issue:      makeIssue(withLabels("area:frontend", "team:platform")),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantTags:   []string{"area:frontend", "team:platform"},
 		},
 		{
 			name:          "body with blocked by #42 → Meta[blocked_by]",
 			issue:         makeIssue(withBody("Blocked by #42")),
-			wantStatus:    "TODO",
+			wantStatus:    "todo",
 			wantBlockedBy: []string{"42"},
 		},
 		{
@@ -153,20 +153,20 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 				withLabels("status:blocked"),
 				withBody("blocked by #10\nDepends on #20"),
 			),
-			wantStatus:    "TODO",
+			wantStatus:    "todo",
 			wantBlocked:   strPtr("blocked by #10, #20"),
 			wantBlockedBy: []string{"10", "20"},
 		},
 		{
 			name:       "due date from body footer",
 			issue:      makeIssue(withBody("some text\n\n<!-- tlc:due 2025-05-01 -->")),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantDueAt:  timePtr(mustDate("2025-05-01")),
 		},
 		{
 			name:       "no due date footer → nil",
 			issue:      makeIssue(withBody("just a description")),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantDueAt:  nil,
 		},
 		{
@@ -175,7 +175,7 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 				withBody("no footer here"),
 				withMilestone("v1.0", timePtr(mustDate("2025-06-15"))),
 			),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantDueAt:  timePtr(mustDate("2025-06-15")),
 		},
 		{
@@ -184,7 +184,7 @@ func TestMapGitHubIssueToTask(t *testing.T) {
 				withBody("text\n\n<!-- tlc:due 2025-05-01 -->"),
 				withMilestone("v1.0", timePtr(mustDate("2025-06-15"))),
 			),
-			wantStatus: "TODO",
+			wantStatus: "todo",
 			wantDueAt:  timePtr(mustDate("2025-05-01")),
 		},
 	}
@@ -262,13 +262,13 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 	}{
 		{
 			name:       "TODO → open, no status labels",
-			task:       &Task{Title: "t", Status: "TODO"},
+			task:       &Task{Title: "t", Status: "todo"},
 			wantState:  "open",
 			wantLabels: nil,
 		},
 		{
 			name:       "IN_PROGRESS → open + status:in-progress",
-			task:       &Task{Title: "t", Status: "IN_PROGRESS"},
+			task:       &Task{Title: "t", Status: "in_progress"},
 			wantState:  "open",
 			wantLabels: []string{"status:in-progress"},
 		},
@@ -276,7 +276,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 			name: "BlockedReason → open + status:blocked",
 			task: &Task{
 				Title:         "t",
-				Status:        "TODO",
+				Status:        "todo",
 				BlockedReason: strPtr("blocked by #5"),
 			},
 			wantState:  "open",
@@ -284,25 +284,25 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 		},
 		{
 			name:            "DONE → closed + completed",
-			task:            &Task{Title: "t", Status: "DONE"},
+			task:            &Task{Title: "t", Status: "done"},
 			wantState:       "closed",
 			wantStateReason: "completed",
 		},
 		{
 			name:            "SKIPPED → closed + not_planned",
-			task:            &Task{Title: "t", Status: "SKIPPED"},
+			task:            &Task{Title: "t", Status: "cancelled"},
 			wantState:       "closed",
 			wantStateReason: "not_planned",
 		},
 		{
 			name:       "Priority P0 → priority:critical label",
-			task:       &Task{Title: "t", Status: "TODO", Priority: "P0"},
+			task:       &Task{Title: "t", Status: "todo", Priority: "P0"},
 			wantState:  "open",
 			wantLabels: []string{"priority:critical"},
 		},
 		{
 			name:       "Effort M → effort:m label",
-			task:       &Task{Title: "t", Status: "TODO", Effort: "M"},
+			task:       &Task{Title: "t", Status: "todo", Effort: "M"},
 			wantState:  "open",
 			wantLabels: []string{"effort:m"},
 		},
@@ -310,7 +310,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 			name: "Tags passed through",
 			task: &Task{
 				Title:  "t",
-				Status: "TODO",
+				Status: "todo",
 				Tags:   []string{"area:backend", "team:core"},
 			},
 			wantState:  "open",
@@ -320,7 +320,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 			name: "Body with blocked-by refs prepended",
 			task: &Task{
 				Title:       "t",
-				Status:      "TODO",
+				Status:      "todo",
 				Description: "some desc",
 				Meta: map[string]interface{}{
 					"blocked_by": []string{"42", "99"},
@@ -333,7 +333,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 			name: "DueAt → body contains footer",
 			task: &Task{
 				Title:       "t",
-				Status:      "TODO",
+				Status:      "todo",
 				Description: "some desc",
 				DueAt:       timePtr(mustDate("2025-05-01")),
 			},
@@ -342,7 +342,7 @@ func TestMapTaskToGitHubIssueRequest(t *testing.T) {
 		},
 		{
 			name:       "no DueAt → no footer",
-			task:       &Task{Title: "t", Status: "TODO", Description: "some desc"},
+			task:       &Task{Title: "t", Status: "todo", Description: "some desc"},
 			wantState:  "open",
 			wantLabels: nil,
 		},
@@ -396,7 +396,7 @@ func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
 	original := &Task{
 		ID:          taskID,
 		Title:       "round-trip",
-		Status:      "TODO",
+		Status:      "todo",
 		Description: "body text",
 	}
 

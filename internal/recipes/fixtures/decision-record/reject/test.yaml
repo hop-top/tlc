@@ -1,0 +1,17 @@
+name: reject
+description: >
+  The owner rejects the decision. Replays the read-only analysis and the
+  decision task, which stays blocked: the apply and verify steps behind it
+  are never reached and nothing is written. The cassettes are those of
+  happy-path, recorded against a stand-in agent with canned answers: they
+  pin the prompts and the step wiring, not the quality of an analysis.
+expected_exit: 0
+vars:
+  question: Keep SQLite as the only storage backend?
+  owner: alice
+  affected: T-0001 T-0002
+gates:
+  decide:
+    decision: reject
+    by: alice
+    reason: the recommendation ignores the sync use case

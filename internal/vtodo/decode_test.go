@@ -58,7 +58,7 @@ func TestRoundTrip_StatusEveryValue(t *testing.T) {
 		core.StatusTodo,
 		core.StatusInProgress,
 		core.StatusDone,
-		core.StatusSkipped,
+		core.StatusCancelled,
 	}
 	for _, s := range cases {
 		t.Run(string(s), func(t *testing.T) {

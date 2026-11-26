@@ -1,7 +1,7 @@
 name: happy-path
 description: >
   Conditional recipe with target=staging. Validate-config and staging
-  branch SUCCEEDED; production branch SKIPPED. Default scenario.
+  branch SUCCEEDED; production branch not created. Default scenario.
 expected_exit: 0
 vars:
   target: staging

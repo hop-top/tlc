@@ -105,6 +105,15 @@ type TaskFieldChanges struct {
 	AddEva    []string
 	RemoveEva []string
 
+	// Meta, UnsetMeta: a merge write to user meta. Meta is a JSON Merge
+	// Patch (RFC 7396) document over task.Meta: a key sets, a nil value
+	// removes, an object value merges recursively. UnsetMeta removes
+	// top-level keys. Every other key — user or internal — survives, and
+	// a write naming a reserved key (core.IsReservedMetaKey) is refused
+	// before anything is applied. Nil/empty = no change.
+	Meta      map[string]any
+	UnsetMeta []string
+
 	// AutoCreateTrack, when Track resolves to ErrTrackNotFound, creates a
 	// track named Track and links it instead of failing. Callers that
 	// don't want auto-create (e.g. a strict HTTP API) can leave this nil;
@@ -164,6 +173,13 @@ func resolveOrCreateTrackID(
 // against the task and move on to the next one, exactly as RunE's errs
 // slice does).
 func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *storage.SQLiteStorage, task *core.Task, changes TaskFieldChanges) (changed bool, err error) {
+	// Refuse a bad meta write before any field is touched: the status
+	// branch below logs its transition as it goes, so a rejection found
+	// after it would leave a half-applied edit behind.
+	if err := core.ValidateUserMetaWrite(changes.Meta, changes.UnsetMeta); err != nil {
+		return false, metaWriteError(err)
+	}
+
 	if changes.Title != nil {
 		task.Title = *changes.Title
 		changed = true
@@ -192,9 +208,8 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		if transitionNote == "" {
 			transitionNote = "Manual update"
 		}
-		log, transErr := task.TransitionWithWorkflow(
-			nextStatus, core.GetCurrentUser(), transitionNote, wm, changes.StatusForce,
-		)
+		log, transErr := transitionTask(ctx, taskStorage, task, nextStatus, wm,
+			transitionOpts{By: core.GetCurrentUser(), Note: transitionNote, Force: changes.StatusForce})
 		if transErr != nil {
 			return changed, fmt.Errorf("%w: failed to transition: %v", domain.ErrInvalidTransition, transErr)
 		}
@@ -326,6 +341,15 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 			newTags = append(newTags, t)
 		}
 		task.Tags = newTags
+		changed = true
+	}
+
+	if len(changes.Meta) > 0 || len(changes.UnsetMeta) > 0 {
+		merged, err := core.MergeUserMeta(task.Meta, changes.Meta, changes.UnsetMeta)
+		if err != nil {
+			return changed, metaWriteError(err)
+		}
+		task.Meta = merged
 		changed = true
 	}
 
@@ -497,7 +521,9 @@ func statusOnlyEdit(changes TaskFieldChanges) bool {
 		len(changes.AddBlockedBy) > 0 ||
 		len(changes.RemoveBlockedBy) > 0 ||
 		len(changes.AddEva) > 0 ||
-		len(changes.RemoveEva) > 0
+		len(changes.RemoveEva) > 0 ||
+		len(changes.Meta) > 0 ||
+		len(changes.UnsetMeta) > 0
 	return !touchesOther
 }
 

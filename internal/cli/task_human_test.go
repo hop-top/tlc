@@ -90,6 +90,9 @@ func TestTaskApprove_CompletesHumanTask(t *testing.T) {
 		if !strings.Contains(out, "Approved") {
 			t.Errorf("output = %q; want an Approved line", out)
 		}
+		if got.Result["decision"] != "approved" || got.Result["by"] != "lead" || got.Result["note"] != "lgtm" {
+			t.Errorf("result = %v; want the decision recorded as approved by lead with the note", got.Result)
+		}
 	})
 }
 
@@ -111,8 +114,8 @@ func TestTaskApprove_RefusesNonHumanTask(t *testing.T) {
 		if err == nil {
 			t.Fatalf("approve on an agent task succeeded; want error\n%s", out)
 		}
-		if !strings.Contains(err.Error(), "agent") || !strings.Contains(err.Error(), "task_a1") {
-			t.Errorf("error = %v; want it to name the task and its kind", err)
+		if !strings.Contains(err.Error(), "in_review") || !strings.Contains(err.Error(), "task_a1") {
+			t.Errorf("error = %v; want it to name the task and the required status", err)
 		}
 		if got := mustGetTask(t, ctx, s, "task_a1"); got.Status != core.StatusTodo {
 			t.Errorf("status changed to %q", got.Status)
@@ -148,6 +151,9 @@ func TestTaskReject_BlocksWithReason(t *testing.T) {
 		}
 		if actions := taskActions(t, ctx, s, "task_h2"); !strings.Contains(strings.Join(actions, ","), core.ActionRejected) {
 			t.Errorf("log actions = %v; want REJECTED", actions)
+		}
+		if got.Result["decision"] != "rejected" || got.Result["reason"] != "scope creep" || got.Result["by"] == nil || got.Result["by"] == "" {
+			t.Errorf("result = %v; want the decision recorded as rejected with the reason and who", got.Result)
 		}
 	})
 }

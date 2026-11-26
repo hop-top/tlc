@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"hop.top/kit/go/ai/toolspec"
+	"hop.top/tlc/internal/core"
 )
 
 var helpLLMFormat string
@@ -122,9 +123,7 @@ func specProperties(spec *toolspec.ToolSpec) map[string]interface{} {
 			}
 			p["enum"] = names
 		case "status":
-			p["enum"] = []string{
-				"TODO", "IN_PROGRESS", "DONE", "SKIPPED",
-			}
+			p["enum"] = core.ConfiguredTaskStatusStrings()
 		case "tags":
 			p["items"] = map[string]string{"type": "string"}
 		}
@@ -201,19 +200,19 @@ func renderJSONFormat(spec *toolspec.ToolSpec) map[string]interface{} {
 				"tool_call": map[string]interface{}{
 					"action":  "update",
 					"task_id": "T-0042",
-					"status":  "IN_PROGRESS",
+					"status":  "in_progress",
 				},
-				"command": "tlc task update T-0042 --status IN_PROGRESS",
+				"command": "tlc task update T-0042 --status in_progress",
 			},
 			{
 				"description": "Listing pending tasks",
 				"tool_call": map[string]interface{}{
 					"action":      "list",
-					"status":      "TODO",
+					"status":      "todo",
 					"assigned_to": "engineer-1",
 				},
 				"command": "tlc task list " +
-					"--status TODO --assigned-to engineer-1",
+					"--status todo --assigned-to engineer-1",
 			},
 			{
 				"description": "Claiming a task",

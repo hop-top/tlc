@@ -27,6 +27,10 @@ type recipeCreateOpts struct {
 	Assign   bool
 	Infer    bool
 	Recreate bool
+
+	// ProvidedVars, when non-nil, replaces Vars: values already split by
+	// name, for callers (the REST surface) that never see --var syntax.
+	ProvidedVars map[string]string
 }
 
 func recipeOptsFromFlags() recipeCreateOpts {

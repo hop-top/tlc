@@ -30,7 +30,7 @@ func errNoSkippedStatus(statuses []string) error {
 			"(declared statuses: %s); add `role: %s` to the status that means "+
 			"\"finished, but not done\" in task.statuses, or use "+
 			"'tlc task update <id> --status <status>' to set it explicitly",
-		config.RoleSkipped, core.StatusSkipped, strings.Join(statuses, ", "), config.RoleSkipped,
+		config.RoleSkipped, core.StatusCancelled, strings.Join(statuses, ", "), config.RoleSkipped,
 	)
 }
 
@@ -55,10 +55,14 @@ func resolveSkipTarget(wm *core.WorkflowManager) (core.TaskStatus, string, error
 	}
 }
 
-var TaskSkipCmd = &cobra.Command{
-	Use:   "skip <task-id|pattern>...",
-	Short: "Mark a task as skipped",
-	Long: `Transition one or more tasks to the workflow's skipped status.
+// TaskCancelCmd is the canonical form of the old `skip`; `skip` stays
+// as an alias so scripts keep working.
+var TaskCancelCmd = &cobra.Command{
+	Use:     "cancel <task-id|pattern>...",
+	Aliases: []string{"skip"},
+	Short:   "Cancel a task (alias: skip)",
+	Long: `Transition one or more tasks to the workflow's cancelled status.
+('skip' is an alias of 'cancel'.)
 
 The target status is resolved by ROLE, not by name: whichever status
 declares ` + "`role: skipped`" + ` in task.statuses is the one used, so a
@@ -70,7 +74,12 @@ command refuses rather than electing an arbitrary terminal status.
 Skipping is a state-machine transition like any other, so a config that
 forbids it rejects the command. Use --no-verify for the same escape
 hatch 'task complete' offers, or 'tlc task update --status --force'.
-Re-running on an already-skipped task converges.`,
+Re-running on an already-cancelled task converges.
+
+Examples:
+  tlc task cancel T-0042 --note "superseded by T-0050"
+  tlc task skip T-0042 --note "not needed"        # same command
+  tlc task cancel T-0042 --note "x" --dry-run     # preview only`,
 	Annotations: map[string]string{
 		"kit/side-effect": "write-local",
 		"kit/idempotent":  "yes",
@@ -112,15 +121,14 @@ Re-running on an already-skipped task converges.`,
 
 			user := core.GetCurrentUser()
 			prevStatus := task.Status
-			logEntry, transErr := task.TransitionWithWorkflow(
-				skippedStatus, user, taskSkipNote, wm, taskSkipNoVerify,
-			)
+			logEntry, transErr := transitionTask(ctx, res.Storage, task, skippedStatus, wm,
+				transitionOpts{By: user, Note: taskSkipNote, Force: taskSkipNoVerify})
 			if transErr != nil {
 				errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), transErr))
 				continue
 			}
 			details := fmt.Sprintf("(%s → %s)", prevStatus, skippedStatus)
-			appendAuditLog(task, user, "SKIPPED", details, taskSkipNote, task.UpdatedAt)
+			appendAuditLog(task, user, "CANCELLED", details, taskSkipNote, task.UpdatedAt)
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
@@ -131,7 +139,7 @@ Re-running on an already-skipped task converges.`,
 					fmt.Sprintf("%s → %s", prevStatus, skippedStatus))
 				continue
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped task %s\n", taskDisplayID(task))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cancelled task %s\n", taskDisplayID(task))
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("some tasks failed:\n%s", strings.Join(errs, "\n"))
@@ -151,11 +159,11 @@ var TaskBlockCmd = &cobra.Command{
 	Short: "Record why a task is blocked",
 	Long: `Record a blocking reason on one or more tasks.
 
-Blocking is ORTHOGONAL to status: it sets the task's blocked reason and
-leaves the status untouched, so a blocked task keeps whatever lifecycle
-state it was in. This is deliberate — a task can be blocked while TODO
-and blocked while IN_PROGRESS, and collapsing that into a status would
-lose the distinction.
+When the workflow declares a status with role blocked (the default one
+does), blocking moves the task there, validated like any transition, and
+remembers the status it came from so 'tlc task unblock' can return it.
+In a custom vocabulary with no blocked status, blocking only sets the
+blocked reason and leaves the status untouched.
 
 It is also distinct from the dependency graph. --add-blocked-by on
 'task update' records that a task is blocked BY another task, a fact the
@@ -164,7 +172,11 @@ A task can carry both at once and they are never merged.
 
 Requires a reason via --note (or its --reason alias): a blocked task
 with no stated reason tells a reader nothing they could not already see.
-Re-running with the same reason converges.`,
+Re-running with the same reason converges.
+
+Examples:
+  tlc task block T-0042 --reason "waiting on vendor SLA"
+  tlc task block T-0042 --reason "waiting on vendor SLA" --dry-run`,
 	Annotations: map[string]string{
 		"kit/side-effect": "write-local",
 		"kit/idempotent":  "yes",
@@ -197,6 +209,7 @@ Re-running with the same reason converges.`,
 		}
 
 		user := core.GetCurrentUser()
+		wm := core.DefaultWorkflow()
 		var errs []string
 		for _, res := range resolved {
 			task := res.Task
@@ -209,16 +222,14 @@ Re-running with the same reason converges.`,
 				prevReason = *task.BlockedReason
 			}
 
+			prevStatus := task.Status
 			blocked := reason
-			task.BlockedReason = &blocked
 			task.UpdatedAt = time.Now().UTC()
 
 			details := fmt.Sprintf("(blocked: %s)", reason)
 			if prevReason != "" && prevReason != reason {
 				details = fmt.Sprintf("(blocked reason changed from %q to %q)", prevReason, reason)
 			}
-			appendAuditLog(task, user, "BLOCKED", details, reason, task.UpdatedAt)
-
 			logEntry := &core.LogEntry{
 				TaskID:    task.ID,
 				Timestamp: task.UpdatedAt,
@@ -226,6 +237,29 @@ Re-running with the same reason converges.`,
 				Action:    core.ActionBlocked,
 				Note:      reason,
 			}
+
+			// With a blocked status in the vocabulary, blocking is a
+			// status move: remember where the task came from, validate
+			// the move, and let unblock return there. A task already in
+			// the blocked status only has its reason replaced.
+			if blockedStatus, bErr := wm.StatusForRole(roleBlocked); bErr == nil && task.Status != blockedStatus {
+				entry, terr := transitionTask(ctx, res.Storage, task, blockedStatus, wm,
+					transitionOpts{By: user, Reason: reason, Force: taskBlockNoVerify})
+				if terr != nil {
+					errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), terr))
+					continue
+				}
+				if task.Meta == nil {
+					task.Meta = map[string]interface{}{}
+				}
+				task.Meta[metaBlockedFrom] = string(prevStatus)
+				entry.Action = core.ActionBlocked
+				entry.Note = fmt.Sprintf("Status changed from %s to %s: %s", prevStatus, blockedStatus, reason)
+				logEntry = entry
+				details = fmt.Sprintf("(%s → %s, blocked: %s)", prevStatus, blockedStatus, reason)
+			}
+			task.BlockedReason = &blocked
+			appendAuditLog(task, user, "BLOCKED", details, reason, task.UpdatedAt)
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
@@ -252,13 +286,18 @@ var TaskUnblockCmd = &cobra.Command{
 	Short: "Clear a task's blocked reason",
 	Long: `Clear the blocked reason on one or more tasks.
 
-Leaves status and dependency edges untouched — this clears only the
-free-text reason set by 'tlc task block'. To drop a dependency edge use
+Clears the reason set by 'tlc task block'. A task in the blocked status
+returns to the status it was blocked from; if that move is no longer
+allowed it goes to the initial status. Dependency edges are untouched. To drop a dependency edge use
 'tlc task update --remove-blocked-by' instead.
 
 --note is optional: the prior reason is already in the audit trail, so
 unblocking carries its own explanation in a way blocking does not.
-Re-running on an unblocked task converges.`,
+Re-running on an unblocked task converges.
+
+Examples:
+  tlc task unblock T-0042
+  tlc task unblock T-0042 --note "vendor replied" --dry-run`,
 	Annotations: map[string]string{
 		"kit/side-effect": "write-local",
 		"kit/idempotent":  "yes",
@@ -283,6 +322,7 @@ Re-running on an unblocked task converges.`,
 		}
 
 		user := core.GetCurrentUser()
+		wm := core.DefaultWorkflow()
 		var errs []string
 		for _, res := range resolved {
 			task := res.Task
@@ -295,6 +335,7 @@ Re-running on an unblocked task converges.`,
 				prevReason = *task.BlockedReason
 			}
 
+			prevStatus := task.Status
 			task.BlockedReason = nil
 			task.UpdatedAt = time.Now().UTC()
 
@@ -302,8 +343,6 @@ Re-running on an unblocked task converges.`,
 			if prevReason != "" {
 				details = fmt.Sprintf("(unblocked, was %q)", prevReason)
 			}
-			appendAuditLog(task, user, "UNBLOCKED", details, taskUnblockNote, task.UpdatedAt)
-
 			logEntry := &core.LogEntry{
 				TaskID:    task.ID,
 				Timestamp: task.UpdatedAt,
@@ -311,6 +350,29 @@ Re-running on an unblocked task converges.`,
 				Action:    core.ActionBlocked,
 				Note:      unblockLogNote(prevReason, taskUnblockNote),
 			}
+
+			// A task in the blocked status returns to the status it
+			// came from; when that move is no longer allowed it falls
+			// back to the initial status.
+			if blockedStatus, bErr := wm.StatusForRole(roleBlocked); bErr == nil && task.Status == blockedStatus {
+				back, terr := unblockTarget(ctx, res.Storage, task, wm)
+				if terr != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), terr))
+					continue
+				}
+				entry, terr := transitionTask(ctx, res.Storage, task, back, wm,
+					transitionOpts{By: user, Note: taskUnblockNote, Force: taskUnblockNoVerify})
+				if terr != nil {
+					errs = append(errs, fmt.Sprintf("%s: failed to transition task: %v", formatTaskAlias(task), terr))
+					continue
+				}
+				delete(task.Meta, metaBlockedFrom)
+				entry.Action = core.ActionBlocked
+				entry.Note = fmt.Sprintf("Status changed from %s to %s: %s", prevStatus, back, logEntry.Note)
+				logEntry = entry
+				details = fmt.Sprintf("(%s → %s, unblocked)", prevStatus, back)
+			}
+			appendAuditLog(task, user, "UNBLOCKED", details, taskUnblockNote, task.UpdatedAt)
 
 			if err := saveTaskWithLog(ctx, cmd, task, logEntry, res.Storage); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", formatTaskAlias(task), err))
@@ -330,6 +392,22 @@ Re-running on an unblocked task converges.`,
 		}
 		return writeProjection()
 	},
+}
+
+// unblockTarget picks where an unblocked task goes: the recorded
+// pre-block status when the workflow still allows the move, else the
+// initial status.
+func unblockTarget(ctx context.Context, repo core.Repository, task *core.Task, wm *core.WorkflowManager) (core.TaskStatus, error) {
+	if rec, ok := task.Meta[metaBlockedFrom].(string); ok && rec != "" {
+		if canTransition(ctx, repo, task, core.TaskStatus(rec), wm) {
+			return core.TaskStatus(rec), nil
+		}
+	}
+	initial, err := wm.StatusForRole("initial")
+	if err != nil {
+		return "", fmt.Errorf("workflow has no initial status: %w", err)
+	}
+	return initial, nil
 }
 
 // blockDryRunDetail and unblockDryRunDetail phrase the reason change a
@@ -368,8 +446,8 @@ func unblockLogNote(prevReason, note string) string {
 }
 
 func init() {
-	TaskSkipCmd.Flags().StringVarP(&taskSkipNote, "note", "n", "", "Skip note")
-	TaskSkipCmd.Flags().BoolVar(&taskSkipNoVerify, "no-verify", false, "Skip state machine validation")
+	TaskCancelCmd.Flags().StringVarP(&taskSkipNote, "note", "n", "", "Cancellation note (required where the workflow demands one)")
+	TaskCancelCmd.Flags().BoolVar(&taskSkipNoVerify, "no-verify", false, "Skip state machine validation")
 
 	TaskBlockCmd.Flags().StringVarP(&taskBlockNote, "note", "n", "", "Reason the task is blocked (required)")
 	// --reason is the word a user reaches for here, and the field it
@@ -378,5 +456,7 @@ func init() {
 	// two can never disagree.
 	TaskBlockCmd.Flags().StringVar(&taskBlockNote, "reason", "", "Alias for --note")
 
+	TaskBlockCmd.Flags().BoolVar(&taskBlockNoVerify, "no-verify", false, "Skip state machine validation")
 	TaskUnblockCmd.Flags().StringVarP(&taskUnblockNote, "note", "n", "", "Unblock note (optional)")
+	TaskUnblockCmd.Flags().BoolVar(&taskUnblockNoVerify, "no-verify", false, "Skip state machine validation")
 }

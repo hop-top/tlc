@@ -11,7 +11,7 @@ import (
 
 func defaultTestConfig() *config.TaskConfig {
 	return &config.TaskConfig{
-		DefaultStatus: "TODO",
+		DefaultStatus: "todo",
 		Statuses:      config.GetDefaultStatuses(),
 		StateMachine:  config.GetDefaultStateMachine(),
 	}
@@ -30,10 +30,10 @@ func TestValidateTransition_DefaultConfig(t *testing.T) {
 		wantErr bool
 	}{
 		{"TODO to IN_PROGRESS", StatusTodo, StatusInProgress, false},
-		{"TODO to SKIPPED", StatusTodo, StatusSkipped, false},
+		{"TODO to SKIPPED", StatusTodo, StatusCancelled, false},
 		{"IN_PROGRESS to DONE", StatusInProgress, StatusDone, false},
 		{"IN_PROGRESS to TODO", StatusInProgress, StatusTodo, false},
-		{"IN_PROGRESS to SKIPPED", StatusInProgress, StatusSkipped, false},
+		{"IN_PROGRESS to SKIPPED", StatusInProgress, StatusCancelled, false},
 		{"same status", StatusTodo, StatusTodo, false},
 	}
 
@@ -54,8 +54,8 @@ func TestValidateTransition_RejectsTerminalToAnything(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	terminalStatuses := []TaskStatus{StatusDone, StatusSkipped}
-	targets := []TaskStatus{StatusTodo, StatusInProgress, StatusDone, StatusSkipped}
+	terminalStatuses := []TaskStatus{StatusDone, StatusCancelled}
+	targets := []TaskStatus{StatusTodo, StatusInProgress, StatusDone, StatusCancelled}
 
 	for _, from := range terminalStatuses {
 		for _, to := range targets {
@@ -173,8 +173,11 @@ func TestStatusForTLSMarker(t *testing.T) {
 		{" ", StatusTodo, true},
 		{">", StatusInProgress, true},
 		{"x", StatusDone, true},
-		{"-", StatusSkipped, true},
-		{"?", "", false},
+		{"-", StatusBacklog, true},
+		{"?", StatusInReview, true},
+		{"!", StatusBlocked, true},
+		{"~", StatusCancelled, true},
+		{"z", "", false},
 	}
 
 	for _, tt := range tests {
@@ -197,7 +200,7 @@ func TestGetAllStatuses_PreservesOrder(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := []string{"TODO", "IN_PROGRESS", "DONE", "SKIPPED"}
+	expected := []string{"backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"}
 	got := wm.GetAllStatuses()
 
 	if len(got) != len(expected) {
@@ -224,7 +227,7 @@ func TestIsTerminal(t *testing.T) {
 		{StatusTodo, false},
 		{StatusInProgress, false},
 		{StatusDone, true},
-		{StatusSkipped, true},
+		{StatusCancelled, true},
 	}
 
 	for _, tt := range tests {
@@ -242,8 +245,8 @@ func TestGetWorkflowForTags(t *testing.T) {
 		"urgent": {
 			StateMachine: &config.WorkflowDefinition{
 				Rules: map[string][]string{
-					"TODO":        {"IN_PROGRESS", "DONE", "SKIPPED"},
-					"IN_PROGRESS": {"DONE", "TODO", "SKIPPED"},
+					"todo":        {"in_progress", "done", "cancelled"},
+					"in_progress": {"done", "todo", "cancelled"},
 				},
 			},
 		},
@@ -313,10 +316,10 @@ func TestGetWorkflowForTagsRefusesAmbiguity(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Workflows = map[string]config.WorkflowOverride{
 		"hotfix": {StateMachine: &config.WorkflowDefinition{
-			Rules: map[string][]string{"TODO": {"DONE"}},
+			Rules: map[string][]string{"todo": {"done"}},
 		}},
 		"experimental": {StateMachine: &config.WorkflowDefinition{
-			Rules: map[string][]string{"TODO": {"SKIPPED"}},
+			Rules: map[string][]string{"todo": {"cancelled"}},
 		}},
 	}
 
@@ -349,10 +352,10 @@ func TestGetWorkflowForTagsIsDeterministic(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Workflows = map[string]config.WorkflowOverride{
 		"alpha": {StateMachine: &config.WorkflowDefinition{
-			Rules: map[string][]string{"TODO": {"DONE"}},
+			Rules: map[string][]string{"todo": {"done"}},
 		}},
 		"zulu": {StateMachine: &config.WorkflowDefinition{
-			Rules: map[string][]string{"TODO": {"SKIPPED"}},
+			Rules: map[string][]string{"todo": {"cancelled"}},
 		}},
 	}
 
@@ -405,7 +408,7 @@ func TestOverrideReplacesRulesButDoesNotStrand(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Workflows = map[string]config.WorkflowOverride{
 		"fast": {StateMachine: &config.WorkflowDefinition{
-			Rules: map[string][]string{"TODO": {"DONE"}},
+			Rules: map[string][]string{"todo": {"done"}},
 		}},
 	}
 
@@ -440,19 +443,19 @@ func TestOverrideReplacesRulesButDoesNotStrand(t *testing.T) {
 
 func TestCustomConfig_WithInReviewStatus(t *testing.T) {
 	cfg := &config.TaskConfig{
-		DefaultStatus: "TODO",
+		DefaultStatus: "todo",
 		Statuses: []config.StatusDefinition{
-			{Name: "TODO", Label: "To Do", IsTerminal: false, Color: "yellow", Role: "initial", TLSMarker: " "},
-			{Name: "IN_PROGRESS", Label: "In Progress", IsTerminal: false, Color: "blue", Role: "active", TLSMarker: ">"},
+			{Name: "todo", Label: "To Do", IsTerminal: false, Color: "yellow", Role: "initial", TLSMarker: " "},
+			{Name: "in_progress", Label: "In Progress", IsTerminal: false, Color: "blue", Role: "active", TLSMarker: ">"},
 			{Name: "IN_REVIEW", Label: "In Review", IsTerminal: false, Color: "purple", Role: "active", TLSMarker: "r"},
-			{Name: "DONE", Label: "Done", IsTerminal: true, Color: "green", Role: "completed", TLSMarker: "x"},
-			{Name: "SKIPPED", Label: "Skipped", IsTerminal: true, Color: "gray", Role: "completed", TLSMarker: "-"},
+			{Name: "done", Label: "Done", IsTerminal: true, Color: "green", Role: "completed", TLSMarker: "x"},
+			{Name: "cancelled", Label: "Skipped", IsTerminal: true, Color: "gray", Role: "completed", TLSMarker: "-"},
 		},
 		StateMachine: &config.WorkflowDefinition{
 			Rules: map[string][]string{
-				"TODO":        {"IN_PROGRESS", "SKIPPED"},
-				"IN_PROGRESS": {"IN_REVIEW", "TODO", "SKIPPED"},
-				"IN_REVIEW":   {"DONE", "IN_PROGRESS", "SKIPPED"},
+				"todo":        {"in_progress", "cancelled"},
+				"in_progress": {"IN_REVIEW", "todo", "cancelled"},
+				"IN_REVIEW":   {"done", "in_progress", "cancelled"},
 			},
 		},
 	}
@@ -463,13 +466,13 @@ func TestCustomConfig_WithInReviewStatus(t *testing.T) {
 	}
 
 	// IN_PROGRESS -> IN_REVIEW should be allowed
-	err = wm.ValidateTransition(TaskStatus("IN_PROGRESS"), TaskStatus("IN_REVIEW"), false)
+	err = wm.ValidateTransition(TaskStatus("in_progress"), TaskStatus("IN_REVIEW"), false)
 	if err != nil {
 		t.Errorf("expected IN_PROGRESS -> IN_REVIEW to be allowed: %v", err)
 	}
 
 	// IN_REVIEW -> DONE should be allowed
-	err = wm.ValidateTransition(TaskStatus("IN_REVIEW"), TaskStatus("DONE"), false)
+	err = wm.ValidateTransition(TaskStatus("IN_REVIEW"), TaskStatus("done"), false)
 	if err != nil {
 		t.Errorf("expected IN_REVIEW -> DONE to be allowed: %v", err)
 	}
@@ -523,7 +526,7 @@ func TestGetStatusDef(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if def.Name != "TODO" {
+		if def.Name != "todo" {
 			t.Errorf("expected name TODO, got %s", def.Name)
 		}
 		if def.Label != "To Do" {
@@ -558,8 +561,8 @@ func TestValidateTransition_TerminalGatePrecedesRules(t *testing.T) {
 	// the engine and prove the gate — not the rules — is what answers.
 	cfg.StateMachine = &config.WorkflowDefinition{
 		Rules: map[string][]string{
-			"TODO": {"IN_PROGRESS"},
-			"DONE": {"TODO"},
+			"todo": {"in_progress"},
+			"done": {"todo"},
 		},
 	}
 	wm, err := NewWorkflowManager(cfg)

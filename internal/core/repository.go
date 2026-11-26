@@ -120,4 +120,8 @@ type TrackQuery struct {
 	Limit       int
 	Offset      int
 	AllProjects bool // If true, don't filter by current project
+	// Meta keeps tracks whose meta holds every key=value pair (string
+	// equality on the member's scalar form); keys are validated by
+	// ListTracks, see core.ValidateMetaFilterKey.
+	Meta map[string]string
 }

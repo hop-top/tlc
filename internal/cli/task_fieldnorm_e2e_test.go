@@ -286,7 +286,7 @@ func TestFieldNorm_E2E_CreateStatusAlias(t *testing.T) {
 		{"wip", core.StatusInProgress},
 		{"in-progress", core.StatusInProgress},
 		{"complete", core.StatusDone},
-		{"skip", core.StatusSkipped},
+		{"skip", core.StatusCancelled},
 	} {
 		t.Run(tc.alias, func(t *testing.T) {
 			ctx, cleanup := setupTestDir(t)

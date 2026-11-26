@@ -230,16 +230,10 @@ func renderTrackShowDetail(
 // renderPhaseTask renders a single task line within a phase/unphased section.
 func renderPhaseTask(w io.Writer, task *core.Task) {
 	statusStr := string(task.Status)
-	styled := statusStr
-	switch task.Status {
-	case core.StatusDone:
-		styled = doneStyle.Render("[DONE]")
-	case core.StatusInProgress:
-		styled = inProgressStyle.Render("[IN_PROGRESS]")
-	case core.StatusSkipped:
-		styled = skippedStyle.Render("[SKIPPED]")
-	default:
-		styled = fmt.Sprintf("[%s]", statusStr)
+	role := statusRole(task.Status)
+	styled := fmt.Sprintf("[%s]", strings.ToUpper(statusStr))
+	if role != "" {
+		styled = roleStyleFor(role).Render(styled)
 	}
 	_, _ = fmt.Fprintf(w, "  %-10s %-15s %s\n", formatTaskAlias(task), styled, task.Title)
 }
