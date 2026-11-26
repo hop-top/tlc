@@ -254,7 +254,8 @@ Exit codes:
 Runs live under `<recipe dir>/fixtures/<recipe>/<run>/`. Each run has a
 `record/` dir (cassettes, one subdirectory per step id), an optional
 `contracts/` dir (eva contracts, `<step-id>.yaml`), and a `test.yaml`
-manifest declaring `expected_exit`, `vars` and `passthrough`.
+manifest declaring `expected_exit`, `vars`, `passthrough` and `gates` (the
+decision, approve or reject, for each human step; unknown keys are an error).
 
 ### `git hop` — Worktree Management
 

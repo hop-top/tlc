@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/storage"
 )
@@ -34,6 +35,8 @@ it. The completion is forced past the state machine because a decision
 is the task's whole work: it never passes through IN_PROGRESS. When the
 task is the last open leaf of a recipe run, the run's subject completes
 too.
+The decision is recorded in the task's result as decision, by and note, so
+a later step's when: reads results.<step>.decision == 'approved'.
 
 Examples:
   tlc task approve T-0050
@@ -60,27 +63,15 @@ Examples:
 			return runMove(cmd, args, s, move{
 				verb: "approve", past: "Approved", audit: "APPROVED",
 				logAction: core.ActionApproved,
-				toRole:    "completed", fromRole: roleReview,
+				toRole:    config.RoleCompleted, fromRole: roleReview,
 				note: taskApproveNote, by: taskApproveBy, force: taskApproveNoVerify,
 			})
 		}
 		wm := core.DefaultWorkflow()
-		completed, err := wm.StatusForRole("completed")
-		if err != nil {
-			return fmt.Errorf("workflow has no completed status: %w", err)
-		}
 		by := approvalBy(taskApproveBy)
-		note := "approved"
-		if taskApproveNote != "" {
-			note += ": " + taskApproveNote
-		}
-		entry, err := task.TransitionWithWorkflow(completed, by, note, wm, true)
-		if err != nil {
-			return fmt.Errorf("approve %s: %w", formatTaskAlias(task), err)
-		}
-		entry.Action = core.ActionApproved
-		task.ClaimedAt = nil
-		if err := s.UpdateTaskWithLog(ctx, task, entry); err != nil {
+		if err := core.DecideHumanTask(ctx, s, wm, task, core.HumanDecisionInput{
+			Decision: core.HumanApproved, By: by, Note: taskApproveNote,
+		}); err != nil {
 			return fmt.Errorf("approve %s: %w", formatTaskAlias(task), err)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Approved %s (by %s)\n", formatTaskAlias(task), by)
@@ -103,7 +94,8 @@ decision), behavior is as described below.
 Human-kind tasks: record a human decision against the task. The task stays in
 its current status and is marked blocked with the reason, so 'tlc track
 execute' leaves it and everything behind it alone until someone unblocks
-or skips it.
+or skips it. The decision is recorded in the task's result as decision, by
+and reason.
 
 Examples:
   tlc task reject T-0050 --reason "tests missing" --dry-run
@@ -132,15 +124,14 @@ Examples:
 			return runMove(cmd, args, s, move{
 				verb: "reject", past: "Rejected", audit: "REJECTED",
 				logAction: core.ActionRejected,
-				toRole:    "active", fromRole: roleReview,
+				toRole:    config.RoleActive, fromRole: roleReview,
 				reason: taskRejectReason, by: taskRejectBy, force: taskRejectNoVerify,
 			})
 		}
 		by := approvalBy(taskRejectBy)
-		reason := "rejected: " + taskRejectReason
-		task.BlockedReason = &reason
-		entry := &core.LogEntry{TaskID: task.ID, Timestamp: task.UpdatedAt, By: by, Action: core.ActionRejected, Note: reason}
-		if err := s.UpdateTaskWithLog(ctx, task, entry); err != nil {
+		if err := core.DecideHumanTask(ctx, s, core.DefaultWorkflow(), task, core.HumanDecisionInput{
+			Decision: core.HumanRejected, By: by, Reason: taskRejectReason,
+		}); err != nil {
 			return fmt.Errorf("reject %s: %w", formatTaskAlias(task), err)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Rejected %s (by %s): %s\n", formatTaskAlias(task), by, taskRejectReason)

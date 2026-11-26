@@ -1,0 +1,32 @@
+xrr: "1"
+adapter: exec
+fingerprint: d26c0a85
+recorded_at: "2026-11-15T22:20:35Z"
+payload:
+    argv:
+        - -p
+        - |-
+          Read-only. Pin down what is being decided and what it touches.
+
+          1. Restate the question "Keep SQLite as the only storage backend?" as one sentence a reader
+             can answer, and list what is out of scope.
+          2. Gather the facts from .: the constraints,
+             the current state and anything already ruled out. Cite each
+             fact (a file:line, a commit SHA, a document and section).
+          3. Resolve the affected tasks "T-0001 T-0002". When it is a list of
+             task ids, take those. Otherwise treat it as a topic: run
+             `tlc task list --format json` and keep the open tasks whose
+             title or description matches it. For each record its id,
+             title, status and track, and its edges from the human
+             `tlc task show <id>` view; the JSON output omits them.
+          4. List the records already in docs/decisions/ that bear on the
+             question, and the one this decision would supersede, if any.
+
+          Write decision-record/context.md. End your summary with the number of
+          affected tasks.
+        - --print
+        - --output-format
+        - json
+        - --dangerously-skip-permissions
+        - --max-budget-usd
+        - "0.10"

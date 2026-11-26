@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -222,5 +223,80 @@ func TestRecipeTest_E2E_ExpectedExitMismatch(t *testing.T) {
 	}
 	if !contains(out, "expected exit 1") {
 		t.Errorf("output = %q; want the expectation named", out)
+	}
+}
+
+const conditionalRecipe = `recipe: cond-probe
+version: 1.0.0
+vars:
+  target:
+    description: deploy target
+    required: true
+steps:
+  - id: check
+    kind: exec
+    title: Check config
+    exec:
+      argv: [echo, ok]
+  - id: deploy-staging
+    kind: exec
+    title: Deploy staging
+    depends_on: [check]
+    when: "vars.target == 'staging'"
+    exec:
+      argv: [echo, staging]
+  - id: deploy-production
+    kind: exec
+    title: Deploy production
+    depends_on: [check]
+    when: "vars.target == 'production'"
+    exec:
+      argv: [echo, production]
+`
+
+// TestRecipeTest_E2E_WhenSkippedStepPasses: a step skipped because its
+// when: is false is terminal and expected, so the run passes.
+func TestRecipeTest_E2E_WhenSkippedStepPasses(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	inRepoRoot(t)
+	dir := t.TempDir()
+	path := writeRecipeFixture(t, dir, "cond-probe.yaml", conditionalRecipe)
+	writeRunFixture(t, dir, "cond-probe", "staging",
+		"name: staging\nexpected_exit: 0\nvars:\n  target: staging\n")
+
+	out, err := runRecipeCmd(t, "test", path, "staging")
+	if err != nil {
+		t.Fatalf("expected exit 0; got %v (code %d)\n%s", err, exitCodeOf(err), out)
+	}
+	if !contains(out, "skipped: when false") || !contains(out, "result: PASS") {
+		t.Errorf("output = %q; want the when-skip logged and PASS", out)
+	}
+}
+
+// TestRecipeTest_E2E_FailedStepStillFails guards the other direction: a
+// step that fails keeps the run red even when another step was skipped.
+func TestRecipeTest_E2E_FailedStepStillFails(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	inRepoRoot(t)
+	dir := t.TempDir()
+	// "lint" is independent of the gate, so the skipped deploy steps and
+	// the failure land in the same run.
+	path := writeRecipeFixture(t, dir, "cond-fail.yaml", strings.Replace(conditionalRecipe, "cond-probe", "cond-fail", 1)+`  - id: lint
+    kind: exec
+    title: Lint
+    exec:
+      argv: ["false"]
+`)
+	writeRunFixture(t, dir, "cond-fail", "staging",
+		"name: staging\nexpected_exit: 0\nvars:\n  target: staging\n")
+
+	out, err := runRecipeCmd(t, "test", path, "staging")
+	if code := exitCodeOf(err); code != recipeTestExitFailed {
+		t.Errorf("exit = %d (%v); want %d\n%s", code, err, recipeTestExitFailed, out)
+	}
+	if !contains(out, "result: FAIL") {
+		t.Errorf("output = %q; want FAIL", out)
 	}
 }

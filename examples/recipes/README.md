@@ -61,10 +61,29 @@ output. Each recipe's fixtures live beside it:
 
 ```
 fixtures/<recipe>/<run>/
-  test.yaml      # run name, description, expected_exit, vars
+  test.yaml      # run name, description, expected_exit, vars, passthrough, gates
   contracts/     # <step-id>.yaml, one per gated step
   record/        # <step-id>/ cassettes, one directory per step
 ```
+
+A human step needs a decision in `test.yaml`, keyed by step id; the run
+resumes after it, in replay and with `--record`:
+
+```yaml
+gates:
+  review: approve            # shorthand, approve only
+  sign-off:
+    decision: reject         # approve or reject, required
+    by: lead                 # optional; default: the current user
+    reason: not ready        # reject only, required
+    # note: ...              # approve only
+```
+
+A rejected gate stays blocked, so the steps behind it never run; declare
+`expected_exit: 0` and the run passes when the gate ended as declared. A
+gate reached with no decision fails the run (exit 1); one left out by
+`--task` needs none. An unknown key in `test.yaml`, a gate that is not a
+human step, or a reject without a reason exits 3.
 
 A run directory named `happy-path` is the convention for the case where
 everything succeeds. Cassettes are keyed by step id, so renaming a step
