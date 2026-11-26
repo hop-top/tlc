@@ -784,6 +784,10 @@ tlc track execute review-42 --recipe code-review --recreate
   without a value is prompted for on a terminal; otherwise the command
   fails naming every missing var and the `--var` fix. `--infer` is
   reserved and errors as not implemented yet.
+- **Create-time `when:`**: a step whose `when:` the vars alone make false
+  is not created, and its dependents lose the edge to it; a true or
+  run-time (`results.*`) condition is kept for the executor. `--dry-run`
+  lists only what would be created.
 - **Selection**: `--task 1-5,7`, `--task lint` (repeatable) keeps a subset
   of the expanded steps; ordinals are the ones `recipe show` prints. A
   dependency on an unselected step is dropped and warned about, or pulled

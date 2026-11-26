@@ -38,8 +38,8 @@ func (p *recipePlan) scope() core.Scope {
 	return sc
 }
 
-// renderRecipePlan binds vars, applies --task selection and renders the
-// expanded steps. carried holds an earlier run's vars, overridden by
+// renderRecipePlan binds vars, applies --task selection, renders the
+// expanded steps and drops the ones whose `when:` the vars make false. carried holds an earlier run's vars, overridden by
 // --var.
 func renderRecipePlan(
 	cmd *cobra.Command, r *core.Recipe, expanded []core.RecipeStep, opts recipeCreateOpts,
@@ -66,9 +66,22 @@ func renderRecipePlan(
 			))
 		}
 	}
-	plan.Steps, err = core.RenderSteps(selected, plan.scope())
+	rendered, err := core.RenderSteps(selected, plan.scope())
 	if err != nil {
 		return nil, fmt.Errorf("recipe %s: %w", r.Name, err)
+	}
+	// A step whose `when:` the vars alone make false is not materialized;
+	// its dependents lose the edge the way an unselected step's do.
+	kept := core.DropFalseWhen(rendered, plan.Vars)
+	plan.Steps = kept.Steps
+	plan.Warnings = append(plan.Warnings, kept.Warnings...)
+	if len(kept.Deps) > 0 {
+		if plan.Dropped == nil {
+			plan.Dropped = map[string][]string{}
+		}
+		for step, deps := range kept.Deps {
+			plan.Dropped[step] = append(plan.Dropped[step], deps...)
+		}
 	}
 	return plan, nil
 }
