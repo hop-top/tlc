@@ -300,7 +300,7 @@ func formatTLS(t *core.Task) string {
 		status = "[~]"
 	case core.StatusDone:
 		status = "[x]"
-	case core.StatusSkipped:
+	case core.StatusCancelled:
 		status = "[-]"
 	}
 

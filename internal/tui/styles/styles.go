@@ -25,6 +25,9 @@ type Styles struct {
 	InProgress lipgloss.Style
 	Done       lipgloss.Style
 	Skipped    lipgloss.Style
+	Backlog    lipgloss.Style
+	Review     lipgloss.Style
+	Blocked    lipgloss.Style
 	Box        lipgloss.Style
 	TagColors  []string
 
@@ -45,6 +48,9 @@ func NewFromTheme(t kitcli.Theme) *Styles {
 		InProgress: lipgloss.NewStyle().Foreground(t.Accent),
 		Done:       lipgloss.NewStyle().Foreground(t.Success).Bold(true),
 		Skipped:    lipgloss.NewStyle().Foreground(t.Secondary),
+		Backlog:    lipgloss.NewStyle().Foreground(t.Muted),
+		Review:     lipgloss.NewStyle().Foreground(t.Accent).Italic(true),
+		Blocked:    lipgloss.NewStyle().Foreground(t.Error),
 		Box: lipgloss.NewStyle().
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderForeground(t.Secondary).

@@ -219,21 +219,21 @@ func mapStateToStatus(state string, tags []string) (status string, blockedReason
 
 	switch state {
 	case "New":
-		return "TODO", ""
+		return "todo", ""
 	case "Active":
 		if hasTag("status:blocked") || hasTag("Blocked") {
-			return "TODO", "blocked via ADO tag"
+			return "todo", "blocked via ADO tag"
 		}
 		if hasTag("status:in-progress") {
-			return "IN_PROGRESS", ""
+			return "in_progress", ""
 		}
-		return "IN_PROGRESS", ""
+		return "in_progress", ""
 	case "Resolved", "Closed":
-		return "DONE", ""
+		return "done", ""
 	case "Removed":
-		return "SKIPPED", ""
+		return "cancelled", ""
 	default:
-		return "TODO", ""
+		return "todo", ""
 	}
 }
 
@@ -290,7 +290,7 @@ func MapTaskToWorkItem(task *Task) []PatchOperation {
 	tagParts = append(tagParts, task.Tags...)
 
 	// Add status tag for blocked/in-progress states.
-	if task.Status == "IN_PROGRESS" {
+	if task.Status == "in_progress" {
 		tagParts = append(tagParts, "status:in-progress")
 	}
 	if task.BlockedReason != "" {
@@ -331,13 +331,13 @@ func MapBlockedByToLinkPatches(blockedBy []string, org, project string) []PatchO
 // mapStatusToState converts a TLC status to an ADO work item state.
 func mapStatusToState(status, blockedReason string) string {
 	switch status {
-	case "TODO":
+	case "todo":
 		return "New"
-	case "IN_PROGRESS":
+	case "in_progress":
 		return "Active"
-	case "DONE":
+	case "done":
 		return "Closed"
-	case "SKIPPED":
+	case "cancelled":
 		return "Removed"
 	default:
 		return "New"

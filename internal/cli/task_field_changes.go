@@ -208,9 +208,8 @@ func applyTaskFieldChanges(ctx context.Context, registryStorage, taskStorage *st
 		if transitionNote == "" {
 			transitionNote = "Manual update"
 		}
-		log, transErr := task.TransitionWithWorkflow(
-			nextStatus, core.GetCurrentUser(), transitionNote, wm, changes.StatusForce,
-		)
+		log, transErr := transitionTask(ctx, taskStorage, task, nextStatus, wm,
+			transitionOpts{By: core.GetCurrentUser(), Note: transitionNote, Force: changes.StatusForce})
 		if transErr != nil {
 			return changed, fmt.Errorf("%w: failed to transition: %v", domain.ErrInvalidTransition, transErr)
 		}

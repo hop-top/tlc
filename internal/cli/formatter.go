@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"hop.top/kit/go/console/markdown"
 	"hop.top/kit/go/console/output"
+	"hop.top/tlc/internal/config"
 	"hop.top/tlc/internal/core"
 	"hop.top/tlc/internal/vtodo"
 )
@@ -32,6 +33,9 @@ var (
 	inProgressStyle = lipgloss.NewStyle().Foreground(primaryColor)
 	doneStyle       = lipgloss.NewStyle().Foreground(successColor).Bold(true)
 	skippedStyle    = lipgloss.NewStyle().Foreground(warningColor)
+	backlogStyle    = lipgloss.NewStyle().Foreground(mutedColor)
+	reviewStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("170"))
+	blockedStyle    = lipgloss.NewStyle().Foreground(errorColor)
 )
 
 // formatTaskAlias renders the human-readable task display alias
@@ -709,10 +713,10 @@ type taskTableRow struct {
 
 func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	// Color is a pure function of status + state:
-	//   DONE / SKIPPED → none (terminal, always)
-	//   IN_PROGRESS    → primary (green)
+	//   completed / skipped role → none (terminal, always)
+	//   active role    → primary
 	//   blocker (ID in another task's blocked-by) → secondary (pink)
-	//   blocked (has BlockedReason) → muted
+	//   blocked (blocked role or BlockedReason) → muted
 	//   everything else → none
 	blockerIDs := make(map[string]bool)
 	for _, t := range tasks {
@@ -724,13 +728,13 @@ func renderTable(w io.Writer, tasks []*core.Task, cols []string) {
 	emphasis := make(map[int]output.EmphasisKind)
 	for i, t := range tasks {
 		switch {
-		case t.Status == core.StatusDone, t.Status == core.StatusSkipped:
+		case isTerminalRole(statusRole(t.Status)):
 			// none — terminal statuses stay neutral.
-		case t.Status == core.StatusInProgress:
+		case statusRole(t.Status) == config.RoleActive:
 			emphasis[i] = output.EmphasisPrimary
 		case blockerIDs[t.ID]:
 			emphasis[i] = output.EmphasisSecondary
-		case t.IsBlocked():
+		case t.IsBlocked(), statusRole(t.Status) == config.RoleBlocked:
 			emphasis[i] = output.EmphasisMuted
 		}
 	}
@@ -989,21 +993,11 @@ func formatStatus(status core.TaskStatus) string {
 	}
 	if def.Color != "" {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(def.Color)).Render(label)
+			Foreground(statusColor(def.Color)).Render(label)
 	}
-	// Fallback to legacy styles for default statuses without explicit color
-	switch status {
-	case core.StatusTodo:
-		return todoStyle.Render(label)
-	case core.StatusInProgress:
-		return inProgressStyle.Render(label)
-	case core.StatusDone:
-		return doneStyle.Render(label)
-	case core.StatusSkipped:
-		return skippedStyle.Render(label)
-	default:
-		return label
-	}
+	// No explicit color: style by role so a vocabulary without colors
+	// still reads at a glance.
+	return roleStyleFor(def.Role).Render(label)
 }
 
 // resolveTaskReference returns the absolute reference URI for a task.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"strings"
 
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -246,6 +247,12 @@ func formatLogAction(action string) string {
 		"UPDATED":       lipgloss.Color("45"),  // cyan
 		"DONE":          lipgloss.Color("46"),  // bright green
 		"SKIPPED":       lipgloss.Color("226"), // yellow
+		"CANCELLED":     lipgloss.Color("226"), // yellow
+		"BLOCKED":       lipgloss.Color("196"), // red
+		"IN_REVIEW":     lipgloss.Color("201"), // magenta
+		"IN_PROGRESS":   lipgloss.Color("39"),  // blue
+		"TODO":          lipgloss.Color("214"), // yellow
+		"BACKLOG":       lipgloss.Color("245"), // gray
 		"FAILURE":       lipgloss.Color("196"), // red
 		"RETRY":         lipgloss.Color("214"), // orange
 		"COMMENT":       lipgloss.Color("245"), // gray
@@ -256,7 +263,7 @@ func formatLogAction(action string) string {
 		"SYNC_ERROR":    lipgloss.Color("196"), // red
 	}
 
-	color, exists := actionColors[action]
+	color, exists := actionColors[strings.ToUpper(action)]
 	if !exists {
 		color = lipgloss.Color("255") // white/default
 	}

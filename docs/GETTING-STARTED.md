@@ -38,8 +38,8 @@ Follow these stages in order. Each builds on the previous:
 tlc init
 tlc task create "Fix login bug" --tag bug
 tlc task list
-tlc task update T-0001 --status IN_PROGRESS
-tlc task update T-0001 --status DONE
+tlc task update T-0001 --status in_progress
+tlc task update T-0001 --status done
 ```
 
 **When to move on**: You can create, update, and list tasks comfortably.
@@ -116,7 +116,7 @@ tlc sync pull github
 tlc task list | grep github
 
 # Make a local change
-tlc task update T-0010 --status IN_PROGRESS
+tlc task update T-0010 --status in_progress
 
 # Push back to GitHub
 tlc sync push github
@@ -201,7 +201,7 @@ Substitute your own track id for `smoke-test` — `tlc track list` shows it.
 
 **Next**: add `depends_on` to fan steps out, a `when:` to skip a step on
 an upstream result, a `retry:` block to give a flaky step a second
-attempt, and a `gate:` to hold a step at an eva contract before DONE.
+attempt, and a `gate:` to hold a step at an eva contract before `done`.
 
 **When to move on**: You understand step kinds, dependencies and the run ledger.
 
@@ -269,7 +269,7 @@ tlc task stale --run-hooks
 tlc task list --blocked
 
 # Combine with other filters
-tlc task list --stale --status IN_PROGRESS
+tlc task list --stale --status in_progress
 tlc task list --blocked --assigned-to me
 
 # Clear blocked reason
@@ -402,7 +402,7 @@ After completing stages 7-8, you should be able to:
 **Docs**: [Sync Architecture Use Cases](sync-architecture-0.1.md#use-cases)
 
 ### Mistake 2: Modifying completed tasks
-**Problem**: Trying to claim or update tasks in DONE/SKIPPED status
+**Problem**: Trying to claim or update tasks in done/cancelled status
 **Solution**: These states are terminal. Create a new task or revert status first.
 **Docs**: [Task Collaboration Invariants](task-collab-spec-0.1.md#ownership-invariants-normative)
 

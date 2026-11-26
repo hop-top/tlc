@@ -251,10 +251,10 @@ func TestDefaultVocabularyUnchanged(t *testing.T) {
 		t.Errorf("task list --status todo should work (exit %d):\n%s", code, out)
 	}
 
-	// And the rejection message must still name exactly the built-in four.
+	// And the rejection message must still name exactly the built-in seven.
 	rej, _ := runTLC(t, bin, home, env, "task", "update", "T-0001", "--status", "BOGUS")
-	if !strings.Contains(rej, "TODO, IN_PROGRESS, DONE, SKIPPED") {
-		t.Errorf("default rejection should name the built-in four verbatim, got:\n%s", rej)
+	if !strings.Contains(rej, "backlog, todo, in_progress, in_review, blocked, done, cancelled") {
+		t.Errorf("default rejection should name the built-in seven verbatim, got:\n%s", rej)
 	}
 	if strings.Contains(rej, "IN_REVIEW") {
 		t.Errorf("default vocabulary leaked a custom status:\n%s", rej)

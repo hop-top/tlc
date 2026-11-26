@@ -525,7 +525,7 @@ func handleTaskComplete(deps *serveDeps) http.HandlerFunc {
 			writeAPIErrorf(w, http.StatusInternalServerError, "internal_error", "workflow has no completed status: %v", wmErr)
 			return
 		}
-		logEntry, transErr := task.TransitionWithWorkflow(completedStatus, user, "Completed via serve API", wm, false)
+		logEntry, transErr := transitionTask(ctx, deps.storage, task, completedStatus, wm, transitionOpts{By: user, Note: "Completed via serve API"})
 		if transErr != nil {
 			writeAPIErrorf(w, http.StatusConflict, "invalid_transition", "%v", transErr)
 			return

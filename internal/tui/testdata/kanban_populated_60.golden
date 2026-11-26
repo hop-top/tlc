@@ -1,0 +1,22 @@
+[1;38;5;39mKanban Board[m                                                                    
+                                                                                
+[1;38;5;39mKanban Board[m                                                                    
+                                                                                
+      [1;38;5;245mIN_PROGRESS (1)[m              [1;38;5;245mIN_REVIEW (1)[m                                
+                                                                                
+[38;5;240m╭────────────────────────╮[m  [38;5;240m╭────────────────────────╮[m                          
+[38;5;240m│[mT-0003                  [38;5;240m│[m  [38;5;240m│[mT-0004                  [38;5;240m│[m                          
+[38;5;240m│[mBuild parser            [38;5;240m│[m  [38;5;240m│[mReview parser           [38;5;240m│[m                          
+[38;5;240m╰────────────────────────╯[m  [38;5;240m╰────────────────────────╯[m                          
+                                                                                
+[38;5;241mhidden: done (3), todo (2), blocked (1); widen terminal to show[m                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+[38;5;241m[j/k] navigate  [h/l] move  [v] cycle view  [enter] details  [r]efresh  [q]uit[m  

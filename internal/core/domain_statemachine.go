@@ -95,10 +95,7 @@ func buildStateMachine(
 	opts []domain.SMOption,
 ) *domain.StateMachine {
 	if configRules == nil {
-		configRules = map[string][]string{
-			"TODO":        {"IN_PROGRESS", "SKIPPED"},
-			"IN_PROGRESS": {"DONE", "TODO", "SKIPPED"},
-		}
+		configRules = config.GetDefaultStateMachine().Rules
 	}
 
 	rules := make(map[domain.State][]domain.State, len(configRules))

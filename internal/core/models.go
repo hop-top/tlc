@@ -9,10 +9,13 @@ import (
 type TaskStatus string
 
 const (
-	StatusTodo       TaskStatus = "TODO"
-	StatusInProgress TaskStatus = "IN_PROGRESS"
-	StatusDone       TaskStatus = "DONE"
-	StatusSkipped    TaskStatus = "SKIPPED"
+	StatusBacklog    TaskStatus = "backlog"
+	StatusTodo       TaskStatus = "todo"
+	StatusInProgress TaskStatus = "in_progress"
+	StatusInReview   TaskStatus = "in_review"
+	StatusBlocked    TaskStatus = "blocked"
+	StatusDone       TaskStatus = "done"
+	StatusCancelled  TaskStatus = "cancelled"
 )
 
 // taskStatuses is the BUILT-IN set of task statuses in lifecycle order,
@@ -27,10 +30,13 @@ const (
 // remains the fallback and the compile-time home of the Status* constants
 // the code refers to by name.
 var taskStatuses = []TaskStatus{
+	StatusBacklog,
 	StatusTodo,
 	StatusInProgress,
+	StatusInReview,
+	StatusBlocked,
 	StatusDone,
-	StatusSkipped,
+	StatusCancelled,
 }
 
 // TaskStatuses returns the closed set of task statuses in lifecycle order.
@@ -168,8 +174,9 @@ func ConfiguredPriorityDefinitions() []config.PriorityDefinition {
 }
 
 // UnfinishedTaskStatuses returns the statuses that mean "not yet finished
-// work": every status carrying role "initial" or role "active", in
-// declared order.
+// work": every status carrying role "initial", "active", "review" or
+// "blocked", in declared order. Role "backlog" is parked work and stays
+// out of the default view.
 //
 // This is the vocabulary-derived spelling of the default `task list` /
 // `task graph` filter. The literal it replaces — IN_PROGRESS + TODO —
@@ -218,7 +225,7 @@ func UnfinishedTaskStatuses() []string {
 		if s.Name == "" {
 			continue
 		}
-		if s.Role == config.RoleInitial || s.Role == config.RoleActive {
+		if isUnfinishedRole(s.Role) {
 			out = append(out, s.Name)
 		}
 	}
@@ -590,4 +597,14 @@ type LogEntry struct {
 	Action    string                 `json:"action" yaml:"action"`
 	Note      string                 `json:"note" yaml:"note"`
 	Meta      map[string]interface{} `json:"meta,omitempty" yaml:"meta,omitempty"`
+}
+
+// isUnfinishedRole reports whether a status role means live, unfinished
+// work: not parked (backlog), not terminal.
+func isUnfinishedRole(role string) bool {
+	switch role {
+	case config.RoleInitial, config.RoleActive, config.RoleReview, config.RoleBlocked:
+		return true
+	}
+	return false
 }

@@ -81,6 +81,8 @@ var (
 	taskSkipNote         string
 	taskSkipNoVerify     bool
 	taskBlockNote        string
+	taskBlockNoVerify    bool
+	taskUnblockNoVerify  bool
 	taskUnblockNote      string
 	taskUnassignNote     string
 	taskUpdateForce      bool
@@ -475,7 +477,8 @@ func init() {
 	TaskCmd.AddCommand(TaskUnassignCmd)
 	TaskCmd.AddCommand(TaskCompleteCmd)
 	TaskCmd.AddCommand(TaskReopenCmd)
-	TaskCmd.AddCommand(TaskSkipCmd)
+	TaskCmd.AddCommand(TaskCancelCmd)
+	TaskCmd.AddCommand(TaskSubmitCmd)
 	TaskCmd.AddCommand(TaskBlockCmd)
 	TaskCmd.AddCommand(TaskUnblockCmd)
 	TaskCmd.AddCommand(TaskReprioritiseCmd)

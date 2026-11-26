@@ -15,7 +15,7 @@ func TestTypeIDRoundTrip_PreservesEmbedded(t *testing.T) {
 	original := &Task{
 		ID:          taskID,
 		Title:       "round-trip",
-		Status:      "TODO",
+		Status:      "todo",
 		Description: "body text",
 	}
 
