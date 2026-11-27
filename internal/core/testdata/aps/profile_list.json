@@ -1,0 +1,62 @@
+[
+  {
+    "id": "Casey_Dev",
+    "display_name": "Casey_Dev",
+    "roles": "",
+    "capabilities": "",
+    "workspace": "",
+    "email": "",
+    "has_secrets": false,
+    "has_identity": false,
+    "color": "",
+    "avatar": ""
+  },
+  {
+    "id": "avery",
+    "display_name": "Avery Quinn",
+    "roles": "",
+    "capabilities": "",
+    "workspace": "",
+    "email": "avery@example.test",
+    "has_secrets": false,
+    "has_identity": false,
+    "color": "",
+    "avatar": ""
+  },
+  {
+    "id": "bolt-bot",
+    "display_name": "Bolt",
+    "roles": "",
+    "capabilities": "",
+    "workspace": "",
+    "email": "",
+    "has_secrets": false,
+    "has_identity": false,
+    "color": "",
+    "avatar": ""
+  },
+  {
+    "id": "noor",
+    "display_name": "Noor",
+    "roles": "",
+    "capabilities": "",
+    "workspace": "",
+    "email": "",
+    "has_secrets": false,
+    "has_identity": false,
+    "color": "",
+    "avatar": ""
+  },
+  {
+    "id": "quirky",
+    "display_name": "Yes: \"No\"",
+    "roles": "",
+    "capabilities": "",
+    "workspace": "",
+    "email": "",
+    "has_secrets": false,
+    "has_identity": false,
+    "color": "",
+    "avatar": ""
+  }
+]

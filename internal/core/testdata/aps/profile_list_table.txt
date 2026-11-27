@@ -1,0 +1,6 @@
+ID         DISPLAY NAME  ROLES  CAPABILITIES  WORKSPACE  EMAIL               SECRETS  DID    COLOR  AVATAR
+Casey_Dev  Casey_Dev                                                         false    false         
+avery      Avery Quinn                                   avery@example.test  false    false         
+bolt-bot   Bolt                                                              false    false         
+noor       Noor                                                              false    false         
+quirky     Yes: "No"                                                         false    false         
