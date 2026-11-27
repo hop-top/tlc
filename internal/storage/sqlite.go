@@ -354,7 +354,7 @@ func groupFiltersByField(filters []core.FieldFilter) (map[string][]core.FieldFil
 // filterClause renders one filter on an allowlisted field as a clause and
 // its bound args.
 func filterClause(field string, f core.FieldFilter) (string, []any) {
-	if field == "status" {
+	if field == fieldStatus {
 		if clause, cargs, ok := statusFilterClause(f.Operator, f.Value); ok {
 			return clause, cargs
 		}
