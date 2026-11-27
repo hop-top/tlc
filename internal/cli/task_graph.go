@@ -31,6 +31,9 @@ Output formats:
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
+		if err := validateTaskListSort(); err != nil {
+			return err
+		}
 		query := core.Query{
 			Limit:           taskListLimit,
 			Offset:          taskListOffset,
@@ -352,7 +355,7 @@ func init() {
 	TaskGraphCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
 	TaskGraphCmd.Flags().BoolVar(&taskListArchived, "archived", false, "Show archived tasks")
 	TaskGraphCmd.Flags().BoolVar(&taskListAllProjects, "all-projects", false, "Show tasks from all projects")
-	TaskGraphCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
+	TaskGraphCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", sortByUsage())
 	TaskGraphCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
 	TaskGraphCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
 	TaskGraphCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")

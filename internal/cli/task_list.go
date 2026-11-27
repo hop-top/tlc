@@ -48,6 +48,13 @@ set. Supports temporal filters (--due-before, --due-after, --overdue,
 			return unknownGroupByError(taskListGroupBy)
 		}
 
+		// Same ordering argument as the group-by gate above: a bad sort
+		// key fails against the user's flags (or config defaults) before
+		// storage opens.
+		if err := validateTaskListSort(); err != nil {
+			return err
+		}
+
 		// --group-limit caps rows WITHIN a group, so without a grouping
 		// dimension there is nothing for it to cap. Accepting it there
 		// would leave the user believing their listing was capped when
@@ -486,7 +493,7 @@ func init() {
 	TaskListCmd.Flags().BoolVar(&taskListMine, "mine", false, "Filter by current user")
 	TaskListCmd.Flags().BoolVar(&taskListArchived, "archived", false, "Show archived tasks")
 	TaskListCmd.Flags().BoolVar(&taskListAllProjects, "all-projects", false, "Show tasks from all projects")
-	TaskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", "Sort field")
+	TaskListCmd.Flags().StringVar(&taskListSortBy, "sort-by", "created_at", sortByUsage())
 	TaskListCmd.Flags().StringVar(&taskListSortDirection, "sort-direction", "desc", "Sort direction (asc, desc)")
 	TaskListCmd.Flags().IntVarP(&taskListLimit, "limit", "n", 100, "Limit results")
 	TaskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "Skip results")

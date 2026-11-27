@@ -8,6 +8,7 @@ import (
 	"charm.land/log/v2"
 
 	"hop.top/tlc/internal/core"
+	"hop.top/tlc/internal/storage"
 )
 
 // SourceOpener creates a ProjectSource for a registered project.
@@ -25,6 +26,13 @@ func QueryAcross(
 	q core.Query,
 	opener SourceOpener,
 ) ([]*core.Task, error) {
+	// Rejected once, up front: a bad sort key or filter field fails every
+	// project's read, and the loop below skips unreadable projects, so
+	// without this the request would come back as an empty listing.
+	if err := storage.ValidateTaskQuery(q); err != nil {
+		return nil, err
+	}
+
 	var all []*core.Task
 
 	for _, proj := range projects {
