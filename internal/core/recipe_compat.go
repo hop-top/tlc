@@ -274,8 +274,7 @@ func parseRecipe(r io.Reader, filename string) (*Recipe, error) {
 	if err != nil {
 		return nil, recipeWordingAfter(err, filename+": ")
 	}
-	foldTLCExt(rec)
-	if err := validateTLC(rec); err != nil {
+	if err := finishTLC(rec); err != nil {
 		return nil, fmt.Errorf("%s: %w", filename, err)
 	}
 	// Drift detection compares the hash of the file as authored, not of
@@ -392,6 +391,9 @@ func (s shimFS) ReadFile(name string) ([]byte, error) {
 	data, err := fs.ReadFile(s.FS, name)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // fs error passes through unchanged
+	}
+	if err := rejectReservedExt(data, name); err != nil {
+		return nil, err
 	}
 	return shimRecipeSource(data, name), nil
 }
