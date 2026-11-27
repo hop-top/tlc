@@ -7,6 +7,10 @@ import (
 	"hop.top/tlc/internal/core"
 )
 
+// fieldStatus is the one field with its own sort and filter semantics
+// (legacy spellings fold together), so callers branch on it by name.
+const fieldStatus = "status"
+
 // taskFieldNames lists the task columns a caller may sort or filter on,
 // in the order help text and rejection messages render them. Every other
 // string is rejected before it can reach a statement: identifiers cannot
@@ -141,7 +145,7 @@ func taskOrderTerms(query core.Query) ([]string, []any, error) {
 		if expr, exprArgs := vocabRankOrder(key, query, order); expr != "" {
 			terms = append(terms, expr)
 			args = append(args, exprArgs...)
-		} else if key == "status" {
+		} else if key == fieldStatus {
 			terms = append(terms, statusSortExpr()+" "+order)
 		} else {
 			terms = append(terms, taskFieldExprs[key]+" "+order)
