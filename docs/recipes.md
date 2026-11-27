@@ -58,6 +58,8 @@ track:
   plan: |
     # Review PR {{pr}}
     Checked out, linted, reviewed and signed off.
+  meta:                    # user meta on the created track
+    pr: "{{pr}}"
 
 steps:
   - id: fetch
@@ -117,6 +119,33 @@ who does the work:
 Any task step may carry `title`, `description`, `depends_on`, `when`,
 `assignee`, `due`, `retry` (`max_attempts`, `backoff`) and `gate`
 (`contract`, `eva_url`). `title` defaults to the step id.
+
+A step also sets what its task carries beyond the work itself: `tags`
+(a list), `meta` (user meta, a map) and `priority`. They behave as on a
+hand-made task: tags go through the tag policy, `priority` must be in the
+configured vocabulary and counts as set by hand, `meta` may not use a key
+tlc reserves (`blocked_by`, `priority_source`, `origin_*`, ...). Values are
+templated like `title`. The recipe's `track.meta` does the same for the
+track `track create --recipe` builds. Every check runs before anything is
+created, and `recipe validate` runs the static ones.
+
+```yaml
+track:
+  title: "Release {{version}}"
+  meta: {owner: release-team}
+steps:
+  - id: changelog
+    tags: [docs, "release:{{version}}"]
+    priority: P1
+    meta: {ticket: "REL-{{version}}"}
+```
+
+Reconcile and `recipe diff` leave these fields alone, as they do `title`
+and `description`: a task keeps the definition it was created from, and
+changing them in the recipe shows up only as content drift.
+
+Keys starting with `x-` are yours to use for anything: they are kept and
+written back, and ignored. `x-tlc` is reserved.
 
 ### Variables and templates
 

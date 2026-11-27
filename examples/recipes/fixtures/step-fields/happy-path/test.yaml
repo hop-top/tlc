@@ -1,0 +1,3 @@
+name: happy-path
+description: both steps run and exit 0; the tags, meta and priority ride on their tasks
+expected_exit: 0

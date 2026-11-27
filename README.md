@@ -716,6 +716,10 @@ steps:
     depends_on: [review]
 ```
 
+- **Task and track fields**: a step can set `tags`, `meta` and `priority`
+  on its task; `track.meta` sets user meta on the track the recipe creates.
+  Values are templated; reserved meta keys are refused before anything is
+  created.
 - **Templates**: `{{var}}`, `{{subject.title}}`, `{{run.iteration}}` and
   `{{steps.<id>.<field>}}` are rendered when tasks are created;
   `{{results.<id>.<field>}}` and `when:` are evaluated at dispatch from
