@@ -306,10 +306,22 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 }
 
 // buildFilterClauses converts FieldFilter groups into SQL WHERE clauses and args.
-func buildFilterClauses(filters []core.FieldFilter) ([]string, []any) {
+//
+// Field names are identifiers, which cannot be bound as parameters, so each
+// is resolved through the task field allowlist (see task_fields.go) before
+// it is placed in a clause; a field outside it fails the whole query with
+// core.ErrInvalidFilterField. Values always travel as bound args.
+func buildFilterClauses(filters []core.FieldFilter) ([]string, []any, error) {
 	fieldGroups := make(map[string][]core.FieldFilter)
 	for _, f := range filters {
-		fieldGroups[f.Field] = append(fieldGroups[f.Field], f)
+		canonical, _, ok := resolveTaskField(f.Field)
+		if !ok {
+			return nil, nil, invalidFieldError(core.ErrInvalidFilterField, f.Field)
+		}
+		// canonical is an allowlisted name, so it is safe to place in a
+		// clause below; the caller's spelling never is.
+		f.Field = canonical
+		fieldGroups[canonical] = append(fieldGroups[canonical], f)
 	}
 
 	var whereClauses []string
@@ -384,7 +396,7 @@ func buildFilterClauses(filters []core.FieldFilter) ([]string, []any) {
 				"("+strings.Join(groupClauses, " OR ")+")")
 		}
 	}
-	return whereClauses, args
+	return whereClauses, args, nil
 }
 
 // scanLogEntries iterates sql.Rows and returns parsed LogEntry slices.
@@ -432,7 +444,7 @@ var rankedSortColumns = map[string]func(core.Query) []string{
 // empty expression when it does not apply, leaving the caller on the
 // plain column sort.
 //
-// It applies only when SortBy names a ranked column and the matching
+// It applies only when col names a ranked column and the matching
 // vocabulary is supplied. A priority vocabulary of URGENT/NORMAL/LATER
 // sorts to LATER, NORMAL, URGENT as text — exactly backwards — while the
 // built-in P0..P3 sorts correctly by accident, which is why the plain
@@ -445,8 +457,8 @@ var rankedSortColumns = map[string]func(core.Query) []string{
 // rather than interpolated: the values come from a user's config file.
 // The COLUMN name is interpolated, but only ever from the keys of
 // rankedSortColumns, never from the caller's string.
-func vocabRankOrder(query core.Query, order string) (string, []any) {
-	vocabFor, ok := rankedSortColumns[query.SortBy]
+func vocabRankOrder(col string, query core.Query, order string) (string, []any) {
+	vocabFor, ok := rankedSortColumns[col]
 	if !ok {
 		return "", nil
 	}
@@ -454,7 +466,6 @@ func vocabRankOrder(query core.Query, order string) (string, []any) {
 	if len(vocab) == 0 {
 		return "", nil
 	}
-	col := query.SortBy
 
 	var b strings.Builder
 	args := make([]any, 0, len(vocab)+1)
@@ -480,7 +491,10 @@ func vocabRankOrder(query core.Query, order string) (string, []any) {
 func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*core.Task, error) {
 	sqlQuery := "SELECT " + taskColumns + " FROM tasks"
 
-	whereClauses, args := buildTaskWhereClauses(query)
+	whereClauses, args, err := buildTaskWhereClauses(query)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(whereClauses) > 0 {
 		sqlQuery += " WHERE " + strings.Join(whereClauses, " AND ")
@@ -496,23 +510,15 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 			args = append(args, p)
 		}
 	}
-	if query.SortBy != "" {
-		order := sqlOrderASC
-		if strings.ToLower(query.SortDirection) == "desc" {
-			order = sqlOrderDESC
-		}
-		if expr, exprArgs := vocabRankOrder(query, order); expr != "" {
-			orderParts = append(orderParts, expr)
-			args = append(args, exprArgs...)
-		} else if query.SortBy == "status" {
-			orderParts = append(orderParts, statusSortExpr()+" "+order)
-		} else {
-			orderParts = append(orderParts,
-				fmt.Sprintf("%s %s", query.SortBy, order))
-		}
-	} else {
-		orderParts = append(orderParts, "created_at DESC")
+	// Sort keys and direction are resolved through the allowlist in
+	// task_fields.go; nothing from the caller's string reaches the
+	// statement as text.
+	terms, termArgs, err := taskOrderTerms(query)
+	if err != nil {
+		return nil, err
 	}
+	orderParts = append(orderParts, terms...)
+	args = append(args, termArgs...)
 	sqlQuery += " ORDER BY " + strings.Join(orderParts, ", ")
 
 	// Pagination

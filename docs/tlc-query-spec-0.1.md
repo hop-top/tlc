@@ -275,13 +275,27 @@ updated_at:-7d..@now                     # Last 7 days
 ### Sort Syntax
 
 ```bash
---sort-by <field> [--order asc|desc]
+--sort-by <field>[,<field>...] [--sort-direction asc|desc]
 ```
 
-**Default order**:
-- Timestamps: `desc` (newest first)
-- Strings: `asc` (alphabetical)
-- Numbers: `asc` (smallest first)
+`<field>` is one of the task columns below. Anything else is rejected
+with an error naming the allowed fields; sort keys and filter fields are
+never passed through as free text. The direction applies to every listed
+field and defaults to `desc` on `task list`.
+
+| Group | Fields |
+|-------|--------|
+| Identity | `id`, `seq`, `title`, `description`, `reference` |
+| Workflow | `status`, `priority`, `effort`, `kind`, `attempts`, `archived` |
+| Ownership | `assigned_to`, `track_id`, `project_id` |
+| Time | `created_at`, `updated_at`, `due_at`, `remind_at`, `claimed_at`, `last_sync_at`, `stale_fired_at`, `stale_timeout`, `rrule`, `no_auto_remind` |
+| Other | `tags`, `origin_system`, `blocked_reason`, `run_id`, `step_id`, `step_ordinal` |
+
+`status`, `priority` and `effort` sort by rank in their configured
+vocabulary, not alphabetically; tasks with no priority or effort sort
+last in both directions.
+
+The same fields are the filterable set for the query layer.
 
 ### Examples
 
@@ -290,10 +304,7 @@ updated_at:-7d..@now                     # Last 7 days
 tlc task list --sort-by created_at
 
 # Sort by status (alphabetical)
-tlc task list --sort-by status --order asc
-
-# Sort by priority (custom order)
-tlc task list --sort-by meta.priority --order desc
+tlc task list --sort-by status --sort-direction asc
 
 # Multiple sort fields
 tlc task list --sort-by status,created_at

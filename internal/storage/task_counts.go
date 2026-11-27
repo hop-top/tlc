@@ -54,8 +54,11 @@ func closedStatuses() []string {
 // Pagination (LIMIT/OFFSET) and ORDER BY are deliberately excluded so
 // aggregate callers can count the full match set independently of page
 // size — see CountTasksByStatus.
-func buildTaskWhereClauses(query core.Query) ([]string, []any) {
-	whereClauses, args := buildFilterClauses(query.Filters)
+func buildTaskWhereClauses(query core.Query) ([]string, []any, error) {
+	whereClauses, args, err := buildFilterClauses(query.Filters)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	if query.Search != "" {
 		whereClauses = append(whereClauses, "(title LIKE ? OR description LIKE ?)")
@@ -82,7 +85,7 @@ func buildTaskWhereClauses(query core.Query) ([]string, []any) {
 	whereClauses = append(whereClauses, rClauses...)
 	args = append(args, rArgs...)
 
-	return whereClauses, args
+	return whereClauses, args, nil
 }
 
 // buildTaskRecipeClauses renders the recipe-era column predicates: run
@@ -200,7 +203,10 @@ func taskWhereSuffix(clauses []string) string {
 // (--stale, --blocked-by, qualified track IDs) must not use this; count
 // the fully filtered slice instead, fetched without a limit.
 func (s *SQLiteStorage) CountTasksByStatus(ctx context.Context, query core.Query) (map[string]int, error) {
-	whereClauses, args := buildTaskWhereClauses(query)
+	whereClauses, args, err := buildTaskWhereClauses(query)
+	if err != nil {
+		return nil, err
+	}
 
 	//nolint:gosec // G202: whereClauses built from validated field names; values travel as ? args
 	sqlQuery := "SELECT status, COUNT(*) FROM tasks" +
@@ -239,7 +245,10 @@ func (s *SQLiteStorage) CountTasksByStatus(ctx context.Context, query core.Query
 func (s *SQLiteStorage) CountTasksByProjectAndStatus(
 	ctx context.Context, query core.Query,
 ) (map[string]map[string]int, error) {
-	whereClauses, args := buildTaskWhereClauses(query)
+	whereClauses, args, err := buildTaskWhereClauses(query)
+	if err != nil {
+		return nil, err
+	}
 
 	//nolint:gosec // G202: whereClauses built from validated field names; values travel as ? args
 	sqlQuery := "SELECT COALESCE(project_id, ''), status, COUNT(*) FROM tasks" +
@@ -276,7 +285,10 @@ func (s *SQLiteStorage) CountTasksByProjectAndStatus(
 // every predicate the list query honors — the temporal ones included —
 // narrows this count too.
 func (s *SQLiteStorage) CountTasks(ctx context.Context, query core.Query) (int, error) {
-	whereClauses, args := buildTaskWhereClauses(query)
+	whereClauses, args, err := buildTaskWhereClauses(query)
+	if err != nil {
+		return 0, err
+	}
 
 	// whereClauses are built from validated field names; values travel as ? args.
 	sqlQuery := "SELECT COUNT(*) FROM tasks" + taskWhereSuffix(whereClauses)
