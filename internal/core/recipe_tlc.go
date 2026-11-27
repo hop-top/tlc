@@ -112,7 +112,10 @@ func SetStepExtras(s *RecipeStep, x StepExtras) error {
 	if err != nil {
 		return fmt.Errorf("step %s: %w", s.ID, err)
 	}
-	part, _ := v.(map[string]any)
+	part, ok := v.(map[string]any)
+	if !ok {
+		return fmt.Errorf("step %s: tlc fields did not encode to a map", s.ID)
+	}
 	if s.Ext == nil {
 		s.Ext = map[string]any{}
 	}
@@ -127,8 +130,10 @@ func RenderRecipeMap(m map[string]any, scope Scope) (map[string]any, error) {
 }
 
 func tlcPart(ext map[string]any) map[string]any {
-	part, _ := ext[extTLC].(map[string]any)
-	return part
+	if part, ok := ext[extTLC].(map[string]any); ok {
+		return part
+	}
+	return nil
 }
 
 func dropTLC(ext map[string]any) map[string]any {

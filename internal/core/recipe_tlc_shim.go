@@ -22,13 +22,13 @@ func rejectReservedExt(data []byte, filename string) error {
 	if isJSONName(filename) {
 		var doc map[string]json.RawMessage
 		if json.Unmarshal(data, &doc) != nil {
-			return nil // spec reports the syntax error
+			return nil //nolint:nilerr // not an object: spec reports the syntax error
 		}
 		return reservedInJSON(doc, filename)
 	}
 	var doc yaml.Node
 	if yaml.Unmarshal(data, &doc) != nil {
-		return nil
+		return nil //nolint:nilerr // not YAML: spec reports the syntax error
 	}
 	root := &doc
 	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
@@ -168,13 +168,17 @@ func unshimTLCSteps(step *yaml.Node) {
 func (p PlainStep) MarshalJSON() ([]byte, error) {
 	part := tlcPart(p.Ext)
 	if len(part) == 0 {
-		return p.RecipeStep.MarshalJSON()
+		b, err := p.RecipeStep.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("encode step %s: %w", p.ID, err)
+		}
+		return b, nil
 	}
 	bare := p.RecipeStep
 	bare.Ext = dropTLC(bare.Ext)
 	b, err := bare.MarshalJSON()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode step %s: %w", p.ID, err)
 	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(b, &obj); err != nil {
@@ -185,7 +189,11 @@ func (p PlainStep) MarshalJSON() ([]byte, error) {
 			return nil, fmt.Errorf("encode step %s: %s: %w", p.ID, k, err)
 		}
 	}
-	return json.Marshal(obj)
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return nil, fmt.Errorf("encode step %s: %w", p.ID, err)
+	}
+	return out, nil
 }
 
 // PlainSteps wraps steps for encoding.
