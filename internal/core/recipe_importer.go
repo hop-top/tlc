@@ -43,10 +43,17 @@ func (ri *RecipeImporter) ImportFromURL(ctx context.Context, url string) (*Recip
 	if err != nil {
 		return nil, fmt.Errorf("import %s: %w", url, err)
 	}
-	if rec.Track == nil {
-		rec.Track = &RecipeTrack{}
+	track, err := RecipeTrackOf(rec)
+	if err != nil {
+		return nil, fmt.Errorf("import %s: %w", url, err)
 	}
-	rec.Track.Plan = content
+	if track == nil {
+		track = &RecipeTrack{}
+	}
+	track.Plan = content
+	if err := SetRecipeTrack(rec, track); err != nil {
+		return nil, fmt.Errorf("import %s: %w", url, err)
+	}
 	return rec, nil
 }
 

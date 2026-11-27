@@ -116,8 +116,12 @@ func trackFromRecipe(
 			"recipe %s names no track title; pass one as the argument or set track.title in the recipe", r.Name,
 		)
 	}
-	if trackType == "" && r.Track != nil {
-		trackType = r.Track.Type
+	rt, err := core.RecipeTrackOf(r)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // names the recipe
+	}
+	if trackType == "" && rt != nil {
+		trackType = rt.Type
 	}
 	track, err := mk(title, trackType)
 	if err != nil {
@@ -132,14 +136,18 @@ func trackFromRecipe(
 // recipeTrackTitle renders the recipe's track.title against the vars and
 // the --for subject, "" when the recipe declares none.
 func recipeTrackTitle(r *core.Recipe, vars map[string]any, subj *recipeSubject) (string, error) {
-	if r.Track == nil || r.Track.Title == "" {
+	rt, err := core.RecipeTrackOf(r)
+	if err != nil {
+		return "", err //nolint:wrapcheck // names the recipe
+	}
+	if rt == nil || rt.Title == "" {
 		return "", nil
 	}
 	scope := core.Scope{Vars: vars, Run: core.RecipeRunScope("", r.Name, r.Version, time.Now())}
 	if subj != nil {
 		scope.Subject = subj.Fields
 	}
-	rendered, err := core.Render(r.Track.Title, scope)
+	rendered, err := core.Render(rt.Title, scope)
 	if err != nil {
 		return "", fmt.Errorf("recipe %s: track.title: %w", r.Name, err)
 	}
@@ -148,10 +156,14 @@ func recipeTrackTitle(r *core.Recipe, vars map[string]any, subj *recipeSubject) 
 
 // renderTrackPlan renders the recipe's track.plan, "" when it has none.
 func renderTrackPlan(r *core.Recipe, plan *recipePlan) (string, error) {
-	if r.Track == nil || r.Track.Plan == "" {
+	rt, err := core.RecipeTrackOf(r)
+	if err != nil {
+		return "", err //nolint:wrapcheck // names the recipe
+	}
+	if rt == nil || rt.Plan == "" {
 		return "", nil
 	}
-	rendered, err := core.Render(r.Track.Plan, plan.scope())
+	rendered, err := core.Render(rt.Plan, plan.scope())
 	if err != nil {
 		return "", fmt.Errorf("recipe %s: track.plan: %w", r.Name, err)
 	}

@@ -130,8 +130,9 @@ func TestCaptureTrack_OrderFollowsBatches(t *testing.T) {
 	if deps := stepByID(t, rec, "bravo").DependsOn; !reflect.DeepEqual(deps, []string{"alpha"}) {
 		t.Errorf("bravo depends_on = %v; want [alpha]", deps)
 	}
-	if rec.Name != "release" || rec.Version != "0.1.0" || rec.Track == nil || rec.Track.Title != "Release" || rec.Track.Type != "feature" {
-		t.Errorf("header = %s@%s track=%+v; want the track slug, 0.1.0 and the track block", rec.Name, rec.Version, rec.Track)
+	rt, _ := RecipeTrackOf(rec)
+	if rec.Name != "release" || rec.Version != "0.1.0" || rt == nil || rt.Title != "Release" || rt.Type != "feature" {
+		t.Errorf("header = %s@%s track=%+v; want the track slug, 0.1.0 and the track block", rec.Name, rec.Version, rt)
 	}
 }
 
@@ -302,8 +303,9 @@ func TestCaptureTrack_RoundTripRecipeBornTrack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRecipe:\n%s\n%v", data, err)
 	}
-	if parsed.Name != "release-copy" || parsed.Version != "2.0.0" || parsed.Track == nil || parsed.Track.Plan != "# Plan\n\nShip it.\n" {
-		t.Errorf("header = %s@%s track=%+v", parsed.Name, parsed.Version, parsed.Track)
+	pt, _ := RecipeTrackOf(parsed)
+	if parsed.Name != "release-copy" || parsed.Version != "2.0.0" || pt == nil || pt.Plan != "# Plan\n\nShip it.\n" {
+		t.Errorf("header = %s@%s track=%+v", parsed.Name, parsed.Version, pt)
 	}
 	for i, want := range capSteps() {
 		got := parsed.Steps[i]

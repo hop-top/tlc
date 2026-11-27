@@ -57,8 +57,9 @@ func assertRecipeHeader(t *testing.T, r *Recipe) {
 	if r.Name != "code-review" || r.Version != "1.2.0" || r.Requires.Subject != "task" || r.Agent != "claude" {
 		t.Errorf("header = %+v", r)
 	}
-	if r.Track == nil || r.Track.Type != "delivery" || !strings.Contains(r.Track.Plan, "checklist") {
-		t.Errorf("track block = %+v", r.Track)
+	rt, _ := RecipeTrackOf(r)
+	if rt == nil || rt.Type != "delivery" || !strings.Contains(rt.Plan, "checklist") {
+		t.Errorf("track block = %+v", rt)
 	}
 	if r.Hash == "" || r.Path != "test.yaml" {
 		t.Errorf("hash/path not set: %q %q", r.Hash, r.Path)

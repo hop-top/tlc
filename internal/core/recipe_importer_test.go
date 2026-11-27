@@ -115,8 +115,9 @@ func TestRecipeImporter_ImportFromURL_PlanKeepsDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportFromURL: %v", err)
 	}
-	if rec.Track == nil || !strings.Contains(rec.Track.Plan, "# Deploy") || !strings.Contains(rec.Track.Plan, "Run the suite.") {
-		t.Errorf("track.plan = %+v; want the main document and the linked file", rec.Track)
+	rt, _ := RecipeTrackOf(rec)
+	if rt == nil || !strings.Contains(rt.Plan, "# Deploy") || !strings.Contains(rt.Plan, "Run the suite.") {
+		t.Errorf("track.plan = %+v; want the main document and the linked file", rt)
 	}
 	if !strings.Contains(llm.prompts[0], "Run the suite.") {
 		t.Errorf("prompt lacks the linked file:\n%s", llm.prompts[0])
