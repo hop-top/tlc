@@ -504,6 +504,8 @@ func (s *SQLiteStorage) ListTasks(ctx context.Context, query core.Query) ([]*cor
 		if expr, exprArgs := vocabRankOrder(query, order); expr != "" {
 			orderParts = append(orderParts, expr)
 			args = append(args, exprArgs...)
+		} else if query.SortBy == "status" {
+			orderParts = append(orderParts, statusSortExpr()+" "+order)
 		} else {
 			orderParts = append(orderParts,
 				fmt.Sprintf("%s %s", query.SortBy, order))

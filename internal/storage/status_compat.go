@@ -8,6 +8,7 @@ package storage
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"hop.top/tlc/internal/config"
@@ -118,18 +119,26 @@ func validateStatusWrite(s core.TaskStatus) error {
 
 // statusFilterClause renders a status filter under the default
 // vocabulary. ok is false when the filter needs no rewriting.
+//
+// Every operator a caller can leave on a FieldFilter is covered: the
+// empty operator (what the CLI and REST callers build) is plain
+// equality, exactly as buildFilterClauses reads it for other fields.
+// Ordering operators on a nominal column carry no meaning and are left
+// to the generic path.
 func statusFilterClause(op core.Operator, value any) (clause string, args []any, ok bool) {
 	if !usesDefaultVocabulary() || value == nil {
 		return "", nil, false
 	}
 	var raw []string
-	switch op { //nolint:exhaustive // only equality-shaped operators are rewritten
-	case core.OpEq, core.OpEqual, core.OpNotEq:
+	switch op { //nolint:exhaustive // ordering operators are not rewritten
+	case "", core.OpEq, core.OpEqual, core.OpNotEq:
 		raw = []string{fmt.Sprintf("%v", value)}
 	case core.OpIn:
 		for _, v := range strings.Split(fmt.Sprintf("%v", value), ",") {
 			raw = append(raw, strings.TrimSpace(v))
 		}
+	case core.OpContains, core.OpNotCont, core.OpStart, core.OpEnd:
+		return statusPatternClause(op, fmt.Sprintf("%v", value))
 	default:
 		return "", nil, false
 	}
@@ -144,6 +153,65 @@ func statusFilterClause(op core.Operator, value any) (clause string, args []any,
 		kw = "NOT IN"
 	}
 	return fmt.Sprintf("%s %s (%s)", statusColumn(), kw, strings.Join(ph, ",")), args, true
+}
+
+// statusPatternClause renders the substring, prefix, suffix and negated
+// substring operators. LIKE already folds ASCII case, so the stored
+// spelling needs no help; only a legacy alias does, because its stored
+// word differs from the name it reads as (SKIPPED reads as cancelled, so
+// "cancel" must find it).
+func statusPatternClause(op core.Operator, v string) (string, []any, bool) {
+	v = strings.ToLower(v)
+	pattern := "%" + v + "%"
+	match := strings.Contains
+	switch op { //nolint:exhaustive // only the pattern operators reach here
+	case core.OpStart:
+		pattern, match = v+"%", strings.HasPrefix
+	case core.OpEnd:
+		pattern, match = "%"+v, strings.HasSuffix
+	}
+	clause := "status LIKE ?"
+	args := []any{pattern}
+	var aliases []string
+	for alias, target := range legacyStatusAliases {
+		if match(target, v) {
+			aliases = append(aliases, alias)
+		}
+	}
+	sort.Strings(aliases)
+	if len(aliases) > 0 {
+		clause = fmt.Sprintf("(status LIKE ? OR %s IN (%s))",
+			statusColumn(), placeholderList(len(aliases)))
+		for _, a := range aliases {
+			args = append(args, a)
+		}
+	}
+	if op == core.OpNotCont {
+		clause = "NOT " + clause
+	}
+	return clause, args, true
+}
+
+// statusSortExpr is the ORDER BY term for a sort on the status column.
+// Under the default vocabulary it orders by the name a row reads as, so
+// a store mixing legacy and current spellings sorts as one set rather
+// than splitting at the case boundary.
+func statusSortExpr() string {
+	if !usesDefaultVocabulary() {
+		return "status"
+	}
+	var b strings.Builder
+	b.WriteString("CASE LOWER(status)")
+	aliases := make([]string, 0, len(legacyStatusAliases))
+	for a := range legacyStatusAliases {
+		aliases = append(aliases, a)
+	}
+	sort.Strings(aliases)
+	for _, a := range aliases {
+		fmt.Fprintf(&b, " WHEN '%s' THEN '%s'", a, legacyStatusAliases[a])
+	}
+	b.WriteString(" ELSE LOWER(status) END")
+	return b.String()
 }
 
 // placeholderList renders n comma-separated SQL placeholders.
