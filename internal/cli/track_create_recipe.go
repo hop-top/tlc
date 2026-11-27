@@ -127,6 +127,9 @@ func trackFromRecipe(
 	if err != nil {
 		return nil, err
 	}
+	if err := applyRecipeTrackMeta(track, r, rt, vars, subj); err != nil {
+		return nil, err
+	}
 	// Minted here so the subject binding and the run ledger can name the
 	// track before it is written; CreateTrack keeps a typeid it is given.
 	track.ID = core.NewTrackID()

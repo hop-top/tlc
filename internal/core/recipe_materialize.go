@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -195,8 +196,9 @@ type stepDep struct {
 
 // preparedStep holds what buildTask needs beyond the step itself.
 type preparedStep struct {
-	deps []stepDep
-	due  *time.Time
+	deps   []stepDep
+	due    *time.Time
+	extras StepExtras
 }
 
 // prepareSteps validates every dependency and due before anything is
@@ -208,6 +210,11 @@ func prepareSteps(recipe string, plan materializePlan, now time.Time) ([]prepare
 	}
 	out := make([]preparedStep, len(plan.create))
 	for i, step := range plan.create {
+		extras, err := prepareStepExtras(recipe, step)
+		if err != nil {
+			return nil, err
+		}
+		out[i].extras = extras
 		for _, dep := range step.DependsOn {
 			if j, ok := index[dep]; ok {
 				out[i].deps = append(out[i].deps, stepDep{index: j})
@@ -257,6 +264,7 @@ func (r *materializeRun) build(i int, ids []string, seqs []int64) (*Task, error)
 	if title == "" {
 		title = step.ID
 	}
+	extras := r.prepared[i].extras
 	task := &Task{
 		ID:          ids[i],
 		Seq:         seqs[i],
@@ -264,6 +272,8 @@ func (r *materializeRun) build(i int, ids []string, seqs []int64) (*Task, error)
 		Description: strings.TrimSpace(step.Description),
 		Status:      StatusTodo,
 		AssignedTo:  assigneeFromSpec(stepAssignee(step)),
+		Tags:        slices.Clone(extras.Tags),
+		Priority:    Priority(extras.Priority),
 		Kind:        step.EffectiveKind(),
 		Spec:        stepSpec(step, recipe.Agent),
 		DueAt:       r.prepared[i].due,
@@ -274,6 +284,13 @@ func (r *materializeRun) build(i int, ids []string, seqs []int64) (*Task, error)
 		ProjectID:   optString(r.in.ProjectID),
 		CreatedAt:   r.now,
 		UpdatedAt:   r.now,
+	}
+	if len(extras.Meta) > 0 {
+		meta, err := MergeUserMeta(task.Meta, extras.Meta, nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s: meta: %w", r.label(i), err)
+		}
+		task.Meta = meta
 	}
 	task.SetProvenance(TaskProvenance{
 		Recipe: recipe.Name, RecipeVersion: recipe.Version, RecipeHash: recipe.Hash, Subject: r.in.SubjectID,
