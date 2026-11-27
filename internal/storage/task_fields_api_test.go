@@ -14,7 +14,7 @@ func TestTaskFieldNames_MatchesAdvertisedSet(t *testing.T) {
 	// The slice is a copy: mutating it must not widen the allowlist.
 	names := TaskFieldNames()
 	names[0] = "(SELECT 1)"
-	if _, _, ok := resolveTaskField("(SELECT 1)"); ok {
+	if _, ok := resolveTaskField("(SELECT 1)"); ok {
 		t.Error("mutating the returned slice widened the allowlist")
 	}
 }

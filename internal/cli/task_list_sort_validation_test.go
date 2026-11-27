@@ -155,7 +155,7 @@ func TestServe_E2E_TaskListIgnoresSortAndFilterFieldParams(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			var ids []string
+			ids := make([]string, 0, len(resp.Tasks))
 			for _, task := range resp.Tasks {
 				ids = append(ids, task.ID)
 			}

@@ -312,16 +312,9 @@ func (s *SQLiteStorage) UpdateTaskWithLog(ctx context.Context, task *core.Task, 
 // it is placed in a clause; a field outside it fails the whole query with
 // core.ErrInvalidFilterField. Values always travel as bound args.
 func buildFilterClauses(filters []core.FieldFilter) ([]string, []any, error) {
-	fieldGroups := make(map[string][]core.FieldFilter)
-	for _, f := range filters {
-		canonical, _, ok := resolveTaskField(f.Field)
-		if !ok {
-			return nil, nil, invalidFieldError(core.ErrInvalidFilterField, f.Field)
-		}
-		// canonical is an allowlisted name, so it is safe to place in a
-		// clause below; the caller's spelling never is.
-		f.Field = canonical
-		fieldGroups[canonical] = append(fieldGroups[canonical], f)
+	fieldGroups, err := groupFiltersByField(filters)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var whereClauses []string
@@ -329,67 +322,9 @@ func buildFilterClauses(filters []core.FieldFilter) ([]string, []any, error) {
 	for field, group := range fieldGroups {
 		var groupClauses []string
 		for _, f := range group {
-			if field == "status" {
-				if clause, cargs, ok := statusFilterClause(f.Operator, f.Value); ok {
-					groupClauses = append(groupClauses, clause)
-					args = append(args, cargs...)
-					continue
-				}
-			}
-			if field == "tags" && f.Operator == core.OpContains {
-				groupClauses = append(groupClauses,
-					"EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)")
-				args = append(args, f.Value)
-				continue
-			}
-
-			op := "="
-			switch f.Operator {
-			case core.OpEq, core.OpEqual:
-				op = "="
-			case core.OpNotEq:
-				op = "!="
-			case core.OpGt:
-				op = ">"
-			case core.OpGte:
-				op = ">="
-			case core.OpLt:
-				op = "<"
-			case core.OpLte:
-				op = "<="
-			case core.OpContains:
-				op = sqlOpLike
-				f.Value = "%" + fmt.Sprintf("%v", f.Value) + "%"
-			case core.OpStart:
-				op = sqlOpLike
-				f.Value = fmt.Sprintf("%v", f.Value) + "%"
-			case core.OpEnd:
-				op = sqlOpLike
-				f.Value = "%" + fmt.Sprintf("%v", f.Value)
-			case core.OpIn:
-				vals := strings.Split(fmt.Sprintf("%v", f.Value), ",")
-				placeholders := make([]string, len(vals))
-				for i, v := range vals {
-					placeholders[i] = "?"
-					args = append(args, strings.TrimSpace(v))
-				}
-				groupClauses = append(groupClauses,
-					fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
-				continue
-			}
-
-			if f.Value == nil {
-				if op == "=" {
-					groupClauses = append(groupClauses,
-						fmt.Sprintf("(%s IS NULL OR %s = '')", field, field))
-				} else {
-					groupClauses = append(groupClauses,
-						fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field))
-				}
-			} else {
-				groupClauses = append(groupClauses, fmt.Sprintf("%s %s ?", field, op))
-				args = append(args, f.Value)
-			}
+			clause, cargs := filterClause(field, f)
+			groupClauses = append(groupClauses, clause)
+			args = append(args, cargs...)
 		}
 		if len(groupClauses) > 0 {
 			whereClauses = append(whereClauses,
@@ -397,6 +332,82 @@ func buildFilterClauses(filters []core.FieldFilter) ([]string, []any, error) {
 		}
 	}
 	return whereClauses, args, nil
+}
+
+// groupFiltersByField buckets filters by their canonical field name,
+// rejecting any field outside the allowlist. The keys of the result are
+// allowlisted names, so they are safe to place in a clause; the caller's
+// spelling never is.
+func groupFiltersByField(filters []core.FieldFilter) (map[string][]core.FieldFilter, error) {
+	groups := make(map[string][]core.FieldFilter)
+	for _, f := range filters {
+		canonical, ok := resolveTaskField(f.Field)
+		if !ok {
+			return nil, invalidFieldError(core.ErrInvalidFilterField, f.Field)
+		}
+		f.Field = canonical
+		groups[canonical] = append(groups[canonical], f)
+	}
+	return groups, nil
+}
+
+// filterClause renders one filter on an allowlisted field as a clause and
+// its bound args.
+func filterClause(field string, f core.FieldFilter) (string, []any) {
+	if field == "status" {
+		if clause, cargs, ok := statusFilterClause(f.Operator, f.Value); ok {
+			return clause, cargs
+		}
+	}
+	if field == "tags" && f.Operator == core.OpContains {
+		return "EXISTS (SELECT 1 FROM json_each(tasks.tags) WHERE value = ?)", []any{f.Value}
+	}
+	if f.Operator == core.OpIn {
+		vals := strings.Split(fmt.Sprintf("%v", f.Value), ",")
+		placeholders := make([]string, len(vals))
+		args := make([]any, len(vals))
+		for i, v := range vals {
+			placeholders[i] = "?"
+			args[i] = strings.TrimSpace(v)
+		}
+		return fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")), args
+	}
+
+	op, value := filterComparison(f)
+	if value == nil {
+		if op == "=" {
+			return fmt.Sprintf("(%s IS NULL OR %s = '')", field, field), nil
+		}
+		return fmt.Sprintf("(%s IS NOT NULL AND %s != '')", field, field), nil
+	}
+	return fmt.Sprintf("%s %s ?", field, op), []any{value}
+}
+
+// filterComparison maps a filter's operator to its SQL comparison and
+// returns the value to bind, with the LIKE wildcards the pattern
+// operators need. Both results are constants or the caller's value; no
+// caller text becomes SQL.
+func filterComparison(f core.FieldFilter) (op string, value any) {
+	value = f.Value
+	switch f.Operator {
+	case core.OpNotEq:
+		return "!=", value
+	case core.OpGt:
+		return ">", value
+	case core.OpGte:
+		return ">=", value
+	case core.OpLt:
+		return "<", value
+	case core.OpLte:
+		return "<=", value
+	case core.OpContains:
+		return sqlOpLike, "%" + fmt.Sprintf("%v", value) + "%"
+	case core.OpStart:
+		return sqlOpLike, fmt.Sprintf("%v", value) + "%"
+	case core.OpEnd:
+		return sqlOpLike, "%" + fmt.Sprintf("%v", value)
+	}
+	return "=", value
 }
 
 // scanLogEntries iterates sql.Rows and returns parsed LogEntry slices.

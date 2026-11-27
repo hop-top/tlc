@@ -15,14 +15,13 @@ import (
 // meta, spec and result are left out on purpose: they hold JSON documents,
 // and addressing keys inside them is a separate, validated path (see
 // core.ValidateMetaFilterKey), not a column name.
-var taskFieldNames = []string{
-	"id", "seq", "title", "description", "status", "assigned_to",
-	"reference", "created_at", "updated_at", "tags", "origin_system",
-	"last_sync_at", "archived", "project_id", "effort", "priority",
-	"stale_timeout", "blocked_reason", "stale_fired_at", "track_id",
-	"due_at", "remind_at", "rrule", "no_auto_remind", "kind", "attempts",
-	"claimed_at", "run_id", "step_id", "step_ordinal",
-}
+var taskFieldNames = strings.Fields(
+	"id seq title description status assigned_to " +
+		"reference created_at updated_at tags origin_system " +
+		"last_sync_at archived project_id effort priority " +
+		"stale_timeout blocked_reason stale_fired_at track_id " +
+		"due_at remind_at rrule no_auto_remind kind attempts " +
+		"claimed_at run_id step_id step_ordinal")
 
 // taskFieldExprs maps each user-facing field name to the SQL expression it
 // stands for. Today every entry is its own column; the indirection is the
@@ -44,12 +43,13 @@ func TaskFieldNames() []string {
 }
 
 // resolveTaskField maps a caller-supplied field name to its canonical
-// name and SQL expression. Matching ignores case and surrounding space;
-// ok is false for anything outside the allowlist.
-func resolveTaskField(name string) (canonical, expr string, ok bool) {
+// name; the SQL expression is taskFieldExprs[canonical]. Matching ignores
+// case and surrounding space; ok is false for anything outside the
+// allowlist.
+func resolveTaskField(name string) (canonical string, ok bool) {
 	canonical = strings.ToLower(strings.TrimSpace(name))
-	expr, ok = taskFieldExprs[canonical]
-	return canonical, expr, ok
+	_, ok = taskFieldExprs[canonical]
+	return canonical, ok
 }
 
 func invalidFieldError(sentinel error, name string) error {
@@ -77,7 +77,7 @@ func sortKeys(spec string) ([]string, error) {
 	parts := strings.Split(spec, ",")
 	keys := make([]string, 0, len(parts))
 	for _, p := range parts {
-		canonical, _, ok := resolveTaskField(p)
+		canonical, ok := resolveTaskField(p)
 		if !ok {
 			return nil, invalidFieldError(core.ErrInvalidSortField, p)
 		}
@@ -111,7 +111,7 @@ func ValidateTaskQuery(query core.Query) error {
 		return err
 	}
 	for _, f := range query.Filters {
-		if _, _, ok := resolveTaskField(f.Field); !ok {
+		if _, ok := resolveTaskField(f.Field); !ok {
 			return invalidFieldError(core.ErrInvalidFilterField, f.Field)
 		}
 	}

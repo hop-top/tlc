@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -30,7 +31,7 @@ func QueryAcross(
 	// project's read, and the loop below skips unreadable projects, so
 	// without this the request would come back as an empty listing.
 	if err := storage.ValidateTaskQuery(q); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("workspace query: %w", err)
 	}
 
 	var all []*core.Task
