@@ -85,6 +85,13 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
     recipe, a missing required var, a recipe path instead of a name, or
     `meta` combined with `recipe` is 422 and creates nothing.
 
+11. **Given** a recipe whose `track.meta` and steps' `tags`, `meta` and
+    `priority` use `{{var}}` templates, **When** a client sends
+    `POST /tracks` with `recipe` and `vars`, **Then** the track carries
+    the rendered `track.meta` and each created task its rendered tags,
+    meta and priority, as `tlc track create --recipe` produces. A recipe
+    that names a reserved meta key is 422 and creates nothing.
+
 ## Tests
 
 ### E2E
@@ -99,6 +106,10 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
 - `internal/cli/track_recipe_serve_test.go::TestServe_TrackCreateFromRecipe`,
   `TestServe_TrackCreateFromRecipe_TitleSlugAndPin`,
   `TestServe_TrackCreateFromRecipe_ClientErrors` (scenario 10)
+- `internal/cli/recipe_step_fields_e2e_test.go::TestServe_TrackCreateFromRecipe_StepFieldsAndTrackMeta`,
+  `TestServe_TrackCreateFromRecipe_ReservedMetaCreatesNothing` (scenario 11;
+  CLI parity: `TestTrackCreateRecipe_E2E_StepFieldsAndTrackMeta`,
+  `TestRecipeFields_E2E_ReservedKeysRefused`)
 
 ### Unit
 - `internal/core/track_meta_test.go`, `internal/core/meta_filter_test.go`,
@@ -122,3 +133,4 @@ ambiguous" (422) from "your input was well-formed but nothing matches"
 | 8 | PATCH status / assigned_to / due, transitions, 404 | `TestServe_TrackPatchFields`, `TestServe_TrackPatchInvalidInput`, `TestServe_TrackPatchUnknownTrack` | COVERED |
 | 9 | `meta.<key>` list filter, key whitelist | `TestServe_TrackListMetaFilter`, `TestServe_TrackListMetaFilterRejectsBadKeys` | COVERED |
 | 10 | Track from a recipe over POST /tracks | `TestServe_TrackCreateFromRecipe`, `TestServe_TrackCreateFromRecipe_ClientErrors` | COVERED |
+| 11 | Recipe track meta and step tags/meta/priority over POST /tracks | `TestServe_TrackCreateFromRecipe_StepFieldsAndTrackMeta`, `TestServe_TrackCreateFromRecipe_ReservedMetaCreatesNothing` | COVERED |

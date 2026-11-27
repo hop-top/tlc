@@ -65,7 +65,29 @@ Authoritative code: `internal/core/recipe*.go`, `condition.go`,
 | `track.title` | string | no | Title of the track `track create --recipe` builds; templatable. |
 | `track.type` | string | no | Track type when `--type` is not given. |
 | `track.plan` | string | no | Body written to the track's `plan.md`; templatable. |
+| `track.meta` | map | no | User meta set on the created track; string values templatable (§5.3). Keys tlc reserves for itself are refused (§1.5). |
 | `steps` | list of Step | yes | At least one step (§3). |
+
+### 1.5 tlc-owned keys and extensions
+
+`track` (§1.2) and the step keys `tags`, `meta` and `priority` (§3.1) are
+tlc's, not the recipe model's: the model has no tracks, tags, meta or
+priority. A tool that reads recipes through the model sees them as one
+extension key, `x-tlc`, on the document root (`track`) and on each step
+(`tags`, `meta`, `priority`). Authors never write `x-tlc`: a recipe that
+does is invalid. Documents tlc writes (`recipe import`, `recipe show`)
+carry the plain keys.
+
+Any other key starting with `x-`, on the root or on a step, is the
+author's. It is parsed, kept and written back unchanged, and means
+nothing to tlc.
+
+A recipe whose `track.meta` or step `meta` names a key tlc reserves for
+itself (for tasks: `blocked_by`, the plan and recipe bookkeeping keys,
+`priority_source`, `priority_rule`, `eva`, `origin_*` and the other keys
+`task update --meta` refuses; for tracks: `plans`, `due_date_only`, ...)
+fails `recipe validate` and materialization with the same error, before
+anything is created.
 
 ### 1.3 References
 
@@ -158,6 +180,9 @@ a task step with a 1-based `ordinal`.
 | `description` | Task description (trimmed). Templatable. |
 | `assignee` | Task assignee. Templatable. |
 | `due` | Due date, string or structured form (§7). Templatable. |
+| `tags` | List of task tags. String entries templatable. Checked against the tag policy before anything is created, as plan ingest checks them. |
+| `meta` | Map of user meta for the task. String values templatable, at any depth. Merged into the task's meta alongside the recipe provenance keys (§9). |
+| `priority` | Task priority from the configured vocabulary. Templatable. An unknown value is refused before anything is created. |
 
 ### 3.2 Task step keys, per kind
 
@@ -317,8 +342,10 @@ Rendering, validation and expansion share one list of fields a
 placeholder may appear in: `title`, `description`, `assignee`, `due`
 (string form), `when`, `until`, `agent`, `exec.argv[*]`, `exec.cwd`,
 `exec.env` values, `human.assignee`, `gate.contract`, and string values
-under `with`. The `track.title` and `track.plan` headers are rendered
-too.
+under `with`; the string entries of `tags`, the string values (at any
+depth) of `meta` and `priority`. The `track.title` and `track.plan` headers
+are rendered too, and so are the string values of `track.meta`, against
+the same scope as `track.title`.
 
 ### 5.4 Rendering
 
@@ -500,6 +527,8 @@ Contract:
 | `run_id`, `step_id`, `step_ordinal` | the run, the expanded step id, its ordinal |
 | `track_id`, `project_id` | the target |
 | `meta.recipe`, `meta.recipe_version`, `meta.recipe_hash`, `meta.subject` | provenance; keys are removed when empty |
+| `tags`, `priority` | the step's rendered `tags` and `priority`; a set `priority` is recorded as manually set (`meta.priority_source`), an unset one is derived like a hand-made task's |
+| `meta.<key>` | the step's rendered `meta`, merged as user meta; provenance keys above and the dependency keys below are written after and cannot be overridden |
 | `blocked_by` | `depends_on` resolved to batch task ids or `Existing` ids |
 | `meta.blocked_by_recipe` | the edges this run authored; a later pass may replace exactly those and MUST leave edges added out-of-band untouched |
 
@@ -517,8 +546,11 @@ CLI entry points:
   binding and the run can name it); title = the argument, else
   `track.title` rendered against vars, subject and `run.recipe`/
   `run.version`; type = `--type`, else `track.type`, else config; the
-  track is created with `track.plan` rendered against the full scope,
-  then the steps are materialized into it.
+  track is created with `track.plan` rendered against the full scope and
+  `track.meta` rendered against the same scope as `track.title` (user
+  meta, through the track meta gate), then the steps are materialized
+  into it. `POST /tracks` with `recipe` does the same; it still refuses a
+  request `meta`, since the recipe declares the track's meta.
 - `task create --recipe`: no title argument allowed; target = `--track`
   (offering to create a missing track), else the `--for` subject's track,
   else trackless.

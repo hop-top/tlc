@@ -41,6 +41,7 @@ Recipes built into tlc (`tlc recipe list --source builtin`) live in
 | `pr-review-loop` | `repo`, `pr` | Bounded review and fix cycles that stop once approved |
 | `retry-timeout` | `service_url` | Retry with backoff, an exec timeout, and teardown |
 | `sequential-chain` | — | A to B to C, each step building on the last |
+| `step-fields` | — | Per-step `tags`, `meta` and `priority`, and `track.meta`, templated with the vars |
 | `systematic-debugging` | — | Find the root cause before fixing it |
 | `task-generation` | `sprint_name` | Generate sprint tasks with a dependency chain |
 | `test-driven-development` | — | Tests first, then the implementation |

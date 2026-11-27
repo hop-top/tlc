@@ -1,0 +1,38 @@
+recipe: step-fields
+version: 1.0.0
+description: |
+  Per-step tags, meta and priority, and meta on the track the recipe
+  creates. String values are templated with the recipe vars; keys tlc
+  reserves for itself are refused before anything is created.
+vars:
+  area:
+    default: core
+  level:
+    default: P1
+track:
+  title: "Release {{area}}"
+  type: feature
+  meta:
+    owner: "{{area}}-team"
+    budget: 5
+steps:
+  - id: version
+    kind: exec
+    title: Capture tlc --version
+    exec:
+      argv: [tlc, --version]
+      timeout: 10s
+    tags: [release, "area:{{area}}"]
+    priority: "{{level}}"
+    meta:
+      ticket: "REL-{{area}}"
+  - id: help
+    kind: exec
+    title: Capture tlc --help
+    depends_on: [version]
+    exec:
+      argv: [tlc, --help]
+      timeout: 10s
+    tags: [release]
+    meta:
+      reviewer: "{{area}}-lead"
