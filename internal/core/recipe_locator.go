@@ -38,6 +38,9 @@ func (l *DirLocator) Locate(ref string) (*Recipe, error) {
 			rec.Source = dir
 			name := strings.TrimPrefix(rec.Path, builtinPrefix)
 			rec.Path = filepath.Join(dir, name)
+			if err := finishTLC(rec); err != nil {
+				return nil, fmt.Errorf("%s: %w", rec.Path, err)
+			}
 			if raw, rerr := os.ReadFile(rec.Path); rerr == nil {
 				rec.Hash = rawHash(raw)
 			}
@@ -51,6 +54,9 @@ func (l *DirLocator) Locate(ref string) (*Recipe, error) {
 		layer := spec.DirLocator{Builtin: shimFS{l.Builtin}}
 		rec, err := layer.Locate(ref)
 		if err == nil {
+			if err := finishTLC(rec); err != nil {
+				return nil, fmt.Errorf("%s: %w", rec.Path, err)
+			}
 			if raw, rerr := fs.ReadFile(l.Builtin, strings.TrimPrefix(rec.Path, builtinPrefix)); rerr == nil {
 				rec.Hash = rawHash(raw)
 			}

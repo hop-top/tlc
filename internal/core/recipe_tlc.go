@@ -247,6 +247,14 @@ func foldExt(ext map[string]any) map[string]any {
 	return ext
 }
 
+// finishTLC completes a recipe spec has parsed from a shimmed document:
+// it folds the in-flight keys into Ext["x-tlc"] and checks them. Every
+// path that parses a recipe ends here.
+func finishTLC(r *Recipe) error {
+	foldTLCExt(r)
+	return validateTLC(r)
+}
+
 // validateTLC checks the tlc-owned keys of a recipe and of every step at
 // any depth: shapes, and meta keys tlc reserves for itself. Values that
 // are still templates are checked after rendering, at materialization.
