@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "label": "12-factor AI-CLI",
-  "message": "5/5 pass",
+  "message": "1/1 pass",
   "color": "red",
   "labelColor": "555",
   "namedLogo": "robotframework",
