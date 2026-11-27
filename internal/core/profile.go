@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -46,24 +47,25 @@ func newProfileResolverWith(run commandRunner) *ProfileResolver {
 		profiles: make(map[string]string),
 	}
 
-	out, err := run("aps", "profile", "list")
+	out, err := run("aps", "profile", "list", "--format", "json")
 	if err != nil {
 		return r
 	}
 
-	ids := parseProfileIDs(string(out))
-	for _, id := range ids {
-		r.profiles[strings.ToLower(id)] = id
+	profiles, err := parseAPSProfiles(out)
+	if err != nil {
+		return r
 	}
 
-	// Fetch display names for each profile.
-	for _, id := range ids {
-		out, err := run("aps", "profile", "show", id)
-		if err != nil {
-			continue
-		}
-		if dn := parseDisplayName(string(out)); dn != "" && dn != id {
-			r.profiles[strings.ToLower(dn)] = id
+	for _, p := range profiles {
+		r.profiles[strings.ToLower(p.ID)] = p.ID
+	}
+
+	// Display names come from the same listing; a name equal to the id
+	// adds nothing.
+	for _, p := range profiles {
+		if p.DisplayName != "" && p.DisplayName != p.ID {
+			r.profiles[strings.ToLower(p.DisplayName)] = p.ID
 		}
 	}
 
@@ -158,26 +160,26 @@ func parseSquadMembers(output string) []string {
 	return members
 }
 
-// parseProfileIDs extracts profile IDs from `aps profile list` output.
-// Each non-empty line is treated as a profile ID.
-func parseProfileIDs(output string) []string {
-	var ids []string
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			ids = append(ids, line)
-		}
-	}
-	return ids
+// apsProfile is the part of an `aps profile list --format json` row that
+// the resolver reads; aps emits more columns, which decoding ignores.
+type apsProfile struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
 }
 
-// parseDisplayName extracts the display_name from `aps profile show` output.
-func parseDisplayName(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "display_name:") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "display_name:"))
+// parseAPSProfiles decodes `aps profile list --format json` output.
+// Rows without an id are dropped. Anything that is not a JSON array of
+// objects is an error, so error text or a table never yields ids.
+func parseAPSProfiles(output []byte) ([]apsProfile, error) {
+	var rows []apsProfile
+	if err := json.Unmarshal(output, &rows); err != nil {
+		return nil, fmt.Errorf("decode aps profile list: %w", err)
+	}
+	profiles := rows[:0]
+	for _, p := range rows {
+		if p.ID != "" {
+			profiles = append(profiles, p)
 		}
 	}
-	return ""
+	return profiles, nil
 }
