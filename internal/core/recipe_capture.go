@@ -63,7 +63,10 @@ func CaptureTrack(
 	}
 	c.substituteVars(steps, vars)
 	c.warnLiterals(steps)
-	rec := c.assemble(steps, vars)
+	rec, err := c.assemble(steps, vars)
+	if err != nil {
+		return nil, nil, fmt.Errorf("capture track %s: %w", c.label(), err)
+	}
 	if err := ValidateRecipe(rec); err != nil {
 		return nil, nil, fmt.Errorf("capture track %s: %w", c.label(), err)
 	}
@@ -314,12 +317,11 @@ func (c *capture) resolveVars(ctx context.Context, runs RecipeRunStore) (map[str
 // assemble builds the recipe document around the steps. An agent shared
 // by every step is hoisted to the header, undoing the materializer's
 // per-task fallback.
-func (c *capture) assemble(steps []RecipeStep, vars map[string]string) *Recipe {
+func (c *capture) assemble(steps []RecipeStep, vars map[string]string) (*Recipe, error) {
 	rec := &Recipe{
 		Name:    c.recipeName(),
 		Version: c.opts.Version,
 		Agent:   hoistAgent(steps),
-		Track:   &RecipeTrack{Title: c.track.Title, Type: c.track.Type, Plan: c.opts.Plan},
 		Steps:   steps,
 	}
 	if rec.Version == "" {
@@ -331,7 +333,10 @@ func (c *capture) assemble(steps []RecipeStep, vars map[string]string) *Recipe {
 			rec.Vars[name] = VarDef{Required: true}
 		}
 	}
-	return rec
+	if err := SetRecipeTrack(rec, &RecipeTrack{Title: c.track.Title, Type: c.track.Type, Plan: c.opts.Plan}); err != nil {
+		return nil, err
+	}
+	return rec, nil
 }
 
 func (c *capture) recipeName() string {

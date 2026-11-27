@@ -19,7 +19,6 @@ import (
 type (
 	Recipe         = spec.Flow
 	RecipeRequires = spec.Requires
-	RecipeTrack    = spec.Track
 	RecipeStep     = spec.Step
 	VarDef         = spec.VarDef
 	DueSpec        = spec.DueSpec
@@ -134,7 +133,12 @@ func CompareRecipeVersions(a, b string) int { return spec.CompareVersions(a, b) 
 func IsRecipeNotFound(err error) bool { return spec.IsFlowNotFound(err) }
 
 // ValidateRecipe checks a parsed recipe.
-func ValidateRecipe(r *Recipe) error { return recipeWording(spec.ValidateFlow(r)) }
+func ValidateRecipe(r *Recipe) error {
+	if err := recipeWording(spec.ValidateFlow(r)); err != nil {
+		return err
+	}
+	return validateTLC(r)
+}
 
 // Expand resolves includes and unrolls repeats into a flat step list.
 func Expand(r *Recipe, loc Locator) ([]RecipeStep, error) {

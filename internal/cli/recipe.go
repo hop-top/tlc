@@ -109,7 +109,7 @@ type recipeView struct {
 	Vars        map[string]core.VarDef `json:"vars,omitempty" yaml:"vars,omitempty"`
 	Agent       string                 `json:"agent,omitempty" yaml:"agent,omitempty"`
 	Track       *core.RecipeTrack      `json:"track,omitempty" yaml:"track,omitempty"`
-	Steps       []core.RecipeStep      `json:"steps" yaml:"steps"`
+	Steps       []core.PlainStep       `json:"steps" yaml:"steps"`
 	Path        string                 `json:"path" yaml:"path"`
 	Source      string                 `json:"source" yaml:"source"`
 	Hash        string                 `json:"hash" yaml:"hash"`
@@ -164,9 +164,15 @@ func runRecipeShow(cmd *cobra.Command, args []string) error {
 	format := viper.GetString("output.format")
 	switch format {
 	case formatJSON, formatYAML:
-		return renderRecipeOutput(out, format, newRecipeView(r, steps))
+		view, err := newRecipeView(r, steps)
+		if err != nil {
+			return err
+		}
+		return renderRecipeOutput(out, format, view)
 	}
-	printRecipeHeader(out, r)
+	if err := printRecipeHeader(out, r); err != nil {
+		return err
+	}
 	if len(r.Vars) > 0 {
 		_, _ = fmt.Fprintln(out, "\nVars:")
 		if err := renderRecipeTable(out, format, recipeVarRows(r.Vars)); err != nil {
@@ -202,15 +208,19 @@ func loadExpandedRecipe(ref string) (*core.Recipe, []core.RecipeStep, error) {
 	return r, steps, nil
 }
 
-func newRecipeView(r *core.Recipe, steps []core.RecipeStep) recipeView {
+func newRecipeView(r *core.Recipe, steps []core.RecipeStep) (recipeView, error) {
+	track, err := core.RecipeTrackOf(r)
+	if err != nil {
+		return recipeView{}, err //nolint:wrapcheck // names the recipe
+	}
 	return recipeView{
 		Name: r.Name, Version: r.Version, Description: r.Description,
-		Requires: r.Requires, Vars: r.Vars, Agent: r.Agent, Track: r.Track,
-		Steps: steps, Path: r.Path, Source: r.Source, Hash: r.Hash,
-	}
+		Requires: r.Requires, Vars: r.Vars, Agent: r.Agent, Track: track,
+		Steps: core.PlainSteps(steps), Path: r.Path, Source: r.Source, Hash: r.Hash,
+	}, nil
 }
 
-func printRecipeHeader(out io.Writer, r *core.Recipe) {
+func printRecipeHeader(out io.Writer, r *core.Recipe) error {
 	_, _ = fmt.Fprintln(out, r.Key())
 	if r.Description != "" {
 		_, _ = fmt.Fprintf(out, "  %s\n", r.Description)
@@ -222,9 +232,14 @@ func printRecipeHeader(out io.Writer, r *core.Recipe) {
 	if r.Agent != "" {
 		_, _ = fmt.Fprintf(out, "  Agent:    %s\n", r.Agent)
 	}
-	if r.Track != nil && r.Track.Title != "" {
-		_, _ = fmt.Fprintf(out, "  Track:    %s\n", r.Track.Title)
+	track, err := core.RecipeTrackOf(r)
+	if err != nil {
+		return err //nolint:wrapcheck // names the recipe
 	}
+	if track != nil && track.Title != "" {
+		_, _ = fmt.Fprintf(out, "  Track:    %s\n", track.Title)
+	}
+	return nil
 }
 
 func recipeVarRows(vars map[string]core.VarDef) []recipeVarRow {

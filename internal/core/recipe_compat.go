@@ -70,6 +70,7 @@ func shimRecipeYAML(data []byte) []byte {
 	}
 	var edits []keyEdit
 	collectRenames(root, keyRecipe, keyFlow, &edits, func(m *yaml.Node) {
+		collectRenames(m, keyTrack, tlcInflight+keyTrack, &edits, nil)
 		for i := 0; i+1 < len(m.Content); i += 2 {
 			if m.Content[i].Value == keySteps && m.Content[i+1].Kind == yaml.SequenceNode {
 				collectStepRenames(m.Content[i+1], &edits)
@@ -104,6 +105,9 @@ func collectStepRenames(seq *yaml.Node, edits *[]keyEdit) {
 			continue
 		}
 		collectRenames(step, keyGate, keyCheck, edits, func(m *yaml.Node) {
+			for _, k := range tlcStepKeys {
+				collectRenames(m, k, tlcInflight+k, edits, nil)
+			}
 			for i := 0; i+1 < len(m.Content); i += 2 {
 				if m.Content[i].Value == keySteps && m.Content[i+1].Kind == yaml.SequenceNode {
 					collectStepRenames(m.Content[i+1], edits)
@@ -168,6 +172,7 @@ func shimRecipeJSON(data []byte) []byte {
 		return data
 	}
 	renameJSONKey(doc, keyRecipe, keyFlow)
+	renameJSONKey(doc, keyTrack, tlcInflight+keyTrack)
 	if raw, ok := doc[keySteps]; ok {
 		if steps, ok := shimJSONSteps(raw); ok {
 			doc[keySteps] = steps
@@ -187,6 +192,9 @@ func shimJSONSteps(raw json.RawMessage) (json.RawMessage, bool) {
 	}
 	for _, s := range steps {
 		renameJSONKey(s, keyGate, keyCheck)
+		for _, k := range tlcStepKeys {
+			renameJSONKey(s, k, tlcInflight+k)
+		}
 		if nested, ok := s[keySteps]; ok {
 			if out, ok := shimJSONSteps(nested); ok {
 				s[keySteps] = out
@@ -221,6 +229,7 @@ func unshimRecipeNode(root *yaml.Node) {
 	if root.Kind != yaml.MappingNode {
 		return
 	}
+	unshimTLCNode(root)
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		switch root.Content[i].Value {
 		case keyFlow:
@@ -236,6 +245,7 @@ func unshimSteps(seq *yaml.Node) {
 		return
 	}
 	for _, step := range seq.Content {
+		unshimTLCStep(step)
 		for i := 0; i+1 < len(step.Content); i += 2 {
 			switch step.Content[i].Value {
 			case keyCheck:
@@ -257,9 +267,16 @@ func parseRecipe(r io.Reader, filename string) (*Recipe, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read recipe %s: %w", filename, err)
 	}
+	if err := rejectReservedExt(data, filename); err != nil {
+		return nil, err
+	}
 	rec, err := spec.ParseFlow(bytes.NewReader(shimRecipeSource(data, filename)), filename)
 	if err != nil {
 		return nil, recipeWordingAfter(err, filename+": ")
+	}
+	foldTLCExt(rec)
+	if err := validateTLC(rec); err != nil {
+		return nil, fmt.Errorf("%s: %w", filename, err)
 	}
 	// Drift detection compares the hash of the file as authored, not of
 	// the rewritten copy.

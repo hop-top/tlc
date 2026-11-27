@@ -29,7 +29,7 @@ require (
 	golang.org/x/oauth2 v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.1
-	hop.top/flo/spec v0.0.0-20261118143449-9c4ce169fdac
+	hop.top/flo/spec v0.0.0-20261127000734-55ab551a7875
 	hop.top/kit v0.5.0-beta.14
 	hop.top/vstar v1.0.0-alpha.1
 	hop.top/xrr v0.1.0-alpha.5
@@ -37,7 +37,7 @@ require (
 )
 
 require (
-	cel.dev/cel-go v0.33.0 // indirect
+	cel.dev/cel-go v0.33.2 // indirect
 	cel.dev/expr v0.26.0 // indirect
 	cloud.google.com/go/auth v0.24.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.1 // indirect

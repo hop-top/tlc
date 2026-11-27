@@ -109,8 +109,9 @@ func TestRecipeImport_E2E_CapturesTrack(t *testing.T) {
 		if got.Steps[0].Title != "Plan release {{pr}}" || !got.Vars["pr"].Required {
 			t.Errorf("ledger var not lifted: title=%q vars=%+v", got.Steps[0].Title, got.Vars)
 		}
-		if got.Track == nil || got.Track.Title != "Release flow" || got.Track.Plan != "# Release flow\n\nShip it." {
-			t.Errorf("track = %+v; want title and the plan body without frontmatter", got.Track)
+		gt, _ := core.RecipeTrackOf(got)
+		if gt == nil || gt.Title != "Release flow" || gt.Plan != "# Release flow\n\nShip it." {
+			t.Errorf("track = %+v; want title and the plan body without frontmatter", gt)
 		}
 		if contains(out, "warning:") {
 			t.Errorf("unexpected warnings:\n%s", out)
