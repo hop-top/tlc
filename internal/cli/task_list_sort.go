@@ -29,5 +29,8 @@ func validateTaskListSort() error {
 	case errors.Is(err, core.ErrInvalidSortDirection):
 		return fmt.Errorf("--sort-direction: %w", err)
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("invalid sort: %w", err)
+	}
+	return nil
 }
