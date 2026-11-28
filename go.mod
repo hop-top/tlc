@@ -26,7 +26,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	go.jetify.com/typeid v1.3.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/oauth2 v0.37.0
+	golang.org/x/oauth2 v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/cite v0.1.1
 	hop.top/flo/spec v0.0.0-20261127020429-9eee8ac75a23
