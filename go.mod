@@ -33,7 +33,7 @@ require (
 	hop.top/kit v0.5.0-beta.14
 	hop.top/vstar v1.0.0-alpha.1
 	hop.top/xrr v0.1.0-alpha.5
-	modernc.org/sqlite v1.61.1
+	modernc.org/sqlite v1.62.0
 )
 
 require (
@@ -167,10 +167,8 @@ require (
 	google.golang.org/grpc v1.85.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	hop.top/aim v0.1.0-alpha.6 // indirect
-	modernc.org/cc/v4 v4.30.5 // indirect
-	modernc.org/ccgo/v4 v4.38.0 // indirect
 	modernc.org/gc/v3 v3.2.1 // indirect
-	modernc.org/libc v1.79.1 // indirect
+	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
