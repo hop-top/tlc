@@ -56,7 +56,7 @@ func registerRecipeFlags(cmd *cobra.Command) {
 	f.StringVar(&recipeFlagFor, "for", "",
 		"Subject the recipe applies to: a task (T-NNNN) or a track (L-NNNN, slug); bound as subject.*")
 	f.BoolVar(&recipeFlagAssign, "assign", false, "Assign steps that name no assignee through the assignment engine")
-	f.BoolVar(&recipeFlagInfer, "infer", false, "Infer missing vars from the subject")
+	f.BoolVar(&recipeFlagInfer, "infer", false, "Reserved for inferring missing vars from the subject; currently has no effect")
 }
 
 // registerRecipeRefFlags adds --recipe and --var, the subset the execute
